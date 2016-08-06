@@ -40,6 +40,7 @@ class Writer {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
       this.writeVarOctetString(value)
+      return
     } else if (!Number.isInteger(value)) {
       throw new Error('UInt must be an integer')
     } else if (value < 0) {
