@@ -68,7 +68,7 @@ class Reader {
    */
   readUInt (length) {
     if (length > Reader.MAX_INT_BYTES) {
-      throw new Error('Tried too read too large integer (requested: ' +
+      throw new Error('Tried to read too large integer (requested: ' +
         length + ', max: ' + Reader.MAX_INT_BYTES + ')')
     }
     this.ensureAvailable(length)
@@ -85,7 +85,7 @@ class Reader {
    */
   peekUInt (length) {
     if (length > Reader.MAX_INT_BYTES) {
-      throw new Error('Tried too read too large integer (requested: ' +
+      throw new Error('Tried to read too large integer (requested: ' +
         length + ', max: ' + Reader.MAX_INT_BYTES + ')')
     }
     this.ensureAvailable(length)
