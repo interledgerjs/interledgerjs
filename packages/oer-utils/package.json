@@ -7,6 +7,7 @@
     "test": "test"
   },
   "scripts": {
+    "lint": "eslint .",
     "test": "mocha"
   },
   "repository": {
@@ -29,5 +30,11 @@
   "bugs": {
     "url": "https://github.com/interledger/js-oer-utils/issues"
   },
-  "homepage": "https://github.com/interledger/js-oer-utils"
+  "homepage": "https://github.com/interledger/js-oer-utils",
+  "devDependencies": {
+    "eslint": "^3.2.2",
+    "eslint-config-standard": "^5.3.5",
+    "eslint-plugin-promise": "^2.0.1",
+    "eslint-plugin-standard": "^2.0.0"
+  }
 }
