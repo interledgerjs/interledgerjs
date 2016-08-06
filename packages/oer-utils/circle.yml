@@ -1,0 +1,22 @@
+machine:
+  node:
+    version: 4.4.0
+test:
+  override:
+    # Run lint
+    - npm run lint
+    # Run tests with coverage
+    - npm test --coverage
+  post:
+    # Upload code coverage data
+    - bash <(curl -s https://codecov.io/bash) || echo "Codecov did not collect coverage reports"
+deployment:
+  production:
+    branch: master
+    commands:
+      # Push NPM package if not yet published
+      - mv npmrc-env .npmrc
+      - if [ -z "$(npm info $(npm ls --depth=-1 2>/dev/null | head -1 | cut -f 1 -d " ") 2>/dev/null)" ] ; then npm publish ; fi
+general:
+  artifacts:
+    - "coverage/lcov-report"
