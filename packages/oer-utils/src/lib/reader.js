@@ -24,7 +24,7 @@ class Reader {
     if (Buffer.isBuffer(source)) {
       return new Reader(source)
     } else if (source instanceof Reader) {
-      return source
+      return new Reader(source.buffer.slice(source.cursor))
     } else {
       throw new Error('Reader must be given a Buffer')
     }
