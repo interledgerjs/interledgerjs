@@ -16,6 +16,8 @@ class Writer {
       throw new Error('UInt must be an integer')
     } else if (value < 0) {
       throw new Error('UInt must be positive')
+    } else if (length <= 0) {
+      throw new Error('UInt length must be greater than zero')
     } else if (value.toString(2).length > length * 8) {
       throw new Error('UInt ' + value + ' does not fit in ' + length + ' bytes')
     }
