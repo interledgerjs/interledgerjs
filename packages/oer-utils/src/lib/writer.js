@@ -79,6 +79,10 @@ class Writer {
    * @param {Buffer} buffer Contents of the octet string.
    */
   writeVarOctetString (buffer) {
+    if (!Buffer.isBuffer(buffer)) {
+      throw new TypeError('Expects a buffer')
+    }
+
     const MSB = 0x80
 
     if (buffer.length <= 127) {
