@@ -67,12 +67,7 @@ class Reader {
    * @return {Number} Contents of next byte.
    */
   readUInt (length) {
-    if (length > Reader.MAX_INT_BYTES) {
-      throw new Error('Tried to read too large integer (requested: ' +
-        length + ', max: ' + Reader.MAX_INT_BYTES + ')')
-    }
-    this.ensureAvailable(length)
-    const value = this.buffer.readUIntBE(this.cursor, length)
+    const value = this.peekUInt(length)
     this.cursor += length
     return value
   }
