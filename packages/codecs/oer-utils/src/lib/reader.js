@@ -96,6 +96,34 @@ class Reader {
   }
 
   /**
+   * Read a 64-bit integer.
+   *
+   * @return {Array} Integer in the form [high, low]
+   */
+  readUInt64 () {
+    return [ this.readUInt32(), this.readUInt32() ]
+  }
+
+  /**
+   * Look at a 64-bit integer, but don't advance the cursor.
+   *
+   * @return {Array} Integer in the form [high, low]
+   */
+  peekUInt64 () {
+    this.bookmark()
+    const value = this.readUInt64()
+    this.restore()
+    return value
+  }
+
+  /**
+   * Advance the cursor by eight bytes.
+   */
+  skipUInt64 () {
+    this.skip(8)
+  }
+
+  /**
    * Read a variable-length integer at the cursor position.
    *
    * Return the integer as a number and advance the cursor accordingly.
@@ -106,7 +134,11 @@ class Reader {
     const buffer = this.readVarOctetString()
     if (buffer.length > Reader.MAX_INT_BYTES) {
       throw new ParseError('UInt of length ' + buffer.length +
-        'too large to parse as integer (max: ' + Reader.MAX_INT_BYTES + ')')
+        ' too large to parse as integer (max: ' + Reader.MAX_INT_BYTES + ')')
+    }
+
+    if (buffer.length === 0) {
+      throw new ParseError('UInt of length 0 is invalid')
     }
 
     return buffer.readUIntBE(0, buffer.length)
@@ -269,9 +301,9 @@ Reader.LOWER_SEVEN_BITS = 0x7F
 // => Math.floor(Number.MAX_SAFE_INTEGER.toString(2).length / 8)
 Reader.MAX_INT_BYTES = 6
 
-// Create {read,peek,skip}UInt{8,16,32,64} shortcuts
+// Create {read,peek,skip}UInt{8,16,32} shortcuts
 ;['read', 'peek', 'skip'].forEach((verb) => {
-  ;[1, 2, 4, 8].forEach((bytes) => {
+  ;[1, 2, 4].forEach((bytes) => {
     Reader.prototype[verb + 'UInt' + bytes * 8] = function () {
       return this[verb + 'UInt'](bytes)
     }
