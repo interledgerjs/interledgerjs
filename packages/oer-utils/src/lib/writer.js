@@ -45,6 +45,8 @@ class Writer {
       throw new Error('UInt must be an integer')
     } else if (value < 0) {
       throw new Error('UInt must be positive')
+    } else if (value > Writer.MAX_VAR_UINT) {
+      throw new Error('UInt is too large')
     }
 
     const lengthOfValue = Math.ceil(value.toString(2).length / 8)
@@ -130,6 +132,9 @@ class Writer {
     return Buffer.concat(this.components)
   }
 }
+
+// Largest value that can be written as a variable-length unsigned integer
+Writer.MAX_VAR_UINT = Number.MAX_SAFE_INTEGER
 
 // Create writeUInt{8,16,32,64} shortcuts
 ;[1, 2, 4, 8].forEach((bytes) => {
