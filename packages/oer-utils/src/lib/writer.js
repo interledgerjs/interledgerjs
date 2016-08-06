@@ -57,6 +57,31 @@ class Writer {
   }
 
   /**
+   * Write a 64-bit integer.
+   *
+   * It is possible to pass a number to this method, however only if the number
+   * is guaranteed to be smaller than Number.MAX_SAFE_INTEGER.
+   *
+   * Alternatively, the number may be passed as an array of two 32-bit words,
+   * with the most significant word first.
+   *
+   * @param {Number|Array} A 64-bit integer as a number or of the form [high, low]
+   */
+  writeUInt64 (value) {
+    if (Number.isInteger(value) && value <= Number.MAX_SAFE_INTEGER) {
+      this.writeUInt32(Math.floor(value / 0x100000000))
+      this.writeUInt32(value & 0xffffffff)
+      return
+    } else if (!Array.isArray(value) || value.length !== 2 ||
+        !Number.isInteger(value[0]) || !Number.isInteger(value[1])) {
+      throw new TypeError('Expected 64-bit integer as an array of two 32-bit words')
+    }
+
+    this.writeUInt32(value[0])
+    this.writeUInt32(value[1])
+  }
+
+  /**
    * Write a fixed-length octet string.
    *
    * Mostly just a raw write, but this method enforces the length of the
@@ -136,8 +161,8 @@ class Writer {
 // Largest value that can be written as a variable-length unsigned integer
 Writer.MAX_VAR_UINT = Number.MAX_SAFE_INTEGER
 
-// Create writeUInt{8,16,32,64} shortcuts
-;[1, 2, 4, 8].forEach((bytes) => {
+// Create writeUInt{8,16,32} shortcuts
+;[1, 2, 4].forEach((bytes) => {
   Writer.prototype['writeUInt' + bytes * 8] = function (value) {
     this.writeUInt(value, bytes)
   }
