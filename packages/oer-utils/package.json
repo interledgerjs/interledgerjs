@@ -6,9 +6,18 @@
   "directories": {
     "test": "test"
   },
+  "files": [
+    "index.js",
+    "reader.js",
+    "writer.js",
+    "predictor.js",
+    "dist"
+  ],
   "scripts": {
     "lint": "eslint .",
-    "test": "NODE_ENV=unit istanbul test -- _mocha"
+    "test": "npm run build && npm run test:specs",
+    "test:specs": "NODE_ENV=unit istanbul test -- _mocha",
+    "build": "babel src --out-dir dist"
   },
   "repository": {
     "type": "git",
@@ -31,7 +40,12 @@
     "url": "https://github.com/interledger/js-oer-utils/issues"
   },
   "homepage": "https://github.com/interledger/js-oer-utils",
+  "dependencies": {
+    "core-js": "^2.4.1"
+  },
   "devDependencies": {
+    "babel-core": "^6.13.2",
+    "babel-preset-es2015": "^6.13.2",
     "chai": "^3.5.0",
     "eslint": "^3.2.2",
     "eslint-config-standard": "^5.3.5",

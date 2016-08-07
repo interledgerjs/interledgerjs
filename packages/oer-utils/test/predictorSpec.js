@@ -1,6 +1,6 @@
 'use strict'
 
-const Predictor = require('../predictor')
+const Predictor = require('../src/lib/predictor')
 
 const assert = require('chai').assert
 

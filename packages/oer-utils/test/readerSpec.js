@@ -1,6 +1,6 @@
 'use strict'
 
-const Reader = require('../reader')
+const Reader = require('../src/lib/reader')
 
 const assert = require('chai').assert
 

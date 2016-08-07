@@ -1,5 +1,7 @@
 'use strict'
 
+const isInteger = require('core-js/library/fn/number/is-integer')
+
 class Writer {
   constructor () {
     this.components = []
@@ -12,7 +14,7 @@ class Writer {
    * @param {Number} length Number of bytes to encode this value as.
    */
   writeUInt (value, length) {
-    if (!Number.isInteger(value)) {
+    if (!isInteger(value)) {
       throw new Error('UInt must be an integer')
     } else if (value < 0) {
       throw new Error('UInt must be positive')
@@ -41,11 +43,11 @@ class Writer {
       // an octet string.
       this.writeVarOctetString(value)
       return
-    } else if (!Number.isInteger(value)) {
+    } else if (!isInteger(value)) {
       throw new Error('UInt must be an integer')
     } else if (value < 0) {
       throw new Error('UInt must be positive')
-    } else if (value > Writer.MAX_VAR_UINT) {
+    } else if (value > Writer.MAX_SAFE_INTEGER) {
       throw new Error('UInt is too large')
     }
 
@@ -68,12 +70,12 @@ class Writer {
    * @param {Number|Array} A 64-bit integer as a number or of the form [high, low]
    */
   writeUInt64 (value) {
-    if (Number.isInteger(value) && value <= Number.MAX_SAFE_INTEGER) {
+    if (isInteger(value) && value <= Writer.MAX_SAFE_INTEGER) {
       this.writeUInt32(Math.floor(value / 0x100000000))
       this.writeUInt32(value & 0xffffffff)
       return
     } else if (!Array.isArray(value) || value.length !== 2 ||
-        !Number.isInteger(value[0]) || !Number.isInteger(value[1])) {
+        !isInteger(value[0]) || !isInteger(value[1])) {
       throw new TypeError('Expected 64-bit integer as an array of two 32-bit words')
     }
 
@@ -159,7 +161,7 @@ class Writer {
 }
 
 // Largest value that can be written as a variable-length unsigned integer
-Writer.MAX_VAR_UINT = Number.MAX_SAFE_INTEGER
+Writer.MAX_SAFE_INTEGER = require('core-js/library/fn/number/max-safe-integer')
 
 // Create writeUInt{8,16,32} shortcuts
 ;[1, 2, 4].forEach((bytes) => {
