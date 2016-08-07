@@ -1,5 +1,7 @@
 'use strict'
 
+const isInteger = require('core-js/library/fn/number/is-integer')
+
 /**
  * Writable stream which tracks the amount of data written.
  *
@@ -37,7 +39,7 @@ class Predictor {
       // an octet string.
       this.writeVarOctetString(value)
       return
-    } else if (!Number.isInteger(value)) {
+    } else if (!isInteger(value)) {
       throw new Error('UInt must be an integer')
     } else if (value < 0) {
       throw new Error('UInt must be positive')

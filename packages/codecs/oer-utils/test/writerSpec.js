@@ -1,6 +1,6 @@
 'use strict'
 
-const Writer = require('../writer')
+const Writer = require('../src/lib/writer')
 
 const assert = require('chai').assert
 

@@ -5,7 +5,7 @@ test:
   override:
     # Run lint
     - npm run lint
-    # Run tests with coverage
+    # Build and run tests with coverage
     - npm test --coverage
   post:
     # Upload code coverage data
