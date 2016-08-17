@@ -36,7 +36,9 @@ class BaseError extends Error {
     })
 
     // Set this.stack
-    Error.captureStackTrace(this, this.constructor)
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor)
+    }
   }
 }
 
