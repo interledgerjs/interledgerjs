@@ -79,6 +79,11 @@ class Reader {
    * @return {Number} Contents of the next byte.
    */
   peekUInt (length) {
+    if (length === 0) return 0
+    if (length < 0) {
+      throw new Error('Tried to read integer with negative length (provided: ' +
+        length + ')')
+    }
     if (length > Reader.MAX_INT_BYTES) {
       throw new Error('Tried to read too large integer (requested: ' +
         length + ', max: ' + Reader.MAX_INT_BYTES + ')')
@@ -206,7 +211,17 @@ class Reader {
     const length = this.readUInt8()
 
     if (length & Reader.HIGH_BIT) {
-      return this.readUInt(length & Reader.LOWER_SEVEN_BITS)
+      const lengthPrefixLength = length & Reader.LOWER_SEVEN_BITS
+      const actualLength = this.readUInt(lengthPrefixLength)
+
+      // Reject lengths that could have been encoded with a shorter prefix
+      const minLength = Math.max(128, 1 << ((lengthPrefixLength - 1) * 8))
+      if (actualLength < minLength) {
+        throw new ParseError('Length prefix encoding is not canonical: ' +
+          actualLength + ' encoded in ' + lengthPrefixLength + ' bytes')
+      }
+
+      return actualLength
     }
 
     return length
