@@ -24,5 +24,8 @@
   "bugs": {
     "url": "https://github.com/interledger/js-ilp-packet/issues"
   },
-  "homepage": "https://github.com/interledger/js-ilp-packet#readme"
+  "homepage": "https://github.com/interledger/js-ilp-packet#readme",
+  "devDependencies": {
+    "chai": "^3.5.0"
+  }
 }
