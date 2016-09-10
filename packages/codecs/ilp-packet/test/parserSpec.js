@@ -20,7 +20,6 @@ describe('Parser', function () {
           assert.deepEqual(serialized.toString('base64'), test.binary)
         })
       }
-      console.log('validTests', validTests)
     })
   })
 
@@ -37,7 +36,6 @@ describe('Parser', function () {
           assert.deepEqual(parsed, test.json)
         })
       }
-      console.log('validTests', validTests)
     })
   })
 })
