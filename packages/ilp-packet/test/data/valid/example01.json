@@ -2,7 +2,9 @@
   "name": "example 1",
   "binary": "AAESAA1leGFtcGxlLmFsaWNl/gFrAA==",
   "json": {
-    "amount": "1.07",
-    "account": "example.alice"
+    "ilp_header": {
+      "amount": "1.07",
+      "account": "example.alice"
+    }
   }
 }

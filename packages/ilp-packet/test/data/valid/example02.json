@@ -1,0 +1,10 @@
+{
+  "name": "example 2",
+  "binary": "AAEQAAtleGFtcGxlLmJvYgIBAQA=",
+  "json": {
+    "ilp_header": {
+      "amount": "100",
+      "account": "example.bob"
+    }
+  }
+}
