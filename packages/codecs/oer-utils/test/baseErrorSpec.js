@@ -10,4 +10,15 @@ describe('BaseError', function () {
 
     assert.equal(err.message, '')
   })
+
+  it('should still work if Error.captureStackTrace is not available', function () {
+    const captureStackTrace = Error.captureStackTrace
+    delete Error.captureStackTrace
+
+    const err = new BaseError()
+
+    assert.equal(err.message, '')
+
+    Error.captureStackTrace = captureStackTrace
+  })
 })
