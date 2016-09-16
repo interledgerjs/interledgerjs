@@ -61,7 +61,7 @@ class Reader {
   }
 
   /**
-   * Read a fixed-length big-endian integer.
+   * Read a fixed-length unsigned big-endian integer.
    *
    * @param {Number} length Length of the integer in bytes.
    * @return {Number} Contents of next byte.
@@ -73,7 +73,7 @@ class Reader {
   }
 
   /**
-   * Look at a fixed-length integer, but don't advance the cursor.
+   * Look at a fixed-length unsigned integer, but don't advance the cursor.
    *
    * @param {Number} length Length of the integer in bytes.
    * @return {Number} Contents of the next byte.
@@ -97,6 +97,46 @@ class Reader {
    * Advance cursor by length bytes.
    */
   skipUInt (length) {
+    this.skip(length)
+  }
+
+  /**
+   * Read a fixed-length signed big-endian integer.
+   *
+   * @param {Number} length Length of the integer in bytes.
+   * @return {Number} Contents of next byte.
+   */
+  readInt (length) {
+    const value = this.peekInt(length)
+    this.cursor += length
+    return value
+  }
+
+  /**
+   * Look at a fixed-length signed integer, but don't advance the cursor.
+   *
+   * @param {Number} length Length of the integer in bytes.
+   * @return {Number} Contents of the next byte.
+   */
+  peekInt (length) {
+    if (length === 0) return 0
+    if (length < 0) {
+      throw new Error('Tried to read integer with negative length (provided: ' +
+        length + ')')
+    }
+    if (length > Reader.MAX_INT_BYTES) {
+      throw new Error('Tried to read too large integer (requested: ' +
+        length + ', max: ' + Reader.MAX_INT_BYTES + ')')
+    }
+    this.ensureAvailable(length)
+    const value = this.buffer.readIntBE(this.cursor, length)
+    return value
+  }
+
+  /**
+   * Advance cursor by length bytes.
+   */
+  skipInt (length) {
     this.skip(length)
   }
 
@@ -129,7 +169,7 @@ class Reader {
   }
 
   /**
-   * Read a variable-length integer at the cursor position.
+   * Read a variable-length unsigned integer at the cursor position.
    *
    * Return the integer as a number and advance the cursor accordingly.
    *
@@ -150,7 +190,7 @@ class Reader {
   }
 
   /**
-   * Read the next variable-length integer, but don't advance the cursor.
+   * Read the next variable-length unsigned integer, but don't advance the cursor.
    *
    * @return {Number} Integer at the cursor position.
    */
@@ -163,12 +203,56 @@ class Reader {
   }
 
   /**
-   * Skip past the variable-length integer at the cursor position.
+   * Skip past the variable-length unsigned integer at the cursor position.
    *
    * Since variable integers are encoded the same way as octet strings, this
    * method is equivalent to skipVarOctetString.
    */
   skipVarUInt () {
+    this.skipVarOctetString()
+  }
+
+  /**
+   * Read a variable-length unsigned integer at the cursor position.
+   *
+   * Return the integer as a number and advance the cursor accordingly.
+   *
+   * @return {Number} Value of the integer.
+   */
+  readVarInt () {
+    const buffer = this.readVarOctetString()
+    if (buffer.length > Reader.MAX_INT_BYTES) {
+      throw new ParseError('Int of length ' + buffer.length +
+        ' too large to parse as integer (max: ' + Reader.MAX_INT_BYTES + ')')
+    }
+
+    if (buffer.length === 0) {
+      throw new ParseError('Int of length 0 is invalid')
+    }
+
+    return buffer.readIntBE(0, buffer.length)
+  }
+
+  /**
+   * Read the next variable-length unsigned integer, but don't advance the cursor.
+   *
+   * @return {Number} Integer at the cursor position.
+   */
+  peekVarInt () {
+    this.bookmark()
+    const value = this.readVarInt()
+    this.restore()
+
+    return value
+  }
+
+  /**
+   * Skip past the variable-length signed integer at the cursor position.
+   *
+   * Since variable integers are encoded the same way as octet strings, this
+   * method is equivalent to skipVarOctetString.
+   */
+  skipVarInt () {
     this.skipVarOctetString()
   }
 
@@ -321,6 +405,10 @@ Reader.MAX_INT_BYTES = 6
   ;[1, 2, 4].forEach((bytes) => {
     Reader.prototype[verb + 'UInt' + bytes * 8] = function () {
       return this[verb + 'UInt'](bytes)
+    }
+
+    Reader.prototype[verb + 'Int' + bytes * 8] = function () {
+      return this[verb + 'Int'](bytes)
     }
   })
 })

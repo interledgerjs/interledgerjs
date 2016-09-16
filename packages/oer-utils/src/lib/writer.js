@@ -20,7 +20,9 @@ class Writer {
       throw new Error('UInt must be positive')
     } else if (length <= 0) {
       throw new Error('UInt length must be greater than zero')
-    } else if (value.toString(2).length > length * 8) {
+    } else if (value > Writer.MAX_SAFE_INTEGER) {
+      throw new Error('UInt is larger than safe JavaScript range')
+    } else if (value > Writer.UINT_RANGES[length]) {
       throw new Error('UInt ' + value + ' does not fit in ' + length + ' bytes')
     }
 
@@ -30,7 +32,33 @@ class Writer {
   }
 
   /**
-   * Write a variable length integer to the stream.
+   * Write a fixed-length signed integer to the stream.
+   *
+   * @param {Number} value Value to write. Must be in range for the given length.
+   * @param {Number} length Number of bytes to encode this value as.
+   */
+  writeInt (value, length) {
+    if (!isInteger(value)) {
+      throw new Error('Int must be an integer')
+    } else if (length <= 0) {
+      throw new Error('Int length must be greater than zero')
+    } else if (value > Writer.MAX_SAFE_INTEGER) {
+      throw new Error('Int is larger than safe JavaScript range')
+    } else if (value < Writer.MIN_SAFE_INTEGER) {
+      throw new Error('Int is smaller than safe JavaScript range')
+    } else if (value < Writer.INT_RANGES[length][0]) {
+      throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
+    } else if (value > Writer.INT_RANGES[length][1]) {
+      throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
+    }
+
+    const buffer = new Buffer(length)
+    buffer.writeIntBE(value, 0, length)
+    this.write(buffer)
+  }
+
+  /**
+   * Write a variable length unsigned integer to the stream.
    *
    * We need to first turn the integer into a buffer in big endian order, then
    * we write the buffer as an octet string.
@@ -48,7 +76,7 @@ class Writer {
     } else if (value < 0) {
       throw new Error('UInt must be positive')
     } else if (value > Writer.MAX_SAFE_INTEGER) {
-      throw new Error('UInt is too large')
+      throw new Error('UInt is larger than safe JavaScript range')
     }
 
     const lengthOfValue = Math.ceil(value.toString(2).length / 8)
@@ -59,7 +87,37 @@ class Writer {
   }
 
   /**
-   * Write a 64-bit integer.
+   * Write a variable length signed integer to the stream.
+   *
+   * We need to first turn the integer into a buffer in big endian order, then
+   * we write the buffer as an octet string.
+   *
+   * @param {Number} value Integer to represent.
+   */
+  writeVarInt (value) {
+    if (Buffer.isBuffer(value)) {
+      // If the integer was already passed as a buffer, we can just treat it as
+      // an octet string.
+      this.writeVarOctetString(value)
+      return
+    } else if (!isInteger(value)) {
+      throw new Error('Int must be an integer')
+    } else if (value > Writer.MAX_SAFE_INTEGER) {
+      throw new Error('Int is larger than safe JavaScript range')
+    } else if (value < Writer.MIN_SAFE_INTEGER) {
+      throw new Error('Int is smaller than safe JavaScript range')
+    }
+
+    const lengthDeterminingValue = (value < 0) ? 1 - value : value
+    const lengthOfValue = Math.ceil((lengthDeterminingValue.toString(2).length + 1) / 8)
+    const buffer = new Buffer(lengthOfValue)
+    buffer.writeIntBE(value, 0, lengthOfValue)
+
+    this.writeVarOctetString(buffer)
+  }
+
+  /**
+   * Write a 64-bit unsigned integer.
    *
    * It is possible to pass a number to this method, however only if the number
    * is guaranteed to be smaller than Number.MAX_SAFE_INTEGER.
@@ -162,11 +220,34 @@ class Writer {
 
 // Largest value that can be written as a variable-length unsigned integer
 Writer.MAX_SAFE_INTEGER = require('core-js/library/fn/number/max-safe-integer')
+Writer.MIN_SAFE_INTEGER = require('core-js/library/fn/number/min-safe-integer')
 
-// Create writeUInt{8,16,32} shortcuts
+Writer.UINT_RANGES = {
+  1: 0xff,
+  2: 0xffff,
+  3: 0xffffff,
+  4: 0xffffffff,
+  5: 0xffffffffff,
+  6: 0xffffffffffff
+}
+
+Writer.INT_RANGES = {
+  1: [-0x80, 0x7f],
+  2: [-0x8000, 0x7fff],
+  3: [-0x800000, 0x7fffff],
+  4: [-0x80000000, 0x7fffffff],
+  5: [-0x8000000000, 0x7fffffffff],
+  6: [-0x800000000000, 0x7fffffffffff]
+}
+
+// Create write(U)Int{8,16,32} shortcuts
 ;[1, 2, 4].forEach((bytes) => {
   Writer.prototype['writeUInt' + bytes * 8] = function (value) {
     this.writeUInt(value, bytes)
+  }
+
+  Writer.prototype['writeInt' + bytes * 8] = function (value) {
+    this.writeInt(value, bytes)
   }
 })
 
