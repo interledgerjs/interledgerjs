@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/interledger/js-ilp-packet.git"
+    "url": "git+https://github.com/interledgerjs/ilp-packet.git"
   },
   "keywords": [
     "ilp",
@@ -22,9 +22,9 @@
   "author": "Interledger Team <info@interledger.org>",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/interledger/js-ilp-packet/issues"
+    "url": "https://github.com/interledgerjs/ilp-packet/issues"
   },
-  "homepage": "https://github.com/interledger/js-ilp-packet#readme",
+  "homepage": "https://github.com/interledgerjs/ilp-packet#readme",
   "devDependencies": {
     "chai": "^3.5.0"
   },
