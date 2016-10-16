@@ -4,10 +4,10 @@
 
 [npm-image]: https://img.shields.io/npm/v/oer-utils.svg?style=flat
 [npm-url]: https://npmjs.org/package/oer-utils
-[circle-image]: https://circleci.com/gh/interledger/js-oer-utils.svg?style=shield
-[circle-url]: https://circleci.com/gh/interledger/js-oer-utils
-[codecov-image]: https://codecov.io/gh/interledger/js-oer-utils/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/interledger/js-oer-utils
+[circle-image]: https://circleci.com/gh/interledgerjs/oer-utils.svg?style=shield
+[circle-url]: https://circleci.com/gh/interledgerjs/oer-utils
+[codecov-image]: https://codecov.io/gh/interledgerjs/oer-utils/branch/master/graph/badge.svg
+[codecov-url]: https://codecov.io/gh/interledgerjs/oer-utils
 
 > Collection of tools for OER parsing and serialization
 

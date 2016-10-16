@@ -21,7 +21,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/interledger/js-oer-utils.git"
+    "url": "https://github.com/interledgerjs/oer-utils.git"
   },
   "keywords": [
     "canonical",
@@ -37,9 +37,9 @@
   "author": "Interledger Team <info@interledger.org>",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/interledger/js-oer-utils/issues"
+    "url": "https://github.com/interledgerjs/oer-utils/issues"
   },
-  "homepage": "https://github.com/interledger/js-oer-utils",
+  "homepage": "https://github.com/interledgerjs/oer-utils",
   "dependencies": {
     "core-js": "^2.4.1"
   },
