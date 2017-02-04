@@ -17,7 +17,7 @@ describe('Parser', function () {
 
           const serialized = Parser.serialize(json)
 
-          assert.deepEqual(serialized.toString('base64'), test.binary)
+          assert.deepEqual(serialized.toString('hex'), test.binary)
         })
       }
     })
@@ -29,7 +29,7 @@ describe('Parser', function () {
 
       for (let test of validTests) {
         it(test.name, function () {
-          const binary = new Buffer(test.binary, 'base64')
+          const binary = new Buffer(test.binary, 'hex')
 
           const parsed = Parser.deserialize(binary)
 
