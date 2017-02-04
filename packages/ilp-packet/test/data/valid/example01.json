@@ -1,10 +1,9 @@
 {
   "name": "example 1",
-  "binary": "AAESAA1leGFtcGxlLmFsaWNl/gFrAA==",
-  "json": {
-    "ilp_header": {
-      "amount": "1.07",
-      "account": "example.alice"
-    }
-  }
+  "binary": "000000150000000000006bfe6578616d706c652e616c696365",
+  "json": [{
+    "type": "https://interledger.org/rel/ilp",
+    "destination_amount": "1.07",
+    "destination_account": "example.alice"
+  }]
 }
