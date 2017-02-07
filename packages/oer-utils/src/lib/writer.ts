@@ -1,8 +1,31 @@
-'use strict'
-
-const isInteger = require('core-js/library/fn/number/is-integer')
+import isInteger = require('core-js/library/fn/number/is-integer')
+import MAX_SAFE_INTEGER = require('core-js/library/fn/number/max-safe-integer')
 
 class Writer {
+  // Largest value that can be written as a variable-length unsigned integer
+  static MAX_SAFE_INTEGER = MAX_SAFE_INTEGER
+  static MIN_SAFE_INTEGER: number = require('core-js/library/fn/number/min-safe-integer')
+
+  static UINT_RANGES = {
+    1: 0xff,
+    2: 0xffff,
+    3: 0xffffff,
+    4: 0xffffffff,
+    5: 0xffffffffff,
+    6: 0xffffffffffff
+  }
+
+  static INT_RANGES = {
+    1: [-0x80, 0x7f],
+    2: [-0x8000, 0x7fff],
+    3: [-0x800000, 0x7fffff],
+    4: [-0x80000000, 0x7fffffff],
+    5: [-0x8000000000, 0x7fffffffff],
+    6: [-0x800000000000, 0x7fffffffffff]
+  }
+
+  components: Buffer[]
+
   constructor () {
     this.components = []
   }
@@ -10,10 +33,10 @@ class Writer {
   /**
    * Write a fixed-length unsigned integer to the stream.
    *
-   * @param {Number} value Value to write. Must be in range for the given length.
-   * @param {Number} length Number of bytes to encode this value as.
+   * @param {number} value Value to write. Must be in range for the given length.
+   * @param {number} length Number of bytes to encode this value as.
    */
-  writeUInt (value, length) {
+  writeUInt (value: number, length: number) {
     if (!isInteger(value)) {
       throw new Error('UInt must be an integer')
     } else if (value < 0) {
@@ -34,10 +57,10 @@ class Writer {
   /**
    * Write a fixed-length signed integer to the stream.
    *
-   * @param {Number} value Value to write. Must be in range for the given length.
-   * @param {Number} length Number of bytes to encode this value as.
+   * @param {number} value Value to write. Must be in range for the given length.
+   * @param {number} length Number of bytes to encode this value as.
    */
-  writeInt (value, length) {
+  writeInt (value: number, length: number) {
     if (!isInteger(value)) {
       throw new Error('Int must be an integer')
     } else if (length <= 0) {
@@ -63,9 +86,9 @@ class Writer {
    * We need to first turn the integer into a buffer in big endian order, then
    * we write the buffer as an octet string.
    *
-   * @param {Number} value Integer to represent.
+   * @param {number} value Integer to represent.
    */
-  writeVarUInt (value) {
+  writeVarUInt (value: number | Buffer) {
     if (Buffer.isBuffer(value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -92,9 +115,9 @@ class Writer {
    * We need to first turn the integer into a buffer in big endian order, then
    * we write the buffer as an octet string.
    *
-   * @param {Number} value Integer to represent.
+   * @param {number} value Integer to represent.
    */
-  writeVarInt (value) {
+  writeVarInt (value: number | Buffer) {
     if (Buffer.isBuffer(value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -125,10 +148,10 @@ class Writer {
    * Alternatively, the number may be passed as an array of two 32-bit words,
    * with the most significant word first.
    *
-   * @param {Number|Array} A 64-bit integer as a number or of the form [high, low]
+   * @param {number|number[]} A 64-bit integer as a number or of the form [high, low]
    */
-  writeUInt64 (value) {
-    if (isInteger(value) && value <= Writer.MAX_SAFE_INTEGER) {
+  writeUInt64 (value: number | number[]) {
+    if (typeof value === 'number' && isInteger(value) && value <= Writer.MAX_SAFE_INTEGER) {
       this.writeUInt32(Math.floor(value / 0x100000000))
       this.writeUInt32(value & 0xffffffff)
       return
@@ -148,9 +171,9 @@ class Writer {
    * provided buffer is correct.
    *
    * @param {Buffer} buffer Data to write.
-   * @param {Number} length Length of data according to the format.
+   * @param {number} length Length of data according to the format.
    */
-  writeOctetString (buffer, length) {
+  writeOctetString (buffer: Buffer, length: number) {
     if (buffer.length !== length) {
       throw new Error('Incorrect length for octet string (actual: ' +
         buffer.length + ', expected: ' + length + ')')
@@ -165,7 +188,7 @@ class Writer {
    *
    * @param {Buffer} buffer Contents of the octet string.
    */
-  writeVarOctetString (buffer) {
+  writeVarOctetString (buffer: Buffer) {
     if (!Buffer.isBuffer(buffer)) {
       throw new TypeError('Expects a buffer')
     }
@@ -197,7 +220,7 @@ class Writer {
    *
    * @param {Buffer} buffer Bytes to write.
    */
-  write (buffer) {
+  write (buffer: Buffer) {
     this.components.push(buffer)
   }
 
@@ -218,37 +241,24 @@ class Writer {
   }
 }
 
-// Largest value that can be written as a variable-length unsigned integer
-Writer.MAX_SAFE_INTEGER = require('core-js/library/fn/number/max-safe-integer')
-Writer.MIN_SAFE_INTEGER = require('core-js/library/fn/number/min-safe-integer')
-
-Writer.UINT_RANGES = {
-  1: 0xff,
-  2: 0xffff,
-  3: 0xffffff,
-  4: 0xffffffff,
-  5: 0xffffffffff,
-  6: 0xffffffffffff
-}
-
-Writer.INT_RANGES = {
-  1: [-0x80, 0x7f],
-  2: [-0x8000, 0x7fff],
-  3: [-0x800000, 0x7fffff],
-  4: [-0x80000000, 0x7fffffff],
-  5: [-0x8000000000, 0x7fffffffff],
-  6: [-0x800000000000, 0x7fffffffffff]
+interface Writer {
+  writeUInt8(value: number): undefined
+  writeUInt16(value: number): undefined
+  writeUInt32(value: number): undefined
+  writeInt8(value: number): undefined
+  writeInt16(value: number): undefined
+  writeInt32(value: number): undefined
 }
 
 // Create write(U)Int{8,16,32} shortcuts
 ;[1, 2, 4].forEach((bytes) => {
-  Writer.prototype['writeUInt' + bytes * 8] = function (value) {
+  Writer.prototype['writeUInt' + bytes * 8] = function (value: number) {
     this.writeUInt(value, bytes)
   }
 
-  Writer.prototype['writeInt' + bytes * 8] = function (value) {
+  Writer.prototype['writeInt' + bytes * 8] = function (value: number) {
     this.writeInt(value, bytes)
   }
 })
 
-module.exports = Writer
+export = Writer

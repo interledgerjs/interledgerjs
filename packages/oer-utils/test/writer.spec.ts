@@ -1,8 +1,7 @@
-'use strict'
+import Writer = require('../src/lib/writer')
 
-const Writer = require('../src/lib/writer')
-
-const assert = require('chai').assert
+import chai = require('chai')
+const assert = chai.assert
 
 describe('Writer', function () {
   describe('constructor', function () {
@@ -17,9 +16,10 @@ describe('Writer', function () {
     it('when writing a zero byte integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeUInt(0, 0)
-      }, 'UInt length must be greater than zero')
+      assert.throws(
+        () => writer.writeUInt(0, 0),
+        'UInt length must be greater than zero'
+      )
     })
 
     it('should write a one byte integer zero', function () {
@@ -57,33 +57,37 @@ describe('Writer', function () {
     it('when asked to write an integer that does not fit, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeUInt(256, 1)
-      }, 'UInt 256 does not fit in 1 bytes')
+      assert.throws(
+        () => writer.writeUInt(256, 1),
+        'UInt 256 does not fit in 1 bytes'
+      )
     })
 
     it('when asked to write an integer outside of safe JavaScript range, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeUInt(Number.MAX_SAFE_INTEGER + 1, 1)
-      }, 'UInt is larger than safe JavaScript range')
+      assert.throws(
+        () => writer.writeUInt(Number.MAX_SAFE_INTEGER + 1, 1),
+        'UInt is larger than safe JavaScript range'
+      )
     })
 
     it('when asked to write a negative integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeUInt(-1, 1)
-      }, 'UInt must be positive')
+      assert.throws(
+        () => writer.writeUInt(-1, 1),
+        'UInt must be positive'
+      )
     })
 
     it('when asked to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeUInt(false, 1)
-      }, 'UInt must be an integer')
+      assert.throws(
+        () => writer.writeUInt(false as any, 1),
+        'UInt must be an integer'
+      )
     })
   })
 
@@ -91,9 +95,10 @@ describe('Writer', function () {
     it('when writing a zero byte integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeInt(0, 0)
-      }, 'Int length must be greater than zero')
+      assert.throws(
+        () => writer.writeInt(0, 0),
+        'Int length must be greater than zero'
+      )
     })
 
     it('should write a one byte integer zero', function () {
@@ -147,41 +152,46 @@ describe('Writer', function () {
     it('when asked to write an integer that does not fit, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeInt(256, 1)
-      }, 'Int 256 does not fit in 1 bytes')
+      assert.throws(
+        () => writer.writeInt(256, 1),
+        'Int 256 does not fit in 1 bytes'
+      )
     })
 
     it('when asked to write a negative integer that does not fit, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeInt(-257, 1)
-      }, 'Int -257 does not fit in 1 bytes')
+      assert.throws(
+        () => writer.writeInt(-257, 1),
+        'Int -257 does not fit in 1 bytes'
+      )
     })
 
     it('when asked to write an integer above safe JavaScript range, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeInt(Number.MAX_SAFE_INTEGER + 1, 1)
-      }, 'Int is larger than safe JavaScript range')
+      assert.throws(
+        () => writer.writeInt(Number.MAX_SAFE_INTEGER + 1, 1),
+        'Int is larger than safe JavaScript range'
+      )
     })
 
     it('when asked to write an integer above safe JavaScript range, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeInt(Number.MIN_SAFE_INTEGER - 1, 1)
-      }, 'Int is smaller than safe JavaScript range')
+      assert.throws(
+        () => writer.writeInt(Number.MIN_SAFE_INTEGER - 1, 1),
+        'Int is smaller than safe JavaScript range'
+      )
     })
 
     it('when asked to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeInt(false, 1)
-      }, 'Int must be an integer')
+      assert.throws(
+        () => writer.writeInt(false as any, 1),
+        'Int must be an integer'
+      )
     })
   })
 
@@ -229,33 +239,37 @@ describe('Writer', function () {
     it('when trying to write an unsafe integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarUInt(Number.MAX_SAFE_INTEGER + 1)
-      }, 'UInt is larger than safe JavaScript range')
+      assert.throws(
+        () => writer.writeVarUInt(Number.MAX_SAFE_INTEGER + 1),
+        'UInt is larger than safe JavaScript range'
+      )
     })
 
     it('when trying to write an eight-byte integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarUInt(0x0100000000000000)
-      }, 'UInt is larger than safe JavaScript range')
+      assert.throws(
+        () => writer.writeVarUInt(0x0100000000000000),
+        'UInt is larger than safe JavaScript range'
+      )
     })
 
     it('when trying to write a negative integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarUInt(-1)
-      }, 'UInt must be positive')
+      assert.throws(
+        () => writer.writeVarUInt(-1),
+        'UInt must be positive'
+      )
     })
 
     it('when trying to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarUInt(false)
-      }, 'UInt must be an integer')
+      assert.throws(
+        () => writer.writeVarUInt(false as any),
+        'UInt must be an integer'
+      )
     })
 
     it('should accept a buffer to write', function () {
@@ -327,33 +341,37 @@ describe('Writer', function () {
     it('when trying to write an unsafe integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarInt(Number.MAX_SAFE_INTEGER + 1)
-      }, 'Int is larger than safe JavaScript range')
+      assert.throws(
+        () => writer.writeVarInt(Number.MAX_SAFE_INTEGER + 1),
+        'Int is larger than safe JavaScript range'
+      )
     })
 
     it('when trying to write an unsafe negative integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarInt(Number.MIN_SAFE_INTEGER - 1)
-      }, 'Int is smaller than safe JavaScript range')
+      assert.throws(
+        () => writer.writeVarInt(Number.MIN_SAFE_INTEGER - 1),
+        'Int is smaller than safe JavaScript range'
+      )
     })
 
     it('when trying to write an eight-byte integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarInt(0x0100000000000000)
-      }, 'Int is larger than safe JavaScript range')
+      assert.throws(
+        () => writer.writeVarInt(0x0100000000000000),
+        'Int is larger than safe JavaScript range'
+      )
     })
 
     it('when trying to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarInt(false)
-      }, 'Int must be an integer')
+      assert.throws(
+        () => writer.writeVarInt(false as any),
+        'Int must be an integer'
+      )
     })
 
     it('should accept a buffer to write', function () {
@@ -397,9 +415,10 @@ describe('Writer', function () {
     it('when writing an octet string of the wrong length, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeOctetString(new Buffer('02', 'hex'), 2)
-      }, 'Incorrect length for octet string (actual: 1, expected: 2)')
+      assert.throws(
+        () => writer.writeOctetString(new Buffer('02', 'hex'), 2),
+        'Incorrect length for octet string (actual: 1, expected: 2)'
+      )
     })
   })
 
@@ -435,9 +454,10 @@ describe('Writer', function () {
     it('when writing a non-buffer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeVarOctetString(false)
-      }, 'Expects a buffer')
+      assert.throws(
+        () => writer.writeVarOctetString(false as any),
+        'Expects a buffer'
+      )
     })
   })
 
@@ -601,9 +621,10 @@ describe('Writer', function () {
     it('when writing an unsafe integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(() => {
-        writer.writeUInt64(Number.MAX_SAFE_INTEGER + 1)
-      }, 'Expected 64-bit integer as an array of two 32-bit words')
+      assert.throws(
+        () => writer.writeUInt64(Number.MAX_SAFE_INTEGER + 1),
+        'Expected 64-bit integer as an array of two 32-bit words'
+      )
     })
   })
 })

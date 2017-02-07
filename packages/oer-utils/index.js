@@ -1,5 +1,5 @@
 'use strict'
 
-exports.Reader = require('./dist/lib/reader')
-exports.Writer = require('./dist/lib/writer')
-exports.Predictor = require('./dist/lib/predictor')
+exports.Reader = require('./dist/src/lib/reader')
+exports.Writer = require('./dist/src/lib/writer')
+exports.Predictor = require('./dist/src/lib/predictor')

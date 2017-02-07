@@ -1,5 +1,3 @@
-'use strict'
-
 /**
  * @module util
  */
@@ -18,14 +16,14 @@
  * Note that this code is specific to V8 (due to `Error.captureStackTrace`).
  */
 class BaseError extends Error {
-  constructor (message) {
+  constructor (message: string = '') {
     super()
 
     // Set this.message
     Object.defineProperty(this, 'message', {
       configurable: true,
       enumerable: false,
-      value: message !== undefined ? String(message) : ''
+      value: message
     })
 
     // Set this.name
@@ -42,4 +40,4 @@ class BaseError extends Error {
   }
 }
 
-module.exports = BaseError
+export = BaseError

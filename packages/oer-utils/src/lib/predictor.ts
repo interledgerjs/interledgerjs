@@ -1,6 +1,4 @@
-'use strict'
-
-const isInteger = require('core-js/library/fn/number/is-integer')
+import isInteger = require('core-js/library/fn/number/is-integer')
 
 /**
  * Writable stream which tracks the amount of data written.
@@ -9,6 +7,8 @@ const isInteger = require('core-js/library/fn/number/is-integer')
  * work necessary to count/predict the output size.
  */
 class Predictor {
+  size: number
+
   constructor () {
     this.size = 0
   }
@@ -16,11 +16,11 @@ class Predictor {
   /**
    * Add the size of a fixed-length integer to the predicted size.
    *
-   * @params {Number} value Value of integer. Irrelevant here, but included in
-   *   order to have the same interface as the Writer.
-   * @params {Number} length Size of integer in bytes.
+   * @param {number} value Value of integer. Irrelevant here, but included in
+   *                       order to have the same interface as the Writer.
+   * @param {number} length Size of integer in bytes.
    */
-  writeUInt (value, length) {
+  writeUInt (value: number, length: number) {
     this.size += length
   }
 
@@ -31,9 +31,9 @@ class Predictor {
    * bit indicates that another byte is following. The first byte contains the
    * seven least significant bits of the number represented.
    *
-   * @param {Number} value Integer to be encoded
+   * @param {number} value Integer to be encoded
    */
-  writeVarUInt (value) {
+  writeVarUInt (value: number | Buffer) {
     if (Buffer.isBuffer(value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -46,7 +46,7 @@ class Predictor {
     }
 
     const length = Math.ceil(value.toString(2).length / 8)
-    this.writeVarOctetString({ length })
+    this.skipVarOctetString(length)
   }
 
   /**
@@ -57,7 +57,7 @@ class Predictor {
    * @param {Buffer} buffer Data to write.
    * @param {Number} length Length of data according to the format.
    */
-  writeOctetString (buffer, length) {
+  writeOctetString (buffer: Buffer, length: number) {
     this.skip(length)
   }
 
@@ -68,17 +68,8 @@ class Predictor {
    *
    * @param {Buffer} value Contents of the octet string.
    */
-  writeVarOctetString (buffer) {
-    // Skip initial byte
-    this.skip(1)
-
-    // Skip separate length field if there is one
-    if (buffer.length > 127) {
-      const lengthOfLength = Math.ceil(buffer.length.toString(2).length / 8)
-      this.skip(lengthOfLength)
-    }
-
-    this.skip(buffer.length)
+  writeVarOctetString (buffer: Buffer) {
+    this.skipVarOctetString(buffer.length)
   }
 
   /**
@@ -86,7 +77,7 @@ class Predictor {
    *
    * @param {Buffer} Bytes to write.
    */
-  write (bytes) {
+  write (bytes: Buffer) {
     this.size += bytes.length
   }
 
@@ -95,7 +86,7 @@ class Predictor {
    *
    * @param {Number} Number of bytes to pretend to write.
    */
-  skip (bytes) {
+  skip (bytes: number) {
     this.size += bytes
   }
 
@@ -107,13 +98,33 @@ class Predictor {
   getSize () {
     return this.size
   }
+
+  private skipVarOctetString (length: number) {
+    // Skip initial byte
+    this.skip(1)
+
+    // Skip separate length field if there is one
+    if (length > 127) {
+      const lengthOfLength = Math.ceil(length.toString(2).length / 8)
+      this.skip(lengthOfLength)
+    }
+
+    this.skip(length)
+  }
+}
+
+interface Predictor {
+  writeUInt8(value: number): undefined
+  writeUInt16(value: number): undefined
+  writeUInt32(value: number): undefined
+  writeUInt64(value: number): undefined
 }
 
 // Create writeUInt{8,16,32,64} shortcuts
 ;[1, 2, 4, 8].forEach((bytes) => {
-  Predictor.prototype['writeUInt' + bytes * 8] = function (value) {
-    return this['writeUInt'](value, bytes)
+  Predictor.prototype['writeUInt' + bytes * 8] = function (value: number) {
+    return this.writeUInt(value, bytes)
   }
 })
 
-module.exports = Predictor
+export = Predictor
