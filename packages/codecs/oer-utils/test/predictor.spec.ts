@@ -1,8 +1,7 @@
-'use strict'
+import Predictor = require('../src/lib/predictor')
 
-const Predictor = require('../src/lib/predictor')
-
-const assert = require('chai').assert
+import chai = require('chai')
+const assert = chai.assert
 
 describe('Predictor', function () {
   describe('constructor', function () {
@@ -68,17 +67,19 @@ describe('Predictor', function () {
     it('when writing a non-integer, should throw', function () {
       const predictor = new Predictor()
 
-      assert.throws(() => {
-        predictor.writeVarUInt(false)
-      }, 'UInt must be an integer')
+      assert.throws(
+        () => predictor.writeVarUInt(0.5),
+        'UInt must be an integer'
+      )
     })
 
     it('when writing a negative integer, should throw', function () {
       const predictor = new Predictor()
 
-      assert.throws(() => {
-        predictor.writeVarUInt(-1)
-      }, 'UInt must be positive')
+      assert.throws(
+        () => predictor.writeVarUInt(-1),
+        'UInt must be positive'
+      )
     })
   })
 

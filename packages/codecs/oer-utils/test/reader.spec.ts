@@ -1,8 +1,7 @@
-'use strict'
+import Reader = require('../src/lib/reader')
 
-const Reader = require('../src/lib/reader')
-
-const assert = require('chai').assert
+import chai = require('chai')
+const assert = chai.assert
 
 describe('Reader', function () {
   describe('constructor', function () {
@@ -37,9 +36,10 @@ describe('Reader', function () {
     })
 
     it('should throw if the wrong type of source is provided', function () {
-      assert.throws(() => {
-        Reader.from('test')
-      }, 'Reader must be given a Buffer')
+      assert.throws(
+        () => Reader.from('test' as any),
+        'Reader must be given a Buffer'
+      )
     })
   })
 
@@ -57,6 +57,20 @@ describe('Reader', function () {
       assert.equal(v1, 5)
       assert.equal(v2, 2)
     })
+
+    it('should throw when resuming too many times', function () {
+      const reader = Reader.from(new Buffer('010203040506', 'hex'))
+
+      reader.readUInt8()
+      reader.bookmark()
+      reader.skip(3)
+      reader.restore()
+
+      assert.throws(
+        () => reader.restore(),
+        'Cannot restore bookmark when no bookmark set'
+      )
+    })
   })
 
   describe('ensureAvailable', function () {
@@ -69,9 +83,10 @@ describe('Reader', function () {
     it('should throw when not enough bytes are available', function () {
       const reader = Reader.from(new Buffer('010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.ensureAvailable(7)
-      }, 'Tried to read 7 bytes, but only 6 bytes available')
+      assert.throws(
+        () => reader.ensureAvailable(7),
+        'Tried to read 7 bytes, but only 6 bytes available'
+      )
     })
 
     it('should succeed when enough bytes are available after reading some', function () {
@@ -87,9 +102,10 @@ describe('Reader', function () {
 
       reader.skip(3)
 
-      assert.throws(() => {
-        reader.ensureAvailable(4)
-      }, 'Tried to read 4 bytes, but only 3 bytes available')
+      assert.throws(
+        () => reader.ensureAvailable(4),
+        'Tried to read 4 bytes, but only 3 bytes available'
+      )
     })
   })
 
@@ -151,9 +167,10 @@ describe('Reader', function () {
     it('when trying to read a seven byte integer, should throw', function () {
       const reader = Reader.from(new Buffer('01020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.readUInt(7)
-      }, 'Tried to read too large integer (requested: 7, max: 6)')
+      assert.throws(
+        () => reader.readUInt(7),
+        'Tried to read too large integer (requested: 7, max: 6)'
+      )
     })
   })
 
@@ -221,17 +238,19 @@ describe('Reader', function () {
     it('when trying to read a seven byte integer, should throw', function () {
       const reader = Reader.from(new Buffer('01020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.peekUInt(7)
-      }, 'Tried to read too large integer (requested: 7, max: 6)')
+      assert.throws(
+        () => reader.peekUInt(7),
+        'Tried to read too large integer (requested: 7, max: 6)'
+      )
     })
 
     it('when trying to read a negative length integer, should throw', function () {
       const reader = Reader.from(new Buffer('01020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.peekUInt(-1)
-      }, 'Tried to read integer with negative length (provided: -1)')
+      assert.throws(
+        () => reader.peekUInt(-1),
+        'Tried to read integer with negative length (provided: -1)'
+      )
     })
   })
 
@@ -305,9 +324,10 @@ describe('Reader', function () {
     it('when trying to read a seven byte integer, should throw', function () {
       const reader = Reader.from(new Buffer('01020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.readInt(7)
-      }, 'Tried to read too large integer (requested: 7, max: 6)')
+      assert.throws(
+        () => reader.readInt(7),
+        'Tried to read too large integer (requested: 7, max: 6)'
+      )
     })
   })
 
@@ -383,17 +403,19 @@ describe('Reader', function () {
     it('when trying to read a seven byte integer, should throw', function () {
       const reader = Reader.from(new Buffer('01020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.peekInt(7)
-      }, 'Tried to read too large integer (requested: 7, max: 6)')
+      assert.throws(
+        () => reader.peekInt(7),
+        'Tried to read too large integer (requested: 7, max: 6)'
+      )
     })
 
     it('when trying to read a negative length integer, should throw', function () {
       const reader = Reader.from(new Buffer('01020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.peekInt(-1)
-      }, 'Tried to read integer with negative length (provided: -1)')
+      assert.throws(
+        () => reader.peekInt(-1),
+        'Tried to read integer with negative length (provided: -1)'
+      )
     })
   })
 
@@ -413,9 +435,10 @@ describe('Reader', function () {
     it('when reading a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('00', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarUInt()
-      }, 'UInt of length 0 is invalid')
+      assert.throws(
+        () => reader.readVarUInt(),
+        'UInt of length 0 is invalid'
+      )
     })
 
     it('should read a one byte variable-length integer', function () {
@@ -475,25 +498,28 @@ describe('Reader', function () {
     it('when reading a seven byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('0701020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarUInt()
-      }, 'UInt of length 7 too large to parse as integer')
+      assert.throws(
+        () => reader.readVarUInt(),
+        'UInt of length 7 too large to parse as integer'
+      )
     })
 
     it('when reading a truncated variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('04010203', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarUInt()
-      }, 'Tried to read 4 bytes')
+      assert.throws(
+        () => reader.readVarUInt(),
+        'Tried to read 4 bytes'
+      )
     })
 
     it('when reading a length-only variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('04', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarUInt()
-      }, 'Tried to read 4 bytes')
+      assert.throws(
+        () => reader.readVarUInt(),
+        'Tried to read 4 bytes'
+      )
     })
   })
 
@@ -501,9 +527,10 @@ describe('Reader', function () {
     it('when reading a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('00', 'hex'))
 
-      assert.throws(() => {
-        reader.peekVarUInt()
-      }, 'UInt of length 0 is invalid')
+      assert.throws(
+        () => reader.peekVarUInt(),
+        'UInt of length 0 is invalid'
+      )
     })
 
     it('should read a one byte variable-length integer', function () {
@@ -563,9 +590,10 @@ describe('Reader', function () {
     it('when reading a seven byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('0701020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.peekVarUInt()
-      }, 'UInt of length 7 too large to parse as integer')
+      assert.throws(
+        () => reader.peekVarUInt(),
+        'UInt of length 7 too large to parse as integer'
+      )
     })
   })
 
@@ -573,9 +601,10 @@ describe('Reader', function () {
     it.skip('when skipping a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('00', 'hex'))
 
-      assert.throws(() => {
-        reader.skipVarUInt()
-      }, 'UInt of length 0 is invalid')
+      assert.throws(
+        () => reader.skipVarUInt(),
+        'UInt of length 0 is invalid'
+      )
     })
 
     it('should skip a one byte variable-length integer', function () {
@@ -629,9 +658,10 @@ describe('Reader', function () {
     it.skip('when skipping a seven byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('0701020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.skipVarUInt()
-      }, 'UInt of length 7 too large to parse as integer')
+      assert.throws(
+        () => reader.skipVarUInt(),
+        'UInt of length 7 too large to parse as integer'
+      )
     })
   })
 
@@ -639,9 +669,10 @@ describe('Reader', function () {
     it('when reading a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('00', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarInt()
-      }, 'Int of length 0 is invalid')
+      assert.throws(
+        () => reader.readVarInt(),
+        'Int of length 0 is invalid'
+      )
     })
 
     it('should read a one byte variable-length integer', function () {
@@ -701,25 +732,28 @@ describe('Reader', function () {
     it('when reading a seven byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('0701020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarInt()
-      }, 'Int of length 7 too large to parse as integer')
+      assert.throws(
+        () => reader.readVarInt(),
+        'Int of length 7 too large to parse as integer'
+      )
     })
 
     it('when reading a truncated variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('04010203', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarInt()
-      }, 'Tried to read 4 bytes')
+      assert.throws(
+        () => reader.readVarInt(),
+        'Tried to read 4 bytes'
+      )
     })
 
     it('when reading a length-only variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('04', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarInt()
-      }, 'Tried to read 4 bytes')
+      assert.throws(
+        () => reader.readVarInt(),
+        'Tried to read 4 bytes'
+      )
     })
   })
 
@@ -727,9 +761,10 @@ describe('Reader', function () {
     it('when reading a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('00', 'hex'))
 
-      assert.throws(() => {
-        reader.peekVarInt()
-      }, 'Int of length 0 is invalid')
+      assert.throws(
+        () => reader.peekVarInt(),
+        'Int of length 0 is invalid'
+      )
     })
 
     it('should read a one byte variable-length integer', function () {
@@ -789,9 +824,10 @@ describe('Reader', function () {
     it('when reading a seven byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('0701020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.peekVarInt()
-      }, 'Int of length 7 too large to parse as integer')
+      assert.throws(
+        () => reader.peekVarInt(),
+        'Int of length 7 too large to parse as integer'
+      )
     })
   })
 
@@ -799,9 +835,10 @@ describe('Reader', function () {
     it.skip('when skipping a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('00', 'hex'))
 
-      assert.throws(() => {
-        reader.skipVarInt()
-      }, 'Int of length 0 is invalid')
+      assert.throws(
+        () => reader.skipVarInt(),
+        'Int of length 0 is invalid'
+      )
     })
 
     it('should skip a one byte variable-length integer', function () {
@@ -855,9 +892,10 @@ describe('Reader', function () {
     it.skip('when skipping a seven byte variable-length integer, should throw', function () {
       const reader = Reader.from(new Buffer('0701020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.skipVarInt()
-      }, 'Int of length 7 too large to parse as integer')
+      assert.throws(
+        () => reader.skipVarInt(),
+        'Int of length 7 too large to parse as integer'
+      )
     })
   })
 
@@ -892,9 +930,7 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.readOctetString(7)
-      })
+      assert.throws(() => reader.readOctetString(7))
     })
   })
 
@@ -929,9 +965,7 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.peekOctetString(7)
-      })
+      assert.throws(() => reader.peekOctetString(7))
     })
   })
 
@@ -963,9 +997,7 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.skipOctetString(7)
-      })
+      assert.throws(() => reader.skipOctetString(7))
     })
   })
 
@@ -1000,41 +1032,46 @@ describe('Reader', function () {
     it('should throw when length is greater than six bytes', function () {
       const reader = Reader.from(new Buffer('8701020304050607', 'hex'))
 
-      assert.throws(() => {
-        reader.readLengthPrefix()
-      }, 'Tried to read too large integer (requested: 7, max: 6)')
+      assert.throws(
+        () => reader.readLengthPrefix(),
+        'Tried to read too large integer (requested: 7, max: 6)'
+      )
     })
 
     it('should throw when length prefix is 0x80 (non-canonical)', function () {
       const reader = Reader.from(new Buffer('80', 'hex'))
 
-      assert.throws(() => {
-        reader.readLengthPrefix()
-      }, 'Length prefix encoding is not canonical: 0 encoded in 0 bytes')
+      assert.throws(
+        () => reader.readLengthPrefix(),
+        'Length prefix encoding is not canonical: 0 encoded in 0 bytes'
+      )
     })
 
     it('should throw when length prefix is 0x8100 (non-canonical)', function () {
       const reader = Reader.from(new Buffer('8100', 'hex'))
 
-      assert.throws(() => {
-        reader.readLengthPrefix()
-      }, 'Length prefix encoding is not canonical: 0 encoded in 1 bytes')
+      assert.throws(
+        () => reader.readLengthPrefix(),
+        'Length prefix encoding is not canonical: 0 encoded in 1 bytes'
+      )
     })
 
     it('should throw when length prefix is 0x8101 (non-canonical)', function () {
       const reader = Reader.from(new Buffer('810100', 'hex'))
 
-      assert.throws(() => {
-        reader.readLengthPrefix()
-      }, 'Length prefix encoding is not canonical: 1 encoded in 1 bytes')
+      assert.throws(
+        () => reader.readLengthPrefix(),
+        'Length prefix encoding is not canonical: 1 encoded in 1 bytes'
+      )
     })
 
     it('should throw when length prefix is 0x820001 (non-canonical)', function () {
       const reader = Reader.from(new Buffer('82000100', 'hex'))
 
-      assert.throws(() => {
-        reader.readLengthPrefix()
-      }, 'Length prefix encoding is not canonical: 1 encoded in 2 bytes')
+      assert.throws(
+        () => reader.readLengthPrefix(),
+        'Length prefix encoding is not canonical: 1 encoded in 2 bytes'
+      )
     })
   })
 
@@ -1069,9 +1106,10 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('07010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.readVarOctetString()
-      }, 'Tried to read 7 bytes, but only 6 bytes available')
+      assert.throws(
+        () => reader.readVarOctetString(),
+        'Tried to read 7 bytes, but only 6 bytes available'
+      )
     })
   })
 
@@ -1106,9 +1144,10 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('07010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.peekVarOctetString()
-      }, 'Tried to read 7 bytes, but only 6 bytes available')
+      assert.throws(
+        () => reader.peekVarOctetString(),
+        'Tried to read 7 bytes, but only 6 bytes available'
+      )
     })
   })
 
@@ -1140,9 +1179,10 @@ describe('Reader', function () {
     it('when skiping past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('07010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.skipVarOctetString()
-      }, 'Tried to read 7 bytes, but only 6 bytes available')
+      assert.throws(
+        () => reader.skipVarOctetString(),
+        'Tried to read 7 bytes, but only 6 bytes available'
+      )
     })
   })
 
@@ -1177,9 +1217,7 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.read(7)
-      })
+      assert.throws(() => reader.read(7))
     })
   })
 
@@ -1214,9 +1252,7 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.peek(7)
-      })
+      assert.throws(() => reader.peek(7))
     })
   })
 
@@ -1248,9 +1284,7 @@ describe('Reader', function () {
     it('when reading past the end of the buffer, should throw', function () {
       const reader = Reader.from(new Buffer('010203040506', 'hex'))
 
-      assert.throws(() => {
-        reader.skip(7)
-      })
+      assert.throws(() => reader.skip(7))
     })
   })
 
@@ -1417,12 +1451,12 @@ describe('Reader', function () {
 
   describe.skip('readInt64', function () {
     it('should read an 64-bit unsigned integer', function () {
-      const reader = Reader.from(new Buffer('01010101ffffffff', 'hex'))
-
-      const v = reader.readInt64()
-
-      assert.deepEqual(v, [16843009, 4294967295])
-      assert.equal(reader.cursor, 8)
+      // const reader = Reader.from(new Buffer('01010101ffffffff', 'hex'))
+      //
+      // const v = reader.readInt64()
+      //
+      // assert.deepEqual(v, [16843009, 4294967295])
+      // assert.equal(reader.cursor, 8)
     })
   })
 
@@ -1461,12 +1495,12 @@ describe('Reader', function () {
 
   describe.skip('peekInt64', function () {
     it('should read an 64-bit unsigned integer', function () {
-      const reader = Reader.from(new Buffer('01010101ffffffff', 'hex'))
-
-      const v = reader.peekInt64()
-
-      assert.deepEqual(v, [16843009, 4294967295])
-      assert.equal(reader.cursor, 0)
+      // const reader = Reader.from(new Buffer('01010101ffffffff', 'hex'))
+      //
+      // const v = reader.peekInt64()
+      //
+      // assert.deepEqual(v, [16843009, 4294967295])
+      // assert.equal(reader.cursor, 0)
     })
   })
 
@@ -1502,11 +1536,11 @@ describe('Reader', function () {
 
   describe.skip('skipInt64', function () {
     it('should read an 64-bit unsigned integer', function () {
-      const reader = Reader.from(new Buffer('01010101ffffffff', 'hex'))
-
-      reader.skipInt64()
-
-      assert.equal(reader.cursor, 8)
+      // const reader = Reader.from(new Buffer('01010101ffffffff', 'hex'))
+      //
+      // reader.skipInt64()
+      //
+      // assert.equal(reader.cursor, 8)
     })
   })
 })

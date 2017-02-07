@@ -5,11 +5,13 @@ test:
   override:
     # Run lint
     - npm run lint
-    # Build and run tests with coverage
-    - npm test --coverage
+    # Build
+    - npm run build
+    # Run tests with coverage
+    - npm run cover
   post:
     # Upload code coverage data
-    - bash <(curl -s https://codecov.io/bash) || echo "Codecov did not collect coverage reports"
+    - npm run codecov
 deployment:
   production:
     branch: master
@@ -19,4 +21,4 @@ deployment:
       - if [ -z "$(npm info $(npm ls --depth=-1 2>/dev/null | head -1 | cut -f 1 -d " ") 2>/dev/null)" ] ; then npm publish ; fi
 general:
   artifacts:
-    - "coverage/lcov-report"
+    - "coverage"

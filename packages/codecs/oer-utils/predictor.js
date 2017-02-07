@@ -1,3 +1,3 @@
 'use strict'
 
-module.exports = require('./dist/lib/predictor')
+module.exports = require('./dist/src/lib/predictor')

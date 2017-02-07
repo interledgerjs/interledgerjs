@@ -1,8 +1,7 @@
-'use strict'
+import BaseError = require('../src/errors/base-error')
 
-const BaseError = require('../src/errors/base-error')
-
-const assert = require('chai').assert
+import chai = require('chai')
+const assert = chai.assert
 
 describe('BaseError', function () {
   it('should default to an empty error message', function () {

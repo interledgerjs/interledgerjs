@@ -1,3 +1,3 @@
 'use strict'
 
-module.exports = require('./dist/lib/writer')
+module.exports = require('./dist/src/lib/writer')
