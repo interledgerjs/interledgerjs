@@ -1,9 +1,10 @@
 {
   "name": "example 2",
-  "binary": "0000001300000000000001026578616d706c652e626f62",
-  "json": [{
-    "type": "https://interledger.org/rel/ilp",
-    "destination_amount": "100",
-    "destination_account": "example.bob"
-  }]
+  "binary": "011900000000000000640b6578616d706c652e626f620365965900",
+  "json": {
+    "type": "ilp",
+    "amount": "100",
+    "account": "example.bob",
+    "data": "ZZZZ"
+  }
 }
