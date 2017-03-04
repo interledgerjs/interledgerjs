@@ -1,6 +1,6 @@
 {
   "name": "ilp-packet",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "description": "Module for parsing and serializing ILP packets",
   "main": "index.js",
   "scripts": {
