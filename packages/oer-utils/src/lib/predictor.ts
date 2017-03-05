@@ -114,10 +114,10 @@ class Predictor {
 }
 
 interface Predictor {
-  writeUInt8(value: number): undefined
-  writeUInt16(value: number): undefined
-  writeUInt32(value: number): undefined
-  writeUInt64(value: number): undefined
+  writeUInt8 (value: number): undefined
+  writeUInt16 (value: number): undefined
+  writeUInt32 (value: number): undefined
+  writeUInt64 (value: number): undefined
 }
 
 // Create writeUInt{8,16,32,64} shortcuts
@@ -127,4 +127,4 @@ interface Predictor {
   }
 })
 
-export = Predictor
+export default Predictor

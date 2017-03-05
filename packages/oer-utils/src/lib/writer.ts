@@ -242,12 +242,12 @@ class Writer {
 }
 
 interface Writer {
-  writeUInt8(value: number): undefined
-  writeUInt16(value: number): undefined
-  writeUInt32(value: number): undefined
-  writeInt8(value: number): undefined
-  writeInt16(value: number): undefined
-  writeInt32(value: number): undefined
+  writeUInt8 (value: number): undefined
+  writeUInt16 (value: number): undefined
+  writeUInt32 (value: number): undefined
+  writeInt8 (value: number): undefined
+  writeInt16 (value: number): undefined
+  writeInt32 (value: number): undefined
 }
 
 // Create write(U)Int{8,16,32} shortcuts
@@ -261,4 +261,4 @@ interface Writer {
   }
 })
 
-export = Writer
+export default Writer

@@ -1,4 +1,4 @@
-import Writer = require('../src/lib/writer')
+import Writer from '../src/lib/writer'
 
 import chai = require('chai')
 const assert = chai.assert
