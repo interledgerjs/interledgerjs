@@ -1,4 +1,4 @@
-import Reader = require('../src/lib/reader')
+import Reader from '../src/lib/reader'
 
 import chai = require('chai')
 const assert = chai.assert

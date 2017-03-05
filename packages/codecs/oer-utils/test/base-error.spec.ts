@@ -1,4 +1,4 @@
-import BaseError = require('../src/errors/base-error')
+import BaseError from '../src/errors/base-error'
 
 import chai = require('chai')
 const assert = chai.assert

@@ -1,5 +1,5 @@
-import UnderflowError = require('../errors/underflow-error')
-import ParseError = require('../errors/parse-error')
+import UnderflowError from '../errors/underflow-error'
+import ParseError from '../errors/parse-error'
 
 class Reader {
   // Most significant bit in a byte
@@ -410,24 +410,24 @@ class Reader {
 }
 
 interface Reader {
-  readUInt8(): number
-  readUInt16(): number
-  readUInt32(): number
-  peekUInt8(): number
-  peekUInt16(): number
-  peekUInt32(): number
-  skipUInt8(): number
-  skipUInt16(): number
-  skipUInt32(): number
-  readInt8(): number
-  readInt16(): number
-  readInt32(): number
-  peekInt8(): number
-  peekInt16(): number
-  peekInt32(): number
-  skipInt8(): number
-  skipInt16(): number
-  skipInt32(): number
+  readUInt8 (): number
+  readUInt16 (): number
+  readUInt32 (): number
+  peekUInt8 (): number
+  peekUInt16 (): number
+  peekUInt32 (): number
+  skipUInt8 (): number
+  skipUInt16 (): number
+  skipUInt32 (): number
+  readInt8 (): number
+  readInt16 (): number
+  readInt32 (): number
+  peekInt8 (): number
+  peekInt16 (): number
+  peekInt32 (): number
+  skipInt8 (): number
+  skipInt16 (): number
+  skipInt32 (): number
 }
 
 // Create {read,peek,skip}UInt{8,16,32} shortcuts
@@ -443,4 +443,4 @@ interface Reader {
   })
 })
 
-export = Reader
+export default Reader

@@ -1,5 +1,5 @@
-import BaseError = require('./base-error')
+import BaseError from './base-error'
 
 class UnderflowError extends BaseError { }
 
-export = UnderflowError
+export default UnderflowError

@@ -1,4 +1,4 @@
-import Predictor = require('../src/lib/predictor')
+import Predictor from '../src/lib/predictor'
 
 import chai = require('chai')
 const assert = chai.assert
