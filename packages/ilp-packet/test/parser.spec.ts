@@ -1,21 +1,19 @@
-'use strict'
+import { assert } from 'chai'
 
-const assert = require('chai').assert
-
-const loadTests = require('./helpers/loadTests')
+import loadTests from './helpers/loadTests'
 
 const Parser = require('..')
 
 describe('Parser', function () {
   describe('serialize', function () {
     describe('correctly serializes valid ilp packets', function () {
-      const validTests = loadTests({ type: 'valid' })
+      const validTests = loadTests({ type: 'ilp_payment' })
 
       for (let test of validTests) {
         it(test.name, function () {
           const json = test.json
 
-          const serialized = Parser.serialize(json)
+          const serialized = Parser.serializeIlpPayment(json)
 
           assert.deepEqual(serialized.toString('hex'), test.binary)
         })
@@ -25,13 +23,13 @@ describe('Parser', function () {
 
   describe('deserialize', function () {
     describe('correctly parses valid ilp packets', function () {
-      const validTests = loadTests({ type: 'valid' })
+      const validTests = loadTests({ type: 'ilp_payment' })
 
       for (let test of validTests) {
         it(test.name, function () {
           const binary = new Buffer(test.binary, 'hex')
 
-          const parsed = Parser.deserialize(binary)
+          const parsed = Parser.deserializeIlpPayment(binary)
 
           assert.deepEqual(parsed, test.json)
         })
