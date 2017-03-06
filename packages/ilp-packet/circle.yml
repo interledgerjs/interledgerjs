@@ -5,10 +5,10 @@ test:
   override:
     - npm run lint
     - npm run build
-    - npm test --coverage
+    - npm run cover
   post:
     # Upload code coverage data
-    - bash <(curl -s https://codecov.io/bash) || echo "Codecov did not collect coverage reports"
+    - npm run codecov
 deployment:
   production:
     branch: master
