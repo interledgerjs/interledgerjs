@@ -4,6 +4,9 @@
   "description": "Module for parsing and serializing ILP packets",
   "main": "dist/index.js",
   "typings": "dist/index",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "lint": "tslint \"src/**/*.ts\" \"test/*.spec.ts\"",
     "build": "rm -rf dist ; tsc",
