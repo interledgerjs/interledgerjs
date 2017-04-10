@@ -1,0 +1,8 @@
+{
+  "name": "example 1",
+  "binary": "070d0000000218711a0000000bb800",
+  "json": {
+    "sourceAmount": "9000000000",
+    "sourceHoldDuration": 3000
+  }
+}
