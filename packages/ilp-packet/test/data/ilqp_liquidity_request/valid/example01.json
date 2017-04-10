@@ -1,0 +1,8 @@
+{
+  "name": "example 1",
+  "binary": "02130d6578616d706c652e616c69636500000bb800",
+  "json": {
+    "destinationAccount": "example.alice",
+    "destinationHoldDuration": 3000
+  }
+}
