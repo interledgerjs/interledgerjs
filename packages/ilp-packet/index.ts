@@ -4,7 +4,7 @@ import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
 import base64url from 'base64url-adhoc'
 import Long = require('long')
 
-export enum Type {
+enum Type {
   TYPE_ILP_PAYMENT = 1,
   TYPE_ILQP_LIQUIDITY_REQUEST = 2,
   TYPE_ILQP_LIQUIDITY_RESPONSE = 3,
@@ -368,6 +368,7 @@ const deserializeIlqpByDestinationResponse = (binary: Buffer): IlqpByDestination
 }
 
 module.exports = {
+  Type,
   serializeIlpPayment,
   deserializeIlpPayment,
   serializeIlqpLiquidityRequest,
