@@ -3,6 +3,7 @@ import { dateToGeneralizedTime, generalizedTimeToDate } from './src/utils/date'
 import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
 import base64url from 'base64url-adhoc'
 import Long = require('long')
+import times = require('lodash/times')
 
 enum Type {
   TYPE_ILP_PAYMENT = 1,
@@ -11,7 +12,8 @@ enum Type {
   TYPE_ILQP_BY_SOURCE_REQUEST = 4,
   TYPE_ILQP_BY_SOURCE_RESPONSE = 5,
   TYPE_ILQP_BY_DESTINATION_REQUEST = 6,
-  TYPE_ILQP_BY_DESTINATION_RESPONSE = 7
+  TYPE_ILQP_BY_DESTINATION_RESPONSE = 7,
+  TYPE_ILP_ERROR = 8
 }
 
 const serializeEnvelope = (type: number, contents: Buffer) => {
@@ -367,6 +369,88 @@ const deserializeIlqpByDestinationResponse = (binary: Buffer): IlqpByDestination
   }
 }
 
+interface IlpError {
+  code: string,
+  name: string,
+  triggeredBy: string,
+  forwardedBy: string[],
+  triggeredAt: Date,
+  data: string
+}
+
+const ILP_ERROR_CODE_LENGTH = 3
+
+const serializeIlpError = (json: IlpError) => {
+  const writer = new Writer()
+
+  // Convert code to buffer to ensure we are counting bytes, not UTF8 characters
+  const codeBuffer = Buffer.from(json.code, 'ascii')
+  if (codeBuffer.length !== ILP_ERROR_CODE_LENGTH) {
+    throw new Error('ILP error codes must be three bytes long, received: ' + json.code)
+  }
+
+  // code
+  writer.write(codeBuffer)
+
+  // name
+  writer.writeVarOctetString(Buffer.from(json.name, 'ascii'))
+
+  // triggeredBy
+  writer.writeVarOctetString(Buffer.from(json.triggeredBy, 'ascii'))
+
+  // forwardedBy
+  writer.writeVarUInt(json.forwardedBy.length)
+  json.forwardedBy.forEach(forwardedBy => {
+    writer.writeVarOctetString(Buffer.from(forwardedBy, 'ascii'))
+  })
+
+  // triggeredAt
+  writer.writeVarOctetString(Buffer.from(dateToGeneralizedTime(json.triggeredAt), 'ascii'))
+
+  // data
+  writer.writeVarOctetString(Buffer.from(json.data, 'ascii'))
+
+  // extensibility
+  writer.writeUInt8(0)
+
+  return serializeEnvelope(Type.TYPE_ILP_ERROR, writer.getBuffer())
+}
+
+const deserializeIlpError = (binary: Buffer): IlpError => {
+  const { type, contents } = deserializeEnvelope(binary)
+
+  if (type !== Type.TYPE_ILP_ERROR) {
+    throw new Error('Packet has incorrect type')
+  }
+
+  const reader = Reader.from(contents)
+
+  const code = reader.read(ILP_ERROR_CODE_LENGTH).toString('ascii')
+
+  const name = reader.readVarOctetString().toString('ascii')
+
+  const triggeredBy = reader.readVarOctetString().toString('ascii')
+
+  const forwardedBy = times(reader.readVarUInt()).map(() => {
+    return reader.readVarOctetString().toString('ascii')
+  })
+
+  const triggeredAt = generalizedTimeToDate(reader.readVarOctetString().toString('ascii'))
+
+  const data = reader.readVarOctetString().toString('ascii')
+
+  // Ignore remaining bytes for extensibility
+
+  return {
+    code,
+    name,
+    triggeredBy,
+    forwardedBy,
+    triggeredAt,
+    data
+  }
+}
+
 module.exports = {
   Type,
   serializeIlpPayment,
@@ -382,5 +466,7 @@ module.exports = {
   serializeIlqpByDestinationRequest,
   deserializeIlqpByDestinationRequest,
   serializeIlqpByDestinationResponse,
-  deserializeIlqpByDestinationResponse
+  deserializeIlqpByDestinationResponse,
+  serializeIlpError,
+  deserializeIlpError
 }
