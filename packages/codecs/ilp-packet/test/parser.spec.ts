@@ -234,4 +234,40 @@ describe('Parser', function () {
       }
     })
   })
+
+  describe('serializeIlpError', function () {
+    describe('correctly serializes valid ilqp by destination responses', function () {
+      const validTests = loadTests({ type: 'ilp_error' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const json = test.json
+
+          json.triggeredAt = new Date(json.triggeredAt)
+
+          const serialized = Parser.serializeIlpError(json)
+
+          assert.deepEqual(serialized.toString('hex'), test.binary)
+        })
+      }
+    })
+  })
+
+  describe('deserializeIlpError', function () {
+    describe('correctly parses valid ilqp by destination responses', function () {
+      const validTests = loadTests({ type: 'ilp_error' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const binary = new Buffer(test.binary, 'hex')
+
+          const parsed = Parser.deserializeIlpError(binary)
+
+          parsed.triggeredAt = parsed.triggeredAt.getTime()
+
+          assert.deepEqual(parsed, test.json)
+        })
+      }
+    })
+  })
 })
