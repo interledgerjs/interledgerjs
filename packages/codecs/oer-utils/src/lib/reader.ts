@@ -431,8 +431,8 @@ interface Reader {
 }
 
 // Create {read,peek,skip}UInt{8,16,32} shortcuts
-;['read', 'peek', 'skip'].forEach((verb) => {
-  ;[1, 2, 4].forEach((bytes) => {
+['read', 'peek', 'skip'].forEach((verb) => {
+  [1, 2, 4].forEach((bytes) => {
     Reader.prototype[verb + 'UInt' + bytes * 8] = function () {
       return this[verb + 'UInt'](bytes)
     }

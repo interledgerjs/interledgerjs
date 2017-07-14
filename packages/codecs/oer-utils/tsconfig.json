@@ -10,7 +10,8 @@
     "sourceMap": true,
     "inlineSources": true,
     "strictNullChecks": true,
-    "suppressImplicitAnyIndexErrors": true
+    "suppressImplicitAnyIndexErrors": true,
+    "lib": [ "es5", "es2015.core" ]
   },
   "exclude": [
     "node_modules",
