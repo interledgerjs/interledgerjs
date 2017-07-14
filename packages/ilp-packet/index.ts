@@ -451,6 +451,51 @@ const deserializeIlpError = (binary: Buffer): IlpError => {
   }
 }
 
+const deserializeIlpPacket = (binary: Buffer) => {
+  let packet, typeString
+  switch (binary[0]) {
+    case Type.TYPE_ILP_PAYMENT:
+      packet = deserializeIlpPayment(binary)
+      typeString = 'ilp_payment'
+      break
+    case Type.TYPE_ILQP_LIQUIDITY_REQUEST:
+      packet = deserializeIlqpLiquidityRequest(binary)
+      typeString = 'ilqp_liquidity_request'
+      break
+    case Type.TYPE_ILQP_LIQUIDITY_RESPONSE:
+      packet = deserializeIlqpLiquidityResponse(binary)
+      typeString = 'ilqp_liquidity_response'
+      break
+    case Type.TYPE_ILQP_BY_SOURCE_REQUEST:
+      packet = deserializeIlqpBySourceRequest(binary)
+      typeString = 'ilqp_by_source_request'
+      break
+    case Type.TYPE_ILQP_BY_SOURCE_RESPONSE:
+      packet = deserializeIlqpBySourceResponse(binary)
+      typeString = 'ilqp_by_source_response'
+      break
+    case Type.TYPE_ILQP_BY_DESTINATION_REQUEST:
+      packet = deserializeIlqpByDestinationRequest(binary)
+      typeString = 'ilqp_by_destination_request'
+      break
+    case Type.TYPE_ILQP_BY_DESTINATION_RESPONSE:
+      packet = deserializeIlqpByDestinationResponse(binary)
+      typeString = 'ilqp_by_destination_response'
+      break
+    case Type.TYPE_ILP_ERROR:
+      packet = deserializeIlpError(binary)
+      typeString = 'ilp_error'
+      break
+    default:
+      throw new Error('Packet has invalid type')
+  }
+  return {
+    type: binary[0],
+    typeString,
+    data: packet
+  }
+}
+
 module.exports = {
   Type,
   serializeIlpPayment,
@@ -468,5 +513,6 @@ module.exports = {
   serializeIlqpByDestinationResponse,
   deserializeIlqpByDestinationResponse,
   serializeIlpError,
-  deserializeIlpError
+  deserializeIlpError,
+  deserializeIlpPacket
 }

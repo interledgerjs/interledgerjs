@@ -19,6 +19,25 @@
 npm install ilp-packet
 ```
 
+### Deserialize ILP Packet
+
+```js
+const packet = require('ilp-packet')
+
+const binaryPacket = Buffer.from("011c000000000754d4c00e672e75732e6e657875732e626f620304104100", 'hex')
+const jsonPacket = packet.deserializeIlpPayment(binaryPacket)
+console.log(packet.deserializeIlpPacket(jsonPacket))
+// prints {
+//   type: 1,
+//   typeString: 'ilp_payment',
+//   data: {
+//     amount: '123000000',       // Unsigned 64-bit integer as a string
+//     account: 'g.us.nexus.bob', // ILP Address
+//     data: 'BBBB'               // Base64url-encoded attached data
+//   }
+// }
+```
+
 ### Serialize/deserialize ILP Payment Packet
 
 ```js

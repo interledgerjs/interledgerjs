@@ -270,4 +270,35 @@ describe('Parser', function () {
       }
     })
   })
+
+  describe('deserializeIlpPacket', function () {
+    describe('correctly parses valid ilp packets', function () {
+      testPackets('ilp_payment', Parser.Type.TYPE_ILP_PAYMENT)
+      testPackets('ilqp_liquidity_request', Parser.Type.TYPE_ILQP_LIQUIDITY_REQUEST)
+      testPackets('ilqp_liquidity_response', Parser.Type.TYPE_ILQP_LIQUIDITY_RESPONSE)
+      testPackets('ilqp_by_source_request', Parser.Type.TYPE_ILQP_BY_SOURCE_REQUEST)
+      testPackets('ilqp_by_source_response', Parser.Type.TYPE_ILQP_BY_SOURCE_RESPONSE)
+      testPackets('ilqp_by_destination_request', Parser.Type.TYPE_ILQP_BY_DESTINATION_REQUEST)
+      testPackets('ilqp_by_destination_response', Parser.Type.TYPE_ILQP_BY_DESTINATION_RESPONSE)
+      testPackets('ilp_error', Parser.Type.TYPE_ILP_ERROR)
+
+      function testPackets (typeString: string, type: number) {
+        const validTests = loadTests({ type: typeString })
+        for (let test of validTests) {
+          it('parses ' + typeString + ': ' + test.name, function () {
+            const binary = new Buffer(test.binary, 'hex')
+            const parsed = Parser.deserializeIlpPacket(binary)
+            if (typeString === 'ilqp_liquidity_response') {
+              parsed.data.expiresAt = parsed.data.expiresAt.getTime()
+              parsed.data.liquidityCurve = parsed.data.liquidityCurve.toString('hex')
+            }
+            if (typeString === 'ilp_error') {
+              parsed.data.triggeredAt = parsed.data.triggeredAt.getTime()
+            }
+            assert.deepEqual(parsed, {type, typeString, data: test.json})
+          })
+        }
+      }
+    })
+  })
 })
