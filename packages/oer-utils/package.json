@@ -44,21 +44,18 @@
     "url": "https://github.com/interledgerjs/oer-utils/issues"
   },
   "homepage": "https://github.com/interledgerjs/oer-utils",
-  "dependencies": {
-    "core-js": "^2.4.1"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "@types/chai": "^3.4.35",
-    "@types/core-js": "^0.9.35",
-    "@types/mocha": "^2.2.39",
-    "@types/node": "^7.0.5",
-    "chai": "^3.5.0",
-    "codecov": "^1.0.1",
-    "mocha": "^3.2.0",
-    "nyc": "^10.1.2",
-    "ts-node": "^2.1.0",
-    "tslint": "^4.5.1",
-    "tslint-config-standard": "^4.0.0",
-    "typescript": "^2.2.1"
+    "@types/chai": "^4.0.1",
+    "@types/mocha": "^2.2.41",
+    "@types/node": "^8.0.12",
+    "chai": "^4.1.0",
+    "codecov": "^2.2.0",
+    "mocha": "^3.4.2",
+    "nyc": "^11.0.3",
+    "ts-node": "^3.2.0",
+    "tslint": "^5.5.0",
+    "tslint-config-standard": "^6.0.1",
+    "typescript": "^2.4.1"
   }
 }

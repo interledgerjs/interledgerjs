@@ -3,6 +3,9 @@ import Writer from '../src/lib/writer'
 import chai = require('chai')
 const assert = chai.assert
 
+const MAX_SAFE_INTEGER = 9007199254740991
+const MIN_SAFE_INTEGER = -9007199254740991
+
 describe('Writer', function () {
   describe('constructor', function () {
     it('should create a writer', function () {
@@ -67,7 +70,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeUInt(Number.MAX_SAFE_INTEGER + 1, 1),
+        () => writer.writeUInt(MAX_SAFE_INTEGER + 1, 1),
         'UInt is larger than safe JavaScript range'
       )
     })
@@ -171,7 +174,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeInt(Number.MAX_SAFE_INTEGER + 1, 1),
+        () => writer.writeInt(MAX_SAFE_INTEGER + 1, 1),
         'Int is larger than safe JavaScript range'
       )
     })
@@ -180,7 +183,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeInt(Number.MIN_SAFE_INTEGER - 1, 1),
+        () => writer.writeInt(MIN_SAFE_INTEGER - 1, 1),
         'Int is smaller than safe JavaScript range'
       )
     })
@@ -231,7 +234,7 @@ describe('Writer', function () {
     it('should write the largest possible number', function () {
       const writer = new Writer()
 
-      writer.writeVarUInt(Number.MAX_SAFE_INTEGER)
+      writer.writeVarUInt(MAX_SAFE_INTEGER)
 
       assert.equal(writer.getBuffer().toString('hex'), '071fffffffffffff')
     })
@@ -240,7 +243,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeVarUInt(Number.MAX_SAFE_INTEGER + 1),
+        () => writer.writeVarUInt(MAX_SAFE_INTEGER + 1),
         'UInt is larger than safe JavaScript range'
       )
     })
@@ -333,7 +336,7 @@ describe('Writer', function () {
     it('should write the largest possible number', function () {
       const writer = new Writer()
 
-      writer.writeVarInt(Number.MAX_SAFE_INTEGER)
+      writer.writeVarInt(MAX_SAFE_INTEGER)
 
       assert.equal(writer.getBuffer().toString('hex'), '071fffffffffffff')
     })
@@ -342,7 +345,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeVarInt(Number.MAX_SAFE_INTEGER + 1),
+        () => writer.writeVarInt(MAX_SAFE_INTEGER + 1),
         'Int is larger than safe JavaScript range'
       )
     })
@@ -351,7 +354,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeVarInt(Number.MIN_SAFE_INTEGER - 1),
+        () => writer.writeVarInt(MIN_SAFE_INTEGER - 1),
         'Int is smaller than safe JavaScript range'
       )
     })
@@ -622,7 +625,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeUInt64(Number.MAX_SAFE_INTEGER + 1),
+        () => writer.writeUInt64(MAX_SAFE_INTEGER + 1),
         'Expected 64-bit integer as an array of two 32-bit words'
       )
     })

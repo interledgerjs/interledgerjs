@@ -1,10 +1,9 @@
-import isInteger = require('core-js/library/fn/number/is-integer')
-import MAX_SAFE_INTEGER = require('core-js/library/fn/number/max-safe-integer')
+import { isInteger } from './util'
 
 class Writer {
   // Largest value that can be written as a variable-length unsigned integer
-  static MAX_SAFE_INTEGER = MAX_SAFE_INTEGER
-  static MIN_SAFE_INTEGER: number = require('core-js/library/fn/number/min-safe-integer')
+  static MAX_SAFE_INTEGER: number = 0x1fffffffffffff
+  static MIN_SAFE_INTEGER: number = -0x1fffffffffffff
 
   static UINT_RANGES = {
     1: 0xff,
@@ -251,7 +250,7 @@ interface Writer {
 }
 
 // Create write(U)Int{8,16,32} shortcuts
-;[1, 2, 4].forEach((bytes) => {
+[1, 2, 4].forEach((bytes) => {
   Writer.prototype['writeUInt' + bytes * 8] = function (value: number) {
     this.writeUInt(value, bytes)
   }

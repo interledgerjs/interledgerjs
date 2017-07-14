@@ -3,6 +3,8 @@ import Predictor from '../src/lib/predictor'
 import chai = require('chai')
 const assert = chai.assert
 
+const MAX_SAFE_INTEGER = 9007199254740991
+
 describe('Predictor', function () {
   describe('constructor', function () {
     it('should create a Predictor', function () {
@@ -59,7 +61,7 @@ describe('Predictor', function () {
     it('should accept MAX_SAFE_INTEGER and add 8 bytes to the size', function () {
       const predictor = new Predictor()
 
-      predictor.writeVarUInt(Number.MAX_SAFE_INTEGER)
+      predictor.writeVarUInt(MAX_SAFE_INTEGER)
 
       assert.equal(predictor.getSize(), 8)
     })
