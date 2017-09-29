@@ -11,13 +11,13 @@ function pluginFromEnvironment () {
   return new Plugin(JSON.parse(process.env.ILP_CREDENTIALS))
 }
 
-function getRc (testnet = false) {
-  return path.join(process.env.HOME,
+function getRc ({ testnet, local }) {
+  const rootPath = local ? process.cwd() : process.env.HOME
+  return path.join(rootPath,
     testnet ? '.ilprc.test.json' : '.ilprc.json')
 }
 
-function pluginFromIlpRc (testnet = false) {
-  const rc = getRc(testnet)
+function pluginFromIlpRc (rc) {
   debug('loading credentials from', rc)
 
   const contents = fs.readFileSync(rc)
@@ -34,13 +34,13 @@ function pluginFromTestnet () {
   const MetaPlugin = function () {
     this.connect = async function () {
       const res = await request.post('https://faucet.altnet.rippletest.net/accounts')
-      debug('loaded testnet credentials; writing to', getRc(true))
+      debug('loaded testnet credentials; writing to', getRc({ local: false }))
       const credentials = {
         address: res.body.account.address,
         secret: res.body.account.secret,
         server: 'wss://s.altnet.rippletest.net:51233'
       }
-      fs.writeFileSync(getRc(true), JSON.stringify({
+      fs.writeFileSync(getRc({ local: false }), JSON.stringify({
         plugin: 'ilp-plugin-xrp-escrow',
         credentials
       }))
@@ -58,15 +58,14 @@ function pluginFromTestnet () {
   return new MetaPlugin()
 }
 
-module.exports = function ({ testnet, noFileRead }) {
+module.exports = function (opts) {
   if (process.env.ILP_CREDENTIALS) {
     return pluginFromEnvironment()
-  } else if (!noFileRead && fs.existsSync(getRc(testnet))) {
-    return pluginFromIlpRc(testnet)  
-  } else if (testnet) {
+  } else if (fs.existsSync(getRc({ local: true }))) {
+    return pluginFromIlpRc(getRc({ local: true }))
+  } else if (fs.existsSync(getRc({ local: false }))) {
+    return pluginFromIlpRc(getRc({ local: false }))
+  } else {
     return pluginFromTestnet()
   }
-  throw new Error(`ILP_CREDENTIALS must be defined in the environment for ILP
-    payments to be made. To automatically generate testnet credentials, call
-    the 'ilp-plugin' module with '{ testnet: true }'`)
 }
