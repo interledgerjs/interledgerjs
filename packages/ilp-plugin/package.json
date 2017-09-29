@@ -1,0 +1,15 @@
+{
+  "name": "ilp-plugin",
+  "version": "0.0.1",
+  "description": "> A generic handle to ILP",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ilp-plugin-xrp-escrow": "^1.0.4",
+    "superagent": "^3.6.1"
+  }
+}
