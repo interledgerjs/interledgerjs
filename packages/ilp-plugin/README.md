@@ -21,6 +21,8 @@ run()
 First, the script checks whether `ILP_CREDENTIALS` is defined in the environment.
 `ILP_CREDENTIALS` must contain a JSON object with the options passed into the
 constructor of `ilp-plugin-xrp-escrow` or the module name in `ILP_PLUGIN`.
+If you want to acquire testnet credentials and load them into your environment,
+try [this script](https://gist.github.com/sharafian/bb3955eaf3a97aa1bc43dc8a9e76256a#ilp-credentials).
 
 If `ILP_CREDENTIALS` is not defined, the existence of `./.ilprc.json` is checked.
 If it exists, it will be loaded and the module name in the `plugin` field will
