@@ -1,4 +1,4 @@
-import BigNumber = require('bignumber.js')
+import { BigNumber } from 'bignumber.js'
 
 const HIGH_WORD_MULTIPLIER = 0x100000000
 
