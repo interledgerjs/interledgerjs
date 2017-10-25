@@ -12,7 +12,7 @@
     "reader.js",
     "writer.js",
     "predictor.js",
-    "dist"
+    "dist/src"
   ],
   "scripts": {
     "lint": "tslint \"src/**/*.ts\" \"test/*.spec.ts\"",
