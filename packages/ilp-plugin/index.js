@@ -32,6 +32,11 @@ function pluginFromTestnet () {
   debug('automatically creating xrp testnet plugin')
   const PluginXrpEscrow = require('ilp-plugin-xrp-escrow')
   const MetaPlugin = function () {
+    const listeners = []
+    this.on = function (event, callback) {
+      listeners.push({ event, callback })
+    }
+
     this.connect = async function () {
       const res = await request.post('https://faucet.altnet.rippletest.net/accounts')
       debug('loaded testnet credentials; writing to', getRc({ local: false }))
@@ -44,10 +49,19 @@ function pluginFromTestnet () {
         plugin: 'ilp-plugin-xrp-escrow',
         credentials
       }))
+
       debug('instantiating plugin; waiting for account creation')
       const plugin = new PluginXrpEscrow(credentials)
       Object.setPrototypeOf(this, plugin)
+
       delete this.connect
+      delete this.on
+
+      for (const listener of listeners) {
+        console.log('adding listener:', listener)
+        this.on(listener.event, listener.callback)
+      }
+
       await this.connect()
       return new Promise((resolve) => this.on('incoming_message', (m) => {
         debug('testnet account created at address', m.to)
