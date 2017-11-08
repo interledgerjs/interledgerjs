@@ -43,7 +43,8 @@ function pluginFromTestnet () {
       const credentials = {
         address: res.body.account.address,
         secret: res.body.account.secret,
-        server: 'wss://s.altnet.rippletest.net:51233'
+        server: 'wss://s.altnet.rippletest.net:51233',
+        prefix: 'test.crypto.xrp.'
       }
       fs.writeFileSync(getRc({ local: false }), JSON.stringify({
         plugin: 'ilp-plugin-xrp-escrow',
