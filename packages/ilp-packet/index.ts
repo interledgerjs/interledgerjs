@@ -13,7 +13,8 @@ enum Type {
   TYPE_ILQP_BY_SOURCE_RESPONSE = 5,
   TYPE_ILQP_BY_DESTINATION_REQUEST = 6,
   TYPE_ILQP_BY_DESTINATION_RESPONSE = 7,
-  TYPE_ILP_ERROR = 8
+  TYPE_ILP_ERROR = 8,
+  TYPE_ILP_FULFILLMENT = 9
 }
 
 const serializeEnvelope = (type: number, contents: Buffer) => {
@@ -456,6 +457,40 @@ const deserializeIlpError = (binary: Buffer): IlpError => {
   }
 }
 
+interface IlpFulfillment {
+  data: string
+}
+
+const serializeIlpFulfillment = (json: IlpFulfillment) => {
+  const writer = new Writer()
+
+  // data
+  writer.writeVarOctetString(Buffer.from(json.data || '', 'base64'))
+
+  // extensibility
+  writer.writeUInt8(0)
+
+  return serializeEnvelope(Type.TYPE_ILP_FULFILLMENT, writer.getBuffer())
+}
+
+const deserializeIlpFulfillment = (binary: Buffer): IlpFulfillment => {
+  const { type, contents } = deserializeEnvelope(binary)
+
+  if (type !== Type.TYPE_ILP_FULFILLMENT) {
+    throw new Error('Packet has incorrect type')
+  }
+
+  const reader = Reader.from(contents)
+
+  const data = base64url(reader.readVarOctetString())
+
+  // Ignore remaining bytes for extensibility
+
+  return {
+    data
+  }
+}
+
 const serializeIlpPacket = (obj: IlpPacket) => {
   switch (obj.type) {
     case Type.TYPE_ILP_PAYMENT: return serializeIlpPayment(obj.data)
@@ -466,12 +501,14 @@ const serializeIlpPacket = (obj: IlpPacket) => {
     case Type.TYPE_ILQP_BY_DESTINATION_REQUEST: return serializeIlqpByDestinationRequest(obj.data)
     case Type.TYPE_ILQP_BY_DESTINATION_RESPONSE: return serializeIlqpByDestinationResponse(obj.data)
     case Type.TYPE_ILP_ERROR: return serializeIlpError(obj.data)
+    case Type.TYPE_ILP_FULFILLMENT: return serializeIlpFulfillment(obj.data)
     default: throw new Error('Object has invalid type')
   }
 }
 
 const deserializeIlpPacket = (binary: Buffer) => {
-  let packet, typeString
+  let packet
+  let typeString
   switch (binary[0]) {
     case Type.TYPE_ILP_PAYMENT:
       packet = deserializeIlpPayment(binary)
@@ -505,6 +542,10 @@ const deserializeIlpPacket = (binary: Buffer) => {
       packet = deserializeIlpError(binary)
       typeString = 'ilp_error'
       break
+    case Type.TYPE_ILP_FULFILLMENT:
+      packet = deserializeIlpFulfillment(binary)
+      typeString = 'ilp_fulfillment'
+      break
     default:
       throw new Error('Packet has invalid type')
   }
@@ -533,6 +574,8 @@ module.exports = {
   deserializeIlqpByDestinationResponse,
   serializeIlpError,
   deserializeIlpError,
+  serializeIlpFulfillment,
+  deserializeIlpFulfillment,
   serializeIlpPacket,
   deserializeIlpPacket
 }

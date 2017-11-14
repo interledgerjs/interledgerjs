@@ -236,7 +236,7 @@ describe('Parser', function () {
   })
 
   describe('serializeIlpError', function () {
-    describe('correctly serializes valid ilqp by destination responses', function () {
+    describe('correctly serializes valid ilp errors', function () {
       const validTests = loadTests({ type: 'ilp_error' })
 
       for (let test of validTests) {
@@ -254,7 +254,7 @@ describe('Parser', function () {
   })
 
   describe('deserializeIlpError', function () {
-    describe('correctly parses valid ilqp by destination responses', function () {
+    describe('correctly parses valid ilp errors', function () {
       const validTests = loadTests({ type: 'ilp_error' })
 
       for (let test of validTests) {
@@ -264,6 +264,38 @@ describe('Parser', function () {
           const parsed = Parser.deserializeIlpError(binary)
 
           parsed.triggeredAt = parsed.triggeredAt.getTime()
+
+          assert.deepEqual(parsed, test.json)
+        })
+      }
+    })
+  })
+
+  describe('serializeIlpFulfillment', function () {
+    describe('correctly serializes valid ilp fulfillments', function () {
+      const validTests = loadTests({ type: 'ilp_fulfillment' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const json = test.json
+
+          const serialized = Parser.serializeIlpFulfillment(json)
+
+          assert.deepEqual(serialized.toString('hex'), test.binary)
+        })
+      }
+    })
+  })
+
+  describe('deserializeIlpFulfillment', function () {
+    describe('correctly parses valid ilp fulfillments', function () {
+      const validTests = loadTests({ type: 'ilp_fulfillment' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const binary = new Buffer(test.binary, 'hex')
+
+          const parsed = Parser.deserializeIlpFulfillment(binary)
 
           assert.deepEqual(parsed, test.json)
         })
