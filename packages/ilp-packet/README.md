@@ -163,3 +163,15 @@ const json = packet.deserializeIlpError(binary)
 
 const additionalErrorData = JSON.parse(json.data)
 ```
+
+### IlpFulfillment
+
+```js
+const packet = require('ilp-packet')
+
+const binary = packet.serializeIlpFulfillment({
+  data: 'BBBB'               // Base64url-encoded attached data
+})
+
+const json = packet.deserializeIlpFulfillment(binary)
+```
