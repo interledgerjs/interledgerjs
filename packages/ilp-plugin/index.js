@@ -2,6 +2,7 @@ const request = require('superagent')
 const fs = require('fs')
 const path = require('path')
 const debug = require('debug')('ilp-plugin')
+const crypto = require('crypto')
 
 function pluginFromEnvironment () {
   const module = process.env.ILP_PLUGIN || 'ilp-plugin-xrp-escrow'
@@ -73,6 +74,14 @@ function pluginFromTestnet () {
   return new MetaPlugin()
 }
 
+function pluginFromDemoServer () {
+  debug('automatically creating demo server plugin')
+  const Plugin = require('ilp-plugin-payment-channel-framework')
+  const secret = crypto.randomBytes(8).toString('hex')
+  const server = `btp+ws://:${secret}@45.55.1.226`
+  return new Plugin({ server })
+}
+
 module.exports = function (opts) {
   if (process.env.ILP_CREDENTIALS) {
     return pluginFromEnvironment()
@@ -80,7 +89,9 @@ module.exports = function (opts) {
     return pluginFromIlpRc(getRc({ local: true }))
   } else if (fs.existsSync(getRc({ local: false }))) {
     return pluginFromIlpRc(getRc({ local: false }))
-  } else {
+  } else if (opts && opts.testnet) {
     return pluginFromTestnet()
+  } else {
+    return pluginFromDemoServer()
   }
 }
