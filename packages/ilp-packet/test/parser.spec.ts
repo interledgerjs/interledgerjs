@@ -36,6 +36,37 @@ describe('Parser', function () {
       }
     })
   })
+  describe('serializeIlpForwardedPayment', function () {
+    describe('correctly serializes valid ilp packets', function () {
+      const validTests = loadTests({ type: 'ilp_forwarded_payment' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const json = test.json
+
+          const serialized = Parser.serializeIlpForwardedPayment(json)
+
+          assert.deepEqual(serialized.toString('hex'), test.binary)
+        })
+      }
+    })
+  })
+
+  describe('deserializeIlpForwardedPayment', function () {
+    describe('correctly parses valid ilp packets', function () {
+      const validTests = loadTests({ type: 'ilp_forwarded_payment' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const binary = new Buffer(test.binary, 'hex')
+
+          const parsed = Parser.deserializeIlpForwardedPayment(binary)
+
+          assert.deepEqual(parsed, test.json)
+        })
+      }
+    })
+  })
 
   describe('serializeIlqpLiquidityRequest', function () {
     describe('correctly serializes valid ilqp liquidity requests', function () {
