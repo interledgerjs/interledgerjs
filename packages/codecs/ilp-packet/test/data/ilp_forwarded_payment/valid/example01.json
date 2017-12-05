@@ -1,0 +1,8 @@
+{
+  "name": "example 1",
+  "binary": "0a100d6578616d706c652e616c6963650000",
+  "json": {
+    "account": "example.alice",
+    "data": ""
+  }
+}
