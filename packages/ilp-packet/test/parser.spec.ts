@@ -334,6 +334,42 @@ describe('Parser', function () {
     })
   })
 
+  describe('serializeIlpRejection', function () {
+    describe('correctly serializes valid ilp rejections', function () {
+      const validTests = loadTests({ type: 'ilp_rejection' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const json = test.json
+
+          json.data = Buffer.from(json.data, 'base64')
+
+          const serialized = Parser.serializeIlpRejection(json)
+
+          assert.deepEqual(serialized.toString('hex'), test.binary)
+        })
+      }
+    })
+  })
+
+  describe('deserializeIlpRejection', function () {
+    describe('correctly parses valid ilp rejections', function () {
+      const validTests = loadTests({ type: 'ilp_rejection' })
+
+      for (let test of validTests) {
+        it(test.name, function () {
+          const binary = new Buffer(test.binary, 'hex')
+
+          const parsed = Parser.deserializeIlpRejection(binary)
+
+          parsed.data = parsed.data.toString('base64')
+
+          assert.deepEqual(parsed, test.json)
+        })
+      }
+    })
+  })
+
   describe('deserializeIlpPacket', function () {
     describe('correctly parses valid ilp packets', function () {
       testPackets('ilp_payment', Parser.Type.TYPE_ILP_PAYMENT)
@@ -344,6 +380,9 @@ describe('Parser', function () {
       testPackets('ilqp_by_destination_request', Parser.Type.TYPE_ILQP_BY_DESTINATION_REQUEST)
       testPackets('ilqp_by_destination_response', Parser.Type.TYPE_ILQP_BY_DESTINATION_RESPONSE)
       testPackets('ilp_error', Parser.Type.TYPE_ILP_ERROR)
+      testPackets('ilp_fulfillment', Parser.Type.TYPE_ILP_FULFILLMENT)
+      testPackets('ilp_forwarded_payment', Parser.Type.TYPE_ILP_FORWARDED_PAYMENT)
+      testPackets('ilp_rejection', Parser.Type.TYPE_ILP_REJECTION)
 
       function testPackets (typeString: string, type: number) {
         const validTests = loadTests({ type: typeString })
@@ -358,7 +397,10 @@ describe('Parser', function () {
             if (typeString === 'ilp_error') {
               parsed.data.triggeredAt = parsed.data.triggeredAt.getTime()
             }
-            assert.deepEqual(parsed, {type, typeString, data: test.json})
+            if (typeString === 'ilp_rejection') {
+              parsed.data.data = parsed.data.data.toString('base64')
+            }
+            assert.deepEqual(parsed, { type, typeString, data: test.json })
           })
         }
       }

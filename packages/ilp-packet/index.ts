@@ -14,7 +14,8 @@ enum Type {
   TYPE_ILQP_BY_DESTINATION_RESPONSE = 7,
   TYPE_ILP_ERROR = 8,
   TYPE_ILP_FULFILLMENT = 9,
-  TYPE_ILP_FORWARDED_PAYMENT = 10 // experimental
+  TYPE_ILP_FORWARDED_PAYMENT = 10, // experimental
+  TYPE_ILP_REJECTION = 11
 }
 
 const serializeEnvelope = (type: number, contents: Buffer) => {
@@ -117,7 +118,7 @@ const deserializeIlpForwardedPayment = (binary: Buffer): IlpForwardedPayment => 
   const reader = Reader.from(contents)
 
   const account = reader.readVarOctetString().toString('ascii')
-  const data = base64url(reader.readVarOctetString())
+  const data = bufferToBase64url(reader.readVarOctetString())
 
   // Ignore remaining bytes for extensibility
 
@@ -533,6 +534,67 @@ const deserializeIlpFulfillment = (binary: Buffer): IlpFulfillment => {
   }
 }
 
+interface IlpRejection {
+  code: string,
+  triggeredBy: string,
+  message: string,
+  data: Buffer
+}
+
+const serializeIlpRejection = (json: IlpRejection) => {
+  const writer = new Writer()
+
+  // Convert code to buffer to ensure we are counting bytes, not UTF8 characters
+  const codeBuffer = Buffer.from(json.code, 'ascii')
+  if (codeBuffer.length !== ILP_ERROR_CODE_LENGTH) {
+    throw new Error('ILP error codes must be three bytes long, received: ' + json.code)
+  }
+
+  // code
+  writer.write(codeBuffer)
+
+  // triggeredBy
+  writer.writeVarOctetString(Buffer.from(json.triggeredBy, 'ascii'))
+
+  // message
+  writer.writeVarOctetString(Buffer.from(json.message, 'utf8'))
+
+  // data
+  writer.writeVarOctetString(json.data)
+
+  // extensibility
+  writer.writeUInt8(0)
+
+  return serializeEnvelope(Type.TYPE_ILP_REJECTION, writer.getBuffer())
+}
+
+const deserializeIlpRejection = (binary: Buffer): IlpRejection => {
+  const { type, contents } = deserializeEnvelope(binary)
+
+  if (type !== Type.TYPE_ILP_REJECTION) {
+    throw new Error('Packet has incorrect type')
+  }
+
+  const reader = Reader.from(contents)
+
+  const code = reader.read(ILP_ERROR_CODE_LENGTH).toString('ascii')
+
+  const triggeredBy = reader.readVarOctetString().toString('ascii')
+
+  const message = reader.readVarOctetString().toString('utf8')
+
+  const data = reader.readVarOctetString()
+
+  // Ignore remaining bytes for extensibility
+
+  return {
+    code,
+    triggeredBy,
+    message,
+    data
+  }
+}
+
 const serializeIlpPacket = (obj: IlpPacket) => {
   switch (obj.type) {
     case Type.TYPE_ILP_PAYMENT: return serializeIlpPayment(obj.data)
@@ -545,6 +607,7 @@ const serializeIlpPacket = (obj: IlpPacket) => {
     case Type.TYPE_ILP_ERROR: return serializeIlpError(obj.data)
     case Type.TYPE_ILP_FULFILLMENT: return serializeIlpFulfillment(obj.data)
     case Type.TYPE_ILP_FORWARDED_PAYMENT: return serializeIlpForwardedPayment(obj.data)
+    case Type.TYPE_ILP_REJECTION: return serializeIlpRejection(obj.data)
     default: throw new Error('Object has invalid type')
   }
 }
@@ -593,6 +656,10 @@ const deserializeIlpPacket = (binary: Buffer) => {
       packet = deserializeIlpForwardedPayment(binary)
       typeString = 'ilp_forwarded_payment'
       break
+    case Type.TYPE_ILP_REJECTION:
+      packet = deserializeIlpRejection(binary)
+      typeString = 'ilp_rejection'
+      break
     default:
       throw new Error('Packet has invalid type')
   }
@@ -625,6 +692,8 @@ module.exports = {
   deserializeIlpFulfillment,
   serializeIlpForwardedPayment,
   deserializeIlpForwardedPayment,
+  serializeIlpRejection,
+  deserializeIlpRejection,
   serializeIlpPacket,
   deserializeIlpPacket
 }
