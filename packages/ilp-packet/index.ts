@@ -41,12 +41,12 @@ interface IlpPacket {
 interface IlpPayment {
   amount: string,
   account: string,
-  data: string
+  data: Buffer
 }
 
 interface IlpForwardedPayment {
   account: string,
-  data: string
+  data: Buffer
 }
 
 const serializeIlpPayment = (json: IlpPayment) => {
@@ -61,7 +61,7 @@ const serializeIlpPayment = (json: IlpPayment) => {
   writer.writeVarOctetString(Buffer.from(json.account, 'ascii'))
 
   // data
-  writer.writeVarOctetString(Buffer.from(json.data || '', 'base64'))
+  writer.writeVarOctetString(json.data || Buffer.alloc(0))
 
   // extensibility
   writer.writeUInt8(0)
@@ -82,7 +82,7 @@ const deserializeIlpPayment = (binary: Buffer): IlpPayment => {
   const lowBits = reader.readUInt32()
   const amount = Long.fromBits(lowBits, highBits, true).toString()
   const account = reader.readVarOctetString().toString('ascii')
-  const data = bufferToBase64url(reader.readVarOctetString())
+  const data = reader.readVarOctetString()
 
   // Ignore remaining bytes for extensibility
 
@@ -100,7 +100,7 @@ const serializeIlpForwardedPayment = (json: IlpForwardedPayment) => {
   writer.writeVarOctetString(Buffer.from(json.account, 'ascii'))
 
   // data
-  writer.writeVarOctetString(Buffer.from(json.data || '', 'base64'))
+  writer.writeVarOctetString(json.data || Buffer.alloc(0))
 
   // extensibility
   writer.writeUInt8(0)
@@ -118,7 +118,7 @@ const deserializeIlpForwardedPayment = (binary: Buffer): IlpForwardedPayment => 
   const reader = Reader.from(contents)
 
   const account = reader.readVarOctetString().toString('ascii')
-  const data = bufferToBase64url(reader.readVarOctetString())
+  const data = reader.readVarOctetString()
 
   // Ignore remaining bytes for extensibility
 
@@ -501,14 +501,14 @@ const deserializeIlpError = (binary: Buffer): IlpError => {
 }
 
 interface IlpFulfillment {
-  data: string
+  data: Buffer
 }
 
 const serializeIlpFulfillment = (json: IlpFulfillment) => {
   const writer = new Writer()
 
   // data
-  writer.writeVarOctetString(Buffer.from(json.data || '', 'base64'))
+  writer.writeVarOctetString(json.data || Buffer.alloc(0))
 
   // extensibility
   writer.writeUInt8(0)
@@ -525,7 +525,7 @@ const deserializeIlpFulfillment = (binary: Buffer): IlpFulfillment => {
 
   const reader = Reader.from(contents)
 
-  const data = bufferToBase64url(reader.readVarOctetString())
+  const data = reader.readVarOctetString()
 
   // Ignore remaining bytes for extensibility
 
@@ -560,7 +560,7 @@ const serializeIlpRejection = (json: IlpRejection) => {
   writer.writeVarOctetString(Buffer.from(json.message, 'utf8'))
 
   // data
-  writer.writeVarOctetString(json.data)
+  writer.writeVarOctetString(json.data || Buffer.alloc(0))
 
   // extensibility
   writer.writeUInt8(0)

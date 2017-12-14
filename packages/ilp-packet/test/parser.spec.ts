@@ -13,6 +13,8 @@ describe('Parser', function () {
         it(test.name, function () {
           const json = test.json
 
+          json.data = Buffer.from(json.data, 'base64')
+
           const serialized = Parser.serializeIlpPayment(json)
 
           assert.deepEqual(serialized.toString('hex'), test.binary)
@@ -31,6 +33,8 @@ describe('Parser', function () {
 
           const parsed = Parser.deserializeIlpPayment(binary)
 
+          parsed.data = parsed.data.toString('base64')
+
           assert.deepEqual(parsed, test.json)
         })
       }
@@ -43,6 +47,8 @@ describe('Parser', function () {
       for (let test of validTests) {
         it(test.name, function () {
           const json = test.json
+
+          json.data = Buffer.from(json.data, 'base64')
 
           const serialized = Parser.serializeIlpForwardedPayment(json)
 
@@ -61,6 +67,8 @@ describe('Parser', function () {
           const binary = new Buffer(test.binary, 'hex')
 
           const parsed = Parser.deserializeIlpForwardedPayment(binary)
+
+          parsed.data = parsed.data.toString('base64')
 
           assert.deepEqual(parsed, test.json)
         })
@@ -310,6 +318,8 @@ describe('Parser', function () {
         it(test.name, function () {
           const json = test.json
 
+          json.data = Buffer.from(json.data, 'base64')
+
           const serialized = Parser.serializeIlpFulfillment(json)
 
           assert.deepEqual(serialized.toString('hex'), test.binary)
@@ -327,6 +337,8 @@ describe('Parser', function () {
           const binary = new Buffer(test.binary, 'hex')
 
           const parsed = Parser.deserializeIlpFulfillment(binary)
+
+          parsed.data = parsed.data.toString('base64')
 
           assert.deepEqual(parsed, test.json)
         })
@@ -397,7 +409,7 @@ describe('Parser', function () {
             if (typeString === 'ilp_error') {
               parsed.data.triggeredAt = parsed.data.triggeredAt.getTime()
             }
-            if (typeString === 'ilp_rejection') {
+            if (typeString === 'ilp_payment' || typeString === 'ilp_forwarded_payment' || typeString === 'ilp_fulfillment' || typeString === 'ilp_rejection') {
               parsed.data.data = parsed.data.data.toString('base64')
             }
             assert.deepEqual(parsed, { type, typeString, data: test.json })
