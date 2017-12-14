@@ -1,9 +1,8 @@
 import { Reader, Writer } from 'oer-utils'
 import { dateToGeneralizedTime, generalizedTimeToDate } from './src/utils/date'
 import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
-import base64url from 'base64url-adhoc'
+import { bufferToBase64url } from './src/utils/base64url'
 import Long = require('long')
-import times = require('lodash/times')
 
 enum Type {
   TYPE_ILP_PAYMENT = 1,
@@ -82,7 +81,7 @@ const deserializeIlpPayment = (binary: Buffer): IlpPayment => {
   const lowBits = reader.readUInt32()
   const amount = Long.fromBits(lowBits, highBits, true).toString()
   const account = reader.readVarOctetString().toString('ascii')
-  const data = base64url(reader.readVarOctetString())
+  const data = bufferToBase64url(reader.readVarOctetString())
 
   // Ignore remaining bytes for extensibility
 
@@ -478,9 +477,11 @@ const deserializeIlpError = (binary: Buffer): IlpError => {
 
   const triggeredBy = reader.readVarOctetString().toString('ascii')
 
-  const forwardedBy = times(reader.readVarUInt()).map(() => {
-    return reader.readVarOctetString().toString('ascii')
-  })
+  const forwardedByLength = reader.readVarUInt()
+  const forwardedBy: string[] = new Array(forwardedByLength)
+  for (let i = 0; i < forwardedByLength; i++) {
+    forwardedBy[i] = reader.readVarOctetString().toString('ascii')
+  }
 
   const triggeredAt = generalizedTimeToDate(reader.readVarOctetString().toString('ascii'))
 
@@ -523,7 +524,7 @@ const deserializeIlpFulfillment = (binary: Buffer): IlpFulfillment => {
 
   const reader = Reader.from(contents)
 
-  const data = base64url(reader.readVarOctetString())
+  const data = bufferToBase64url(reader.readVarOctetString())
 
   // Ignore remaining bytes for extensibility
 
