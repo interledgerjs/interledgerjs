@@ -1,5 +1,3 @@
-import padStart = require('lodash/padStart')
-
 // The OER encoding for GeneralizedTime is a variable length octet string
 // containing the ASCII/IA5 representation of a ISO8601 combined date and time
 // in the *basic* format without the "T" separator.
