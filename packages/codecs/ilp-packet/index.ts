@@ -1,7 +1,6 @@
 import { Reader, Writer } from 'oer-utils'
 import { dateToGeneralizedTime, generalizedTimeToDate } from './src/utils/date'
 import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
-import { bufferToBase64url } from './src/utils/base64url'
 import Long = require('long')
 
 enum Type {
