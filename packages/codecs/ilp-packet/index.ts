@@ -2,6 +2,7 @@ import { Reader, Writer } from 'oer-utils'
 import { dateToGeneralizedTime, generalizedTimeToDate } from './src/utils/date'
 import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
 import Long = require('long')
+import * as assert from 'assert'
 
 enum Type {
   TYPE_ILP_PAYMENT = 1,
@@ -49,6 +50,10 @@ interface IlpForwardedPayment {
 }
 
 const serializeIlpPayment = (json: IlpPayment) => {
+  assert(json.amount && typeof json.amount === 'string', 'amount must be a string')
+  assert(typeof json.account === 'string', 'account is required')
+  assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
+
   const writer = new Writer()
 
   // amount
@@ -93,6 +98,9 @@ const deserializeIlpPayment = (binary: Buffer): IlpPayment => {
 }
 
 const serializeIlpForwardedPayment = (json: IlpForwardedPayment) => {
+  assert(typeof json.account === 'string', 'account must be a string')
+  assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
+
   const writer = new Writer()
 
   // account
@@ -133,6 +141,9 @@ interface IlqpLiquidityRequest {
 }
 
 const serializeIlqpLiquidityRequest = (json: IlqpLiquidityRequest) => {
+  assert(typeof json.destinationAccount === 'string', 'destinationAccount must be a string')
+  assert(typeof json.destinationHoldDuration === 'number', 'destinationHoldDuration must be a number')
+
   const writer = new Writer()
 
   // destinationAccount
@@ -179,6 +190,11 @@ interface IlqpLiquidityResponse {
 const SIZE_OF_POINT = 16
 
 const serializeIlqpLiquidityResponse = (json: IlqpLiquidityResponse) => {
+  assert(Buffer.isBuffer(json.liquidityCurve), 'liquidityCurve must be a buffer')
+  assert(typeof json.appliesToPrefix === 'string', 'appliesToPrefix must be a string')
+  assert(typeof json.sourceHoldDuration === 'number', 'sourceHoldDuration must be a number')
+  assert(json.expiresAt instanceof Date, 'expiresAt must be a Date object')
+
   const writer = new Writer()
 
   // liquidityCurve
@@ -242,6 +258,9 @@ interface IlqpBySourceRequest {
 }
 
 const serializeIlqpBySourceRequest = (json: IlqpBySourceRequest) => {
+  assert(typeof json.destinationAccount === 'string', 'destinationAccount must be a string')
+  assert(json.sourceAmount && typeof json.sourceAmount === 'string', 'sourceAmount must be a string')
+
   const writer = new Writer()
 
   // destinationAccount
