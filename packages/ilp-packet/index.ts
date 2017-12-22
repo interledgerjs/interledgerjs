@@ -4,7 +4,7 @@ import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
 import Long = require('long')
 import * as assert from 'assert'
 
-enum Type {
+export enum Type {
   TYPE_ILP_PAYMENT = 1,
   TYPE_ILQP_LIQUIDITY_REQUEST = 2,
   TYPE_ILQP_LIQUIDITY_RESPONSE = 3,
@@ -18,14 +18,14 @@ enum Type {
   TYPE_ILP_REJECTION = 11
 }
 
-const serializeEnvelope = (type: number, contents: Buffer) => {
+export const serializeEnvelope = (type: number, contents: Buffer) => {
   const writer = new Writer()
   writer.writeUInt8(type)
   writer.writeVarOctetString(contents)
   return writer.getBuffer()
 }
 
-const deserializeEnvelope = (binary: Buffer) => {
+export const deserializeEnvelope = (binary: Buffer) => {
   const envelopeReader = Reader.from(binary)
   const type = envelopeReader.readUInt8()
   const contents = envelopeReader.readVarOctetString()
@@ -33,23 +33,23 @@ const deserializeEnvelope = (binary: Buffer) => {
   return { type, contents }
 }
 
-interface IlpPacket {
+export interface IlpPacket {
   type: Type,
   data: any
 }
 
-interface IlpPayment {
+export interface IlpPayment {
   amount: string,
   account: string,
   data: Buffer
 }
 
-interface IlpForwardedPayment {
+export interface IlpForwardedPayment {
   account: string,
   data: Buffer
 }
 
-const serializeIlpPayment = (json: IlpPayment) => {
+export const serializeIlpPayment = (json: IlpPayment) => {
   assert(json.amount && typeof json.amount === 'string', 'amount must be a string')
   assert(typeof json.account === 'string', 'account is required')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
@@ -73,7 +73,7 @@ const serializeIlpPayment = (json: IlpPayment) => {
   return serializeEnvelope(Type.TYPE_ILP_PAYMENT, writer.getBuffer())
 }
 
-const deserializeIlpPayment = (binary: Buffer): IlpPayment => {
+export const deserializeIlpPayment = (binary: Buffer): IlpPayment => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILP_PAYMENT) {
@@ -97,7 +97,7 @@ const deserializeIlpPayment = (binary: Buffer): IlpPayment => {
   }
 }
 
-const serializeIlpForwardedPayment = (json: IlpForwardedPayment) => {
+export const serializeIlpForwardedPayment = (json: IlpForwardedPayment) => {
   assert(typeof json.account === 'string', 'account must be a string')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
 
@@ -115,7 +115,7 @@ const serializeIlpForwardedPayment = (json: IlpForwardedPayment) => {
   return serializeEnvelope(Type.TYPE_ILP_FORWARDED_PAYMENT, writer.getBuffer())
 }
 
-const deserializeIlpForwardedPayment = (binary: Buffer): IlpForwardedPayment => {
+export const deserializeIlpForwardedPayment = (binary: Buffer): IlpForwardedPayment => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILP_FORWARDED_PAYMENT) {
@@ -135,12 +135,12 @@ const deserializeIlpForwardedPayment = (binary: Buffer): IlpForwardedPayment => 
   }
 }
 
-interface IlqpLiquidityRequest {
+export interface IlqpLiquidityRequest {
   destinationAccount: string,
   destinationHoldDuration: number
 }
 
-const serializeIlqpLiquidityRequest = (json: IlqpLiquidityRequest) => {
+export const serializeIlqpLiquidityRequest = (json: IlqpLiquidityRequest) => {
   assert(typeof json.destinationAccount === 'string', 'destinationAccount must be a string')
   assert(typeof json.destinationHoldDuration === 'number', 'destinationHoldDuration must be a number')
 
@@ -158,7 +158,7 @@ const serializeIlqpLiquidityRequest = (json: IlqpLiquidityRequest) => {
   return serializeEnvelope(Type.TYPE_ILQP_LIQUIDITY_REQUEST, writer.getBuffer())
 }
 
-const deserializeIlqpLiquidityRequest = (binary: Buffer): IlqpLiquidityRequest => {
+export const deserializeIlqpLiquidityRequest = (binary: Buffer): IlqpLiquidityRequest => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILQP_LIQUIDITY_REQUEST) {
@@ -179,7 +179,7 @@ const deserializeIlqpLiquidityRequest = (binary: Buffer): IlqpLiquidityRequest =
   }
 }
 
-interface IlqpLiquidityResponse {
+export interface IlqpLiquidityResponse {
   liquidityCurve: Buffer,
   appliesToPrefix: string,
   sourceHoldDuration: number,
@@ -189,7 +189,7 @@ interface IlqpLiquidityResponse {
 // Each point in a liquidity curve is two UInt64s
 const SIZE_OF_POINT = 16
 
-const serializeIlqpLiquidityResponse = (json: IlqpLiquidityResponse) => {
+export const serializeIlqpLiquidityResponse = (json: IlqpLiquidityResponse) => {
   assert(Buffer.isBuffer(json.liquidityCurve), 'liquidityCurve must be a buffer')
   assert(typeof json.appliesToPrefix === 'string', 'appliesToPrefix must be a string')
   assert(typeof json.sourceHoldDuration === 'number', 'sourceHoldDuration must be a number')
@@ -223,7 +223,7 @@ const serializeIlqpLiquidityResponse = (json: IlqpLiquidityResponse) => {
   return serializeEnvelope(Type.TYPE_ILQP_LIQUIDITY_RESPONSE, writer.getBuffer())
 }
 
-const deserializeIlqpLiquidityResponse = (binary: Buffer): IlqpLiquidityResponse => {
+export const deserializeIlqpLiquidityResponse = (binary: Buffer): IlqpLiquidityResponse => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILQP_LIQUIDITY_RESPONSE) {
@@ -251,13 +251,13 @@ const deserializeIlqpLiquidityResponse = (binary: Buffer): IlqpLiquidityResponse
   }
 }
 
-interface IlqpBySourceRequest {
+export interface IlqpBySourceRequest {
   destinationAccount: string,
   sourceAmount: string,
   destinationHoldDuration: number,
 }
 
-const serializeIlqpBySourceRequest = (json: IlqpBySourceRequest) => {
+export const serializeIlqpBySourceRequest = (json: IlqpBySourceRequest) => {
   assert(typeof json.destinationAccount === 'string', 'destinationAccount must be a string')
   assert(json.sourceAmount && typeof json.sourceAmount === 'string', 'sourceAmount must be a string')
 
@@ -278,7 +278,7 @@ const serializeIlqpBySourceRequest = (json: IlqpBySourceRequest) => {
   return serializeEnvelope(Type.TYPE_ILQP_BY_SOURCE_REQUEST, writer.getBuffer())
 }
 
-const deserializeIlqpBySourceRequest = (binary: Buffer): IlqpBySourceRequest => {
+export const deserializeIlqpBySourceRequest = (binary: Buffer): IlqpBySourceRequest => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILQP_BY_SOURCE_REQUEST) {
@@ -302,12 +302,12 @@ const deserializeIlqpBySourceRequest = (binary: Buffer): IlqpBySourceRequest => 
   }
 }
 
-interface IlqpBySourceResponse {
+export interface IlqpBySourceResponse {
   destinationAmount: string,
   sourceHoldDuration: number,
 }
 
-const serializeIlqpBySourceResponse = (json: IlqpBySourceResponse) => {
+export const serializeIlqpBySourceResponse = (json: IlqpBySourceResponse) => {
   const writer = new Writer()
 
   // destinationAmount
@@ -323,7 +323,7 @@ const serializeIlqpBySourceResponse = (json: IlqpBySourceResponse) => {
   return serializeEnvelope(Type.TYPE_ILQP_BY_SOURCE_RESPONSE, writer.getBuffer())
 }
 
-const deserializeIlqpBySourceResponse = (binary: Buffer): IlqpBySourceResponse => {
+export const deserializeIlqpBySourceResponse = (binary: Buffer): IlqpBySourceResponse => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILQP_BY_SOURCE_RESPONSE) {
@@ -344,13 +344,13 @@ const deserializeIlqpBySourceResponse = (binary: Buffer): IlqpBySourceResponse =
   }
 }
 
-interface IlqpByDestinationRequest {
+export interface IlqpByDestinationRequest {
   destinationAccount: string,
   destinationAmount: string,
   destinationHoldDuration: number,
 }
 
-const serializeIlqpByDestinationRequest = (json: IlqpByDestinationRequest) => {
+export const serializeIlqpByDestinationRequest = (json: IlqpByDestinationRequest) => {
   const writer = new Writer()
 
   // destinationAccount
@@ -368,7 +368,7 @@ const serializeIlqpByDestinationRequest = (json: IlqpByDestinationRequest) => {
   return serializeEnvelope(Type.TYPE_ILQP_BY_DESTINATION_REQUEST, writer.getBuffer())
 }
 
-const deserializeIlqpByDestinationRequest = (binary: Buffer): IlqpByDestinationRequest => {
+export const deserializeIlqpByDestinationRequest = (binary: Buffer): IlqpByDestinationRequest => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILQP_BY_DESTINATION_REQUEST) {
@@ -392,12 +392,12 @@ const deserializeIlqpByDestinationRequest = (binary: Buffer): IlqpByDestinationR
   }
 }
 
-interface IlqpByDestinationResponse {
+export interface IlqpByDestinationResponse {
   sourceAmount: string,
   sourceHoldDuration: number,
 }
 
-const serializeIlqpByDestinationResponse = (json: IlqpByDestinationResponse) => {
+export const serializeIlqpByDestinationResponse = (json: IlqpByDestinationResponse) => {
   const writer = new Writer()
 
   // destinationAmount
@@ -413,7 +413,7 @@ const serializeIlqpByDestinationResponse = (json: IlqpByDestinationResponse) => 
   return serializeEnvelope(Type.TYPE_ILQP_BY_DESTINATION_RESPONSE, writer.getBuffer())
 }
 
-const deserializeIlqpByDestinationResponse = (binary: Buffer): IlqpByDestinationResponse => {
+export const deserializeIlqpByDestinationResponse = (binary: Buffer): IlqpByDestinationResponse => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILQP_BY_DESTINATION_RESPONSE) {
@@ -434,7 +434,7 @@ const deserializeIlqpByDestinationResponse = (binary: Buffer): IlqpByDestination
   }
 }
 
-interface IlpError {
+export interface IlpError {
   code: string,
   name: string,
   triggeredBy: string,
@@ -445,7 +445,7 @@ interface IlpError {
 
 const ILP_ERROR_CODE_LENGTH = 3
 
-const serializeIlpError = (json: IlpError) => {
+export const serializeIlpError = (json: IlpError) => {
   const writer = new Writer()
 
   // Convert code to buffer to ensure we are counting bytes, not UTF8 characters
@@ -481,7 +481,7 @@ const serializeIlpError = (json: IlpError) => {
   return serializeEnvelope(Type.TYPE_ILP_ERROR, writer.getBuffer())
 }
 
-const deserializeIlpError = (binary: Buffer): IlpError => {
+export const deserializeIlpError = (binary: Buffer): IlpError => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILP_ERROR) {
@@ -518,11 +518,11 @@ const deserializeIlpError = (binary: Buffer): IlpError => {
   }
 }
 
-interface IlpFulfillment {
+export interface IlpFulfillment {
   data: Buffer
 }
 
-const serializeIlpFulfillment = (json: IlpFulfillment) => {
+export const serializeIlpFulfillment = (json: IlpFulfillment) => {
   const writer = new Writer()
 
   // data
@@ -534,7 +534,7 @@ const serializeIlpFulfillment = (json: IlpFulfillment) => {
   return serializeEnvelope(Type.TYPE_ILP_FULFILLMENT, writer.getBuffer())
 }
 
-const deserializeIlpFulfillment = (binary: Buffer): IlpFulfillment => {
+export const deserializeIlpFulfillment = (binary: Buffer): IlpFulfillment => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILP_FULFILLMENT) {
@@ -552,14 +552,14 @@ const deserializeIlpFulfillment = (binary: Buffer): IlpFulfillment => {
   }
 }
 
-interface IlpRejection {
+export interface IlpRejection {
   code: string,
   triggeredBy: string,
   message: string,
   data: Buffer
 }
 
-const serializeIlpRejection = (json: IlpRejection) => {
+export const serializeIlpRejection = (json: IlpRejection) => {
   const writer = new Writer()
 
   // Convert code to buffer to ensure we are counting bytes, not UTF8 characters
@@ -586,7 +586,7 @@ const serializeIlpRejection = (json: IlpRejection) => {
   return serializeEnvelope(Type.TYPE_ILP_REJECTION, writer.getBuffer())
 }
 
-const deserializeIlpRejection = (binary: Buffer): IlpRejection => {
+export const deserializeIlpRejection = (binary: Buffer): IlpRejection => {
   const { type, contents } = deserializeEnvelope(binary)
 
   if (type !== Type.TYPE_ILP_REJECTION) {
@@ -613,7 +613,7 @@ const deserializeIlpRejection = (binary: Buffer): IlpRejection => {
   }
 }
 
-const serializeIlpPacket = (obj: IlpPacket) => {
+export const serializeIlpPacket = (obj: IlpPacket) => {
   switch (obj.type) {
     case Type.TYPE_ILP_PAYMENT: return serializeIlpPayment(obj.data)
     case Type.TYPE_ILQP_LIQUIDITY_REQUEST: return serializeIlqpLiquidityRequest(obj.data)
@@ -630,7 +630,7 @@ const serializeIlpPacket = (obj: IlpPacket) => {
   }
 }
 
-const deserializeIlpPacket = (binary: Buffer) => {
+export const deserializeIlpPacket = (binary: Buffer) => {
   let packet
   let typeString
   switch (binary[0]) {
@@ -686,32 +686,4 @@ const deserializeIlpPacket = (binary: Buffer) => {
     typeString,
     data: packet
   }
-}
-
-module.exports = {
-  Type,
-  serializeIlpPayment,
-  deserializeIlpPayment,
-  serializeIlqpLiquidityRequest,
-  deserializeIlqpLiquidityRequest,
-  serializeIlqpLiquidityResponse,
-  deserializeIlqpLiquidityResponse,
-  serializeIlqpBySourceRequest,
-  deserializeIlqpBySourceRequest,
-  serializeIlqpBySourceResponse,
-  deserializeIlqpBySourceResponse,
-  serializeIlqpByDestinationRequest,
-  deserializeIlqpByDestinationRequest,
-  serializeIlqpByDestinationResponse,
-  deserializeIlqpByDestinationResponse,
-  serializeIlpError,
-  deserializeIlpError,
-  serializeIlpFulfillment,
-  deserializeIlpFulfillment,
-  serializeIlpForwardedPayment,
-  deserializeIlpForwardedPayment,
-  serializeIlpRejection,
-  deserializeIlpRejection,
-  serializeIlpPacket,
-  deserializeIlpPacket
 }
