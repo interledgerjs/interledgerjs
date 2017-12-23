@@ -1,0 +1,10 @@
+{
+  "name": "example 1",
+  "binary": "0e414630310e6578616d706c652e75732e626f62276d697373696e672064657374696e6174696f6e2e206c65646765723d6578616d706c652e75732e06000000041041",
+  "json": {
+    "code": "F01",
+    "triggeredBy": "example.us.bob",
+    "message": "missing destination. ledger=example.us.",
+    "data": "AAAABBBB"
+  }
+}
