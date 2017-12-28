@@ -9,143 +9,26 @@ const MockSocket = require('./helpers/mockSocket')
 const { protocolDataToIlpAndCustom } =
   require('../src/util/protocolDataConverter')
 
-const info = {
-  currencyScale: 2,
-  currencyCode: 'USD',
-  connectors: [ { id: 'other', name: 'other', connector: 'peer.usd.other' } ]
-}
-
 const options = {
-  prefix: 'example.red.',
-  maxBalance: '1000000',
   server: 'btp+wss://user:placeholder@example.com/rpc',
-  info: info,
-  incomingSecret: 'placeholder'
 }
 
 describe('Info', () => {
   beforeEach(async function () {
     options._store = new ObjStore()
-    this.plugin = new PluginPaymentChannel(options)
+    this.plugin = new PluginBtp(options)
 
     this.mockSocketIndex = 0
     this.mockSocket = new MockSocket()
     this.mockSocket
       .reply(btpPacket.TYPE_MESSAGE, ({ requestId }) => btpPacket.serializeResponse(requestId, []))
 
-    await this.plugin.addSocket(this.mockSocket, { username: 'user', token: 'placeholder' })
-    await this.plugin.connect()
+    this.plugin.connected = true
+    this.plugin._ws = this.mockSocket
   })
 
   afterEach(async function () {
     assert(await this.mockSocket.isDone(), 'request handlers must have been called')
-  })
-
-  describe('getBalance', () => {
-    it('should start at zero', function * () {
-      assert.equal((yield this.plugin.getBalance()), '0')
-    })
-  })
-
-  describe('getLimit', () => {
-    it('return the result of the RPC call', function * () {
-      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
-        const expectedGetLimitRequest = {
-          protocolData: [{
-            protocolName: 'limit',
-            contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
-            data: Buffer.from([ 0 ])
-          }]
-        }
-        assert.deepEqual(data, expectedGetLimitRequest)
-
-        return btpPacket.serializeResponse(requestId, [{
-          protocolName: 'limit',
-          contentType: btpPacket.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify('5'))
-        }])
-      })
-
-      // the value is reversed so it makes sense to our side
-      assert.equal((yield this.plugin.getLimit()), '-5')
-    })
-
-    it('handles getLimit requests', function * () {
-      this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({requestId, data}) => {
-        const {protocolMap} = protocolDataToIlpAndCustom(data)
-        assert(protocolMap.limit)
-        assert(protocolMap.limit, options.maxBalance)
-      })
-
-      const getLimitReq = btpPacket.serializeMessage(12345, [{
-        protocolName: 'limit',
-        contentType: btpPacket.MIME_APPLICATION_JSON,
-        data: Buffer.from('[]')
-      }])
-      this.mockSocket.emit('message', getLimitReq)
-    })
-  })
-
-  describe('getPeerBalance', () => {
-    it('return the result of the RPC call', function * () {
-      this.mockSocket.reply(btpPacket.TYPE_MESSAGE, ({requestId, data}) => {
-        const expectedGetBalanceRequest = {
-          protocolData: [{
-            protocolName: 'balance',
-            contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
-            data: Buffer.from([ 0 ])
-          }]
-        }
-        assert.deepEqual(data, expectedGetBalanceRequest)
-
-        return btpPacket.serializeResponse(requestId, [{
-          protocolName: 'balance',
-          contentType: btpPacket.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify('5'))
-        }])
-      })
-
-      // the value is reversed so it makes sense to our side
-      assert.equal((yield this.plugin.getPeerBalance()), '-5')
-    })
-  })
-
-  describe('getInfo', () => {
-    it('should use the supplied info', function () {
-      assert.deepEqual(
-        this.plugin.getInfo(),
-        Object.assign({}, info, {prefix: this.plugin.getInfo().prefix})
-      )
-    })
-
-    it('should return the full info', function () {
-      const expectedFullInfo = Object.assign({},
-        info,
-        {prefix: this.plugin.getInfo().prefix}
-      )
-      this.mockSocket.reply(btpPacket.TYPE_RESPONSE, ({data}) => {
-        const resp = protocolDataToIlpAndCustom(data)
-        assert.property(resp.protocolMap, 'info')
-        assert.deepEqual(resp.protocolMap.info, expectedFullInfo)
-      })
-
-      const fullInfoReq = btpPacket.serializeMessage(12345, [{
-        protocolName: 'info',
-        contentType: btpPacket.MIME_APPLICATION_OCTET_STREAM,
-        data: Buffer.from([ 2 ]) // 2 == INFO_REQUEST_FULL
-      }])
-      this.mockSocket.emit('message', fullInfoReq)
-    })
-  })
-
-  describe('isAuthorized', () => {
-    it('should authorize its own auth token', function () {
-      assert.isTrue(this.plugin.isAuthorized(this.plugin._getAuthToken()))
-    })
-
-    it('should not authorize any other token', function () {
-      assert.isFalse(this.plugin.isAuthorized('any other token'))
-    })
   })
 
   describe('authentication', () => {
