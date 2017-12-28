@@ -1,7 +1,11 @@
 'use strict'
 
+const assert = require('assert')
+const defaultDebug = require('debug')('ilp-plugin-btp')
 const crypto = require('crypto')
 const EventEmitter = require('events').EventEmitter
+const URL = require('url').URL
+const WebSocket = require('ws')
 const BtpPacket = require('btp-packet')
 const base64url = require('base64url')
 
@@ -63,7 +67,7 @@ class AbstractBtpPlugin extends EventEmitter {
   constructor ({ debug, listener, server }) {
     super()
 
-    this._debug = debug
+    this._debug = debug || defaultDebug
     this._dataHandler = null
     this._moneyHandler = null
     this._connected = false
@@ -82,7 +86,8 @@ class AbstractBtpPlugin extends EventEmitter {
       this._incomingWs = null
 
       wss.on('connection', (ws) => {
-        debug('got connection')
+        this._debug('got connection')
+        let authPacket
         let token
 
         ws.once('message', async (binaryAuthMessage) => {
@@ -93,8 +98,9 @@ class AbstractBtpPlugin extends EventEmitter {
             assert.equal(authPacket.data.protocolData[0].protocolName, 'auth', 'First subprotocol must be auth')
             for (let subProtocol of authPacket.data.protocolData) {
               if (subProtocol.protocolName === 'auth_token') {
-                token = subProtocol.data
+                token = subProtocol.data.toString()
                 if (token !== this._listener.secret) {
+                  this._debug(JSON.stringify(token), JSON.stringify(this._listener.secret))
                   throw new Error('invalid auth_token')
                 }
 
@@ -106,7 +112,7 @@ class AbstractBtpPlugin extends EventEmitter {
             }
 
             assert(token, 'auth_token subprotocol is required')
-            wsIncoming.send(BtpPacket.serializeResponse(authPacket.requestId, []))
+            ws.send(BtpPacket.serializeResponse(authPacket.requestId, []))
           } catch (err) {
             this.incomingWs = null
             if (authPacket) {
@@ -116,13 +122,13 @@ class AbstractBtpPlugin extends EventEmitter {
                 data: err.message,
                 triggeredAt: new Date().toISOString()
               }, authPacket.requestId, [])
-              wsIncoming.send(errorResponse)
+              ws.send(errorResponse)
             }
-            wsIncoming.close()
+            ws.close()
             return
           }
 
-          debug('connection authenticated')
+          this._debug('connection authenticated')
           ws.on('message', this._handleIncomingWsMessage.bind(this, ws))
         })
       })
@@ -149,11 +155,11 @@ class AbstractBtpPlugin extends EventEmitter {
 
       return new Promise((resolve, reject) => {
         this._ws.on('open', async () => {
-          debug('connected to server')
+          this._debug('connected to server')
 
           await this._call(null, {
             type: BtpPacket.TYPE_MESSAGE,
-            requestId: await util._requestId(),
+            requestId: await _requestId(),
             data: { protocolData }
           })
 
@@ -172,11 +178,11 @@ class AbstractBtpPlugin extends EventEmitter {
     try {
       btpPacket = BtpPacket.deserialize(binaryMessage)
     } catch (err) {
-      debug('deserialization error:', err)
+      this._debug('deserialization error:', err)
       ws.close()
     }
 
-    debug(`processing btp packet ${JSON.stringify(btpPacket)}`)
+    this._debug(`processing btp packet ${JSON.stringify(btpPacket)}`)
     try {
       await this._handleIncomingBtpPacket(null, btpPacket)
     } catch (err) {
@@ -216,7 +222,7 @@ class AbstractBtpPlugin extends EventEmitter {
   async sendData (buffer) {
     const response = await this._call(null, {
       type: BtpPacket.TYPE_MESSAGE,
-      requestId: await util._requestId(),
+      requestId: await _requestId(),
       data: { protocolData: [{
         protocolName: 'ilp',
         contentType: BtpPacket.MIME_APPLICATION_OCTET_STREAM,
@@ -237,7 +243,7 @@ class AbstractBtpPlugin extends EventEmitter {
   async sendData (buffer) {
     const response = await this._call(null, {
       type: BtpPacket.TYPE_MESSAGE,
-      requestId: await util._requestId(),
+      requestId: await _requestId(),
       data: { protocolData: [{
         protocolName: 'ilp',
         contentType: BtpPacket.MIME_APPLICATION_OCTET_STREAM,
