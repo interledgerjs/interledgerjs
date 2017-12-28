@@ -34,7 +34,11 @@ async function run () {
 
   await server.sendMoney(10)
   await client.sendMoney(10)
-  console.log('sent money (no-op')
+  console.log('sent money (no-op)')
+
+  await client.disconnect()
+  await server.disconnect()
+  process.exit(0)
 }
 
 run()

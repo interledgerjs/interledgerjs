@@ -205,7 +205,9 @@ class AbstractBtpPlugin extends EventEmitter {
   }
 
   async disconnect () {
-    await this._disconnect()
+    if (this._disconnect) {
+      await this._disconnect()
+    }
 
     if (this._ws) this._ws.close()
     if (this._incomingWs) {
