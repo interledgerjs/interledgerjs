@@ -161,7 +161,7 @@ class AbstractBtpPlugin extends EventEmitter {
         })
 
         this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
-      }
+      })
     }
 
     this._connected = true
