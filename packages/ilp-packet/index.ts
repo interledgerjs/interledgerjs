@@ -1,5 +1,10 @@
 import { Reader, Writer } from 'oer-utils'
-import { dateToGeneralizedTime, generalizedTimeToDate } from './src/utils/date'
+import {
+  dateToGeneralizedTime,
+  generalizedTimeToDate,
+  dateToInterledgerTime,
+  interledgerTimeToDate,
+  INTERLEDGER_TIME_LENGTH } from './src/utils/date'
 import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
 import Long = require('long')
 import * as assert from 'assert'
@@ -637,8 +642,8 @@ export const serializeIlpPrepare = (json: IlpPrepare) => {
   const amount = Long.fromString(json.amount, true)
   writer.writeUInt32(amount.getHighBitsUnsigned())
   writer.writeUInt32(amount.getLowBitsUnsigned())
+  writer.write(Buffer.from(dateToInterledgerTime(json.expiresAt), 'ascii'))
   writer.write(json.executionCondition)
-  writer.writeVarOctetString(Buffer.from(dateToGeneralizedTime(json.expiresAt), 'ascii'))
   writer.writeVarOctetString(Buffer.from(json.destination, 'ascii'))
   writer.writeVarOctetString(json.data)
 
@@ -656,8 +661,8 @@ export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
   const highBits = reader.readUInt32()
   const lowBits = reader.readUInt32()
   const amount = Long.fromBits(lowBits, highBits, true).toString()
+  const expiresAt = interledgerTimeToDate(reader.read(INTERLEDGER_TIME_LENGTH).toString('ascii'))
   const executionCondition = reader.read(32)
-  const expiresAt = generalizedTimeToDate(reader.readVarOctetString().toString('ascii'))
   const destination = reader.readVarOctetString().toString('ascii')
   const data = reader.readVarOctetString()
 
