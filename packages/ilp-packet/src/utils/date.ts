@@ -29,7 +29,7 @@ export const INTERLEDGER_TIME_REGEX =
 export const interledgerTimeToDate = (interledgerTime: string) => {
   const isoTimestamp = interledgerTime.replace(
     INTERLEDGER_TIME_REGEX,
-    '$1-$2-$3T$4:$5:$6.$7')
+    '$1-$2-$3T$4:$5:$6.$7Z')
 
   const date = new Date(isoTimestamp)
 
