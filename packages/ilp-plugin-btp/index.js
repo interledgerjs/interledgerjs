@@ -47,12 +47,16 @@ function jsErrorToBtpError (e) {
  * sendMoney (amount), handleMoney (from, btpPacket)
  *
  * The `from` field is set to null in all the methods here. It is present in
- * order to make it possible to write multi account plugins (plugins with
- * an internal connector which understand ILP).
+ * order to make it possible to write multi account plugins (plugins with an
+ * internal connector which understand ILP).
  * 
  * If any work must be done on disconnect, implement _disconnect instead of
  * overriding this.disconnect. This will ensure that the connection is cleaned
  * up properly.
+ *
+ * If any work must be done on connect, implement _connect. You can also
+ * rewrite connect, but then disconnect and handleOutgoingBtpPacket should also
+ * be overridden.
  *
  * Instead, you need to implement _handleOutgoingBtpPacket(to, btpPacket) which
  * returns a Promise. `to` is the ILP address of the destination peer and
@@ -168,6 +172,10 @@ class AbstractBtpPlugin extends EventEmitter {
 
         this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
       })
+    }
+
+    if (this._connect) {
+      await this._connect()
     }
 
     this._connected = true
