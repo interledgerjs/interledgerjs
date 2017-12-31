@@ -1,0 +1,29 @@
+{
+  "name": "ilp-protocol-ildcp",
+  "version": "0.0.0",
+  "description": "Implementation of the Interledger Dynamic Configuration Protocol (IL-DCP)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interledgerjs/ilp-protocol-ildcp.git"
+  },
+  "keywords": [
+    "ilp",
+    "configuration",
+    "dhcp",
+    "autoconfig",
+    "detect",
+    "address",
+    "load",
+    "config"
+  ],
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/interledgerjs/ilp-protocol-ildcp/issues"
+  },
+  "homepage": "https://github.com/interledgerjs/ilp-protocol-ildcp#readme"
+}
