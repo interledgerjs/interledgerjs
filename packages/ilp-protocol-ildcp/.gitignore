@@ -1,0 +1,8 @@
+/node_modules/
+/.nyc_output/
+/dist/
+/coverage/
+*.js
+*.js.map
+*.d.ts
+!wallaby.js
