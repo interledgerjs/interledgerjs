@@ -73,7 +73,7 @@ const serializeIldcpResponse = (response: IldcpResponse): Buffer => {
   })
 }
 
-const receive = async (sendData: (data: Buffer) => Promise<Buffer>): Promise<IldcpResponse> => {
+const fetch = async (sendData: (data: Buffer) => Promise<Buffer>): Promise<IldcpResponse> => {
   const data = await sendData(IlpPacket.serializeIlpPrepare({
     amount: '0',
     executionCondition: PEER_PROTOCOL_CONDITION,
@@ -98,13 +98,34 @@ const receive = async (sendData: (data: Buffer) => Promise<Buffer>): Promise<Ild
   return { clientAddress, assetScale, assetCode }
 }
 
-const serve = (requestPacket: Buffer, handler: (request: IldcpRequest) => IldcpResponse): Buffer => {
-  // In the future, the request packet may contain some parameters. We will pass
-  // these to the handler as an object, the handler will then return the
-  // response as a JavaScript object.
-  const info = handler({})
+export interface ServeSettings {
+  requestPacket: Buffer,
+  handler: (request: IldcpRequest) => IldcpResponse,
+  serverAddress: string
+}
 
-  return serializeIldcpResponse(info)
+const serve = async ({ requestPacket, handler, serverAddress }: ServeSettings): Promise<Buffer> => {
+  try {
+    // Parse the request packet just to make sure it's valid
+    deserializeIldcpRequest(requestPacket)
+
+    // In the future, the request packet may contain some parameters. We will pass
+    // these to the handler as an object, the handler will then return the
+    // response as a JavaScript object.
+    const info = await handler({})
+
+    return serializeIldcpResponse(info)
+  } catch (err) {
+    const errInfo = (err && typeof err === 'object' && err.stack) ? err.stack : err
+    debug('error while handling ildcp request. error=%s', errInfo)
+
+    return IlpPacket.serializeIlpReject({
+      code: 'F00',
+      message: (err && typeof err === 'object' && err.message) ? err.message : 'unexpected error.',
+      triggeredBy: serverAddress,
+      data: Buffer.alloc(0)
+    })
+  }
 }
 
 export {
@@ -112,6 +133,6 @@ export {
   serializeIldcpRequest,
   deserializeIldcpResponse,
   serializeIldcpResponse,
-  receive,
+  fetch,
   serve
 }
