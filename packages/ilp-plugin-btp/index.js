@@ -155,7 +155,7 @@ class AbstractBtpPlugin extends EventEmitter {
         data: Buffer.from(secret, 'utf8')
       }]
 
-      return new Promise((resolve, reject) => {
+      await new Promise((resolve, reject) => {
         this._ws.on('open', async () => {
           debug('connected to server')
 
@@ -209,8 +209,9 @@ class AbstractBtpPlugin extends EventEmitter {
     try {
       await this._handleIncomingBtpPacket(null, btpPacket)
     } catch (err) {
-      debug(`Error processing BTP packet of type ${typeString}: `, e)
-      const error = jsErrorToBtpError(e)
+      debug(`Error processing BTP packet of type ${btpPacket.type}: `, err)
+      const error = jsErrorToBtpError(err)
+      const requestId = btpPacket.requestId
       const { code, name, triggeredAt, data } = error
 
       await this._handleOutgoingBtpPacket(null, {
@@ -335,7 +336,7 @@ class AbstractBtpPlugin extends EventEmitter {
     const { ilp, protocolMap } = protocolDataToIlpAndCustom(data)
 
     if (!this._dataHandler) {
-      throw new NotAcceptedError('no request handler registered')
+      throw new Error('no request handler registered')
     }
 
     const response = await this._dataHandler(ilp)
@@ -388,6 +389,14 @@ class AbstractBtpPlugin extends EventEmitter {
     } catch (e) {
       debug('unable to send btp message to client: ' + e.message, 'btp packet:', JSON.stringify(btpPacket))
     }
+  }
+
+  protocolDataToIlpAndCustom (packet) {
+    return protocolDataToIlpAndCustom(packet)
+  }
+
+  ilpAndCustomToProtocolData (obj) {
+    return ilpAndCustomToProtocolData(obj)
   }
 }
 
