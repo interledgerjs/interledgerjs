@@ -1,13 +1,12 @@
 'use strict'
 
 const assert = require('assert')
-const defaultDebug = require('debug')('ilp-plugin-btp')
+const debug = require('debug')('ilp-plugin-btp')
 const crypto = require('crypto')
 const EventEmitter = require('events').EventEmitter
 const URL = require('url').URL
 const WebSocket = require('ws')
 const BtpPacket = require('btp-packet')
-const base64url = require('base64url')
 
 const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
   require('./protocol-data-converter')
@@ -49,7 +48,7 @@ function jsErrorToBtpError (e) {
  * The `from` field is set to null in all the methods here. It is present in
  * order to make it possible to write multi account plugins (plugins with an
  * internal connector which understand ILP).
- * 
+ *
  * If any work must be done on disconnect, implement _disconnect instead of
  * overriding this.disconnect. This will ensure that the connection is cleaned
  * up properly.
@@ -68,10 +67,9 @@ function jsErrorToBtpError (e) {
  */
 
 class AbstractBtpPlugin extends EventEmitter {
-  constructor ({ debug, listener, server }) {
+  constructor ({ listener, server }) {
     super()
 
-    this._debug = debug || defaultDebug
     this._dataHandler = null
     this._moneyHandler = null
     this._connected = false
@@ -90,7 +88,7 @@ class AbstractBtpPlugin extends EventEmitter {
       this._incomingWs = null
 
       wss.on('connection', (ws) => {
-        this._debug('got connection')
+        debug('got connection')
         let authPacket
         let token
 
@@ -104,7 +102,7 @@ class AbstractBtpPlugin extends EventEmitter {
               if (subProtocol.protocolName === 'auth_token') {
                 token = subProtocol.data.toString()
                 if (token !== this._listener.secret) {
-                  this._debug(JSON.stringify(token), JSON.stringify(this._listener.secret))
+                  debug(JSON.stringify(token), JSON.stringify(this._listener.secret))
                   throw new Error('invalid auth_token')
                 }
 
@@ -132,7 +130,7 @@ class AbstractBtpPlugin extends EventEmitter {
             return
           }
 
-          this._debug('connection authenticated')
+          debug('connection authenticated')
           ws.on('message', this._handleIncomingWsMessage.bind(this, ws))
         })
       })
@@ -142,7 +140,7 @@ class AbstractBtpPlugin extends EventEmitter {
       const parsedServer = new URL(this._server)
       const host = parsedServer.host // TODO: include path
       const secret = parsedServer.password
-      const ws = this._ws = new WebSocket('ws://' + host) // TODO: wss
+      this._ws = new WebSocket('ws://' + host) // TODO: wss
       const protocolData = [{
         protocolName: 'auth',
         contentType: BtpPacket.MIME_APPLICATION_OCTET_STREAM,
@@ -159,7 +157,7 @@ class AbstractBtpPlugin extends EventEmitter {
 
       return new Promise((resolve, reject) => {
         this._ws.on('open', async () => {
-          this._debug('connected to server')
+          debug('connected to server')
 
           await this._call(null, {
             type: BtpPacket.TYPE_MESSAGE,
@@ -181,24 +179,41 @@ class AbstractBtpPlugin extends EventEmitter {
     this._connected = true
   }
 
+  async disconnect () {
+    if (this._disconnect) {
+      await this._disconnect()
+    }
+
+    if (this._ws) this._ws.close()
+    if (this._incomingWs) {
+      this._incomingWs.close()
+      this._incomingWs = null
+    }
+    if (this._wss) this._wss.close()
+  }
+
+  isConnected () {
+    return this._connected
+  }
+
   async _handleIncomingWsMessage (ws, binaryMessage) {
     let btpPacket
     try {
       btpPacket = BtpPacket.deserialize(binaryMessage)
     } catch (err) {
-      this._debug('deserialization error:', err)
+      debug('deserialization error:', err)
       ws.close()
     }
 
-    this._debug(`processing btp packet ${JSON.stringify(btpPacket)}`)
+    debug(`processing btp packet ${JSON.stringify(btpPacket)}`)
     try {
       await this._handleIncomingBtpPacket(null, btpPacket)
     } catch (err) {
-      this._debug(`Error processing BTP packet of type ${typeString}: `, e)
+      debug(`Error processing BTP packet of type ${typeString}: `, e)
       const error = jsErrorToBtpError(e)
       const { code, name, triggeredAt, data } = error
 
-      await this._handleOutgoingBtpPacket(from, {
+      await this._handleOutgoingBtpPacket(null, {
         type: BtpPacket.TYPE_ERROR,
         requestId,
         data: {
@@ -210,44 +225,6 @@ class AbstractBtpPlugin extends EventEmitter {
         }
       })
     }
-  }
-
-  async disconnect () {
-    if (this._disconnect) {
-      await this._disconnect()
-    }
-
-    if (this._ws) this._ws.close()
-    if (this._incomingWs) {
-      this._incomingWs.close() 
-      this._incomingWs = null
-    }
-    if (this._wss) this._wss.close()
-  }
-
-  isConnected () {
-    return this._connected
-  }
-
-  async sendData (buffer) {
-    const response = await this._call(null, {
-      type: BtpPacket.TYPE_MESSAGE,
-      requestId: await _requestId(),
-      data: { protocolData: [{
-        protocolName: 'ilp',
-        contentType: BtpPacket.MIME_APPLICATION_OCTET_STREAM,
-        data: buffer
-      }] }
-    })
-
-    return response.protocolData
-      .filter(p => p.protocolName === 'ilp')[0]
-      .data
-  }
-
-  // With no underlying ledger, sendMoney is a no-op
-  async sendMoney () {
-    return
   }
 
   async sendData (buffer) {
@@ -269,6 +246,10 @@ class AbstractBtpPlugin extends EventEmitter {
       : Buffer.alloc(0)
   }
 
+  async sendMoney () {
+    // With no underlying ledger, sendMoney is a no-op
+  }
+
   // don't throw errors even if the event handler throws
   // this is especially important in plugins because
   // errors can prevent the balance from being updated correctly
@@ -277,7 +258,7 @@ class AbstractBtpPlugin extends EventEmitter {
       this.emit.apply(this, arguments)
     } catch (err) {
       const errInfo = (typeof err === 'object' && err.stack) ? err.stack : String(err)
-      this._debug('error in handler for event', arguments, errInfo)
+      debug('error in handler for event', arguments, errInfo)
     }
   }
 
@@ -321,7 +302,7 @@ class AbstractBtpPlugin extends EventEmitter {
     const {type, requestId, data} = btpPacket
     const typeString = BtpPacket.typeToString(type)
 
-    this._debug(`received BTP packet (${typeString}, RequestId: ${requestId}): ${JSON.stringify(data)}`)
+    debug(`received BTP packet (${typeString}, RequestId: ${requestId}): ${JSON.stringify(data)}`)
     let result
     switch (type) {
       case BtpPacket.TYPE_RESPONSE:
@@ -331,7 +312,7 @@ class AbstractBtpPlugin extends EventEmitter {
       case BtpPacket.TYPE_PREPARE:
       case BtpPacket.TYPE_FULFILL:
       case BtpPacket.TYPE_REJECT:
-        throw new Error('Unsupported BTP packet') 
+        throw new Error('Unsupported BTP packet')
 
       case BtpPacket.TYPE_TRANSFER:
         result = await this._handleMoney(from, btpPacket)
@@ -342,7 +323,7 @@ class AbstractBtpPlugin extends EventEmitter {
         break
     }
 
-    this._debug(`replying to request ${requestId} with ${JSON.stringify(result)}`)
+    debug(`replying to request ${requestId} with ${JSON.stringify(result)}`)
     await this._handleOutgoingBtpPacket(from, {
       type: BtpPacket.TYPE_RESPONSE,
       requestId,
@@ -374,7 +355,7 @@ class AbstractBtpPlugin extends EventEmitter {
       throw new Error('requestHandler must be a function')
     }
 
-    this._debug('registering data handler')
+    debug('registering data handler')
     this._dataHandler = handler
   }
 
@@ -391,7 +372,7 @@ class AbstractBtpPlugin extends EventEmitter {
       throw new Error('requestHandler must be a function')
     }
 
-    this._debug('registering money handler')
+    debug('registering money handler')
     this._moneyHandler = handler
   }
 
@@ -402,7 +383,7 @@ class AbstractBtpPlugin extends EventEmitter {
   async _handleOutgoingBtpPacket (to, btpPacket) {
     const ws = this._ws || this._incomingWs
 
-    try { 
+    try {
       await new Promise(resolve => ws.send(BtpPacket.serialize(btpPacket), resolve))
     } catch (e) {
       debug('unable to send btp message to client: ' + e.message, 'btp packet:', JSON.stringify(btpPacket))
