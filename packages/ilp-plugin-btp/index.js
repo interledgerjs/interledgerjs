@@ -175,15 +175,16 @@ class AbstractBtpPlugin extends EventEmitter {
       await this._ws.open('ws://' + host) // TODO: wss
     }
 
-    if (this._connect) {
-      await this._connect()
-    }
-
     await new Promise((resolve, reject) => {
       this.once('connect', resolve)
       this.once('disconnect', () =>
         void reject(new Error('connection aborted')))
     })
+
+    if (this._connect) {
+      await this._connect()
+    }
+
     this._connected = true
   }
 
