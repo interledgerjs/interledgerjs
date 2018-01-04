@@ -11,8 +11,10 @@ const client = new BtpPlugin({
 })
 
 async function run () {
-  await server.connect()
-  await client.connect()
+  await Promise.all([
+    server.connect(),
+    client.connect()
+  ])
 
   server.registerDataHandler((ilp) => {
     console.log('server got:', IlpPacket.deserializeIlpPacket(ilp))
