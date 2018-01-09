@@ -12,7 +12,7 @@ const BtpPacket = require('btp-packet')
 const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
   require('./protocol-data-converter')
 
-const DEFAULT_TIMEOUT = 5000
+const DEFAULT_TIMEOUT = 35000
 const namesToCodes = {
   'UnreachableError': 'T00',
   'NotAcceptedError': 'F00',
