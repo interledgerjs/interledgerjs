@@ -143,8 +143,11 @@ class AbstractBtpPlugin extends EventEmitter {
 
     if (this._server) {
       const parsedServer = new URL(this._server)
-      const host = parsedServer.host // TODO: include path
       const secret = parsedServer.password
+      if (!parsedServer.protocol.startsWith('btp+')) {
+        throw new Error('server must start with "btp+". server=' + this._server)
+      }
+
       this._ws = new WebSocketReconnector({ interval: this._reconnectInterval })
 
       const protocolData = [{
@@ -172,7 +175,7 @@ class AbstractBtpPlugin extends EventEmitter {
       })
 
       this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
-      await this._ws.open('ws://' + host) // TODO: wss
+      await this._ws.open(this._server.substring('btp+'.length))
     }
 
     await new Promise((resolve, reject) => {
