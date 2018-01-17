@@ -296,16 +296,18 @@ class AbstractBtpPlugin extends EventEmitter {
   async _call (to, btpPacket) {
     const requestId = btpPacket.requestId
 
-    let callback
+    let callback, timer
     const response = new Promise((resolve, reject) => {
       callback = (type, data) => {
         switch (type) {
           case BtpPacket.TYPE_RESPONSE:
             resolve(data)
+            clearTimeout(timer)
             break
 
           case BtpPacket.TYPE_ERROR:
             reject(new Error(JSON.stringify(data)))
+            clearTimeout(timer)
             break
 
           default:
@@ -317,11 +319,12 @@ class AbstractBtpPlugin extends EventEmitter {
 
     await this._handleOutgoingBtpPacket(to, btpPacket)
 
-    const timeout = new Promise((resolve, reject) =>
-      setTimeout(() => {
+    const timeout = new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
         this.removeListener('__callback_' + requestId, callback)
         reject(new Error(requestId + ' timed out'))
-      }, DEFAULT_TIMEOUT))
+      }, DEFAULT_TIMEOUT)
+    })
 
     return Promise.race([
       response,
