@@ -175,3 +175,36 @@ const binary = packet.serializeIlpFulfillment({
 
 const json = packet.deserializeIlpFulfillment(binary)
 ```
+
+### IlpPrepare, IlpFulfill, IlpReject
+
+```js
+const packet = require('ilp-packet')
+const crypto = require('crypto')
+function sha256 (preimage) { return crypto.createHash('sha256').update(preimage).digest() }
+
+const fulfillment = crypto.randomBytes(32)
+const condition = sha256(fulfillment)
+
+const binaryPrepare = packet.serializeIlpPrepare({
+  amount: '10',
+  executionCondition: condition,
+  destination: 'g.us.nexus.bob', // this field was called 'account' in older packet types
+  data: Buffer.from(['hello world']),
+  expiresAt: new Date(new Date().getTime() + 10000)
+})
+
+const binaryFulfill = packet.serializeIlpFulfill({
+  fulfillment,
+  data: Buffer.from('thank you')
+})
+
+// not to be confused with IlpRejection:
+const binaryReject = packet.serializeIlpReject({
+  code: 'F00',
+  name: 'Bad Request',
+  triggeredBy: 'g.us.nexus.gateway',
+  message: 'more details, human-readable',
+  data: Buffer.from('more details, machine-readable')
+})
+```
