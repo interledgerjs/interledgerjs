@@ -142,9 +142,11 @@ class AbstractBtpPlugin extends EventEmitter {
     }
 
     if (this._server) {
-      const parsedServer = new URL(this._server)
-      const secret = parsedServer.password
-      if (!parsedServer.protocol.startsWith('btp+')) {
+      const parsedBtpUri = new URL(this._server)
+      const account = parsedBtpUri.username
+      const token = parsedBtpUri.password
+
+      if (!parsedBtpUri.protocol.startsWith('btp+')) {
         throw new Error('server must start with "btp+". server=' + this._server)
       }
 
@@ -157,11 +159,11 @@ class AbstractBtpPlugin extends EventEmitter {
       }, {
         protocolName: 'auth_username',
         contentType: BtpPacket.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from('', 'utf8')
+        data: Buffer.from(account, 'utf8')
       }, {
         protocolName: 'auth_token',
         contentType: BtpPacket.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from(secret, 'utf8')
+        data: Buffer.from(token, 'utf8')
       }]
 
       this._ws.on('open', async () => {
@@ -175,7 +177,14 @@ class AbstractBtpPlugin extends EventEmitter {
       })
 
       this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
-      await this._ws.open(this._server.substring('btp+'.length))
+
+      // CAUTION: Do not delete the following two lines, they have the side-effect
+      // of removing the 'user@pass:' part from parsedBtpUri.toString()!
+      parsedBtpUri.account = ''
+      parsedBtpUri.password = ''
+      const wsUri = parsedBtpUri.toString().substring('btp+'.length)
+
+      await this._ws.open(wsUri)
     }
 
     await new Promise((resolve, reject) => {
