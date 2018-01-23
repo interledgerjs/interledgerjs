@@ -202,7 +202,6 @@ const binaryFulfill = packet.serializeIlpFulfill({
 // not to be confused with IlpRejection:
 const binaryReject = packet.serializeIlpReject({
   code: 'F00',
-  name: 'Bad Request',
   triggeredBy: 'g.us.nexus.gateway',
   message: 'more details, human-readable',
   data: Buffer.from('more details, machine-readable')
