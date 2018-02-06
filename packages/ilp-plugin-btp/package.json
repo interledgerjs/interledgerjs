@@ -1,6 +1,6 @@
 {
   "name": "ilp-plugin-btp",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "description": "Generic BTP plugin for ILP",
   "main": "index.js",
   "scripts": {
