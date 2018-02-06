@@ -94,6 +94,14 @@ class AbstractBtpPlugin extends EventEmitter {
         let authPacket
         let token
 
+        ws.on('close', code => {
+          debug('incoming websocket closed. code=' + code)
+        })
+
+        ws.on('error', err => {
+          debug('incoming websocket error. error=', err)
+        })
+
         ws.once('message', async (binaryAuthMessage) => {
           try {
             authPacket = BtpPacket.deserialize(binaryAuthMessage)
