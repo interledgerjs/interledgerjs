@@ -144,7 +144,7 @@ class AbstractBtpPlugin extends EventEmitter {
 
           debug('connection authenticated')
           ws.on('message', this._handleIncomingWsMessage.bind(this, ws))
-          this.emit('connect')
+          this.emit('_connect')
         })
       })
     }
@@ -181,7 +181,7 @@ class AbstractBtpPlugin extends EventEmitter {
           requestId: await _requestId(),
           data: { protocolData }
         })
-        this.emit('connect')
+        this.emit('_connect')
       })
 
       this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
@@ -196,7 +196,7 @@ class AbstractBtpPlugin extends EventEmitter {
     }
 
     await new Promise((resolve, reject) => {
-      this.once('connect', resolve)
+      this.once('_connect', resolve)
       this.once('disconnect', () =>
         void reject(new Error('connection aborted')))
     })
@@ -206,6 +206,7 @@ class AbstractBtpPlugin extends EventEmitter {
     }
 
     this._connected = true
+    this.emit('connect')
   }
 
   async _closeIncomingSocket (socket) {
