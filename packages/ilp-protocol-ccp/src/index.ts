@@ -8,8 +8,15 @@ const PEER_PROTOCOL_FULFILLMENT = Buffer.alloc(32)
 const PEER_PROTOCOL_CONDITION = Buffer.from('Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=', 'base64')
 const PEER_PROTOCOL_EXPIRY_DURATION = 60000
 
+export enum Mode {
+  MODE_IDLE = 0,
+  MODE_SYNC = 1
+}
+
+export const ModeReverseMap = ['IDLE', 'SYNC']
+
 export interface CcpRouteControlRequest {
-  speaker: string
+  mode: Mode.MODE_IDLE | Mode.MODE_SYNC
   lastKnownRoutingTableId: string
   lastKnownEpoch: number
   features: string[]
@@ -24,7 +31,7 @@ export enum PropId {
 }
 
 export interface CcpRoutePropCommon {
-  isWellKnown: boolean
+  isOptional: boolean
   isTransitive: boolean
   isPartial: boolean
 }
@@ -58,6 +65,8 @@ export interface CcpRouteUpdateRequest {
   currentEpochIndex: number
   fromEpochIndex: number
   toEpochIndex: number
+  holdDownTime: number
+  speaker: string
   newRoutes: CcpRoute[]
   withdrawnRoutes: string[]
 }
@@ -83,7 +92,7 @@ const deserializeCcpRouteControlRequest = (request: Buffer): CcpRouteControlRequ
 
   const reader = new Reader(ilp.data)
 
-  const speaker = reader.readVarOctetString().toString('ascii')
+  const mode = reader.readUInt8()
 
   const lastKnownRoutingTableId = readUuid(reader)
 
@@ -96,7 +105,7 @@ const deserializeCcpRouteControlRequest = (request: Buffer): CcpRouteControlRequ
   }
 
   return {
-    speaker,
+    mode,
     lastKnownRoutingTableId,
     lastKnownEpoch,
     features
@@ -106,7 +115,7 @@ const deserializeCcpRouteControlRequest = (request: Buffer): CcpRouteControlRequ
 const serializeCcpRouteControlRequest = (request: CcpRouteControlRequest): Buffer => {
   const writer = new Writer()
 
-  writer.writeVarOctetString(Buffer.from(request.speaker, 'ascii'))
+  writer.writeUInt8(request.mode)
 
   writeUuid(writer, request.lastKnownRoutingTableId)
 
@@ -152,6 +161,10 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
 
   const toEpochIndex = reader.readUInt32()
 
+  const holdDownTime = reader.readUInt32()
+
+  const speaker = reader.readVarOctetString().toString('ascii')
+
   const newRoutesCount = reader.readVarUInt()
   const newRoutes = []
   for (let i = 0; i < newRoutesCount; i++) {
@@ -169,7 +182,7 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
     const props: CcpRouteProp[] = []
     for (let i = 0; i < propCount; i++) {
       const meta = reader.readUInt8()
-      const isWellKnown = Boolean(meta & 0x80)
+      const isOptional = Boolean(meta & 0x80)
       const isTransitive = Boolean(meta & 0x40)
       const isPartial = Boolean(meta & 0x20)
       const isUtf8 = Boolean(meta & 0x10)
@@ -178,7 +191,7 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
       const value = reader.readVarOctetString()
 
       const incompleteProp = {
-        isWellKnown,
+        isOptional,
         isTransitive,
         isPartial,
         id
@@ -218,6 +231,8 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
     currentEpochIndex,
     fromEpochIndex,
     toEpochIndex,
+    holdDownTime,
+    speaker,
     newRoutes,
     withdrawnRoutes
   }
@@ -231,6 +246,10 @@ const serializeCcpRouteUpdateRequest = (request: CcpRouteUpdateRequest): Buffer 
   writer.writeUInt32(request.currentEpochIndex)
   writer.writeUInt32(request.fromEpochIndex)
   writer.writeUInt32(request.toEpochIndex)
+
+  writer.writeUInt32(request.holdDownTime)
+
+  writer.writeVarOctetString(Buffer.from(request.speaker, 'ascii'))
 
   writer.writeVarUInt(request.newRoutes.length)
   for (const route of request.newRoutes) {
@@ -250,14 +269,17 @@ const serializeCcpRouteUpdateRequest = (request: CcpRouteUpdateRequest): Buffer 
     for (const prop of route.props) {
       let meta = 0
 
-      meta |= prop.isWellKnown ? 0x80 : 0
+      meta |= prop.isOptional ? 0x80 : 0
 
-      if (!prop.isWellKnown) {
+      if (prop.isOptional) {
         meta |= prop.isTransitive ? 0x40 : 0
 
         if (prop.isTransitive) {
           meta |= prop.isPartial ? 0x20 : 0
         }
+      } else {
+        // Transitive bit must be set for well-known properties
+        meta |= 0x40
       }
 
       meta |= prop.isUtf8 ? 0x10 : 0
