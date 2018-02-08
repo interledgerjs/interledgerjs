@@ -1,0 +1,72 @@
+{
+  "name": "ilp-protocol-ccp",
+  "version": "1.0.0",
+  "description": "Implementation of the Connector-to-Connector Protocol (CCP)",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "files": [
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.js.map"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "pretest": "tsc",
+    "test": "nyc mocha",
+    "watch": "mocha-typescript-watch",
+    "prepare": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interledgerjs/ilp-protocol-ccp.git"
+  },
+  "keywords": [
+    "ilp",
+    "routing",
+    "path-vector"
+  ],
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/interledgerjs/ilp-protocol-ccp/issues"
+  },
+  "homepage": "https://github.com/interledgerjs/ilp-protocol-ccp#readme",
+  "dependencies": {
+    "ilp-packet": "^2.1.2",
+    "oer-utils": "^1.3.4"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.0.10",
+    "@types/mocha": "^2.2.45",
+    "@types/node": "^8.5.2",
+    "@types/sinon": "^4.1.2",
+    "chai": "^4.1.2",
+    "mocha": "^4.1.0",
+    "mocha-typescript": "^1.1.12",
+    "nyc": "^11.4.1",
+    "sinon": "^4.1.3",
+    "source-map-support": "^0.5.0",
+    "ts-node": "^4.1.0",
+    "tslint": "^5.8.0",
+    "tslint-config-standard": "^7.0.0",
+    "typescript": "^2.6.2"
+  },
+  "nyc": {
+    "check-coverage": true,
+    "lines": 80,
+    "statements": 80,
+    "functions": 80,
+    "branches": 80,
+    "include": [
+      "src/**/*.js"
+    ],
+    "exclude": [
+      "test/**/*.js"
+    ],
+    "reporter": [
+      "lcov",
+      "text-summary"
+    ],
+    "all": true
+  }
+}
