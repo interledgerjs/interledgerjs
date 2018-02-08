@@ -1,6 +1,6 @@
 {
   "name": "ilp-protocol-ccp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Implementation of the Connector-to-Connector Protocol (CCP)",
   "main": "src/index.js",
   "types": "src/index.d.ts",
