@@ -32,7 +32,7 @@ export enum Type {
 export interface IlpErrorClass {
   message: string,
   ilpErrorCode?: string,
-  ilpData?: Buffer
+  ilpErrorData?: Buffer
 }
 
 export const errorToReject = (address: string, error: IlpErrorClass) => {
@@ -40,7 +40,7 @@ export const errorToReject = (address: string, error: IlpErrorClass) => {
     code: error.ilpErrorCode || 'F00',
     triggeredBy: address,
     message: error.message || '',
-    data: error.ilpData || Buffer.alloc(0)
+    data: error.ilpErrorData || Buffer.alloc(0)
   })
 }
 
