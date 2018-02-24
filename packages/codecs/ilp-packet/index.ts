@@ -9,6 +9,8 @@ import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
 import Long = require('long')
 import * as assert from 'assert'
 
+export const Errors = require('./src/errors')
+
 export enum Type {
   TYPE_ILP_PAYMENT = 1,
   TYPE_ILQP_LIQUIDITY_REQUEST = 2,
@@ -24,6 +26,21 @@ export enum Type {
   TYPE_ILP_PREPARE = 12,
   TYPE_ILP_FULFILL = 13,
   TYPE_ILP_REJECT = 14
+}
+
+export interface IlpErrorClass {
+  message: string,
+  ilpErrorCode?: string,
+  ilpData?: Buffer
+}
+
+export const errorToReject = (address: string, error: IlpErrorClass) => {
+  return serializeIlpReject({
+    code: error.ilpErrorCode || 'F00',
+    triggeredBy: address,
+    message: error.message || '',
+    data: error.ilpData || Buffer.alloc(0)
+  })
 }
 
 export const serializeEnvelope = (type: number, contents: Buffer) => {
