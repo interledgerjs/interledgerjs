@@ -97,7 +97,7 @@ export interface AmountTooLargeErrorOpts {
 
 export class AmountTooLargeError extends BaseError {
   public ilpErrorCode: string
-  public ilpData: Buffer
+  public ilpErrorData: Buffer
   constructor (message: string, opts: AmountTooLargeErrorOpts) {
     super(message)
     this.ilpErrorCode = codes.F08_AMOUNT_TOO_LARGE
@@ -106,17 +106,17 @@ export class AmountTooLargeError extends BaseError {
     writer.writeUInt64(stringToTwoNumbers(opts.receivedAmount))
     writer.writeUInt64(stringToTwoNumbers(opts.maximumAmount))
 
-    this.ilpData = writer.getBuffer()
+    this.ilpErrorData = writer.getBuffer()
   }
 }
 
 export class FinalApplicationError extends BaseError {
   public ilpErrorCode: string
-  public ilpData: Buffer
+  public ilpErrorData: Buffer
   constructor (message: string, data: Buffer) {
     super(message)
     this.ilpErrorCode = codes.F99_APPLICATION_ERROR
-    this.ilpData = data
+    this.ilpErrorData = data
   }
 }
 
@@ -170,11 +170,11 @@ export class RateLimitedError extends BaseError {
 
 export class TemporaryApplicationError extends BaseError {
   public ilpErrorCode: string
-  public ilpData: Buffer
+  public ilpErrorData: Buffer
   constructor (message: string, data: Buffer) {
     super(message)
     this.ilpErrorCode = codes.T99_APPLICATION_ERROR
-    this.ilpData = data
+    this.ilpErrorData = data
   }
 }
 
@@ -204,10 +204,10 @@ export class InsufficientTimeoutError extends BaseError {
 
 export class RelativeApplicationError extends BaseError {
   public ilpErrorCode: string
-  public ilpData: Buffer
+  public ilpErrorData: Buffer
   constructor (message: string, data: Buffer) {
     super(message)
     this.ilpErrorCode = codes.R99_APPLICATION_ERROR
-    this.ilpData = data
+    this.ilpErrorData = data
   }
 }

@@ -12,7 +12,7 @@ describe('Errors', function () {
 
       assert.equal(error.message, 'amount too large')
       assert.equal(error.ilpErrorCode, Errors.codes.F08_AMOUNT_TOO_LARGE)
-      assert.deepEqual(error.ilpData, Buffer.from([
+      assert.deepEqual(error.ilpErrorData, Buffer.from([
         0, 0, 0, 0, 0, 0, 0, 0xff,
         0, 0, 0, 0, 0, 0, 0xff, 0xff
       ]))
