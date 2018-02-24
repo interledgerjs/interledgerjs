@@ -9,7 +9,8 @@ import { stringToTwoNumbers, twoNumbersToString } from './src/utils/uint64'
 import Long = require('long')
 import * as assert from 'assert'
 
-export const Errors = require('./src/errors')
+import * as errors from './src/errors'
+export const Errors = errors
 
 export enum Type {
   TYPE_ILP_PAYMENT = 1,
