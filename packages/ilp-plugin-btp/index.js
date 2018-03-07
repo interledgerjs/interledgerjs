@@ -113,7 +113,7 @@ class AbstractBtpPlugin extends EventEmitter {
               if (subProtocol.protocolName === 'auth_token') {
                 token = subProtocol.data.toString()
                 if (token !== this._listener.secret) {
-                  debug(JSON.stringify(token), JSON.stringify(this._listener.secret))
+                  debug('received token %s, but expected %s', JSON.stringify(token), JSON.stringify(this._listener.secret))
                   throw new Error('invalid auth_token')
                 }
 
