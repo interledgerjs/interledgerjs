@@ -44,7 +44,9 @@
     "url": "https://github.com/interledgerjs/oer-utils/issues"
   },
   "homepage": "https://github.com/interledgerjs/oer-utils",
-  "dependencies": {},
+  "dependencies": {
+    "bignumber.js": "^6.0.0"
+  },
   "devDependencies": {
     "@types/chai": "^4.0.1",
     "@types/mocha": "^2.2.41",

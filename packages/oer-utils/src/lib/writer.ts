@@ -1,4 +1,5 @@
 import { isInteger } from './util'
+import BigNumber from 'bignumber.js'
 
 class Writer {
   // Largest value that can be written as a variable-length unsigned integer
@@ -11,7 +12,8 @@ class Writer {
     3: 0xffffff,
     4: 0xffffffff,
     5: 0xffffffffff,
-    6: 0xffffffffffff
+    6: 0xffffffffffff,
+    8: new BigNumber(2).exponentiatedBy(64)
   }
 
   static INT_RANGES = {
@@ -20,7 +22,8 @@ class Writer {
     3: [-0x800000, 0x7fffff],
     4: [-0x80000000, 0x7fffffff],
     5: [-0x8000000000, 0x7fffffffff],
-    6: [-0x800000000000, 0x7fffffffffff]
+    6: [-0x800000000000, 0x7fffffffffff],
+    8: [new BigNumber('-80000000000000', 16), new BigNumber('7fffffffffffff', 16)]
   }
 
   components: Buffer[]
@@ -32,51 +35,69 @@ class Writer {
   /**
    * Write a fixed-length unsigned integer to the stream.
    *
-   * @param {number} value Value to write. Must be in range for the given length.
+   * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
    * @param {number} length Number of bytes to encode this value as.
    */
-  writeUInt (value: number, length: number) {
-    if (!isInteger(value)) {
+  writeUInt (_value: BigNumber.Value | number[], length: number) {
+    if (Array.isArray(_value)) {
+      this.writeUInt32(_value[0])
+      this.writeUInt32(_value[1])
+      return
+    }
+    if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
-    } else if (value < 0) {
+    } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
+      throw new Error('UInt is larger than safe JavaScript range (try using BigNumbers instead)')
+    }
+
+    const value = new BigNumber(_value)
+    if (value.isLessThan(0)) {
       throw new Error('UInt must be positive')
     } else if (length <= 0) {
       throw new Error('UInt length must be greater than zero')
-    } else if (value > Writer.MAX_SAFE_INTEGER) {
-      throw new Error('UInt is larger than safe JavaScript range')
-    } else if (value > Writer.UINT_RANGES[length]) {
-      throw new Error('UInt ' + value + ' does not fit in ' + length + ' bytes')
+    } else if (value.isGreaterThan(Writer.UINT_RANGES[length])) {
+      throw new Error(`UInt ${value} does not fit in ${length} bytes`)
     }
 
-    const buffer = new Buffer(length)
-    buffer.writeUIntBE(value, 0, length)
-    this.write(buffer)
+    if (value.isLessThan(Writer.UINT_RANGES[6]) && length <= 6) {
+      const buffer = new Buffer(length)
+      buffer.writeUIntBE(value.toNumber(), 0, length)
+      this.write(buffer)
+    } else {
+      let hex = value.toString(16)
+      hex = '0'.repeat(length * 2 - hex.length) + hex
+      this.write(Buffer.from(hex, 'hex'))
+    }
   }
 
   /**
    * Write a fixed-length signed integer to the stream.
    *
-   * @param {number} value Value to write. Must be in range for the given length.
+   * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
    * @param {number} length Number of bytes to encode this value as.
    */
-  writeInt (value: number, length: number) {
-    if (!isInteger(value)) {
+  writeInt (_value: BigNumber.Value, length: number) {
+    if (!isInteger(_value)) {
       throw new Error('Int must be an integer')
     } else if (length <= 0) {
       throw new Error('Int length must be greater than zero')
-    } else if (value > Writer.MAX_SAFE_INTEGER) {
+    } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
       throw new Error('Int is larger than safe JavaScript range')
-    } else if (value < Writer.MIN_SAFE_INTEGER) {
+    } else if (typeof _value === 'number' && _value < Writer.MIN_SAFE_INTEGER) {
       throw new Error('Int is smaller than safe JavaScript range')
-    } else if (value < Writer.INT_RANGES[length][0]) {
+    }
+    const value = new BigNumber(_value)
+    if (value.isLessThan(Writer.INT_RANGES[length][0])) {
       throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
-    } else if (value > Writer.INT_RANGES[length][1]) {
+    } else if (value.isGreaterThan(Writer.INT_RANGES[length][1])) {
       throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
     }
 
-    const buffer = new Buffer(length)
-    buffer.writeIntBE(value, 0, length)
-    this.write(buffer)
+    const valueToWrite = value.isLessThan(0) ? new BigNumber('ff'.repeat(length), 16).plus(1).plus(value) : value
+    let hex = valueToWrite.toString(16)
+    hex = '0'.repeat(length * 2 - hex.length) + hex
+
+    this.write(Buffer.from(hex, 'hex'))
   }
 
   /**
@@ -85,27 +106,30 @@ class Writer {
    * We need to first turn the integer into a buffer in big endian order, then
    * we write the buffer as an octet string.
    *
-   * @param {number} value Integer to represent.
+   * @param {number | string | BigNumber | Buffer} value Integer to represent.
    */
-  writeVarUInt (value: number | Buffer) {
-    if (Buffer.isBuffer(value)) {
+  writeVarUInt (_value: BigNumber.Value | Buffer) {
+    if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
-      this.writeVarOctetString(value)
+      this.writeVarOctetString(_value)
       return
-    } else if (!isInteger(value)) {
+    } else if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
-    } else if (value < 0) {
-      throw new Error('UInt must be positive')
-    } else if (value > Writer.MAX_SAFE_INTEGER) {
+    }
+    if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
       throw new Error('UInt is larger than safe JavaScript range')
+    }
+    const value = new BigNumber(_value)
+    if (value.isLessThan(0)) {
+      throw new Error('UInt must be positive')
     }
 
     const lengthOfValue = Math.ceil(value.toString(2).length / 8)
-    const buffer = new Buffer(lengthOfValue)
-    buffer.writeUIntBE(value, 0, lengthOfValue)
+    let hex = value.toString(16)
+    hex = '0'.repeat(lengthOfValue * 2 - hex.length) + hex
 
-    this.writeVarOctetString(buffer)
+    this.writeVarOctetString(Buffer.from(hex, 'hex'))
   }
 
   /**
@@ -114,53 +138,30 @@ class Writer {
    * We need to first turn the integer into a buffer in big endian order, then
    * we write the buffer as an octet string.
    *
-   * @param {number} value Integer to represent.
+   * @param {number | string | BigNumber | Buffer} value Integer to represent.
    */
-  writeVarInt (value: number | Buffer) {
-    if (Buffer.isBuffer(value)) {
+  writeVarInt (_value: BigNumber.Value | Buffer) {
+    if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
-      this.writeVarOctetString(value)
+      this.writeVarOctetString(_value)
       return
-    } else if (!isInteger(value)) {
+    } else if (!isInteger(_value)) {
       throw new Error('Int must be an integer')
-    } else if (value > Writer.MAX_SAFE_INTEGER) {
+    } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
       throw new Error('Int is larger than safe JavaScript range')
-    } else if (value < Writer.MIN_SAFE_INTEGER) {
+    } else if (typeof _value === 'number' && _value < Writer.MIN_SAFE_INTEGER) {
       throw new Error('Int is smaller than safe JavaScript range')
     }
+    const value = new BigNumber(_value)
 
-    const lengthDeterminingValue = (value < 0) ? 1 - value : value
+    const lengthDeterminingValue = value.isLessThan(0) ? new BigNumber(1).minus(value) : value
     const lengthOfValue = Math.ceil((lengthDeterminingValue.toString(2).length + 1) / 8)
-    const buffer = new Buffer(lengthOfValue)
-    buffer.writeIntBE(value, 0, lengthOfValue)
+    const valueToWrite = value.isLessThan(0) ? new BigNumber('ff'.repeat(lengthOfValue), 16).plus(1).plus(value) : value
+    let hex = valueToWrite.toString(16)
+    hex = '0'.repeat(lengthOfValue * 2 - hex.length) + hex
 
-    this.writeVarOctetString(buffer)
-  }
-
-  /**
-   * Write a 64-bit unsigned integer.
-   *
-   * It is possible to pass a number to this method, however only if the number
-   * is guaranteed to be smaller than Number.MAX_SAFE_INTEGER.
-   *
-   * Alternatively, the number may be passed as an array of two 32-bit words,
-   * with the most significant word first.
-   *
-   * @param {number|number[]} A 64-bit integer as a number or of the form [high, low]
-   */
-  writeUInt64 (value: number | number[]) {
-    if (typeof value === 'number' && isInteger(value) && value <= Writer.MAX_SAFE_INTEGER) {
-      this.writeUInt32(Math.floor(value / 0x100000000))
-      this.writeUInt32(value & 0xffffffff)
-      return
-    } else if (!Array.isArray(value) || value.length !== 2 ||
-        !isInteger(value[0]) || !isInteger(value[1])) {
-      throw new TypeError('Expected 64-bit integer as an array of two 32-bit words')
-    }
-
-    this.writeUInt32(value[0])
-    this.writeUInt32(value[1])
+    this.writeVarOctetString(Buffer.from(hex, 'hex'))
   }
 
   /**
@@ -241,16 +242,18 @@ class Writer {
 }
 
 interface Writer {
-  writeUInt8 (value: number): undefined
-  writeUInt16 (value: number): undefined
-  writeUInt32 (value: number): undefined
-  writeInt8 (value: number): undefined
-  writeInt16 (value: number): undefined
-  writeInt32 (value: number): undefined
+  writeUInt8 (value: BigNumber.Value): undefined
+  writeUInt16 (value: BigNumber.Value): undefined
+  writeUInt32 (value: BigNumber.Value): undefined
+  writeUInt64 (value: BigNumber.Value | number[]): undefined
+  writeInt8 (value: BigNumber.Value): undefined
+  writeInt16 (value: BigNumber.Value): undefined
+  writeInt32 (value: BigNumber.Value): undefined
+  writeInt64 (value: BigNumber.Value): undefined
 }
 
-// Create write(U)Int{8,16,32} shortcuts
-[1, 2, 4].forEach((bytes) => {
+// Create write(U)Int{8,16,32,64} shortcuts
+[1, 2, 4, 8].forEach((bytes) => {
   Writer.prototype['writeUInt' + bytes * 8] = function (value: number) {
     this.writeUInt(value, bytes)
   }
