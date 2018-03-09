@@ -1,4 +1,5 @@
 import Writer from '../src/lib/writer'
+import BigNumber from 'bignumber.js'
 
 import chai = require('chai')
 const assert = chai.assert
@@ -64,6 +65,14 @@ describe('Writer', function () {
         () => writer.writeUInt(256, 1),
         'UInt 256 does not fit in 1 bytes'
       )
+    })
+
+    it('should write a BigNumber outside of safe JavaScript range', function () {
+      const writer = new Writer()
+
+      writer.writeUInt(0xff0203040506, 8)
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
     })
 
     it('when asked to write an integer outside of safe JavaScript range, should throw', function () {
@@ -150,6 +159,22 @@ describe('Writer', function () {
       writer.writeInt(-2, 2)
 
       assert.equal(writer.getBuffer().toString('hex'), 'fffe')
+    })
+
+    it('should write a small 8 byte integer', function () {
+      const writer = new Writer()
+
+      writer.writeInt(1, 8)
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000000000000001')
+    })
+
+    it('should write a small negative 8 byte integer', function () {
+      const writer = new Writer()
+
+      writer.writeInt(-2, 8)
+
+      assert.equal(writer.getBuffer().toString('hex'), 'fffffffffffffffe')
     })
 
     it('when asked to write an integer that does not fit, should throw', function () {
@@ -239,6 +264,14 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '071fffffffffffff')
     })
 
+    it('should write larger numbers as BigNumbers', function () {
+      const writer = new Writer()
+
+      writer.writeVarUInt(new BigNumber('0100000000000000', 16))
+
+      assert.equal(writer.getBuffer().toString('hex'), '080100000000000000')
+    })
+
     it('when trying to write an unsafe integer, should throw', function () {
       const writer = new Writer()
 
@@ -325,6 +358,14 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '020103')
     })
 
+    it('should write a two-byte negative integer', function () {
+      const writer = new Writer()
+
+      writer.writeVarInt(-256)
+
+      assert.equal(writer.getBuffer().toString('hex'), '02ff00')
+    })
+
     it('should write a four-byte integer', function () {
       const writer = new Writer()
 
@@ -359,13 +400,20 @@ describe('Writer', function () {
       )
     })
 
-    it('when trying to write an eight-byte integer, should throw', function () {
+    it('should write an eight byte BigNumber', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeVarInt(0x0100000000000000),
-        'Int is larger than safe JavaScript range'
-      )
+      writer.writeVarInt(new BigNumber('0100000000000000', 16))
+
+      assert.equal(writer.getBuffer().toString('hex'), '080100000000000000')
+    })
+
+    it('should write a large (absolute value) negative integer', function () {
+      const writer = new Writer()
+
+      writer.writeVarInt(new BigNumber('010000000000000000000000000001', 16))
+
+      assert.equal(writer.getBuffer().toString('hex'), '0f010000000000000000000000000001')
     })
 
     it('when trying to write a non-integer, should throw', function () {
@@ -605,7 +653,7 @@ describe('Writer', function () {
   })
 
   describe('writeUInt64', function () {
-    it('should write an 64-bit integer', function () {
+    it('should write an 64-bit integer formatted as an array', function () {
       const writer = new Writer()
 
       writer.writeUInt64([0xff020304, 0x05060708])
@@ -621,12 +669,20 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
     })
 
-    it('when writing an unsafe integer, should throw', function () {
+    it('should write a BigNumber', function () {
+      const writer = new Writer()
+
+      writer.writeUInt64(new BigNumber(0xff0203040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('when writing an unsafe Javascript integer, should throw', function () {
       const writer = new Writer()
 
       assert.throws(
         () => writer.writeUInt64(MAX_SAFE_INTEGER + 1),
-        'Expected 64-bit integer as an array of two 32-bit words'
+        'UInt is larger than safe JavaScript range (try using BigNumbers instead)'
       )
     })
   })
