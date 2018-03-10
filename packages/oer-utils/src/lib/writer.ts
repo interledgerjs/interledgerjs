@@ -13,7 +13,7 @@ class Writer {
     4: 0xffffffff,
     5: 0xffffffffff,
     6: 0xffffffffffff,
-    8: new BigNumber(2).exponentiatedBy(64)
+    8: new BigNumber('ffffffffffffffff', 16)
   }
 
   static INT_RANGES = {
@@ -38,7 +38,7 @@ class Writer {
    * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
    * @param {number} length Number of bytes to encode this value as.
    */
-  writeUInt (_value: BigNumber.Value | number[], length: number) {
+  writeUInt (_value: BigNumber.Value | number[], length: number): void {
     if (Array.isArray(_value)) {
       this.writeUInt32(_value[0])
       this.writeUInt32(_value[1])
@@ -76,7 +76,7 @@ class Writer {
    * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
    * @param {number} length Number of bytes to encode this value as.
    */
-  writeInt (_value: BigNumber.Value, length: number) {
+  writeInt (_value: BigNumber.Value, length: number): void {
     if (!isInteger(_value)) {
       throw new Error('Int must be an integer')
     } else if (length <= 0) {
@@ -108,7 +108,7 @@ class Writer {
    *
    * @param {number | string | BigNumber | Buffer} value Integer to represent.
    */
-  writeVarUInt (_value: BigNumber.Value | Buffer) {
+  writeVarUInt (_value: BigNumber.Value | Buffer): void {
     if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -140,7 +140,7 @@ class Writer {
    *
    * @param {number | string | BigNumber | Buffer} value Integer to represent.
    */
-  writeVarInt (_value: BigNumber.Value | Buffer) {
+  writeVarInt (_value: BigNumber.Value | Buffer): void {
     if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -173,7 +173,7 @@ class Writer {
    * @param {Buffer} buffer Data to write.
    * @param {number} length Length of data according to the format.
    */
-  writeOctetString (buffer: Buffer, length: number) {
+  writeOctetString (buffer: Buffer, length: number): void {
     if (buffer.length !== length) {
       throw new Error('Incorrect length for octet string (actual: ' +
         buffer.length + ', expected: ' + length + ')')
@@ -188,7 +188,7 @@ class Writer {
    *
    * @param {Buffer} buffer Contents of the octet string.
    */
-  writeVarOctetString (buffer: Buffer) {
+  writeVarOctetString (buffer: Buffer): void {
     if (!Buffer.isBuffer(buffer)) {
       throw new TypeError('Expects a buffer')
     }
@@ -220,19 +220,15 @@ class Writer {
    *
    * @param {Buffer} buffer Bytes to write.
    */
-  write (buffer: Buffer) {
+  write (buffer: Buffer): void {
     this.components.push(buffer)
   }
 
   /**
-   * Return the resulting buffer.
-   *
    * Returns the buffer containing the serialized data that was written using
    * this writer.
-   *
-   * @return {Buffer} Result data.
    */
-  getBuffer () {
+  getBuffer (): Buffer {
     // ST: The following debug statement is very useful, so I finally decided to
     // commit it...
     // console.log(this.components.map((x) => x.toString('hex')).join(' '))
