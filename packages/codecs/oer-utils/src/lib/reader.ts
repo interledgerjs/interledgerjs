@@ -1,5 +1,6 @@
 import UnderflowError from '../errors/underflow-error'
 import ParseError from '../errors/parse-error'
+import BigNumber from 'bignumber.js'
 
 class Reader {
   // Most significant bit in a byte
@@ -7,10 +8,6 @@ class Reader {
 
   // Other bits in a byte
   static LOWER_SEVEN_BITS = 0x7F
-
-  // Largest integer (in bytes) that is safely representable in JavaScript
-  // => Math.floor(Number.MAX_SAFE_INTEGER.toString(2).length / 8)
-  static MAX_INT_BYTES = 6
 
   buffer: Buffer
   cursor: number
@@ -32,7 +29,7 @@ class Reader {
    * @param {Reader|Buffer} source Source of binary data.
    * @return {Reader} Instance of Reader
    */
-  static from (source: Buffer | Reader) {
+  static from (source: Buffer | Reader): Reader {
     if (Buffer.isBuffer(source)) {
       return new Reader(source)
     } else if (source instanceof Reader) {
@@ -45,14 +42,14 @@ class Reader {
   /**
    * Store the current cursor position on a stack.
    */
-  bookmark () {
+  bookmark (): void {
     this.bookmarks.push(this.cursor)
   }
 
   /**
    * Pop the most recently bookmarked cursor position off the stack.
    */
-  restore () {
+  restore (): void {
     if (!this.bookmarks.length) {
       throw new Error('Cannot restore bookmark when no bookmark set')
     }
@@ -68,7 +65,7 @@ class Reader {
    *
    * @param {number} bytes Number of bytes that should be available.
    */
-  ensureAvailable (bytes: number) {
+  ensureAvailable (bytes: number): void {
     if (this.buffer.length < (this.cursor + bytes)) {
       throw new UnderflowError('Tried to read ' + bytes + ' bytes, but only ' +
         (this.buffer.length - this.cursor) + ' bytes available')
@@ -79,9 +76,8 @@ class Reader {
    * Read a fixed-length unsigned big-endian integer.
    *
    * @param {number} length Length of the integer in bytes.
-   * @return {number} Contents of next byte.
    */
-  readUInt (length: number) {
+  readUInt (length: number): BigNumber {
     const value = this.peekUInt(length)
     this.cursor += length
     return value
@@ -91,29 +87,24 @@ class Reader {
    * Look at a fixed-length unsigned integer, but don't advance the cursor.
    *
    * @param {number} length Length of the integer in bytes.
-   * @return {number} Contents of the next byte.
    */
-  peekUInt (length: number) {
+  peekUInt (length: number): BigNumber {
     if (length === 0) {
-      return 0
-    }
-    if (length < 0) {
+      return new BigNumber(0)
+    } else if (length < 0) {
       throw new Error('Tried to read integer with negative length (provided: ' +
         length + ')')
+    } else if (length > 8) {
+      throw new Error('UInts longer than 8 bytes must be encoded as VarUInts')
     }
-    if (length > Reader.MAX_INT_BYTES) {
-      throw new Error('Tried to read too large integer (requested: ' +
-        length + ', max: ' + Reader.MAX_INT_BYTES + ')')
-    }
-    this.ensureAvailable(length)
-    const value = this.buffer.readUIntBE(this.cursor, length)
-    return value
+
+    return new BigNumber(this.peek(length).toString('hex'), 16)
   }
 
   /**
    * Advance cursor by length bytes.
    */
-  skipUInt (length: number) {
+  skipUInt (length: number): void {
     this.skip(length)
   }
 
@@ -121,9 +112,9 @@ class Reader {
    * Read a fixed-length signed big-endian integer.
    *
    * @param {number} length Length of the integer in bytes.
-   * @return {number} Contents of next byte.
+   * @return {BigNumber} Contents of next byte(s).
    */
-  readInt (length: number) {
+  readInt (length: number): BigNumber {
     const value = this.peekInt(length)
     this.cursor += length
     return value
@@ -133,87 +124,50 @@ class Reader {
    * Look at a fixed-length signed integer, but don't advance the cursor.
    *
    * @param {number} length Length of the integer in bytes.
-   * @return {number} Contents of the next byte.
    */
-  peekInt (length: number) {
+  peekInt (length: number): BigNumber {
     if (length === 0) {
-      return 0
-    }
-    if (length < 0) {
+      return new BigNumber(0)
+    } else if (length < 0) {
       throw new Error('Tried to read integer with negative length (provided: ' +
         length + ')')
+    } else if (length > 8) {
+      throw new Error('Ints longer than 8 bytes must be encoded as VarInts')
     }
-    if (length > Reader.MAX_INT_BYTES) {
-      throw new Error('Tried to read too large integer (requested: ' +
-        length + ', max: ' + Reader.MAX_INT_BYTES + ')')
+
+    const value = new BigNumber(this.peek(length).toString('hex'), 16)
+
+    const maxValue = new BigNumber('ff'.repeat(length), 16)
+    if (value.isLessThan(maxValue.dividedBy(2))) {
+      return value
+    } else {
+      return value.minus(maxValue).minus(1)
     }
-    this.ensureAvailable(length)
-    const value = this.buffer.readIntBE(this.cursor, length)
-    return value
   }
 
   /**
    * Advance cursor by length bytes.
    */
-  skipInt (length: number) {
+  skipInt (length: number): void {
     this.skip(length)
   }
 
   /**
-   * Read a 64-bit integer.
-   *
-   * @return {number[]} Integer in the form [high, low]
+   * Read a variable-length unsigned integer at the cursor position and advance the cursor.
    */
-  readUInt64 () {
-    return [ this.readUInt32(), this.readUInt32() ]
-  }
-
-  /**
-   * Look at a 64-bit integer, but don't advance the cursor.
-   *
-   * @return {number[]} Integer in the form [high, low]
-   */
-  peekUInt64 () {
-    this.bookmark()
-    const value = this.readUInt64()
-    this.restore()
-    return value
-  }
-
-  /**
-   * Advance the cursor by eight bytes.
-   */
-  skipUInt64 () {
-    this.skip(8)
-  }
-
-  /**
-   * Read a variable-length unsigned integer at the cursor position.
-   *
-   * Return the integer as a number and advance the cursor accordingly.
-   *
-   * @return {number} Value of the integer.
-   */
-  readVarUInt () {
+  readVarUInt (): BigNumber {
     const buffer = this.readVarOctetString()
-    if (buffer.length > Reader.MAX_INT_BYTES) {
-      throw new ParseError('UInt of length ' + buffer.length +
-        ' too large to parse as integer (max: ' + Reader.MAX_INT_BYTES + ')')
-    }
-
     if (buffer.length === 0) {
       throw new ParseError('UInt of length 0 is invalid')
     }
 
-    return buffer.readUIntBE(0, buffer.length)
+    return new BigNumber(buffer.toString('hex'), 16)
   }
 
   /**
    * Read the next variable-length unsigned integer, but don't advance the cursor.
-   *
-   * @return {number} Integer at the cursor position.
    */
-  peekVarUInt () {
+  peekVarUInt (): BigNumber {
     this.bookmark()
     const value = this.readVarUInt()
     this.restore()
@@ -227,37 +181,34 @@ class Reader {
    * Since variable integers are encoded the same way as octet strings, this
    * method is equivalent to skipVarOctetString.
    */
-  skipVarUInt () {
+  skipVarUInt (): void {
     this.skipVarOctetString()
   }
 
   /**
-   * Read a variable-length unsigned integer at the cursor position.
-   *
-   * Return the integer as a number and advance the cursor accordingly.
-   *
-   * @return {number} Value of the integer.
+   * Read a variable-length unsigned integer at the cursor position and advance the cursor.
    */
-  readVarInt () {
+  readVarInt (): BigNumber {
     const buffer = this.readVarOctetString()
-    if (buffer.length > Reader.MAX_INT_BYTES) {
-      throw new ParseError('Int of length ' + buffer.length +
-        ' too large to parse as integer (max: ' + Reader.MAX_INT_BYTES + ')')
-    }
 
     if (buffer.length === 0) {
       throw new ParseError('Int of length 0 is invalid')
     }
 
-    return buffer.readIntBE(0, buffer.length)
+    const value = new BigNumber(buffer.toString('hex'), 16)
+
+    const maxValue = new BigNumber('ff'.repeat(buffer.length), 16)
+    if (value.isLessThan(maxValue.dividedBy(2))) {
+      return value
+    } else {
+      return value.minus(maxValue).minus(1)
+    }
   }
 
   /**
    * Read the next variable-length unsigned integer, but don't advance the cursor.
-   *
-   * @return {number} Integer at the cursor position.
    */
-  peekVarInt () {
+  peekVarInt (): BigNumber {
     this.bookmark()
     const value = this.readVarInt()
     this.restore()
@@ -271,7 +222,7 @@ class Reader {
    * Since variable integers are encoded the same way as octet strings, this
    * method is equivalent to skipVarOctetString.
    */
-  skipVarInt () {
+  skipVarInt (): void {
     this.skipVarOctetString()
   }
 
@@ -280,7 +231,7 @@ class Reader {
    *
    * @param {number} length Length of the octet string.
    */
-  readOctetString (length: number) {
+  readOctetString (length: number): Buffer {
     return this.read(length)
   }
 
@@ -289,7 +240,7 @@ class Reader {
    *
    * @param {number} length Length of the octet string.
    */
-  peekOctetString (length: number) {
+  peekOctetString (length: number): Buffer {
     return this.peek(length)
   }
 
@@ -298,7 +249,7 @@ class Reader {
    *
    * @param {number} length Length of the octet string.
    */
-  skipOctetString (length: number) {
+  skipOctetString (length: number): void {
     return this.skip(length)
   }
 
@@ -307,15 +258,13 @@ class Reader {
    *
    * You shouldn't need this. Length prefixes are used internally by
    * variable-length octet strings and integers.
-   *
-   * @return {number} Length value.
    */
-  readLengthPrefix () {
-    const length = this.readUInt8()
+  readLengthPrefix (): number {
+    const length = this.readUInt8().toNumber()
 
     if (length & Reader.HIGH_BIT) {
       const lengthPrefixLength = length & Reader.LOWER_SEVEN_BITS
-      const actualLength = this.readUInt(lengthPrefixLength)
+      const actualLength = this.readUInt(lengthPrefixLength).toNumber()
 
       // Reject lengths that could have been encoded with a shorter prefix
       const minLength = Math.max(128, 1 << ((lengthPrefixLength - 1) * 8))
@@ -334,10 +283,8 @@ class Reader {
    * Read a variable-length octet string.
    *
    * A variable-length octet string is a length-prefixed set of arbitrary bytes.
-   *
-   * @return {Buffer} Contents of the octet string.
    */
-  readVarOctetString () {
+  readVarOctetString (): Buffer {
     const length = this.readLengthPrefix()
 
     return this.read(length)
@@ -345,10 +292,8 @@ class Reader {
 
   /**
    * Read a variable-length buffer, but do not advance cursor position.
-   *
-   * @return {Buffer} Contents of the buffer.
    */
-  peekVarOctetString () {
+  peekVarOctetString (): Buffer {
     this.bookmark()
     const value = this.readVarOctetString()
     this.restore()
@@ -359,10 +304,10 @@ class Reader {
   /**
    * Skip a variable-length buffer.
    */
-  skipVarOctetString () {
+  skipVarOctetString (): void {
     const length = this.readLengthPrefix()
 
-    return this.skip(length)
+    this.skip(length)
   }
 
   /**
@@ -372,9 +317,8 @@ class Reader {
    * cursor.
    *
    * @param {number} bytes Number of bytes to read.
-   * @return {Buffer} Contents of bytes read.
    */
-  read (bytes: number) {
+  read (bytes: number): Buffer {
     this.ensureAvailable(bytes)
 
     const value = this.buffer.slice(this.cursor, this.cursor + bytes)
@@ -387,9 +331,8 @@ class Reader {
    * Read bytes, but do not advance cursor.
    *
    * @param {number} bytes Number of bytes to read.
-   * @return {Buffer} Contents of bytes read.
    */
-  peek (bytes: number) {
+  peek (bytes: number): Buffer {
     this.ensureAvailable(bytes)
 
     return this.buffer.slice(this.cursor, this.cursor + bytes)
@@ -402,7 +345,7 @@ class Reader {
    *
    * @param {number} bytes Number of bytes to advance the cursor by.
    */
-  skip (bytes: number) {
+  skip (bytes: number): void {
     this.ensureAvailable(bytes)
 
     this.cursor += bytes
@@ -410,29 +353,35 @@ class Reader {
 }
 
 interface Reader {
-  readUInt8 (): number
-  readUInt16 (): number
-  readUInt32 (): number
-  peekUInt8 (): number
-  peekUInt16 (): number
-  peekUInt32 (): number
-  skipUInt8 (): number
-  skipUInt16 (): number
-  skipUInt32 (): number
-  readInt8 (): number
-  readInt16 (): number
-  readInt32 (): number
-  peekInt8 (): number
-  peekInt16 (): number
-  peekInt32 (): number
-  skipInt8 (): number
-  skipInt16 (): number
-  skipInt32 (): number
+  readUInt8 (): BigNumber
+  readUInt16 (): BigNumber
+  readUInt32 (): BigNumber
+  readUInt64 (): BigNumber
+  peekUInt8 (): BigNumber
+  peekUInt16 (): BigNumber
+  peekUInt32 (): BigNumber
+  peekUInt64 (): BigNumber
+  skipUInt8 (): void
+  skipUInt16 (): void
+  skipUInt32 (): void
+  skipUInt64 (): void
+  readInt8 (): BigNumber
+  readInt16 (): BigNumber
+  readInt32 (): BigNumber
+  readInt64 (): BigNumber
+  peekInt8 (): BigNumber
+  peekInt16 (): BigNumber
+  peekInt32 (): BigNumber
+  peekInt64 (): BigNumber
+  skipInt8 (): void
+  skipInt16 (): void
+  skipInt32 (): void
+  skipInt64 (): void
 }
 
 // Create {read,peek,skip}UInt{8,16,32} shortcuts
 ['read', 'peek', 'skip'].forEach((verb) => {
-  [1, 2, 4].forEach((bytes) => {
+  [1, 2, 4, 8].forEach((bytes) => {
     Reader.prototype[verb + 'UInt' + bytes * 8] = function () {
       return this[verb + 'UInt'](bytes)
     }
