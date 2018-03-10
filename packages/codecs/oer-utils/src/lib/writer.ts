@@ -1,4 +1,4 @@
-import { isInteger } from './util'
+import { isInteger, bigNumberToBuffer } from './util'
 import BigNumber from 'bignumber.js'
 
 class Writer {
@@ -59,15 +59,7 @@ class Writer {
       throw new Error(`UInt ${value} does not fit in ${length} bytes`)
     }
 
-    if (value.isLessThan(Writer.UINT_RANGES[6]) && length <= 6) {
-      const buffer = new Buffer(length)
-      buffer.writeUIntBE(value.toNumber(), 0, length)
-      this.write(buffer)
-    } else {
-      let hex = value.toString(16)
-      hex = '0'.repeat(length * 2 - hex.length) + hex
-      this.write(Buffer.from(hex, 'hex'))
-    }
+    this.write(bigNumberToBuffer(value, length))
   }
 
   /**
@@ -93,11 +85,8 @@ class Writer {
       throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
     }
 
-    const valueToWrite = value.isLessThan(0) ? new BigNumber('ff'.repeat(length), 16).plus(1).plus(value) : value
-    let hex = valueToWrite.toString(16)
-    hex = '0'.repeat(length * 2 - hex.length) + hex
-
-    this.write(Buffer.from(hex, 'hex'))
+    const valueToWrite = value.isLessThan(0) ? new BigNumber(256).exponentiatedBy(length).plus(value) : value
+    this.write(bigNumberToBuffer(valueToWrite, length))
   }
 
   /**
@@ -125,11 +114,7 @@ class Writer {
       throw new Error('UInt must be positive')
     }
 
-    const lengthOfValue = Math.ceil(value.toString(2).length / 8)
-    let hex = value.toString(16)
-    hex = '0'.repeat(lengthOfValue * 2 - hex.length) + hex
-
-    this.writeVarOctetString(Buffer.from(hex, 'hex'))
+    this.writeVarOctetString(bigNumberToBuffer(value))
   }
 
   /**
@@ -157,11 +142,8 @@ class Writer {
 
     const lengthDeterminingValue = value.isLessThan(0) ? new BigNumber(1).minus(value) : value
     const lengthOfValue = Math.ceil((lengthDeterminingValue.toString(2).length + 1) / 8)
-    const valueToWrite = value.isLessThan(0) ? new BigNumber('ff'.repeat(lengthOfValue), 16).plus(1).plus(value) : value
-    let hex = valueToWrite.toString(16)
-    hex = '0'.repeat(lengthOfValue * 2 - hex.length) + hex
-
-    this.writeVarOctetString(Buffer.from(hex, 'hex'))
+    const valueToWrite = value.isLessThan(0) ? new BigNumber(256).exponentiatedBy(lengthOfValue).plus(value) : value
+    this.writeVarOctetString(bigNumberToBuffer(valueToWrite, lengthOfValue))
   }
 
   /**

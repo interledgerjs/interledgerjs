@@ -1,6 +1,7 @@
 import UnderflowError from '../errors/underflow-error'
 import ParseError from '../errors/parse-error'
 import BigNumber from 'bignumber.js'
+import { bufferToBigNumber } from './util'
 
 class Reader {
   // Most significant bit in a byte
@@ -98,7 +99,7 @@ class Reader {
       throw new Error('UInts longer than 8 bytes must be encoded as VarUInts')
     }
 
-    return new BigNumber(this.peek(length).toString('hex'), 16)
+    return bufferToBigNumber(this.peek(length))
   }
 
   /**
@@ -135,9 +136,9 @@ class Reader {
       throw new Error('Ints longer than 8 bytes must be encoded as VarInts')
     }
 
-    const value = new BigNumber(this.peek(length).toString('hex'), 16)
+    const value = bufferToBigNumber(this.peek(length))
 
-    const maxValue = new BigNumber('ff'.repeat(length), 16)
+    const maxValue = new BigNumber(256).exponentiatedBy(length).minus(1)
     if (value.isLessThan(maxValue.dividedBy(2))) {
       return value
     } else {
@@ -161,7 +162,7 @@ class Reader {
       throw new ParseError('UInt of length 0 is invalid')
     }
 
-    return new BigNumber(buffer.toString('hex'), 16)
+    return bufferToBigNumber(buffer)
   }
 
   /**
@@ -195,9 +196,9 @@ class Reader {
       throw new ParseError('Int of length 0 is invalid')
     }
 
-    const value = new BigNumber(buffer.toString('hex'), 16)
+    const value = bufferToBigNumber(buffer)
 
-    const maxValue = new BigNumber('ff'.repeat(buffer.length), 16)
+    const maxValue = new BigNumber(256).exponentiatedBy(buffer.length).minus(1)
     if (value.isLessThan(maxValue.dividedBy(2))) {
       return value
     } else {
