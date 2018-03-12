@@ -55,8 +55,8 @@ describe('Reader', function () {
       reader.restore()
       const v2 = reader.readUInt8()
 
-      assert.equal(v1.toNumber(), 5)
-      assert.equal(v2.toNumber(), 2)
+      assert.equal(v1, '5')
+      assert.equal(v2, '2')
     })
 
     it('should throw when resuming too many times', function () {
@@ -110,13 +110,23 @@ describe('Reader', function () {
     })
   })
 
-  describe('readUInt', function () {
+  describe('readUIntBigNum', function () {
     it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+
+      const v = reader.readUIntBigNum(4)
+
+      assert(BigNumber.isBigNumber(v))
+    })
+  })
+
+  describe('readUInt', function () {
+    it('should return a string', function () {
       const reader = Reader.from(Buffer.from('010203040506', 'hex'))
 
       const v = reader.readUInt(4)
 
-      assert(BigNumber.isBigNumber(v))
+      assert.typeOf(v, 'string')
     })
 
     it('should read a one byte integer', function () {
@@ -125,8 +135,8 @@ describe('Reader', function () {
       const v1 = reader.readUInt(1)
       const v2 = reader.readUInt(1)
 
-      assert.equal(v1.toNumber(), 1)
-      assert.equal(v2.toNumber(), 2)
+      assert.equal(v1, '1')
+      assert.equal(v2, '2')
     })
 
     it('should read a two byte integer', function () {
@@ -135,8 +145,8 @@ describe('Reader', function () {
       const v1 = reader.readUInt(2)
       const v2 = reader.readUInt(2)
 
-      assert.equal(v1.toNumber(), 258)
-      assert.equal(v2.toNumber(), 772)
+      assert.equal(v1, '258')
+      assert.equal(v2, '772')
     })
 
     it('should read a three byte integer', function () {
@@ -145,8 +155,8 @@ describe('Reader', function () {
       const v1 = reader.readUInt(3)
       const v2 = reader.readUInt(3)
 
-      assert.equal(v1.toNumber(), 66051)
-      assert.equal(v2.toNumber(), 263430)
+      assert.equal(v1, '66051')
+      assert.equal(v2, '263430')
     })
 
     it('should read a four byte integer', function () {
@@ -154,7 +164,7 @@ describe('Reader', function () {
 
       const v = reader.readUInt(4)
 
-      assert.equal(v.toNumber(), 16909060)
+      assert.equal(v, '16909060')
     })
 
     it('should read a five byte integer', function () {
@@ -162,7 +172,7 @@ describe('Reader', function () {
 
       const v = reader.readUInt(5)
 
-      assert.equal(v.toNumber(), 4328719365)
+      assert.equal(v, '4328719365')
     })
 
     it('should read a six byte integer', function () {
@@ -170,7 +180,7 @@ describe('Reader', function () {
 
       const v = reader.readUInt(6)
 
-      assert.equal(v.toNumber(), 1108152157446)
+      assert.equal(v, '1108152157446')
     })
 
     it('should read a seven byte integer', function () {
@@ -199,6 +209,18 @@ describe('Reader', function () {
     })
   })
 
+  describe('peekUIntBigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+
+      const v1 = reader.peekUIntBigNum(1)
+      const v2 = reader.peekUIntBigNum(1)
+
+      assert(BigNumber.isBigNumber(v1))
+      assert(BigNumber.isBigNumber(v2))
+    })
+  })
+
   describe('peekUInt', function () {
     it('should read a one byte integer', function () {
       const reader = Reader.from(Buffer.from('010203040506', 'hex'))
@@ -206,8 +228,8 @@ describe('Reader', function () {
       const v1 = reader.peekUInt(1)
       const v2 = reader.peekUInt(1)
 
-      assert.equal(v1.toNumber(), 1)
-      assert.equal(v2.toNumber(), 1)
+      assert.equal(v1, '1')
+      assert.equal(v2, '1')
     })
 
     it('should read a two byte integer', function () {
@@ -216,8 +238,8 @@ describe('Reader', function () {
       const v1 = reader.peekUInt(2)
       const v2 = reader.peekUInt(2)
 
-      assert.equal(v1.toNumber(), 258)
-      assert.equal(v2.toNumber(), 258)
+      assert.equal(v1, '258')
+      assert.equal(v2, '258')
     })
 
     it('should read a three byte integer', function () {
@@ -226,8 +248,8 @@ describe('Reader', function () {
       const v1 = reader.peekUInt(3)
       const v2 = reader.peekUInt(3)
 
-      assert.equal(v1.toNumber(), 66051)
-      assert.equal(v2.toNumber(), 66051)
+      assert.equal(v1, '66051')
+      assert.equal(v2, '66051')
     })
 
     it('should read a four byte integer', function () {
@@ -236,8 +258,8 @@ describe('Reader', function () {
       const v1 = reader.peekUInt(4)
       const v2 = reader.peekUInt(4)
 
-      assert.equal(v1.toNumber(), 16909060)
-      assert.equal(v2.toNumber(), 16909060)
+      assert.equal(v1, '16909060')
+      assert.equal(v2, '16909060')
     })
 
     it('should read a five byte integer', function () {
@@ -246,8 +268,8 @@ describe('Reader', function () {
       const v1 = reader.peekUInt(5)
       const v2 = reader.peekUInt(5)
 
-      assert.equal(v1.toNumber(), 4328719365)
-      assert.equal(v2.toNumber(), 4328719365)
+      assert.equal(v1, '4328719365')
+      assert.equal(v2, '4328719365')
     })
 
     it('should read a six byte integer', function () {
@@ -256,8 +278,8 @@ describe('Reader', function () {
       const v1 = reader.peekUInt(6)
       const v2 = reader.peekUInt(6)
 
-      assert.equal(v1.toNumber(), 1108152157446)
-      assert.equal(v2.toNumber(), 1108152157446)
+      assert.equal(v1, '1108152157446')
+      assert.equal(v2, '1108152157446')
     })
 
     it('when trying to read a negative length integer, should throw', function () {
@@ -303,7 +325,21 @@ describe('Reader', function () {
 
       const v = reader.readUInt8()
 
-      assert.equal(v.toNumber(), 6)
+      assert.equal(v, '6')
+    })
+  })
+
+  describe('readIntBigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+
+      const v1 = reader.readIntBigNum(1)
+      const v2 = reader.readIntBigNum(1)
+
+      assert(BigNumber.isBigNumber(v1))
+      assert(BigNumber.isBigNumber(v2))
+      assert.equal(v1.toString(), '1')
+      assert.equal(v2.toString(), '2')
     })
   })
 
@@ -314,8 +350,8 @@ describe('Reader', function () {
       const v1 = reader.readInt(1)
       const v2 = reader.readInt(1)
 
-      assert.equal(v1.toNumber(), 1)
-      assert.equal(v2.toNumber(), 2)
+      assert.equal(v1, '1')
+      assert.equal(v2, '2')
     })
 
     it('should read a two byte integer', function () {
@@ -324,8 +360,8 @@ describe('Reader', function () {
       const v1 = reader.readInt(2)
       const v2 = reader.readInt(2)
 
-      assert.equal(v1.toNumber(), 258)
-      assert.equal(v2.toNumber(), 772)
+      assert.equal(v1, '258')
+      assert.equal(v2, '772')
     })
 
     it('should read a three byte integer', function () {
@@ -334,8 +370,8 @@ describe('Reader', function () {
       const v1 = reader.readInt(3)
       const v2 = reader.readInt(3)
 
-      assert.equal(v1.toNumber(), 66051)
-      assert.equal(v2.toNumber(), 263430)
+      assert.equal(v1, '66051')
+      assert.equal(v2, '263430')
     })
 
     it('should read a four byte integer', function () {
@@ -343,7 +379,7 @@ describe('Reader', function () {
 
       const v = reader.readInt(4)
 
-      assert.equal(v.toNumber(), 16909060)
+      assert.equal(v, '16909060')
     })
 
     it('should read a five byte integer', function () {
@@ -351,7 +387,7 @@ describe('Reader', function () {
 
       const v = reader.readInt(5)
 
-      assert.equal(v.toNumber(), 4328719365)
+      assert.equal(v, '4328719365')
     })
 
     it('should read a six byte integer', function () {
@@ -359,7 +395,7 @@ describe('Reader', function () {
 
       const v = reader.readInt(6)
 
-      assert.equal(v.toNumber(), 1108152157446)
+      assert.equal(v, '1108152157446')
     })
 
     it('should read a seven byte integer', function () {
@@ -367,7 +403,7 @@ describe('Reader', function () {
 
       const v = reader.readInt(7)
 
-      assert.equal(v.toString(16), '1020304050607')
+      assert.equal(v, '283686952306183')
     })
 
     it('should read an eight byte integer', function () {
@@ -375,7 +411,7 @@ describe('Reader', function () {
 
       const v = reader.readInt(8)
 
-      assert.equal(v.toString(16), '102030405060708')
+      assert.equal(v, '72623859790382856')
     })
 
     it('should read a negative eight byte integer', function () {
@@ -383,7 +419,7 @@ describe('Reader', function () {
 
       const v = reader.readInt(8)
 
-      assert.equal(v.toNumber(), -65536)
+      assert.equal(v, '-65536')
     })
 
     it('when trying to read a nine byte integer, should throw', function () {
@@ -396,13 +432,27 @@ describe('Reader', function () {
     })
   })
 
+  describe('peekIntBigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+
+      const v1 = reader.peekIntBigNum(1)
+      const v2 = reader.peekIntBigNum(1)
+
+      assert(BigNumber.isBigNumber(v1))
+      assert(BigNumber.isBigNumber(v2))
+      assert.equal(v1.toString(), '1')
+      assert.equal(v2.toString(), '1')
+    })
+  })
+
   describe('peekInt', function () {
     it('should read a zero byte integer', function () {
       const reader = Reader.from(Buffer.alloc(1))
 
       const v = reader.peekInt(0)
 
-      assert.equal(v.toNumber(), 0)
+      assert.equal(v, '0')
     })
 
     it('should read a one byte integer', function () {
@@ -411,8 +461,8 @@ describe('Reader', function () {
       const v1 = reader.peekInt(1)
       const v2 = reader.peekInt(1)
 
-      assert.equal(v1.toNumber(), 1)
-      assert.equal(v2.toNumber(), 1)
+      assert.equal(v1, '1')
+      assert.equal(v2, '1')
     })
 
     it('should read a two byte integer', function () {
@@ -421,8 +471,8 @@ describe('Reader', function () {
       const v1 = reader.peekInt(2)
       const v2 = reader.peekInt(2)
 
-      assert.equal(v1.toNumber(), 258)
-      assert.equal(v2.toNumber(), 258)
+      assert.equal(v1, '258')
+      assert.equal(v2, '258')
     })
 
     it('should read a three byte integer', function () {
@@ -431,8 +481,8 @@ describe('Reader', function () {
       const v1 = reader.peekInt(3)
       const v2 = reader.peekInt(3)
 
-      assert.equal(v1.toNumber(), 66051)
-      assert.equal(v2.toNumber(), 66051)
+      assert.equal(v1, '66051')
+      assert.equal(v2, '66051')
     })
 
     it('should read a four byte integer', function () {
@@ -441,8 +491,8 @@ describe('Reader', function () {
       const v1 = reader.peekInt(4)
       const v2 = reader.peekInt(4)
 
-      assert.equal(v1.toNumber(), 16909060)
-      assert.equal(v2.toNumber(), 16909060)
+      assert.equal(v1, '16909060')
+      assert.equal(v2, '16909060')
     })
 
     it('should read a five byte integer', function () {
@@ -451,8 +501,8 @@ describe('Reader', function () {
       const v1 = reader.peekInt(5)
       const v2 = reader.peekInt(5)
 
-      assert.equal(v1.toNumber(), 4328719365)
-      assert.equal(v2.toNumber(), 4328719365)
+      assert.equal(v1, '4328719365')
+      assert.equal(v2, '4328719365')
     })
 
     it('should read a six byte integer', function () {
@@ -461,8 +511,8 @@ describe('Reader', function () {
       const v1 = reader.peekInt(6)
       const v2 = reader.peekInt(6)
 
-      assert.equal(v1.toNumber(), 1108152157446)
-      assert.equal(v2.toNumber(), 1108152157446)
+      assert.equal(v1, '1108152157446')
+      assert.equal(v2, '1108152157446')
     })
 
     it('should read a seven byte integer', function () {
@@ -470,7 +520,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt(7)
 
-      assert.equal(v.toString(16), '1020304050607')
+      assert.equal(v, '283686952306183')
     })
 
     it('should read an eight byte integer', function () {
@@ -478,7 +528,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt(8)
 
-      assert.equal(v.toString(16), '102030405060708')
+      assert.equal(v, '72623859790382856')
     })
 
     it('should read a negative eight byte integer', function () {
@@ -486,7 +536,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt(8)
 
-      assert.equal(v.toNumber(), -65536)
+      assert.equal(v, '-65536')
     })
 
     it('when trying to read a nine byte integer, should throw', function () {
@@ -516,8 +566,18 @@ describe('Reader', function () {
 
       const v = reader.readInt8()
 
-      assert.equal(v.toNumber(), 6)
+      assert.equal(v, '6')
     })
+  })
+
+  describe('readVarUIntBigNum', function () {
+    const reader = Reader.from(Buffer.from('020102', 'hex'))
+
+    const v = reader.readVarUIntBigNum()
+
+    assert(BigNumber.isBigNumber(v))
+    assert.equal(v.toString(), '258')
+    assert.equal(reader.cursor, 3)
   })
 
   describe('readVarUInt', function () {
@@ -535,7 +595,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toNumber(), 9)
+      assert.equal(v, '9')
       assert.equal(reader.cursor, 2)
     })
 
@@ -544,7 +604,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toNumber(), 258)
+      assert.equal(v, '258')
       assert.equal(reader.cursor, 3)
     })
 
@@ -553,7 +613,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toNumber(), 66051)
+      assert.equal(v, '66051')
       assert.equal(reader.cursor, 4)
     })
 
@@ -562,7 +622,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toNumber(), 16909060)
+      assert.equal(v, '16909060')
       assert.equal(reader.cursor, 5)
     })
 
@@ -571,7 +631,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toNumber(), 4328719365)
+      assert.equal(v, '4328719365')
       assert.equal(reader.cursor, 6)
     })
 
@@ -580,7 +640,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toNumber(), 2211975595527)
+      assert.equal(v, '2211975595527')
       assert.equal(reader.cursor, 7)
     })
 
@@ -589,7 +649,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toString(16), '1020304050607')
+      assert.equal(v, '283686952306183')
     })
 
     it('should read an eight byte variable-length integer', function () {
@@ -597,7 +657,7 @@ describe('Reader', function () {
 
       const v = reader.readVarUInt()
 
-      assert.equal(v.toString(16), '102030405060708')
+      assert.equal(v, '72623859790382856')
     })
 
     it('when reading a truncated variable-length integer, should throw', function () {
@@ -619,6 +679,18 @@ describe('Reader', function () {
     })
   })
 
+  describe('peekVarUIntBigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('0109', 'hex'))
+
+      const v = reader.peekVarUIntBigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '9')
+      assert.equal(reader.cursor, 0)
+    })
+  })
+
   describe('peekVarUInt', function () {
     it('when reading a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(Buffer.from('00', 'hex'))
@@ -634,7 +706,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toNumber(), 9)
+      assert.equal(v, '9')
       assert.equal(reader.cursor, 0)
     })
 
@@ -643,7 +715,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toNumber(), 258)
+      assert.equal(v, '258')
       assert.equal(reader.cursor, 0)
     })
 
@@ -652,7 +724,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toNumber(), 66051)
+      assert.equal(v, '66051')
       assert.equal(reader.cursor, 0)
     })
 
@@ -661,7 +733,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toNumber(), 16909060)
+      assert.equal(v, '16909060')
       assert.equal(reader.cursor, 0)
     })
 
@@ -670,7 +742,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toNumber(), 4328719365)
+      assert.equal(v, '4328719365')
       assert.equal(reader.cursor, 0)
     })
 
@@ -679,7 +751,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toNumber(), 2211975595527)
+      assert.equal(v, '2211975595527')
       assert.equal(reader.cursor, 0)
     })
 
@@ -688,7 +760,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toString(16), '1020304050607')
+      assert.equal(v, '283686952306183')
       assert.equal(reader.cursor, 0)
     })
 
@@ -697,7 +769,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarUInt()
 
-      assert.equal(v.toString(16), '102030405060708')
+      assert.equal(v, '72623859790382856')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -769,6 +841,18 @@ describe('Reader', function () {
     })
   })
 
+  describe('readVarIntBigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('0109', 'hex'))
+
+      const v = reader.readVarIntBigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '9')
+      assert.equal(reader.cursor, 2)
+    })
+  })
+
   describe('readVarInt', function () {
     it('when reading a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(Buffer.from('00', 'hex'))
@@ -784,7 +868,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toNumber(), 9)
+      assert.equal(v, '9')
       assert.equal(reader.cursor, 2)
     })
 
@@ -793,7 +877,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toNumber(), 258)
+      assert.equal(v, '258')
       assert.equal(reader.cursor, 3)
     })
 
@@ -802,7 +886,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toNumber(), 66051)
+      assert.equal(v, '66051')
       assert.equal(reader.cursor, 4)
     })
 
@@ -811,7 +895,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toNumber(), 16909060)
+      assert.equal(v, '16909060')
       assert.equal(reader.cursor, 5)
     })
 
@@ -820,7 +904,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toNumber(), 4328719365)
+      assert.equal(v, '4328719365')
       assert.equal(reader.cursor, 6)
     })
 
@@ -829,7 +913,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toNumber(), 2211975595527)
+      assert.equal(v, '2211975595527')
       assert.equal(reader.cursor, 7)
     })
 
@@ -838,7 +922,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toString(16), '1020304050607080910111213141516')
+      assert.equal(v, '1339673755198158349046276780029383958')
       assert.equal(reader.cursor, 17)
     })
 
@@ -847,7 +931,7 @@ describe('Reader', function () {
 
       const v = reader.readVarInt()
 
-      assert.equal(v.toString(), '-1234567890123456789')
+      assert.equal(v, '-1234567890123456789')
     })
 
     it('when reading a truncated variable-length integer, should throw', function () {
@@ -869,6 +953,18 @@ describe('Reader', function () {
     })
   })
 
+  describe('peekVarIntBigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('0109', 'hex'))
+
+      const v = reader.peekVarIntBigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '9')
+      assert.equal(reader.cursor, 0)
+    })
+  })
+
   describe('peekVarInt', function () {
     it('when reading a zero byte variable-length integer, should throw', function () {
       const reader = Reader.from(Buffer.from('00', 'hex'))
@@ -884,7 +980,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarInt()
 
-      assert.equal(v.toNumber(), 9)
+      assert.equal(v, '9')
       assert.equal(reader.cursor, 0)
     })
 
@@ -893,7 +989,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarInt()
 
-      assert.equal(v.toNumber(), 258)
+      assert.equal(v, '258')
       assert.equal(reader.cursor, 0)
     })
 
@@ -902,7 +998,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarInt()
 
-      assert.equal(v.toNumber(), 66051)
+      assert.equal(v, '66051')
       assert.equal(reader.cursor, 0)
     })
 
@@ -911,7 +1007,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarInt()
 
-      assert.equal(v.toNumber(), 16909060)
+      assert.equal(v, '16909060')
       assert.equal(reader.cursor, 0)
     })
 
@@ -920,7 +1016,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarInt()
 
-      assert.equal(v.toNumber(), 4328719365)
+      assert.equal(v, '4328719365')
       assert.equal(reader.cursor, 0)
     })
 
@@ -929,7 +1025,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarInt()
 
-      assert.equal(v.toNumber(), 2211975595527)
+      assert.equal(v, '2211975595527')
       assert.equal(reader.cursor, 0)
     })
 
@@ -938,7 +1034,7 @@ describe('Reader', function () {
 
       const v = reader.peekVarInt()
 
-      assert.equal(v.toString(16), '1020304050607080910111213141516')
+      assert.equal(v, '1339673755198158349046276780029383958')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1397,7 +1493,19 @@ describe('Reader', function () {
 
       const v = reader.readUInt8()
 
-      assert.equal(v.toNumber(), 255)
+      assert.equal(v, '255')
+      assert.equal(reader.cursor, 1)
+    })
+  })
+
+  describe('readUInt8BigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('ff', 'hex'))
+
+      const v = reader.readUInt8BigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '255')
       assert.equal(reader.cursor, 1)
     })
   })
@@ -1408,7 +1516,7 @@ describe('Reader', function () {
 
       const v = reader.readUInt16()
 
-      assert.equal(v.toNumber(), 65535)
+      assert.equal(v, '65535')
       assert.equal(reader.cursor, 2)
     })
   })
@@ -1419,7 +1527,7 @@ describe('Reader', function () {
 
       const v = reader.readUInt32()
 
-      assert.equal(v.toNumber(), 4294967295)
+      assert.equal(v, '4294967295')
       assert.equal(reader.cursor, 4)
     })
   })
@@ -1430,7 +1538,7 @@ describe('Reader', function () {
 
       const v = reader.readUInt64()
 
-      assert.deepEqual(v.toString(16), '1010101ffffffff')
+      assert.deepEqual(v, '72340177116200959')
       assert.equal(reader.cursor, 8)
     })
   })
@@ -1441,7 +1549,7 @@ describe('Reader', function () {
 
       const v = reader.peekUInt8()
 
-      assert.equal(v.toNumber(), 255)
+      assert.equal(v, '255')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1452,7 +1560,7 @@ describe('Reader', function () {
 
       const v = reader.peekUInt16()
 
-      assert.equal(v.toNumber(), 65535)
+      assert.equal(v, '65535')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1463,7 +1571,7 @@ describe('Reader', function () {
 
       const v = reader.peekUInt32()
 
-      assert.equal(v.toNumber(), 4294967295)
+      assert.equal(v, '4294967295')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1474,7 +1582,7 @@ describe('Reader', function () {
 
       const v = reader.peekUInt64()
 
-      assert.deepEqual(v.toString(16), '1010101ffffffff')
+      assert.deepEqual(v, '72340177116200959')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1525,7 +1633,7 @@ describe('Reader', function () {
 
       const v = reader.readInt8()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 1)
     })
   })
@@ -1536,7 +1644,7 @@ describe('Reader', function () {
 
       const v = reader.readInt16()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 2)
     })
   })
@@ -1547,7 +1655,7 @@ describe('Reader', function () {
 
       const v = reader.readInt32()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 4)
     })
   })
@@ -1558,7 +1666,7 @@ describe('Reader', function () {
 
       const v = reader.readInt64()
 
-      assert.equal(v.toString(16), '1010101ffffffff')
+      assert.equal(v, '72340177116200959')
       assert.equal(reader.cursor, 8)
     })
 
@@ -1567,7 +1675,7 @@ describe('Reader', function () {
 
       const v = reader.readInt64()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 8)
     })
   })
@@ -1578,7 +1686,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt8()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1589,7 +1697,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt16()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1600,7 +1708,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt32()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1611,7 +1719,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt64()
 
-      assert.equal(v.toString(16), '1010101ffffffff')
+      assert.equal(v, '72340177116200959')
       assert.equal(reader.cursor, 0)
     })
 
@@ -1620,7 +1728,7 @@ describe('Reader', function () {
 
       const v = reader.peekInt64()
 
-      assert.equal(v.toNumber(), -1)
+      assert.equal(v, '-1')
       assert.equal(reader.cursor, 0)
     })
   })
