@@ -411,9 +411,9 @@ describe('Writer', function () {
     it('should write a large (absolute value) negative integer', function () {
       const writer = new Writer()
 
-      writer.writeVarInt(new BigNumber('010000000000000000000000000001', 16))
+      writer.writeVarInt(new BigNumber('-010000000000000000000000000001', 16))
 
-      assert.equal(writer.getBuffer().toString('hex'), '0f010000000000000000000000000001')
+      assert.equal(writer.getBuffer().toString('hex'), '0ffeffffffffffffffffffffffffffff')
     })
 
     it('when trying to write a non-integer, should throw', function () {
