@@ -147,6 +147,7 @@ class AbstractBtpPlugin extends EventEmitter {
           this.emit('_connect')
         })
       })
+      debug(`listening for BTP connections on ${this._listener.port}`)
     }
 
     if (this._server) {
