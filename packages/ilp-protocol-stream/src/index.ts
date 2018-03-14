@@ -9,7 +9,9 @@ import {
   Frame,
   StreamMoneyFrame,
   parseFrames,
-  isStreamMoneyFrame
+  isStreamMoneyFrame,
+  SourceAccountFrame,
+  isSourceAccountFrame
 } from './frame'
 import { Reader, Writer } from 'oer-utils'
 import 'source-map-support/register'
@@ -158,6 +160,7 @@ export class Connection extends EventEmitter3 {
   protected sending: boolean
   protected maximumPacketAmount: BigNumber
   protected closed: boolean
+  protected shouldSendSourceAccount: boolean
 
   constructor (opts: ConnectionOpts) {
     super()
@@ -172,6 +175,7 @@ export class Connection extends EventEmitter3 {
     this.debug = Debug(`ilp-protocol-stream:Connection:${this.isServer ? 'Server' : 'Client'}`)
     this.sending = false
     this.closed = true
+    this.shouldSendSourceAccount = !opts.isServer
 
     this.maximumPacketAmount = new BigNumber(Infinity)
 
@@ -230,10 +234,9 @@ export class Connection extends EventEmitter3 {
 
     // Make sure prepare amount >= sum of stream frame amounts
 
-    // Handle control frames
+    // TODO ensure that no money frame exceeds a stream's buffer
 
-    // Pass stream frames to relevant stream (and make sure the amount and data don't exceed the stream's buffers)
-    // Emit 'stream' event for new streams
+    // Handle each frame
     for (let frame of frames) {
       if (isStreamMoneyFrame(frame)) {
         const streamId = frame.streamId.toNumber()
@@ -262,6 +265,11 @@ export class Connection extends EventEmitter3 {
 
         // TODO check that all of the streams are able to receive the amount of money before accepting any of them
         this.moneyStreams[streamId].stream._addToIncoming(frame.amount)
+      } else if (isSourceAccountFrame(frame)) {
+        this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
+        this.destinationAccount = frame.sourceAccount
+        // Try sending in case we stopped because we didn't know their address before
+        this.emit('_send')
       } else {
         this.debug(`got unexpected frame type: ${frame.type}`)
         throw new IlpPacket.Errors.UnexpectedPaymentError('')
@@ -303,6 +311,15 @@ export class Connection extends EventEmitter3 {
     if (!this.destinationAccount) {
       this.debug('not sending because we do not know the client\'s address')
       return
+    }
+
+    // Send control frames
+    if (this.shouldSendSourceAccount) {
+      // TODO attach a token to the account?
+      frames.push(new SourceAccountFrame(this.sourceAccount))
+
+      // TODO make sure to reset this if the packet fails
+      this.shouldSendSourceAccount = false
     }
 
     // Determine how much to send based on amount frames and path maximum packet amount

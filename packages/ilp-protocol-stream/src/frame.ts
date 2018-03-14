@@ -1,8 +1,10 @@
-import { Reader, Writer } from 'oer-utils'
+import { Reader, Writer, Predictor } from 'oer-utils'
 import BigNumber from 'bignumber.js'
 
 export enum FrameType {
+  // TODO reorder frame numbers to something sensible
   StreamMoney = 1,
+  SourceAccount = 2,
 }
 
 export abstract class Frame {
@@ -73,6 +75,42 @@ export function isStreamMoneyFrame (frame: Frame): frame is StreamMoneyFrame {
   return frame.type === FrameType.StreamMoney
 }
 
+export class SourceAccountFrame extends Frame {
+  readonly sourceAccount: string
+
+  constructor (sourceAccount: string) {
+    super(FrameType.SourceAccount, 'SourceAccountFrame')
+    this.sourceAccount = sourceAccount
+  }
+
+  byteLength (): number {
+    const predictor = new Predictor()
+    predictor.writeUInt8(this.type)
+    predictor.writeVarOctetString(Buffer.from(this.sourceAccount))
+    return predictor.getSize()
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    writer.writeVarOctetString(Buffer.from(this.sourceAccount))
+    return writer
+  }
+
+  static fromBuffer (reader: Reader): SourceAccountFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.SourceAccount) {
+      throw new Error(`Cannot read SourceAccountFrame from Buffer. Expected type ${FrameType.SourceAccount}, got: ${type}`)
+    }
+
+    const sourceAccount = reader.readVarOctetString().toString('utf8')
+    return new SourceAccountFrame(sourceAccount)
+  }
+}
+
+export function isSourceAccountFrame (frame: Frame): frame is SourceAccountFrame {
+  return frame.type === FrameType.SourceAccount
+}
+
 export function parseFrames (buffer: Reader | Buffer): Frame[] {
   const reader = Reader.from(buffer)
   const frames: Frame[] = []
@@ -83,6 +121,9 @@ export function parseFrames (buffer: Reader | Buffer): Frame[] {
     switch (type) {
       case FrameType.StreamMoney:
         frames.push(StreamMoneyFrame.fromBuffer(reader))
+        break
+      case FrameType.SourceAccount:
+        frames.push(SourceAccountFrame.fromBuffer(reader))!
         break
       default:
         throw new Error(`Unknown frame type: ${type}`)
