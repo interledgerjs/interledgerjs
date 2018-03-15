@@ -6,6 +6,7 @@ export enum FrameType {
   StreamMoney = 1,
   SourceAccount = 2,
   AmountArrived = 3,
+  MinimumDestinationAmount = 4,
 }
 
 export abstract class Frame {
@@ -28,14 +29,14 @@ export abstract class Frame {
 
 export class StreamMoneyFrame extends Frame {
   readonly streamId: BigNumber
-  readonly amount: BigNumber
+  readonly shares: BigNumber
   readonly isEnd: boolean
   protected encoded?: Buffer
 
   constructor (streamId: BigNumber.Value, amount: BigNumber.Value, isEnd: boolean = false) {
     super(FrameType.StreamMoney, 'StreamMoney')
     this.streamId = new BigNumber(streamId)
-    this.amount = new BigNumber(amount)
+    this.shares = new BigNumber(amount)
     this.isEnd = isEnd
   }
 
@@ -53,7 +54,7 @@ export class StreamMoneyFrame extends Frame {
     // TODO should frames be length-prefixed to enable skipping unknown ones?
     writer.writeUInt8(this.type)
     writer.writeVarUInt(this.streamId)
-    writer.writeVarUInt(this.amount)
+    writer.writeVarUInt(this.shares)
     // TODO should this be a bitmask instead?
     writer.writeUInt8(this.isEnd ? 1 : 0)
     return writer
@@ -147,6 +148,41 @@ export function isAmountArrivedFrame (frame: Frame): frame is AmountArrivedFrame
   return frame.type === FrameType.AmountArrived
 }
 
+export class MinimumDestinationAmountFrame extends Frame {
+  readonly amount: BigNumber
+
+  constructor(amount: BigNumber.Value) {
+    super(FrameType.MinimumDestinationAmount, 'MinimumDestinationAmount')
+    this.amount = new BigNumber(amount)
+  }
+
+  byteLength (): number {
+    const writer = new Writer()
+    this.writeTo(writer)
+    return writer.getBuffer().length
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    writer.writeVarUInt(this.amount)
+    return writer
+  }
+
+  static fromBuffer (reader: Reader): MinimumDestinationAmountFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.MinimumDestinationAmount) {
+      throw new Error(`Cannot read MinimumDestinationAmountFrame from Buffer. Expected type ${FrameType.MinimumDestinationAmount}, got: ${type}`)
+    }
+
+    const amount = reader.readVarUInt()
+    return new MinimumDestinationAmountFrame(amount)
+  }
+}
+
+export function isMinimumDestinationAmountFrame (frame: Frame): frame is MinimumDestinationAmountFrame {
+  return frame.type === FrameType.MinimumDestinationAmount
+}
+
 export function parseFrames (buffer: Reader | Buffer): Frame[] {
   const reader = Reader.from(buffer)
   const frames: Frame[] = []
@@ -163,6 +199,9 @@ export function parseFrames (buffer: Reader | Buffer): Frame[] {
         break
       case FrameType.AmountArrived:
         frames.push(AmountArrivedFrame.fromBuffer(reader))
+        break
+      case FrameType.MinimumDestinationAmount:
+        frames.push(MinimumDestinationAmountFrame.fromBuffer(reader))
         break
       default:
         throw new Error(`Unknown frame type: ${type}`)

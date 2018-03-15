@@ -11,7 +11,9 @@ import {
   SourceAccountFrame,
   isSourceAccountFrame,
   AmountArrivedFrame,
-  isAmountArrivedFrame
+  isAmountArrivedFrame,
+  isMinimumDestinationAmountFrame,
+  MinimumDestinationAmountFrame
 } from './frame'
 import { Reader, Writer } from 'oer-utils'
 import { Plugin } from './types'
@@ -41,6 +43,7 @@ export class Connection extends EventEmitter3 {
   protected sourceAccount: string
   protected sharedSecret: Buffer
   protected isServer: boolean
+  protected slippage: BigNumber
 
   protected moneyStreams: StreamData<MoneyStream>[]
   protected nextStreamId: number
@@ -58,6 +61,7 @@ export class Connection extends EventEmitter3 {
     this.sourceAccount = opts.sourceAccount
     this.sharedSecret = opts.sharedSecret
     this.isServer = opts.isServer
+    this.slippage = new BigNumber(opts.slippage || 0)
 
     this.moneyStreams = []
     this.nextStreamId = (this.isServer ? 1 : 2)
@@ -118,14 +122,23 @@ export class Connection extends EventEmitter3 {
     // Tell sender how much arrived
     responseFrames.push(new AmountArrivedFrame(prepare.amount))
 
-    // Handle control frames
+    // Handle non-money frames
     // (We'll use these even if the packet is unfulfillable)
+    let totalMoneyShares = new BigNumber(0)
     for (let frame of frames) {
       if (isSourceAccountFrame(frame)) {
         this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
         this.destinationAccount = frame.sourceAccount
         // Try sending in case we stopped because we didn't know their address before
         this.emit('_send')
+      } else if (isMinimumDestinationAmountFrame(frame)) {
+        if (frame.amount.isLessThan(prepare.amount)) {
+          this.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${frame.amount}`)
+          throw new IlpPacket.Errors.FinalApplicationError('', this.encodeAndEncryptData(responseFrames))
+        }
+      } else if (isStreamMoneyFrame(frame)) {
+        // Count the total number of "shares" to be able to distribute the packet amount amongst the MoneyStreams
+        totalMoneyShares = totalMoneyShares.plus(frame.shares)
       }
     }
 
@@ -169,7 +182,12 @@ export class Connection extends EventEmitter3 {
         }
 
         // TODO check that all of the streams are able to receive the amount of money before accepting any of them
-        this.moneyStreams[streamId].stream._addToIncoming(frame.amount)
+        const amount = new BigNumber(prepare.amount)
+          .times(frame.shares)
+          .dividedBy(totalMoneyShares)
+          // TODO make sure we don't lose any because of rounding issues
+          .integerValue(BigNumber.ROUND_FLOOR)
+        this.moneyStreams[streamId].stream._addToIncoming(amount)
       }
     }
 
@@ -245,6 +263,14 @@ export class Connection extends EventEmitter3 {
     // TODO don't stop if there's still data to send
     if (amountToSend.isEqualTo(0)) {
       this.sending = false
+    }
+
+    // Set minimum destination amount
+    if (this.exchangeRate) {
+      const minimumDestinationAmount = amountToSend.times(this.exchangeRate)
+        .times(new BigNumber(1).minus(this.slippage))
+        .integerValue(BigNumber.ROUND_FLOOR)
+      frames.push(new MinimumDestinationAmountFrame(minimumDestinationAmount))
     }
 
     // Load packet data with available data frames (keep track of max data length)
