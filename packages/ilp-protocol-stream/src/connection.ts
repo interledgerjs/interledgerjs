@@ -104,17 +104,6 @@ export class Connection extends EventEmitter3 {
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
     }
 
-    // Ensure we can generate correct fulfillment
-    const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, prepare.data)
-    const generatedCondition = cryptoHelper.hash(fulfillment)
-    if (!generatedCondition.equals(prepare.executionCondition)) {
-      // TODO add padding to make it less obvious this is a quote response
-      const responseData = this.encodeAndEncryptData([new AmountArrivedFrame(prepare.amount)])
-
-      this.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
-      throw new IlpPacket.Errors.FinalApplicationError('', responseData)
-    }
-
     // Parse frames
     let frames
     try {
@@ -124,11 +113,35 @@ export class Connection extends EventEmitter3 {
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
     }
 
+    const responseFrames: Frame[] = []
+
+    // Tell sender how much arrived
+    responseFrames.push(new AmountArrivedFrame(prepare.amount))
+
+    // Handle control frames
+    // (We'll use these even if the packet is unfulfillable)
+    for (let frame of frames) {
+      if (isSourceAccountFrame(frame)) {
+        this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
+        this.destinationAccount = frame.sourceAccount
+        // Try sending in case we stopped because we didn't know their address before
+        this.emit('_send')
+      }
+    }
+
+    // Ensure we can generate correct fulfillment
+    const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, prepare.data)
+    const generatedCondition = cryptoHelper.hash(fulfillment)
+    if (!generatedCondition.equals(prepare.executionCondition)) {
+      this.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
+      throw new IlpPacket.Errors.FinalApplicationError('', this.encodeAndEncryptData(responseFrames))
+    }
+
     // Make sure prepare amount >= sum of stream frame amounts
 
     // TODO ensure that no money frame exceeds a stream's buffer
 
-    // Handle each frame
+    // Handle money stream frames
     for (let frame of frames) {
       if (isStreamMoneyFrame(frame)) {
         const streamId = frame.streamId.toNumber()
@@ -157,26 +170,15 @@ export class Connection extends EventEmitter3 {
 
         // TODO check that all of the streams are able to receive the amount of money before accepting any of them
         this.moneyStreams[streamId].stream._addToIncoming(frame.amount)
-      } else if (isSourceAccountFrame(frame)) {
-        this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
-        this.destinationAccount = frame.sourceAccount
-        // Try sending in case we stopped because we didn't know their address before
-        this.emit('_send')
-      } else {
-        this.debug(`got unexpected frame type: ${frame.type}`)
-        throw new IlpPacket.Errors.UnexpectedPaymentError('')
       }
     }
-
-    // Fill up response data with data frames
-    const data = Buffer.alloc(0)
 
     this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')}`)
 
     // Return fulfillment
     return {
       fulfillment,
-      data
+      data: this.encodeAndEncryptData(responseFrames)
     }
   }
 
