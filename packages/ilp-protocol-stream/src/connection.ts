@@ -13,7 +13,10 @@ import {
   AmountArrivedFrame,
   isAmountArrivedFrame,
   isMinimumDestinationAmountFrame,
-  MinimumDestinationAmountFrame
+  MinimumDestinationAmountFrame,
+  PacketNumberFrame,
+  isPacketNumberFrame,
+  PacketType
 } from './frame'
 import { Reader, Writer } from 'oer-utils'
 import { Plugin } from './types'
@@ -45,6 +48,7 @@ export class Connection extends EventEmitter3 {
   protected isServer: boolean
   protected slippage: BigNumber
 
+  protected outgoingPacketNumber: number
   protected moneyStreams: StreamData<MoneyStream>[]
   protected nextStreamId: number
   protected debug: Debug.IDebugger
@@ -63,6 +67,7 @@ export class Connection extends EventEmitter3 {
     this.isServer = opts.isServer
     this.slippage = new BigNumber(opts.slippage || 0)
 
+    this.outgoingPacketNumber = 0
     this.moneyStreams = []
     this.nextStreamId = (this.isServer ? 1 : 2)
     this.debug = Debug(`ilp-protocol-stream:Connection:${this.isServer ? 'Server' : 'Client'}`)
@@ -109,9 +114,9 @@ export class Connection extends EventEmitter3 {
     }
 
     // Parse frames
-    let frames
+    let requestFrames
     try {
-      frames = parseFrames(frameData)
+      requestFrames = parseFrames(frameData)
     } catch (err) {
       this.debug(`error parsing frames:`, err)
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
@@ -122,10 +127,30 @@ export class Connection extends EventEmitter3 {
     // Tell sender how much arrived
     responseFrames.push(new AmountArrivedFrame(prepare.amount))
 
+    const packetNumberFrame = requestFrames.find(isPacketNumberFrame)
+    let packetNumber: BigNumber
+    if (!packetNumberFrame) {
+      this.debug('prepare did not include packet number frame')
+      throw new IlpPacket.Errors.UnexpectedPaymentError('')
+    } else {
+      packetNumber = packetNumberFrame.packetNumber
+      if (packetNumberFrame.packetType !== PacketType.Prepare) {
+        this.debug(`prepare packet contains a frame that says it should be something other than a prepare: ${packetNumberFrame.packetType}`)
+        throw new IlpPacket.Errors.UnexpectedPaymentError('')
+      }
+    }
+    this.debug(`handling packet number: ${packetNumber}`)
+
+    const throwFinalApplicationError = () => {
+      responseFrames.push(new PacketNumberFrame(packetNumber, PacketType.Reject))
+      const responseData = this.encodeAndEncryptData(responseFrames)
+      throw new IlpPacket.Errors.FinalApplicationError('', responseData)
+    }
+
     // Handle non-money frames
     // (We'll use these even if the packet is unfulfillable)
     let totalMoneyShares = new BigNumber(0)
-    for (let frame of frames) {
+    for (let frame of requestFrames) {
       if (isSourceAccountFrame(frame)) {
         this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
         this.destinationAccount = frame.sourceAccount
@@ -134,7 +159,7 @@ export class Connection extends EventEmitter3 {
       } else if (isMinimumDestinationAmountFrame(frame)) {
         if (frame.amount.isLessThan(prepare.amount)) {
           this.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${frame.amount}`)
-          throw new IlpPacket.Errors.FinalApplicationError('', this.encodeAndEncryptData(responseFrames))
+          throwFinalApplicationError()
         }
       } else if (isStreamMoneyFrame(frame)) {
         // Count the total number of "shares" to be able to distribute the packet amount amongst the MoneyStreams
@@ -147,7 +172,7 @@ export class Connection extends EventEmitter3 {
     const generatedCondition = cryptoHelper.hash(fulfillment)
     if (!generatedCondition.equals(prepare.executionCondition)) {
       this.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
-      throw new IlpPacket.Errors.FinalApplicationError('', this.encodeAndEncryptData(responseFrames))
+      throwFinalApplicationError()
     }
 
     // Make sure prepare amount >= sum of stream frame amounts
@@ -155,7 +180,7 @@ export class Connection extends EventEmitter3 {
     // TODO ensure that no money frame exceeds a stream's buffer
 
     // Handle money stream frames
-    for (let frame of frames) {
+    for (let frame of requestFrames) {
       if (isStreamMoneyFrame(frame)) {
         const streamId = frame.streamId.toNumber()
 
@@ -191,12 +216,14 @@ export class Connection extends EventEmitter3 {
       }
     }
 
+    responseFrames.push(new PacketNumberFrame(packetNumber, PacketType.Fulfill))
+    const responseData = this.encodeAndEncryptData(responseFrames)
     this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')}`)
 
     // Return fulfillment
     return {
       fulfillment,
-      data: this.encodeAndEncryptData(responseFrames)
+      data: responseData
     }
   }
 
@@ -209,12 +236,23 @@ export class Connection extends EventEmitter3 {
 
     // Send a test packet first to determine the exchange rate
     if (!this.exchangeRate && this.destinationAccount) {
-      await this.sendTestPacket()
+      try {
+        await this.sendTestPacket()
+      } catch (err) {
+        this.debug('error sending test packet:', err)
+        this.emit('error', err)
+        return
+      }
     }
 
     while (this.sending) {
       // Send multiple packets at the same time (don't await promise)
-      await this.sendPacket()
+      try {
+        await this.sendPacket()
+      } catch (err) {
+        this.debug('error in sendPacket loop:', err)
+        this.emit('error', err)
+      }
 
       // Figure out if we need to wait before sending the next one
     }
@@ -223,12 +261,16 @@ export class Connection extends EventEmitter3 {
   protected async sendPacket (): Promise<void> {
     this.debug('sendPacket')
     let amountToSend = new BigNumber(0)
-    const frames: Frame[] = []
+    const requestFrames: Frame[] = []
 
     if (!this.destinationAccount) {
       this.debug('not sending because we do not know the client\'s address')
       return
     }
+
+    // Set packet number to correlate response with request
+    const packetNumber = this.outgoingPacketNumber++
+    requestFrames.push(new PacketNumberFrame(packetNumber, 0))
 
     // Send control frames
 
@@ -248,7 +290,7 @@ export class Connection extends EventEmitter3 {
       const isEnd = msRecord.stream.isClosed() && msRecord.stream.amountOutgoing.isEqualTo(0)
       const frame = new StreamMoneyFrame(msRecord.id, amountToSendFromStream, isEnd)
       // TODO make sure the length of the frame's doesn't exceed packet data limit
-      frames.push(frame)
+      requestFrames.push(frame)
       amountToSend = amountToSend.plus(amountToSendFromStream)
       maxAmountFromStream = maxAmountFromStream.minus(amountToSendFromStream)
 
@@ -270,14 +312,14 @@ export class Connection extends EventEmitter3 {
       const minimumDestinationAmount = amountToSend.times(this.exchangeRate)
         .times(new BigNumber(1).minus(this.slippage))
         .integerValue(BigNumber.ROUND_FLOOR)
-      frames.push(new MinimumDestinationAmountFrame(minimumDestinationAmount))
+      requestFrames.push(new MinimumDestinationAmountFrame(minimumDestinationAmount))
     }
 
     // Load packet data with available data frames (keep track of max data length)
     // TODO implement sending data
 
     // Encrypt
-    const data = this.encodeAndEncryptData(frames)
+    const data = this.encodeAndEncryptData(requestFrames)
 
     // Generate condition
     const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, data)
@@ -292,7 +334,7 @@ export class Connection extends EventEmitter3 {
       // TODO more intelligent expiry
       expiresAt: new Date(Date.now() + 30000)
     }
-    this.debug(`sending prepare: ${JSON.stringify(prepare)}`)
+    this.debug(`sending packet number ${packetNumber}: ${JSON.stringify(prepare)}`)
     const response = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
 
     let packet: IlpPacket.IlpFulfill | IlpPacket.IlpRejection
@@ -306,10 +348,23 @@ export class Connection extends EventEmitter3 {
       }
     } catch (err) {
       this.debug(`got invalid response from sendData:`, err, response.toString('hex'))
-      this.emit('error', new Error(`Invalid response when sending packet: ${err.message}`))
+      throw new Error(`Invalid response when sending packet: ${err.message}`)
     }
 
-    // TODO prevent replay attacks -- make sure response corresponds to request
+    let responseFrames: Frame[] = []
+    // TODO handle F08 data
+    if (packet.data.length > 0) {
+      try {
+        const decrypted = cryptoHelper.decrypt(this.sharedSecret, packet.data)
+        responseFrames = parseFrames(decrypted)
+      } catch (err) {
+        this.debug(`unable to decrypt and parse response data:`, err, packet.data.toString('hex'))
+        // TODO should we continue processing anyway? what if it was fulfilled?
+        throw new Error('Unable to decrypt and parse response data: ' + err.message)
+      }
+    }
+
+    this.ensurePacketNumberMatches(responseFrames, packetNumber, (isFulfill(packet) ? PacketType.Fulfill : PacketType.Reject))
 
     // Handle errors (shift the frames back into the queue)
   }
@@ -319,21 +374,26 @@ export class Connection extends EventEmitter3 {
       throw new Error('Cannot send test packet. Destination account is unknown')
     }
 
-    const frames = []
+    const requestFrames = []
+
+    // Set packet number to correlate response with request
+    const packetNumber = this.outgoingPacketNumber++
+    requestFrames.push(new PacketNumberFrame(packetNumber, PacketType.Prepare))
+
     if (this.shouldSendSourceAccount) {
       // TODO attach a token to the account?
-      frames.push(new SourceAccountFrame(this.sourceAccount))
+      requestFrames.push(new SourceAccountFrame(this.sourceAccount))
 
       // TODO make sure to reset this if the packet fails
       this.shouldSendSourceAccount = false
     }
 
     const sourceAmount = amount || BigNumber.minimum(TEST_PACKET_AMOUNT, this.maximumPacketAmount)
-    this.debug(`sending test packet for amount: ${sourceAmount}`)
+    this.debug(`sending test packet number: ${packetNumber} for amount: ${sourceAmount}`)
     const prepare = {
       destination: this.destinationAccount,
       amount: (sourceAmount).toString(),
-      data: this.encodeAndEncryptData(frames),
+      data: this.encodeAndEncryptData(requestFrames),
       executionCondition: cryptoHelper.generateRandomCondition(),
       expiresAt: new Date(Date.now() + 30000)
     }
@@ -350,16 +410,18 @@ export class Connection extends EventEmitter3 {
 
     // TODO handle F08 errors
     if (reject.code === 'F99' && reject.data.length > 0) {
-      let frames: Frame[]
+      let responseFrames: Frame[]
       try {
         const decrypted = cryptoHelper.decrypt(this.sharedSecret, reject.data)
-        frames = parseFrames(decrypted)
+        responseFrames = parseFrames(decrypted)
       } catch (err) {
         this.debug(`unable to decrypt test packet response:`, err, reject.data.toString('hex'))
         throw new Error('Test packet response was corrupted')
       }
 
-      for (let frame of frames) {
+      this.ensurePacketNumberMatches(responseFrames, packetNumber, PacketType.Reject)
+
+      for (let frame of responseFrames) {
         if (isAmountArrivedFrame(frame)) {
           this.exchangeRate = frame.amount.dividedBy(sourceAmount)
           this.debug(`determined exchange rate to be: ${this.exchangeRate}`)
@@ -387,4 +449,23 @@ export class Connection extends EventEmitter3 {
     const data = cryptoHelper.encrypt(this.sharedSecret, encodedFrames)
     return data
   }
+
+  protected ensurePacketNumberMatches(responseFrames: Frame[], packetNumber: BigNumber.Value, packetType: PacketType): void {
+    // Check that response packet number matches outgoing number
+    const packetNumberFrame = responseFrames.find(isPacketNumberFrame)
+    if (!packetNumberFrame) {
+      this.debug('packet did not include packet number frame, so we cannot be sure if the response matches the request', JSON.stringify(frames))
+      throw new Error('Receiver did not respond with packet number frame')
+    } else if (!packetNumberFrame.packetNumber.isEqualTo(packetNumber)) {
+      this.debug(`packet response does not match request. actual response packet number: ${packetNumberFrame.packetNumber}, expected: ${packetNumber}`)
+      throw new Error(`Packet response does not match packet number of request. Actual: ${packetNumberFrame.packetNumber}, expected: ${packetNumber}.`)
+    } else if (packetNumberFrame.packetType !== packetType) {
+      this.debug(`packet response does not have expected packet type. actual: ${packetNumberFrame.packetType}, expected: ${packetType}`)
+      throw new Error(`Packet response does not have expected packet type. Actual: ${packetNumberFrame.packetType}, expected: ${packetType}`)
+    }
+  }
+}
+
+function isFulfill (packet: IlpPacket.IlpFulfill | IlpPacket.IlpRejection): packet is IlpPacket.IlpFulfill {
+  return packet.hasOwnProperty('fulfillment')
 }

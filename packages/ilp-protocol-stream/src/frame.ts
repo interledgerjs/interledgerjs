@@ -3,10 +3,12 @@ import BigNumber from 'bignumber.js'
 
 export enum FrameType {
   // TODO reorder frame numbers to something sensible
-  StreamMoney = 1,
+  // TODO combine packet number, amount arrived, and min destination amount frames?
+  PacketNumber = 1,
   SourceAccount = 2,
   AmountArrived = 3,
   MinimumDestinationAmount = 4,
+  StreamMoney = 5,
 }
 
 export abstract class Frame {
@@ -25,6 +27,56 @@ export abstract class Frame {
   static fromBuffer (reader: Reader): Frame {
     throw new Error(`class method "fromBuffer" is not implemented`)
   }
+}
+
+export enum PacketType {
+  // TODO should these match the ILP packet type number?
+  Prepare = 0,
+  Fulfill = 1,
+  Reject = 2,
+}
+
+export class PacketNumberFrame extends Frame {
+  readonly packetNumber: BigNumber
+  readonly packetType: PacketType
+
+  constructor (packetNumber: BigNumber.Value, packetType: PacketType) {
+    super(FrameType.PacketNumber, 'PacketNumber')
+    this.packetNumber = new BigNumber(packetNumber)
+    this.packetType = packetType
+  }
+
+  byteLength (): number {
+    // TODO do this without allocating the bytes
+    const writer = new Writer()
+    this.writeTo(writer)
+    return writer.getBuffer().length
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    writer.writeVarUInt(this.packetNumber)
+    writer.writeUInt8(this.packetType)
+    return writer
+  }
+
+  static fromBuffer (reader: Reader): PacketNumberFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.PacketNumber) {
+      throw new Error(`Cannot read PacketNumberFrame from Buffer. Expected type ${FrameType.PacketNumber}, got: ${type}`)
+    }
+    const packetNumber = reader.readVarUIntBigNum()
+    const packetType = reader.readUInt8BigNum().toNumber()
+    if (packetType > 2) {
+      throw new Error(`Unexpected packet type: ${packetType} (should be 0, 1, or 2 to indicate Prepare, Fulfill, or Reject, respectively)`)
+    } else {
+      return new PacketNumberFrame(packetNumber, packetType as PacketType)
+    }
+  }
+}
+
+export function isPacketNumberFrame (frame: Frame): frame is PacketNumberFrame {
+  return frame.type === FrameType.PacketNumber
 }
 
 export class StreamMoneyFrame extends Frame {
@@ -139,7 +191,7 @@ export class AmountArrivedFrame extends Frame {
       throw new Error(`Cannot read AmountArrivedFrame from Buffer. Expected type ${FrameType.AmountArrived}, got: ${type}`)
     }
 
-    const amount = reader.readVarUInt()
+    const amount = reader.readVarUIntBigNum()
     return new AmountArrivedFrame(amount)
   }
 }
@@ -174,7 +226,7 @@ export class MinimumDestinationAmountFrame extends Frame {
       throw new Error(`Cannot read MinimumDestinationAmountFrame from Buffer. Expected type ${FrameType.MinimumDestinationAmount}, got: ${type}`)
     }
 
-    const amount = reader.readVarUInt()
+    const amount = reader.readVarUIntBigNum()
     return new MinimumDestinationAmountFrame(amount)
   }
 }
@@ -191,6 +243,9 @@ export function parseFrames (buffer: Reader | Buffer): Frame[] {
     const type = reader.peekUInt8BigNum().toNumber()
 
     switch (type) {
+      case FrameType.PacketNumber:
+        frames.push(PacketNumberFrame.fromBuffer(reader))
+        break
       case FrameType.StreamMoney:
         frames.push(StreamMoneyFrame.fromBuffer(reader))
         break
