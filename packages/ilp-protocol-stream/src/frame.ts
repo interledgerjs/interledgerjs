@@ -5,6 +5,7 @@ export enum FrameType {
   // TODO reorder frame numbers to something sensible
   StreamMoney = 1,
   SourceAccount = 2,
+  AmountArrived = 3,
 }
 
 export abstract class Frame {
@@ -111,6 +112,41 @@ export function isSourceAccountFrame (frame: Frame): frame is SourceAccountFrame
   return frame.type === FrameType.SourceAccount
 }
 
+export class AmountArrivedFrame extends Frame {
+  readonly amount: BigNumber
+
+  constructor(amount: BigNumber.Value) {
+    super(FrameType.AmountArrived, 'AmountArrived')
+    this.amount = new BigNumber(amount)
+  }
+
+  byteLength (): number {
+    const writer = new Writer()
+    this.writeTo(writer)
+    return writer.getBuffer().length
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    writer.writeVarUInt(this.amount)
+    return writer
+  }
+
+  static fromBuffer (reader: Reader): AmountArrivedFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.AmountArrived) {
+      throw new Error(`Cannot read AmountArrivedFrame from Buffer. Expected type ${FrameType.AmountArrived}, got: ${type}`)
+    }
+
+    const amount = reader.readVarUInt()
+    return new AmountArrivedFrame(amount)
+  }
+}
+
+export function isAmountArrivedFrame (frame: Frame): frame is AmountArrivedFrame {
+  return frame.type === FrameType.AmountArrived
+}
+
 export function parseFrames (buffer: Reader | Buffer): Frame[] {
   const reader = Reader.from(buffer)
   const frames: Frame[] = []
@@ -123,7 +159,10 @@ export function parseFrames (buffer: Reader | Buffer): Frame[] {
         frames.push(StreamMoneyFrame.fromBuffer(reader))
         break
       case FrameType.SourceAccount:
-        frames.push(SourceAccountFrame.fromBuffer(reader))!
+        frames.push(SourceAccountFrame.fromBuffer(reader))
+        break
+      case FrameType.AmountArrived:
+        frames.push(AmountArrivedFrame.fromBuffer(reader))
         break
       default:
         throw new Error(`Unknown frame type: ${type}`)

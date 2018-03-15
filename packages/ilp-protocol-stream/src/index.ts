@@ -109,7 +109,6 @@ export class Server extends EventEmitter3 {
 
     } catch (err) {
       // TODO should the default be F00 or T00?
-      this.debug('error handling prepare:', err)
       return IlpPacket.serializeIlpReject({
         code: err.ilpErrorCode || 'F00',
         message: err.ilpErrorMessage || '',

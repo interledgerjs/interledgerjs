@@ -9,18 +9,23 @@ import {
   parseFrames,
   isStreamMoneyFrame,
   SourceAccountFrame,
-  isSourceAccountFrame
+  isSourceAccountFrame,
+  AmountArrivedFrame,
+  isAmountArrivedFrame
 } from './frame'
 import { Reader, Writer } from 'oer-utils'
 import { Plugin } from './types'
 import BigNumber from 'bignumber.js'
+
+const TEST_PACKET_AMOUNT = new BigNumber(1000)
 
 export interface ConnectionOpts {
   plugin: Plugin,
   destinationAccount?: string,
   sourceAccount: string,
   sharedSecret: Buffer,
-  isServer: boolean
+  isServer: boolean,
+  slippage?: BigNumber.Value
 }
 
 export interface StreamData<Stream> {
@@ -44,6 +49,7 @@ export class Connection extends EventEmitter3 {
   protected maximumPacketAmount: BigNumber
   protected closed: boolean
   protected shouldSendSourceAccount: boolean
+  protected exchangeRate?: BigNumber
 
   constructor (opts: ConnectionOpts) {
     super()
@@ -102,8 +108,11 @@ export class Connection extends EventEmitter3 {
     const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, prepare.data)
     const generatedCondition = cryptoHelper.hash(fulfillment)
     if (!generatedCondition.equals(prepare.executionCondition)) {
-      this.debug(`generated a different condition than the prepare had. generated: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
-      throw new IlpPacket.Errors.WrongConditionError('')
+      // TODO add padding to make it less obvious this is a quote response
+      const responseData = this.encodeAndEncryptData([new AmountArrivedFrame(prepare.amount)])
+
+      this.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
+      throw new IlpPacket.Errors.FinalApplicationError('', responseData)
     }
 
     // Parse frames
@@ -178,6 +187,11 @@ export class Connection extends EventEmitter3 {
     }
     this.sending = true
 
+    // Send a test packet first to determine the exchange rate
+    if (!this.exchangeRate && this.destinationAccount) {
+      await this.sendTestPacket()
+    }
+
     while (this.sending) {
       // Send multiple packets at the same time (don't await promise)
       await this.sendPacket()
@@ -197,13 +211,6 @@ export class Connection extends EventEmitter3 {
     }
 
     // Send control frames
-    if (this.shouldSendSourceAccount) {
-      // TODO attach a token to the account?
-      frames.push(new SourceAccountFrame(this.sourceAccount))
-
-      // TODO make sure to reset this if the packet fails
-      this.shouldSendSourceAccount = false
-    }
 
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromStream = this.maximumPacketAmount
@@ -232,6 +239,8 @@ export class Connection extends EventEmitter3 {
       }
     }
 
+    // Stop sending if there's no more to send
+    // TODO don't stop if there's still data to send
     if (amountToSend.isEqualTo(0)) {
       this.sending = false
     }
@@ -240,12 +249,7 @@ export class Connection extends EventEmitter3 {
     // TODO implement sending data
 
     // Encrypt
-    const dataWriter = new Writer()
-    for (let frame of frames) {
-      frame.writeTo(dataWriter)
-    }
-    const encodedFrames = dataWriter.getBuffer()
-    const data = cryptoHelper.encrypt(this.sharedSecret, encodedFrames)
+    const data = this.encodeAndEncryptData(frames)
 
     // Generate condition
     const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, data)
@@ -280,5 +284,79 @@ export class Connection extends EventEmitter3 {
     // TODO prevent replay attacks -- make sure response corresponds to request
 
     // Handle errors (shift the frames back into the queue)
+  }
+
+  protected async sendTestPacket (amount?: BigNumber) {
+    if (!this.destinationAccount) {
+      throw new Error('Cannot send test packet. Destination account is unknown')
+    }
+
+    const frames = []
+    if (this.shouldSendSourceAccount) {
+      // TODO attach a token to the account?
+      frames.push(new SourceAccountFrame(this.sourceAccount))
+
+      // TODO make sure to reset this if the packet fails
+      this.shouldSendSourceAccount = false
+    }
+
+    const sourceAmount = amount || BigNumber.minimum(TEST_PACKET_AMOUNT, this.maximumPacketAmount)
+    this.debug(`sending test packet for amount: ${sourceAmount}`)
+    const prepare = {
+      destination: this.destinationAccount,
+      amount: (sourceAmount).toString(),
+      data: this.encodeAndEncryptData(frames),
+      executionCondition: cryptoHelper.generateRandomCondition(),
+      expiresAt: new Date(Date.now() + 30000)
+    }
+
+    const result = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
+
+    let reject: IlpPacket.IlpRejection
+    try {
+      reject = IlpPacket.deserializeIlpReject(result)
+    } catch (err) {
+      this.debug(`response is not an ILP Reject packet:`, result.toString('hex'))
+      throw new Error('Response to sendTestPacket is not an ILP Reject packet')
+    }
+
+    // TODO handle F08 errors
+    if (reject.code === 'F99' && reject.data.length > 0) {
+      let frames: Frame[]
+      try {
+        const decrypted = cryptoHelper.decrypt(this.sharedSecret, reject.data)
+        frames = parseFrames(decrypted)
+      } catch (err) {
+        this.debug(`unable to decrypt test packet response:`, err, reject.data.toString('hex'))
+        throw new Error('Test packet response was corrupted')
+      }
+
+      for (let frame of frames) {
+        if (isAmountArrivedFrame(frame)) {
+          this.exchangeRate = frame.amount.dividedBy(sourceAmount)
+          this.debug(`determined exchange rate to be: ${this.exchangeRate}`)
+          break
+        }
+      }
+      if (!this.exchangeRate) {
+        throw new Error('No AmountArrivedFrame in test packet response')
+      } else if (this.exchangeRate.isEqualTo(0)) {
+        // TODO this could also happen if the exchange rate is less than 1 / TEST_PACKET_AMOUNT
+        throw new Error('Exchange rate is 0. We will not be able to send anything through this path')
+      }
+    } else {
+      this.debug(`unexpected test packet response. code: ${reject.code}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
+      throw new Error(`Unexpected test packet response: ${reject.code}`)
+    }
+  }
+
+  protected encodeAndEncryptData (frames: Frame[]): Buffer {
+    const writer = new Writer()
+    for (let frame of frames) {
+      frame.writeTo(writer)
+    }
+    const encodedFrames = writer.getBuffer()
+    const data = cryptoHelper.encrypt(this.sharedSecret, encodedFrames)
+    return data
   }
 }

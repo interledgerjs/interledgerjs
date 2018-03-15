@@ -24,6 +24,10 @@ export function generateSharedSecretFromToken (seed: Buffer, token: Buffer): Buf
   return sharedSecret
 }
 
+export function generateRandomCondition () {
+  return crypto.randomBytes(32)
+}
+
 export function generateFulfillment (sharedSecret: Buffer, data: Buffer) {
   const fulfillmentKey = hmac(sharedSecret, FULFILLMENT_GENERATION_STRING)
   const fulfillment = hmac(fulfillmentKey, data)
