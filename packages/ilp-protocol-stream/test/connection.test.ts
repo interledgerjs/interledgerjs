@@ -3,6 +3,7 @@ import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
 import MockPlugin from './mocks/plugin'
 import { MoneyStream } from '../src/money-stream'
+import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
@@ -44,9 +45,7 @@ describe('Connection', function () {
       const clientStream = this.clientConn.createMoneyStream()
       clientStream.send(117)
 
-      // TODO flushed should only resolve when the money has been received
       await clientStream.flushed()
-      await new Promise((resolve, reject) => setImmediate(resolve))
 
       assert.calledOnce(spy)
       assert.calledWith(spy, '58')
@@ -71,12 +70,8 @@ describe('Connection', function () {
       clientStream1.send(117)
       clientStream2.send(204)
 
-      // TODO flushed should only resolve when the money has been received
       await clientStream1.flushed()
       await clientStream2.flushed()
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      // TODO why is the second one necessary?
-      await new Promise((resolve, reject) => setImmediate(resolve))
 
       assert.calledTwice(moneyStreamSpy)
       assert.calledTwice(incomingSpy)
@@ -84,6 +79,15 @@ describe('Connection', function () {
       assert.calledWith(incomingSpy.secondCall, '101')
       assert.calledOnce(sendDataSpy)
     })
+  })
 
+  describe('Final Error Handling', function () {
+    it.skip('should return the balance to the money streams if sending fails', async function () {
+
+    })
+
+    it.skip('should not resolve the flushed promise until the money has been delivered', async function () {
+
+    })
   })
 })

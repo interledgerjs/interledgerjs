@@ -15,16 +15,18 @@ export class MoneyStream extends EventEmitter3 {
   protected _amountIncoming: BigNumber
   protected _amountOutgoing: BigNumber
   protected closed: boolean
+  protected holds: { [id: string]: BigNumber }
 
   constructor (opts: MoneyStreamOpts) {
     super()
     this.id = opts.id
     this.isServer = opts.isServer
-    this.debug = Debug(`ilp-protocol-stream:Stream:${this.id}:${this.isServer ? 'Server' : 'Client'}`)
+    this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:MoneyStream:${this.id}`)
 
     this._amountIncoming = new BigNumber(0)
     this._amountOutgoing = new BigNumber(0)
     this.closed = false
+    this.holds = {}
   }
 
   get amountIncoming (): BigNumber {
@@ -94,7 +96,7 @@ export class MoneyStream extends EventEmitter3 {
     return new Promise((resolve, reject) => {
       const self = this
       function outgoingHandler () {
-        if (self._amountOutgoing.isEqualTo(0)) {
+        if (self._amountOutgoing.isEqualTo(0) && Object.keys(self.holds).length === 0) {
           cleanup()
           resolve()
         }
@@ -124,14 +126,41 @@ export class MoneyStream extends EventEmitter3 {
   }
 
   /**
-   * (Internal) Take money out of the stream (to send to an external destination)
+   * (Internal) Hold outgoing balance
    * @private
    */
-  _takeFromOutgoing (maxAmount?: BigNumber): BigNumber {
+  _holdOutgoing (holdId: string, maxAmount?: BigNumber): BigNumber {
     const amountToReceive = (maxAmount === undefined ? this._amountOutgoing : BigNumber.minimum(maxAmount, this._amountOutgoing))
     this._amountOutgoing = this._amountOutgoing.minus(amountToReceive)
-    this.emit(`sending money from stream to external destination: ${amountToReceive} (amountOutgoing: ${this._amountOutgoing})`)
-    this.emit('outgoing', amountToReceive.toString())
+    this.holds[holdId] = amountToReceive
+    this.debug(`holding outgoing balance. holdId: ${holdId}, amount: ${amountToReceive}`)
     return amountToReceive
+  }
+
+  /**
+   * (Internal) Execute hold when money has been successfully transferred
+   * @private
+   */
+  _executeHold (holdId: string): void {
+    if (!this.holds[holdId]) {
+      return
+    }
+    const amount = this.holds[holdId].toString()
+    delete this.holds[holdId]
+    this.debug(`executed holdId: ${holdId} for: ${amount}`)
+    this.emit('outgoing', amount)
+  }
+
+  /**
+   * (Internal) Cancel hold if sending money failed
+   * @private
+   */
+  _cancelHold (holdId: string): void {
+    if (!this.holds[holdId]) {
+      return
+    }
+    this.debug(`cancelled holdId: ${holdId} for: ${this.holds[holdId]}`)
+    this._amountOutgoing = this._amountOutgoing.plus(this.holds[holdId])
+    delete this.holds[holdId]
   }
 }

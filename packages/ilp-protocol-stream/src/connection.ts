@@ -70,7 +70,7 @@ export class Connection extends EventEmitter3 {
     this.outgoingPacketNumber = 0
     this.moneyStreams = []
     this.nextStreamId = (this.isServer ? 1 : 2)
-    this.debug = Debug(`ilp-protocol-stream:Connection:${this.isServer ? 'Server' : 'Client'}`)
+    this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
     this.closed = true
     this.shouldSendSourceAccount = !opts.isServer
@@ -281,13 +281,14 @@ export class Connection extends EventEmitter3 {
 
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromStream = this.maximumPacketAmount
+    const moneyStreamsSentFrom = []
     for (let msRecord of this.moneyStreams) {
       if (!msRecord || msRecord.sentClose) {
         // TODO just remove closed streams?
         continue
       }
 
-      const amountToSendFromStream = msRecord.stream._takeFromOutgoing(maxAmountFromStream)
+      const amountToSendFromStream = msRecord.stream._holdOutgoing(packetNumber.toString(), maxAmountFromStream)
       if (amountToSendFromStream.isEqualTo(0)) {
         continue
       }
@@ -300,6 +301,7 @@ export class Connection extends EventEmitter3 {
       maxAmountFromStream = maxAmountFromStream.minus(amountToSendFromStream)
 
       msRecord.sentClose = isEnd || msRecord.sentClose
+      moneyStreamsSentFrom.push(msRecord.stream)
 
       if (maxAmountFromStream.isEqualTo(0)) {
         break
@@ -310,6 +312,7 @@ export class Connection extends EventEmitter3 {
     // TODO don't stop if there's still data to send
     if (amountToSend.isEqualTo(0)) {
       this.sending = false
+      return
     }
 
     // Set minimum destination amount
@@ -371,7 +374,24 @@ export class Connection extends EventEmitter3 {
 
     this.ensurePacketNumberMatches(responseFrames, packetNumber, (isFulfill(packet) ? PacketType.Fulfill : PacketType.Reject))
 
-    // Handle errors (shift the frames back into the queue)
+    // Handle fulfillment
+    if (isFulfill(packet)) {
+      if (!cryptoHelper.hash(packet.fulfillment).equals(executionCondition)) {
+        this.debug(`got invalid fulfillment: ${packet.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
+        throw new Error(`Got invalid fulfillment. Actual: ${packet.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
+      }
+      for (let moneyStream of moneyStreamsSentFrom) {
+        moneyStream._executeHold(packetNumber.toString())
+      }
+      return
+    }
+
+    // Handle errors
+
+    // Put money back into MoneyStreams
+    for (let moneyStream of moneyStreamsSentFrom) {
+      moneyStream._cancelHold(packetNumber.toString())
+    }
   }
 
   protected async sendTestPacket (amount?: BigNumber) {
