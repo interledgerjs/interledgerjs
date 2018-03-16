@@ -18,7 +18,7 @@ import {
   isPacketNumberFrame,
   PacketType
 } from './frame'
-import { Reader, Writer } from 'oer-utils'
+import { Writer } from 'oer-utils'
 import { Plugin } from './types'
 import BigNumber from 'bignumber.js'
 
@@ -450,7 +450,7 @@ export class Connection extends EventEmitter3 {
     return data
   }
 
-  protected ensurePacketNumberMatches(responseFrames: Frame[], packetNumber: BigNumber.Value, packetType: PacketType): void {
+  protected ensurePacketNumberMatches (responseFrames: Frame[], packetNumber: BigNumber.Value, packetType: PacketType): void {
     // Check that response packet number matches outgoing number
     const packetNumberFrame = responseFrames.find(isPacketNumberFrame)
     if (!packetNumberFrame) {

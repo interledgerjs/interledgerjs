@@ -49,7 +49,7 @@ export class MoneyStream extends EventEmitter3 {
    *
    * @param amount Amount to send
    */
-  send(amount: BigNumber.Value): void {
+  send (amount: BigNumber.Value): void {
     if (this.closed) {
       throw new Error('Stream already closed')
     }

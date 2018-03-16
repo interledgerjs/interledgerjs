@@ -8,7 +8,7 @@ export enum FrameType {
   SourceAccount = 2,
   AmountArrived = 3,
   MinimumDestinationAmount = 4,
-  StreamMoney = 5,
+  StreamMoney = 5
 }
 
 export abstract class Frame {
@@ -20,20 +20,20 @@ export abstract class Frame {
     this.name = name
   }
 
-  abstract byteLength (): number
-
-  abstract writeTo (writer: Writer): Writer
-
   static fromBuffer (reader: Reader): Frame {
     throw new Error(`class method "fromBuffer" is not implemented`)
   }
+
+  abstract byteLength (): number
+
+  abstract writeTo (writer: Writer): Writer
 }
 
 export enum PacketType {
   // TODO should these match the ILP packet type number?
   Prepare = 0,
   Fulfill = 1,
-  Reject = 2,
+  Reject = 2
 }
 
 export class PacketNumberFrame extends Frame {
@@ -44,20 +44,6 @@ export class PacketNumberFrame extends Frame {
     super(FrameType.PacketNumber, 'PacketNumber')
     this.packetNumber = new BigNumber(packetNumber)
     this.packetType = packetType
-  }
-
-  byteLength (): number {
-    // TODO do this without allocating the bytes
-    const writer = new Writer()
-    this.writeTo(writer)
-    return writer.getBuffer().length
-  }
-
-  writeTo (writer: Writer): Writer {
-    writer.writeUInt8(this.type)
-    writer.writeVarUInt(this.packetNumber)
-    writer.writeUInt8(this.packetType)
-    return writer
   }
 
   static fromBuffer (reader: Reader): PacketNumberFrame {
@@ -72,6 +58,20 @@ export class PacketNumberFrame extends Frame {
     } else {
       return new PacketNumberFrame(packetNumber, packetType as PacketType)
     }
+  }
+
+  byteLength (): number {
+    // TODO do this without allocating the bytes
+    const writer = new Writer()
+    this.writeTo(writer)
+    return writer.getBuffer().length
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    writer.writeVarUInt(this.packetNumber)
+    writer.writeUInt8(this.packetType)
+    return writer
   }
 }
 
@@ -90,6 +90,18 @@ export class StreamMoneyFrame extends Frame {
     this.streamId = new BigNumber(streamId)
     this.shares = new BigNumber(amount)
     this.isEnd = isEnd
+  }
+
+  static fromBuffer (reader: Reader): StreamMoneyFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.StreamMoney) {
+      throw new Error(`Cannot read StreamMoneyFrame from Buffer. Expected type ${FrameType.StreamMoney}, got: ${type}`)
+    }
+
+    const streamId = reader.readVarUIntBigNum()
+    const amount = reader.readVarUIntBigNum()
+    const isEnd = reader.readUInt8BigNum().toNumber() === 1
+    return new StreamMoneyFrame(streamId, amount, isEnd)
   }
 
   byteLength (): number {
@@ -111,18 +123,6 @@ export class StreamMoneyFrame extends Frame {
     writer.writeUInt8(this.isEnd ? 1 : 0)
     return writer
   }
-
-  static fromBuffer (reader: Reader): StreamMoneyFrame {
-    const type = reader.readUInt8BigNum().toNumber()
-    if (type !== FrameType.StreamMoney) {
-      throw new Error(`Cannot read StreamMoneyFrame from Buffer. Expected type ${FrameType.StreamMoney}, got: ${type}`)
-    }
-
-    const streamId = reader.readVarUIntBigNum()
-    const amount = reader.readVarUIntBigNum()
-    const isEnd = reader.readUInt8BigNum().toNumber() === 1
-    return new StreamMoneyFrame(streamId, amount, isEnd)
-  }
 }
 
 export function isStreamMoneyFrame (frame: Frame): frame is StreamMoneyFrame {
@@ -137,6 +137,16 @@ export class SourceAccountFrame extends Frame {
     this.sourceAccount = sourceAccount
   }
 
+  static fromBuffer (reader: Reader): SourceAccountFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.SourceAccount) {
+      throw new Error(`Cannot read SourceAccountFrame from Buffer. Expected type ${FrameType.SourceAccount}, got: ${type}`)
+    }
+
+    const sourceAccount = reader.readVarOctetString().toString('utf8')
+    return new SourceAccountFrame(sourceAccount)
+  }
+
   byteLength (): number {
     const predictor = new Predictor()
     predictor.writeUInt8(this.type)
@@ -149,16 +159,6 @@ export class SourceAccountFrame extends Frame {
     writer.writeVarOctetString(Buffer.from(this.sourceAccount))
     return writer
   }
-
-  static fromBuffer (reader: Reader): SourceAccountFrame {
-    const type = reader.readUInt8BigNum().toNumber()
-    if (type !== FrameType.SourceAccount) {
-      throw new Error(`Cannot read SourceAccountFrame from Buffer. Expected type ${FrameType.SourceAccount}, got: ${type}`)
-    }
-
-    const sourceAccount = reader.readVarOctetString().toString('utf8')
-    return new SourceAccountFrame(sourceAccount)
-  }
 }
 
 export function isSourceAccountFrame (frame: Frame): frame is SourceAccountFrame {
@@ -168,21 +168,9 @@ export function isSourceAccountFrame (frame: Frame): frame is SourceAccountFrame
 export class AmountArrivedFrame extends Frame {
   readonly amount: BigNumber
 
-  constructor(amount: BigNumber.Value) {
+  constructor (amount: BigNumber.Value) {
     super(FrameType.AmountArrived, 'AmountArrived')
     this.amount = new BigNumber(amount)
-  }
-
-  byteLength (): number {
-    const writer = new Writer()
-    this.writeTo(writer)
-    return writer.getBuffer().length
-  }
-
-  writeTo (writer: Writer): Writer {
-    writer.writeUInt8(this.type)
-    writer.writeVarUInt(this.amount)
-    return writer
   }
 
   static fromBuffer (reader: Reader): AmountArrivedFrame {
@@ -194,19 +182,6 @@ export class AmountArrivedFrame extends Frame {
     const amount = reader.readVarUIntBigNum()
     return new AmountArrivedFrame(amount)
   }
-}
-
-export function isAmountArrivedFrame (frame: Frame): frame is AmountArrivedFrame {
-  return frame.type === FrameType.AmountArrived
-}
-
-export class MinimumDestinationAmountFrame extends Frame {
-  readonly amount: BigNumber
-
-  constructor(amount: BigNumber.Value) {
-    super(FrameType.MinimumDestinationAmount, 'MinimumDestinationAmount')
-    this.amount = new BigNumber(amount)
-  }
 
   byteLength (): number {
     const writer = new Writer()
@@ -219,6 +194,19 @@ export class MinimumDestinationAmountFrame extends Frame {
     writer.writeVarUInt(this.amount)
     return writer
   }
+}
+
+export function isAmountArrivedFrame (frame: Frame): frame is AmountArrivedFrame {
+  return frame.type === FrameType.AmountArrived
+}
+
+export class MinimumDestinationAmountFrame extends Frame {
+  readonly amount: BigNumber
+
+  constructor (amount: BigNumber.Value) {
+    super(FrameType.MinimumDestinationAmount, 'MinimumDestinationAmount')
+    this.amount = new BigNumber(amount)
+  }
 
   static fromBuffer (reader: Reader): MinimumDestinationAmountFrame {
     const type = reader.readUInt8BigNum().toNumber()
@@ -228,6 +216,18 @@ export class MinimumDestinationAmountFrame extends Frame {
 
     const amount = reader.readVarUIntBigNum()
     return new MinimumDestinationAmountFrame(amount)
+  }
+
+  byteLength (): number {
+    const writer = new Writer()
+    this.writeTo(writer)
+    return writer.getBuffer().length
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    writer.writeVarUInt(this.amount)
+    return writer
   }
 }
 

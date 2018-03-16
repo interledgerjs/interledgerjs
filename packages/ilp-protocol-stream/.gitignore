@@ -2,3 +2,7 @@
 node_modules
 src/*.js*
 src/*.d.ts
+test/*.js*
+test/*.d.ts
+coverage
+.nyc_output
