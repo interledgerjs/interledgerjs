@@ -24,6 +24,7 @@ import BigNumber from 'bignumber.js'
 import 'source-map-support/register'
 
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
+const RETRY_DELAY_START = 100
 
 export interface ConnectionOpts {
   plugin: Plugin,
@@ -59,8 +60,10 @@ export class Connection extends EventEmitter3 {
   /** The path's Maximum Packet Amount, discovered through F08 errors */
   protected maximumPacketAmount: BigNumber
   protected closed: boolean
+  /** Indicates whether we need to tell the other side our account (mostly for the client side on startup) */
   protected shouldSendSourceAccount: boolean
   protected exchangeRate?: BigNumber
+  protected retryDelay: number
 
   constructor (opts: ConnectionOpts) {
     super()
@@ -81,6 +84,7 @@ export class Connection extends EventEmitter3 {
 
     this.maximumPacketAmount = new BigNumber(Infinity)
     this.testMaximumPacketAmount = new BigNumber(Infinity)
+    this.retryDelay = RETRY_DELAY_START
 
     // TODO limit total amount buffered for all streams?
   }
@@ -267,6 +271,7 @@ export class Connection extends EventEmitter3 {
       try {
         await this.sendPacket()
       } catch (err) {
+        this.sending = false
         this.debug('error in sendPacket loop:', err)
         this.emit('error', err)
 
@@ -397,6 +402,9 @@ export class Connection extends EventEmitter3 {
         this.debug(`maximum packet amount is between ${this.testMaximumPacketAmount} and ${this.maximumPacketAmount}, trying: ${newTestMax}`)
         this.testMaximumPacketAmount = newTestMax
       }
+
+      // Reset the retry delay
+      this.retryDelay = RETRY_DELAY_START
     } else {
       // Handle reject
 
@@ -497,7 +505,7 @@ export class Connection extends EventEmitter3 {
     }
   }
 
-  protected handleConnectorError (reject: IlpPacket.IlpRejection, amountSent: BigNumber, retry: () => Promise<void>) {
+  protected async handleConnectorError (reject: IlpPacket.IlpRejection, amountSent: BigNumber, retry: () => Promise<void>) {
     this.debug(`handling reject:`, JSON.stringify(reject))
     if (reject.code === 'F08') {
       let receivedAmount: BigNumber | undefined = undefined
@@ -526,9 +534,15 @@ export class Connection extends EventEmitter3 {
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
       return retry()
+    } else if (reject.code[0] === 'T') {
+      this.debug(`got temporary error. waiting ${this.retryDelay} before trying again`)
+      const delay = this.retryDelay
+      this.retryDelay = this.retryDelay * 2
+      await new Promise((resolve, reject) => setTimeout(resolve, delay))
+      return retry()
     } else {
       this.debug(`unexpected error. code: ${reject.code}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
-      throw new Error(`Unexpected response to packet: ${reject.code}`)
+      throw new Error(`Unexpected error while sending packet. Code: ${reject.code}, message: ${reject.message}`)
     }
   }
 

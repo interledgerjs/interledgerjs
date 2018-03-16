@@ -5,6 +5,7 @@ import MockPlugin from './mocks/plugin'
 import { MoneyStream } from '../src/money-stream'
 import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
+import * as lolex from 'lolex'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
@@ -191,17 +192,80 @@ describe('Connection', function () {
     })
   })
 
-  describe('Temporary Error Handling', function () {
+  describe('Error Handling', function () {
+    it('should emit an error and reject all flushed promises if a packet is rejected with an unexpected final error code', async function () {
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+      sendDataStub.resolves(IlpPacket.serializeIlpReject({
+        code: 'F89',
+        message: 'Blah',
+        data: Buffer.alloc(0),
+        triggeredBy: 'test.connector'
+      }))
 
-  })
+      const clientStream1 = this.clientConn.createMoneyStream()
+      const clientStream2 = this.clientConn.createMoneyStream()
+      clientStream1.send(117)
+      clientStream2.send(204)
 
-  describe('Final Error Handling', function () {
-    it.skip('should return the balance to the money streams if sending fails', async function () {
-
+      return Promise.all([
+        assert.isRejected(clientStream1.flushed(), 'Unexpected error while sending packet. Code: F89, message: Blah'),
+        assert.isRejected(clientStream2.flushed(), 'Unexpected error while sending packet. Code: F89, message: Blah')
+      ])
     })
 
-    it.skip('should not resolve the flushed promise until the money has been delivered', async function () {
+    it('should retry on temporary errors', async function () {
+      let clock: any
+      const interval = setInterval(() => {
+        if (clock) {
+          clock.tick(100)
+        }
+      }, 1)
+      clock = lolex.install({
+        toFake: ['setTimeout']
+      })
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T00',
+          message: 'Internal Server Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .onSecondCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .onThirdCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T89',
+          message: 'Some other error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .callThrough()
 
+      const clientStream = this.clientConn.createMoneyStream()
+      clientStream.send(100)
+      await clientStream.flushed()
+      assert.callCount(sendDataStub, 4)
+      clearInterval(interval)
+      clock.uninstall()
+    })
+
+    it('should return the balance to the money streams if sending fails', async function () {
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+      sendDataStub.resolves(IlpPacket.serializeIlpReject({
+        code: 'F89',
+        message: 'Blah',
+        data: Buffer.alloc(0),
+        triggeredBy: 'test.connector'
+      }))
+
+      const clientStream1 = this.clientConn.createMoneyStream()
+      clientStream1.send(117)
+
+      await assert.isRejected(clientStream1.flushed(), 'Unexpected error while sending packet. Code: F89, message: Blah')
+      assert.equal(clientStream1.amountOutgoing.toString(), '117')
     })
   })
 })
