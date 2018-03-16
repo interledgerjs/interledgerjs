@@ -23,6 +23,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
     sharedSecret: opts.sharedSecret,
     isServer: false
   })
+  connection.connect()
   // TODO resolve only when it is connected
   return connection
 }
@@ -51,6 +52,12 @@ export class Server extends EventEmitter3 {
     this.plugin.registerDataHandler(this.handleData.bind(this))
     await this.plugin.connect()
     this.sourceAccount = (await ILDCP.fetch(this.plugin.sendData.bind(this.plugin))).clientAddress
+  }
+
+  async acceptConnection (): Promise<Connection> {
+    return new Promise((resolve, reject) => {
+      this.once('connection', resolve)
+    }) as Promise<Connection>
   }
 
   generateAddressAndSecret (): { destinationAccount: string, sharedSecret: Buffer } {

@@ -85,6 +85,34 @@ export class MoneyStream extends EventEmitter3 {
     return amountToReceive
   }
 
+  async flushed (): Promise<void> {
+    if (this._amountOutgoing.isEqualTo(0)) {
+      return Promise.resolve()
+    }
+
+    // TODO should this only wait for the current amount to be sent, rather than any additional added after?
+    return new Promise((resolve, reject) => {
+      const self = this
+      function outgoingHandler () {
+        if (self._amountOutgoing.isEqualTo(0)) {
+          cleanup()
+          resolve()
+        }
+      }
+      function errorHandler (err: Error) {
+        cleanup()
+        reject(err)
+      }
+      function cleanup () {
+        self.removeListener('outgoing', outgoingHandler)
+        self.removeListener('error', errorHandler)
+      }
+
+      this.on('outgoing', outgoingHandler)
+      this.once('error', errorHandler)
+    }) as Promise<void>
+  }
+
   /**
    * (Internal) Add money to the stream (from an external source)
    * @private

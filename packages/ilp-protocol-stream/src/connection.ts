@@ -80,6 +80,11 @@ export class Connection extends EventEmitter3 {
     // TODO limit total amount buffered for all streams?
   }
 
+  // TODO should this be async and resolve when it's connected?
+  connect (): void {
+    this.startSendLoop()
+  }
+
   createMoneyStream (): MoneyStream {
     // TODO should this inform the other side?
     const stream = new MoneyStream({
@@ -95,7 +100,7 @@ export class Connection extends EventEmitter3 {
     this.debug(`created money stream: ${this.nextStreamId}`)
     this.nextStreamId += 2
 
-    stream.on('_send', () => this.startSendLoop())
+    stream.on('_send', this.startSendLoop.bind(this))
     // TODO notify when the stream is closed
 
     return stream
@@ -139,7 +144,7 @@ export class Connection extends EventEmitter3 {
         throw new IlpPacket.Errors.UnexpectedPaymentError('')
       }
     }
-    this.debug(`handling packet number: ${packetNumber}`)
+    this.debug(`handling packet number: ${packetNumber} with frames: ${JSON.stringify(requestFrames)}`)
 
     const throwFinalApplicationError = () => {
       responseFrames.push(new PacketNumberFrame(packetNumber, PacketType.Reject))
@@ -199,7 +204,7 @@ export class Connection extends EventEmitter3 {
           } as StreamData<MoneyStream>
 
           this.emit('money_stream', stream)
-          stream.on('_send', () => this.startSendLoop())
+          stream.on('_send', this.startSendLoop.bind(this))
 
           // Handle the new frame on the next tick of the event loop
           // to wait for event handlers that may be added to the new stream

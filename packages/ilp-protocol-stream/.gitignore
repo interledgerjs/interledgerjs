@@ -1,8 +1,7 @@
 .vscode
 node_modules
-src/*.js*
-src/*.d.ts
-test/*.js*
-test/*.d.ts
+**/*.js*
+**/*.d.ts
+!example.js
 coverage
 .nyc_output
