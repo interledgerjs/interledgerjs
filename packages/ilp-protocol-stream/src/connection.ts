@@ -18,9 +18,10 @@ import {
   isPacketNumberFrame,
   PacketType
 } from './frame'
-import { Writer } from 'oer-utils'
+import { Writer, Reader } from 'oer-utils'
 import { Plugin } from './types'
 import BigNumber from 'bignumber.js'
+import 'source-map-support/register'
 
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
 
@@ -53,6 +54,9 @@ export class Connection extends EventEmitter3 {
   protected nextStreamId: number
   protected debug: Debug.IDebugger
   protected sending: boolean
+  /** Used to probe for the Maximum Packet Amount if the connectors don't tell us directly */
+  protected testMaximumPacketAmount: BigNumber
+  /** The path's Maximum Packet Amount, discovered through F08 errors */
   protected maximumPacketAmount: BigNumber
   protected closed: boolean
   protected shouldSendSourceAccount: boolean
@@ -76,6 +80,7 @@ export class Connection extends EventEmitter3 {
     this.shouldSendSourceAccount = !opts.isServer
 
     this.maximumPacketAmount = new BigNumber(Infinity)
+    this.testMaximumPacketAmount = new BigNumber(Infinity)
 
     // TODO limit total amount buffered for all streams?
   }
@@ -246,6 +251,13 @@ export class Connection extends EventEmitter3 {
       } catch (err) {
         this.debug('error sending test packet:', err)
         this.emit('error', err)
+
+        // TODO should a connection error be an error on all of the streams?
+        for (let msRecord of this.moneyStreams) {
+          if (msRecord && !msRecord.sentClose) {
+            msRecord.stream.emit('error', err)
+          }
+        }
         return
       }
     }
@@ -257,6 +269,13 @@ export class Connection extends EventEmitter3 {
       } catch (err) {
         this.debug('error in sendPacket loop:', err)
         this.emit('error', err)
+
+        // TODO should a connection error be an error on all of the streams?
+        for (let msRecord of this.moneyStreams) {
+          if (msRecord && !msRecord.sentClose) {
+            msRecord.stream.emit('error', err)
+          }
+        }
       }
 
       // Figure out if we need to wait before sending the next one
@@ -280,7 +299,7 @@ export class Connection extends EventEmitter3 {
     // Send control frames
 
     // Determine how much to send based on amount frames and path maximum packet amount
-    let maxAmountFromStream = this.maximumPacketAmount
+    let maxAmountFromStream = this.testMaximumPacketAmount
     const moneyStreamsSentFrom = []
     for (let msRecord of this.moneyStreams) {
       if (!msRecord || msRecord.sentClose) {
@@ -359,8 +378,40 @@ export class Connection extends EventEmitter3 {
       throw new Error(`Invalid response when sending packet: ${err.message}`)
     }
 
+    // Handle fulfillment
+    if (isFulfill(packet)) {
+      if (!cryptoHelper.hash(packet.fulfillment).equals(executionCondition)) {
+        this.debug(`got invalid fulfillment: ${packet.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
+        throw new Error(`Got invalid fulfillment. Actual: ${packet.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
+      }
+      for (let moneyStream of moneyStreamsSentFrom) {
+        moneyStream._executeHold(packetNumber.toString())
+      }
+
+      // If we're trying to pinpoint the Maximum Packet Amount, raise
+      // the limit because we know that the testMaximumPacketAmount works
+      if (this.maximumPacketAmount.isFinite()
+        && amountToSend.isEqualTo(this.testMaximumPacketAmount)
+        && this.testMaximumPacketAmount.isLessThan(this.maximumPacketAmount)) {
+        const newTestMax = this.maximumPacketAmount.plus(this.testMaximumPacketAmount).dividedToIntegerBy(2)
+        this.debug(`maximum packet amount is between ${this.testMaximumPacketAmount} and ${this.maximumPacketAmount}, trying: ${newTestMax}`)
+        this.testMaximumPacketAmount = newTestMax
+      }
+    } else {
+      // Handle reject
+
+      // Put money back into MoneyStreams
+      for (let moneyStream of moneyStreamsSentFrom) {
+        moneyStream._cancelHold(packetNumber.toString())
+      }
+
+      if (packet.code !== 'F99') {
+        return this.handleConnectorError(packet, amountToSend, this.sendPacket.bind(this))
+      }
+    }
+
+    // Parse response data from receiver
     let responseFrames: Frame[] = []
-    // TODO handle F08 data
     if (packet.data.length > 0) {
       try {
         const decrypted = cryptoHelper.decrypt(this.sharedSecret, packet.data)
@@ -374,27 +425,10 @@ export class Connection extends EventEmitter3 {
 
     this.ensurePacketNumberMatches(responseFrames, packetNumber, (isFulfill(packet) ? PacketType.Fulfill : PacketType.Reject))
 
-    // Handle fulfillment
-    if (isFulfill(packet)) {
-      if (!cryptoHelper.hash(packet.fulfillment).equals(executionCondition)) {
-        this.debug(`got invalid fulfillment: ${packet.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
-        throw new Error(`Got invalid fulfillment. Actual: ${packet.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
-      }
-      for (let moneyStream of moneyStreamsSentFrom) {
-        moneyStream._executeHold(packetNumber.toString())
-      }
-      return
-    }
-
-    // Handle errors
-
-    // Put money back into MoneyStreams
-    for (let moneyStream of moneyStreamsSentFrom) {
-      moneyStream._cancelHold(packetNumber.toString())
-    }
+    // Handle response data from receiver
   }
 
-  protected async sendTestPacket (amount?: BigNumber) {
+  protected async sendTestPacket (amount?: BigNumber): Promise<void> {
     if (!this.destinationAccount) {
       throw new Error('Cannot send test packet. Destination account is unknown')
     }
@@ -413,7 +447,7 @@ export class Connection extends EventEmitter3 {
       this.shouldSendSourceAccount = false
     }
 
-    const sourceAmount = amount || BigNumber.minimum(TEST_PACKET_AMOUNT, this.maximumPacketAmount)
+    const sourceAmount = amount || BigNumber.minimum(TEST_PACKET_AMOUNT, this.testMaximumPacketAmount)
     this.debug(`sending test packet number: ${packetNumber} for amount: ${sourceAmount}`)
     const prepare = {
       destination: this.destinationAccount,
@@ -433,35 +467,68 @@ export class Connection extends EventEmitter3 {
       throw new Error('Response to sendTestPacket is not an ILP Reject packet')
     }
 
-    // TODO handle F08 errors
-    if (reject.code === 'F99' && reject.data.length > 0) {
-      let responseFrames: Frame[]
-      try {
-        const decrypted = cryptoHelper.decrypt(this.sharedSecret, reject.data)
-        responseFrames = parseFrames(decrypted)
-      } catch (err) {
-        this.debug(`unable to decrypt test packet response:`, err, reject.data.toString('hex'))
-        throw new Error('Test packet response was corrupted')
-      }
+    if (reject.code !== 'F99') {
+      return this.handleConnectorError(reject, sourceAmount, this.sendTestPacket.bind(this))
+    }
 
-      this.ensurePacketNumberMatches(responseFrames, packetNumber, PacketType.Reject)
+    let responseFrames: Frame[]
+    try {
+      const decrypted = cryptoHelper.decrypt(this.sharedSecret, reject.data)
+      responseFrames = parseFrames(decrypted)
+    } catch (err) {
+      this.debug(`unable to decrypt test packet response:`, err, reject.data.toString('hex'))
+      throw new Error('Test packet response was corrupted')
+    }
 
-      for (let frame of responseFrames) {
-        if (isAmountArrivedFrame(frame)) {
-          this.exchangeRate = frame.amount.dividedBy(sourceAmount)
-          this.debug(`determined exchange rate to be: ${this.exchangeRate}`)
-          break
-        }
+    this.ensurePacketNumberMatches(responseFrames, packetNumber, PacketType.Reject)
+
+    for (let frame of responseFrames) {
+      if (isAmountArrivedFrame(frame)) {
+        this.exchangeRate = frame.amount.dividedBy(sourceAmount)
+        this.debug(`determined exchange rate to be: ${this.exchangeRate}`)
+        break
       }
-      if (!this.exchangeRate) {
-        throw new Error('No AmountArrivedFrame in test packet response')
-      } else if (this.exchangeRate.isEqualTo(0)) {
-        // TODO this could also happen if the exchange rate is less than 1 / TEST_PACKET_AMOUNT
-        throw new Error('Exchange rate is 0. We will not be able to send anything through this path')
+    }
+    if (!this.exchangeRate) {
+      throw new Error('No AmountArrivedFrame in test packet response')
+    } else if (this.exchangeRate.isEqualTo(0)) {
+      // TODO this could also happen if the exchange rate is less than 1 / TEST_PACKET_AMOUNT
+      throw new Error('Exchange rate is 0. We will not be able to send anything through this path')
+    }
+  }
+
+  protected handleConnectorError (reject: IlpPacket.IlpRejection, amountSent: BigNumber, retry: () => Promise<void>) {
+    this.debug(`handling reject:`, JSON.stringify(reject))
+    if (reject.code === 'F08') {
+      let receivedAmount: BigNumber | undefined = undefined
+      let maximumAmount: BigNumber | undefined = undefined
+      if (reject.data.length >= 16) {
+        try {
+          const reader = Reader.from(reject.data)
+          receivedAmount = reader.readUInt64BigNum()
+          maximumAmount = reader.readUInt64BigNum()
+        } catch (err) {}
       }
+      if (receivedAmount && maximumAmount && receivedAmount.isGreaterThan(maximumAmount)) {
+        const newMaximum = amountSent
+          .times(maximumAmount)
+          .dividedToIntegerBy(receivedAmount)
+        this.debug(`reducing maximum packet amount from ${this.maximumPacketAmount} to ${newMaximum}`)
+        this.maximumPacketAmount = newMaximum
+        this.testMaximumPacketAmount = newMaximum
+      } else {
+        // Connector didn't include amounts
+        this.maximumPacketAmount = amountSent.minus(1)
+        this.testMaximumPacketAmount = this.maximumPacketAmount.dividedToIntegerBy(2)
+      }
+      if (this.maximumPacketAmount.isEqualTo(0)) {
+        this.debug(`cannot send anything through this path. the maximum packet amount is 0`)
+        throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
+      }
+      return retry()
     } else {
-      this.debug(`unexpected test packet response. code: ${reject.code}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
-      throw new Error(`Unexpected test packet response: ${reject.code}`)
+      this.debug(`unexpected error. code: ${reject.code}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
+      throw new Error(`Unexpected response to packet: ${reject.code}`)
     }
   }
 

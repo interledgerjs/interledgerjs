@@ -1,5 +1,6 @@
 import { Reader, Writer, Predictor } from 'oer-utils'
 import BigNumber from 'bignumber.js'
+import 'source-map-support/register'
 
 export enum FrameType {
   // TODO reorder frame numbers to something sensible

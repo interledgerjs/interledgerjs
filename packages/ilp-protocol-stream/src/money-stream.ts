@@ -1,6 +1,7 @@
 import EventEmitter3 = require('eventemitter3')
 import * as Debug from 'debug'
 import BigNumber from 'bignumber.js'
+import 'source-map-support/register'
 
 export interface MoneyStreamOpts {
   id: number,
@@ -131,9 +132,11 @@ export class MoneyStream extends EventEmitter3 {
    */
   _holdOutgoing (holdId: string, maxAmount?: BigNumber): BigNumber {
     const amountToReceive = (maxAmount === undefined ? this._amountOutgoing : BigNumber.minimum(maxAmount, this._amountOutgoing))
-    this._amountOutgoing = this._amountOutgoing.minus(amountToReceive)
-    this.holds[holdId] = amountToReceive
-    this.debug(`holding outgoing balance. holdId: ${holdId}, amount: ${amountToReceive}`)
+    if (amountToReceive.isGreaterThan(0)) {
+      this._amountOutgoing = this._amountOutgoing.minus(amountToReceive)
+      this.holds[holdId] = amountToReceive
+      this.debug(`holding outgoing balance. holdId: ${holdId}, amount: ${amountToReceive}`)
+    }
     return amountToReceive
   }
 
