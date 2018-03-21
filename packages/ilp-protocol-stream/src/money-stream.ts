@@ -9,10 +9,11 @@ export interface MoneyStreamOpts {
 }
 
 export class MoneyStream extends EventEmitter3 {
-  protected id: number
+  readonly id: number
   protected debug: Debug.IDebugger
   protected isServer: boolean
 
+  _sentClose: boolean
   protected _amountIncoming: BigNumber
   protected _amountOutgoing: BigNumber
   protected closed: boolean
@@ -24,6 +25,7 @@ export class MoneyStream extends EventEmitter3 {
     this.isServer = opts.isServer
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:MoneyStream:${this.id}`)
 
+    this._sentClose = false
     this._amountIncoming = new BigNumber(0)
     this._amountOutgoing = new BigNumber(0)
     this.closed = false

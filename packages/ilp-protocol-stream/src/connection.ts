@@ -35,13 +35,6 @@ export interface ConnectionOpts {
   slippage?: BigNumber.Value
 }
 
-export interface StreamData<Stream> {
-  id: number,
-  stream: Stream,
-  sentOpen: boolean,
-  sentClose: boolean
-}
-
 export class Connection extends EventEmitter3 {
   protected plugin: Plugin
   protected destinationAccount?: string
@@ -51,7 +44,7 @@ export class Connection extends EventEmitter3 {
   protected slippage: BigNumber
 
   protected outgoingPacketNumber: number
-  protected moneyStreams: StreamData<MoneyStream>[]
+  protected moneyStreams: MoneyStream[]
   protected nextStreamId: number
   protected debug: Debug.IDebugger
   protected sending: boolean
@@ -100,12 +93,7 @@ export class Connection extends EventEmitter3 {
       id: this.nextStreamId,
       isServer: this.isServer
     })
-    this.moneyStreams[this.nextStreamId] = {
-      id: this.nextStreamId,
-      stream,
-      sentOpen: false,
-      sentClose: false
-    } as StreamData<MoneyStream>
+    this.moneyStreams[this.nextStreamId] = stream
     this.debug(`created money stream: ${this.nextStreamId}`)
     this.nextStreamId += 2
 
@@ -205,12 +193,7 @@ export class Connection extends EventEmitter3 {
             id: streamId,
             isServer: this.isServer
           })
-          this.moneyStreams[streamId] = {
-            id: streamId,
-            stream,
-            sentOpen: true,
-            sentClose: false
-          } as StreamData<MoneyStream>
+          this.moneyStreams[streamId] = stream
 
           this.emit('money_stream', stream)
           stream.on('_send', this.startSendLoop.bind(this))
@@ -226,7 +209,7 @@ export class Connection extends EventEmitter3 {
           .dividedBy(totalMoneyShares)
           // TODO make sure we don't lose any because of rounding issues
           .integerValue(BigNumber.ROUND_FLOOR)
-        this.moneyStreams[streamId].stream._addToIncoming(amount)
+        this.moneyStreams[streamId]._addToIncoming(amount)
       }
     }
 
@@ -257,9 +240,9 @@ export class Connection extends EventEmitter3 {
         this.emit('error', err)
 
         // TODO should a connection error be an error on all of the streams?
-        for (let msRecord of this.moneyStreams) {
-          if (msRecord && !msRecord.sentClose) {
-            msRecord.stream.emit('error', err)
+        for (let moneyStream of this.moneyStreams) {
+          if (moneyStream) {
+            moneyStream.emit('error', err)
           }
         }
         return
@@ -276,9 +259,9 @@ export class Connection extends EventEmitter3 {
         this.emit('error', err)
 
         // TODO should a connection error be an error on all of the streams?
-        for (let msRecord of this.moneyStreams) {
-          if (msRecord && !msRecord.sentClose) {
-            msRecord.stream.emit('error', err)
+        for (let moneyStream of this.moneyStreams) {
+          if (moneyStream && !moneyStream._sentClose) {
+            moneyStream.emit('error', err)
           }
         }
       }
@@ -306,28 +289,29 @@ export class Connection extends EventEmitter3 {
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromStream = this.testMaximumPacketAmount
     const moneyStreamsSentFrom = []
-    for (let msRecord of this.moneyStreams) {
-      if (!msRecord || msRecord.sentClose) {
+    for (let moneyStream of this.moneyStreams) {
+      if (!moneyStream || moneyStream._sentClose) {
         // TODO just remove closed streams?
         continue
       }
 
-      const amountToSendFromStream = msRecord.stream._holdOutgoing(packetNumber.toString(), maxAmountFromStream)
+      const amountToSendFromStream = moneyStream._holdOutgoing(packetNumber.toString(), maxAmountFromStream)
       if (amountToSendFromStream.isEqualTo(0)) {
         continue
       }
 
-      const isEnd = msRecord.stream.isClosed() && msRecord.stream.amountOutgoing.isEqualTo(0)
-      const frame = new StreamMoneyFrame(msRecord.id, amountToSendFromStream, isEnd)
+      const isEnd = moneyStream.isClosed() && moneyStream.amountOutgoing.isEqualTo(0)
+      const frame = new StreamMoneyFrame(moneyStream.id, amountToSendFromStream, isEnd)
       // TODO make sure the length of the frame's doesn't exceed packet data limit
       requestFrames.push(frame)
       amountToSend = amountToSend.plus(amountToSendFromStream)
       maxAmountFromStream = maxAmountFromStream.minus(amountToSendFromStream)
 
-      msRecord.sentClose = isEnd || msRecord.sentClose
-      moneyStreamsSentFrom.push(msRecord.stream)
+      moneyStream._sentClose = isEnd || moneyStream._sentClose
+      moneyStreamsSentFrom.push(moneyStream)
 
       if (maxAmountFromStream.isEqualTo(0)) {
+        // TODO make sure that we start with those later frames the next time around
         break
       }
     }
