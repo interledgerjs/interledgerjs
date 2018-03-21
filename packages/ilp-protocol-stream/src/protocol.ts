@@ -1,15 +1,67 @@
-import { Reader, Writer, Predictor } from 'oer-utils'
+import { Reader, Writer } from 'oer-utils'
 import BigNumber from 'bignumber.js'
+import { encrypt, decrypt } from './crypto'
 import 'source-map-support/register'
+
+const VERSION = 1
+
+export class Packet {
+  sequence: BigNumber
+  ilpPacketType: number
+  frames: Frame[]
+
+  constructor (sequence: BigNumber.Value, ilpPacketType: number, frames: Frame[] = []) {
+    this.sequence = new BigNumber(sequence)
+    this.ilpPacketType = ilpPacketType
+    this.frames = frames
+  }
+
+  /** @private */
+  static _deserializeUnencrypted (buffer: Buffer): Packet {
+    const reader = Reader.from(buffer)
+    const version = reader.readUInt8BigNum()
+    if (!version.isEqualTo(VERSION)) {
+      throw new Error(`Unsupported protocol version: ${version}`)
+    }
+    const ilpPacketType = reader.readUInt8BigNum().toNumber()
+    const sequence = reader.readVarUIntBigNum()
+    const frames = parseFrames(reader)
+    return new Packet(sequence, ilpPacketType, frames)
+  }
+
+  static decryptAndDeserialize (sharedSecret: Buffer, buffer: Buffer): Packet {
+    let decrypted: Buffer
+    try {
+      decrypted = decrypt(sharedSecret, buffer)
+    } catch (err) {
+      throw new Error(`Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key`)
+    }
+    return Packet._deserializeUnencrypted(decrypted)
+  }
+
+  /** @private */
+  _serialize (): Buffer {
+    const writer = new Writer()
+    writer.writeUInt8(VERSION)
+    writer.writeUInt8(this.ilpPacketType)
+    writer.writeVarUInt(this.sequence)
+    for (let frame of this.frames) {
+      frame.writeTo(writer)
+    }
+    return writer.getBuffer()
+  }
+
+  serializeAndEncrypt (sharedSecret: Buffer): Buffer {
+    return encrypt(sharedSecret, this._serialize())
+  }
+}
 
 export enum FrameType {
   // TODO reorder frame numbers to something sensible
-  // TODO combine packet number, amount arrived, and min destination amount frames?
-  PacketNumber = 1,
-  SourceAccount = 2,
-  AmountArrived = 3,
-  MinimumDestinationAmount = 4,
-  StreamMoney = 5
+  SourceAccount = 1,
+  AmountArrived = 2,
+  MinimumDestinationAmount = 3,
+  StreamMoney = 4
 }
 
 export abstract class Frame {
@@ -25,59 +77,7 @@ export abstract class Frame {
     throw new Error(`class method "fromBuffer" is not implemented`)
   }
 
-  abstract byteLength (): number
-
   abstract writeTo (writer: Writer): Writer
-}
-
-export enum PacketType {
-  // TODO should these match the ILP packet type number?
-  Prepare = 0,
-  Fulfill = 1,
-  Reject = 2
-}
-
-export class PacketNumberFrame extends Frame {
-  readonly packetNumber: BigNumber
-  readonly packetType: PacketType
-
-  constructor (packetNumber: BigNumber.Value, packetType: PacketType) {
-    super(FrameType.PacketNumber, 'PacketNumber')
-    this.packetNumber = new BigNumber(packetNumber)
-    this.packetType = packetType
-  }
-
-  static fromBuffer (reader: Reader): PacketNumberFrame {
-    const type = reader.readUInt8BigNum().toNumber()
-    if (type !== FrameType.PacketNumber) {
-      throw new Error(`Cannot read PacketNumberFrame from Buffer. Expected type ${FrameType.PacketNumber}, got: ${type}`)
-    }
-    const packetNumber = reader.readVarUIntBigNum()
-    const packetType = reader.readUInt8BigNum().toNumber()
-    if (packetType > 2) {
-      throw new Error(`Unexpected packet type: ${packetType} (should be 0, 1, or 2 to indicate Prepare, Fulfill, or Reject, respectively)`)
-    } else {
-      return new PacketNumberFrame(packetNumber, packetType as PacketType)
-    }
-  }
-
-  byteLength (): number {
-    // TODO do this without allocating the bytes
-    const writer = new Writer()
-    this.writeTo(writer)
-    return writer.getBuffer().length
-  }
-
-  writeTo (writer: Writer): Writer {
-    writer.writeUInt8(this.type)
-    writer.writeVarUInt(this.packetNumber)
-    writer.writeUInt8(this.packetType)
-    return writer
-  }
-}
-
-export function isPacketNumberFrame (frame: Frame): frame is PacketNumberFrame {
-  return frame.type === FrameType.PacketNumber
 }
 
 export class StreamMoneyFrame extends Frame {
@@ -99,29 +99,21 @@ export class StreamMoneyFrame extends Frame {
       throw new Error(`Cannot read StreamMoneyFrame from Buffer. Expected type ${FrameType.StreamMoney}, got: ${type}`)
     }
 
-    const streamId = reader.readVarUIntBigNum()
-    const amount = reader.readVarUIntBigNum()
-    const isEnd = reader.readUInt8BigNum().toNumber() === 1
+    const contents = Reader.from(reader.readVarOctetString())
+    const streamId = contents.readVarUIntBigNum()
+    const amount = contents.readVarUIntBigNum()
+    const isEnd = contents.readUInt8BigNum().toNumber() === 1
     return new StreamMoneyFrame(streamId, amount, isEnd)
   }
 
-  byteLength (): number {
-    // TODO do this without actually writing bytes
-    if (!this.encoded) {
-      const writer = new Writer()
-      this.writeTo(writer)
-      this.encoded = writer.getBuffer()
-    }
-    return this.encoded.length
-  }
-
   writeTo (writer: Writer): Writer {
-    // TODO should frames be length-prefixed to enable skipping unknown ones?
     writer.writeUInt8(this.type)
-    writer.writeVarUInt(this.streamId)
-    writer.writeVarUInt(this.shares)
+    const contents = new Writer()
+    contents.writeVarUInt(this.streamId)
+    contents.writeVarUInt(this.shares)
     // TODO should this be a bitmask instead?
-    writer.writeUInt8(this.isEnd ? 1 : 0)
+    contents.writeUInt8(this.isEnd ? 1 : 0)
+    writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
 }
@@ -144,20 +136,16 @@ export class SourceAccountFrame extends Frame {
       throw new Error(`Cannot read SourceAccountFrame from Buffer. Expected type ${FrameType.SourceAccount}, got: ${type}`)
     }
 
-    const sourceAccount = reader.readVarOctetString().toString('utf8')
+    const contents = Reader.from(reader.readVarOctetString())
+    const sourceAccount = contents.readVarOctetString().toString('utf8')
     return new SourceAccountFrame(sourceAccount)
-  }
-
-  byteLength (): number {
-    const predictor = new Predictor()
-    predictor.writeUInt8(this.type)
-    predictor.writeVarOctetString(Buffer.from(this.sourceAccount))
-    return predictor.getSize()
   }
 
   writeTo (writer: Writer): Writer {
     writer.writeUInt8(this.type)
-    writer.writeVarOctetString(Buffer.from(this.sourceAccount))
+    const contents = new Writer()
+    contents.writeVarOctetString(Buffer.from(this.sourceAccount))
+    writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
 }
@@ -180,19 +168,16 @@ export class AmountArrivedFrame extends Frame {
       throw new Error(`Cannot read AmountArrivedFrame from Buffer. Expected type ${FrameType.AmountArrived}, got: ${type}`)
     }
 
-    const amount = reader.readVarUIntBigNum()
+    const contents = Reader.from(reader.readVarOctetString())
+    const amount = contents.readVarUIntBigNum()
     return new AmountArrivedFrame(amount)
-  }
-
-  byteLength (): number {
-    const writer = new Writer()
-    this.writeTo(writer)
-    return writer.getBuffer().length
   }
 
   writeTo (writer: Writer): Writer {
     writer.writeUInt8(this.type)
-    writer.writeVarUInt(this.amount)
+    const contents = new Writer()
+    contents.writeVarUInt(this.amount)
+    writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
 }
@@ -215,19 +200,16 @@ export class MinimumDestinationAmountFrame extends Frame {
       throw new Error(`Cannot read MinimumDestinationAmountFrame from Buffer. Expected type ${FrameType.MinimumDestinationAmount}, got: ${type}`)
     }
 
-    const amount = reader.readVarUIntBigNum()
+    const contents = Reader.from(reader.readVarOctetString())
+    const amount = contents.readVarUIntBigNum()
     return new MinimumDestinationAmountFrame(amount)
-  }
-
-  byteLength (): number {
-    const writer = new Writer()
-    this.writeTo(writer)
-    return writer.getBuffer().length
   }
 
   writeTo (writer: Writer): Writer {
     writer.writeUInt8(this.type)
-    writer.writeVarUInt(this.amount)
+    const contents = new Writer()
+    contents.writeVarUInt(this.amount)
+    writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
 }
@@ -236,31 +218,34 @@ export function isMinimumDestinationAmountFrame (frame: Frame): frame is Minimum
   return frame.type === FrameType.MinimumDestinationAmount
 }
 
-export function parseFrames (buffer: Reader | Buffer): Frame[] {
-  const reader = Reader.from(buffer)
+function parseFrame (reader: Reader): Frame | undefined {
+  const type = reader.peekUInt8BigNum().toNumber()
+
+  switch (type) {
+    case FrameType.StreamMoney:
+      return StreamMoneyFrame.fromBuffer(reader)
+    case FrameType.SourceAccount:
+      return SourceAccountFrame.fromBuffer(reader)
+    case FrameType.AmountArrived:
+      return AmountArrivedFrame.fromBuffer(reader)
+    case FrameType.MinimumDestinationAmount:
+      return MinimumDestinationAmountFrame.fromBuffer(reader)
+    default:
+      return undefined
+  }
+}
+
+function parseFrames (buffer: Reader | Buffer): Frame[] {
+  const reader = (Buffer.isBuffer(buffer) ? Reader.from(buffer) : buffer)
   const frames: Frame[] = []
 
   while (reader.cursor < reader.buffer.length) {
-    const type = reader.peekUInt8BigNum().toNumber()
-
-    switch (type) {
-      case FrameType.PacketNumber:
-        frames.push(PacketNumberFrame.fromBuffer(reader))
-        break
-      case FrameType.StreamMoney:
-        frames.push(StreamMoneyFrame.fromBuffer(reader))
-        break
-      case FrameType.SourceAccount:
-        frames.push(SourceAccountFrame.fromBuffer(reader))
-        break
-      case FrameType.AmountArrived:
-        frames.push(AmountArrivedFrame.fromBuffer(reader))
-        break
-      case FrameType.MinimumDestinationAmount:
-        frames.push(MinimumDestinationAmountFrame.fromBuffer(reader))
-        break
-      default:
-        throw new Error(`Unknown frame type: ${type}`)
+    const frame = parseFrame(reader)
+    if (frame) {
+      frames.push(frame)
+    } else {
+      reader.skipUInt8()
+      reader.skipVarOctetString()
     }
   }
   return frames

@@ -10,10 +10,10 @@ export interface MoneyStreamOpts {
 
 export class MoneyStream extends EventEmitter3 {
   readonly id: number
+  _sentClose: boolean
   protected debug: Debug.IDebugger
   protected isServer: boolean
 
-  _sentClose: boolean
   protected _amountIncoming: BigNumber
   protected _amountOutgoing: BigNumber
   protected closed: boolean
@@ -96,6 +96,7 @@ export class MoneyStream extends EventEmitter3 {
     }
 
     // TODO should this only wait for the current amount to be sent, rather than any additional added after?
+    /* tslint:disable-next-line:no-unnecessary-type-assertion */
     return new Promise((resolve, reject) => {
       const self = this
       function outgoingHandler () {

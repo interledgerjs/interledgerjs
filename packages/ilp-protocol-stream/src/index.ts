@@ -55,6 +55,7 @@ export class Server extends EventEmitter3 {
   }
 
   async acceptConnection (): Promise<Connection> {
+    /* tslint:disable-next-line:no-unnecessary-type-assertion */
     return new Promise((resolve, reject) => {
       this.once('connection', resolve)
     }) as Promise<Connection>
