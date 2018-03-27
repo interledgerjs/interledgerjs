@@ -35,6 +35,9 @@ describe('Connection', function () {
     })
 
     this.serverConn = await connectionPromise
+    this.serverConn.on('money_stream', (stream: MoneyStream) => {
+      stream.setReceiveMax(10000)
+    })
   })
 
   describe('Sending Money', function () {
@@ -44,9 +47,7 @@ describe('Connection', function () {
         moneyStream.on('incoming', spy)
       })
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.send(117)
-
-      await clientStream.flushed()
+      await clientStream.sendTotal(117)
 
       assert.calledOnce(spy)
       assert.calledWith(spy, '58')
@@ -64,17 +65,14 @@ describe('Connection', function () {
       })
       const clientStream1 = this.clientConn.createMoneyStream()
       const clientStream2 = this.clientConn.createMoneyStream()
-      clientStream1.send(117)
-      clientStream2.send(204)
-
-      await clientStream1.flushed()
-      await clientStream2.flushed()
+      await Promise.all([clientStream1.sendTotal(117), clientStream2.sendTotal(204)])
 
       assert.calledTwice(moneyStreamSpy)
       assert.calledTwice(incomingSpy)
       assert.calledWith(incomingSpy.firstCall, '58')
       assert.calledWith(incomingSpy.secondCall, '101')
-      assert.calledOnce(sendDataSpy)
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataSpy.getCall(0).args[0]).amount, '321')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataSpy.getCall(1).args[0]).amount, '0')
     })
   })
 
@@ -87,14 +85,13 @@ describe('Connection', function () {
       const spy = sinon.spy(this.clientPlugin, 'sendData')
       this.clientPlugin.maxAmount = 1500
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.send(2000)
+      await clientStream.sendTotal(2000)
 
-      await clientStream.flushed()
-
-      assert.calledThrice(spy)
-      assert.equal(IlpPacket.deserializeIlpPrepare(spy.firstCall.args[0]).amount, '2000')
-      assert.equal(IlpPacket.deserializeIlpPrepare(spy.secondCall.args[0]).amount, '1500')
-      assert.equal(IlpPacket.deserializeIlpPrepare(spy.thirdCall.args[0]).amount, '500')
+      assert.callCount(spy, 4)
+      assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(0).args[0]).amount, '2000')
+      assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(1).args[0]).amount, '1500')
+      assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(2).args[0]).amount, '500')
+      assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(3).args[0]).amount, '0')
     })
 
     it('should keep reducing the packet amount if there are multiple connectors with progressively smaller maximums', async function () {
@@ -112,13 +109,12 @@ describe('Connection', function () {
       }
 
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.send(3000)
+      await clientStream.sendTotal(3000)
 
-      await clientStream.flushed()
-
-      assert.equal(callCount, 5)
-      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 2]).amount, '1675')
-      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 1]).amount, '1325')
+      assert.equal(callCount, 6)
+      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 3]).amount, '1675')
+      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 2]).amount, '1325')
+      // last call is 0
     })
 
     it('should reduce the packet amount even if the error does not contain the correct error data', async function () {
@@ -140,16 +136,15 @@ describe('Connection', function () {
       }
 
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.send(2000)
+      await clientStream.sendTotal(2000)
 
-      await clientStream.flushed()
-
-      assert.equal(callCount, 5)
+      assert.equal(callCount, 6)
       assert.equal(IlpPacket.deserializeIlpPrepare(args[0]).amount, '2000')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[1]).amount, '999')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[2]).amount, '499')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[3]).amount, '748')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[4]).amount, '753')
+      assert.equal(IlpPacket.deserializeIlpPrepare(args[5]).amount, '0')
     })
 
     it('should approximate the maximum amount if the error data is non-sensical', async function () {
@@ -171,24 +166,22 @@ describe('Connection', function () {
       }
 
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.send(2000)
+      await clientStream.sendTotal(2000)
 
-      await clientStream.flushed()
-
-      assert.equal(callCount, 5)
+      assert.equal(callCount, 6)
       assert.equal(IlpPacket.deserializeIlpPrepare(args[0]).amount, '2000')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[1]).amount, '999')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[2]).amount, '499')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[3]).amount, '748')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[4]).amount, '753')
+      assert.equal(IlpPacket.deserializeIlpPrepare(args[5]).amount, '0')
     })
 
     it('should stop sending if the maximum amount is too small to send any money through', async function () {
       this.clientPlugin.maxAmount = 0
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.send(1000)
 
-      return assert.isRejected(clientStream.flushed())
+      return assert.isRejected(clientStream.sendTotal(1000))
     })
   })
 
@@ -204,12 +197,10 @@ describe('Connection', function () {
 
       const clientStream1 = this.clientConn.createMoneyStream()
       const clientStream2 = this.clientConn.createMoneyStream()
-      clientStream1.send(117)
-      clientStream2.send(204)
 
       return Promise.all([
-        assert.isRejected(clientStream1.flushed(), 'Unexpected error while sending packet. Code: F89, message: Blah'),
-        assert.isRejected(clientStream2.flushed(), 'Unexpected error while sending packet. Code: F89, message: Blah')
+        assert.isRejected(clientStream1.sendTotal(117), 'Unexpected error while sending packet. Code: F89, message: Blah'),
+        assert.isRejected(clientStream2.sendTotal(204), 'Unexpected error while sending packet. Code: F89, message: Blah')
       ])
     })
 
@@ -245,8 +236,7 @@ describe('Connection', function () {
         .callThrough()
 
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.send(100)
-      await clientStream.flushed()
+      await clientStream.sendTotal(100)
       assert.callCount(sendDataStub, 4)
       clearInterval(interval)
       clock.uninstall()
@@ -262,10 +252,9 @@ describe('Connection', function () {
       }))
 
       const clientStream1 = this.clientConn.createMoneyStream()
-      clientStream1.send(117)
 
-      await assert.isRejected(clientStream1.flushed(), 'Unexpected error while sending packet. Code: F89, message: Blah')
-      assert.equal(clientStream1.amountOutgoing.toString(), '117')
+      await assert.isRejected(clientStream1.sendTotal(117), 'Unexpected error while sending packet. Code: F89, message: Blah')
+      assert.equal(clientStream1.totalSent, '0')
     })
   })
 })

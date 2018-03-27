@@ -13,7 +13,9 @@ import {
   AmountArrivedFrame,
   isAmountArrivedFrame,
   isMinimumDestinationAmountFrame,
-  MinimumDestinationAmountFrame
+  MinimumDestinationAmountFrame,
+  StreamMoneyReceiveTotalFrame,
+  isStreamMoneyReceiveTotalFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
@@ -39,6 +41,8 @@ export class Connection extends EventEmitter3 {
   protected sharedSecret: Buffer
   protected isServer: boolean
   protected slippage: BigNumber
+  /** How much more than the money stream specified it will accept */
+  protected allowableReceiveExtra: BigNumber
 
   protected outgoingPacketNumber: number
   protected moneyStreams: MoneyStream[]
@@ -63,6 +67,7 @@ export class Connection extends EventEmitter3 {
     this.sharedSecret = opts.sharedSecret
     this.isServer = opts.isServer
     this.slippage = new BigNumber(opts.slippage || 0)
+    this.allowableReceiveExtra = new BigNumber(1.01)
 
     this.outgoingPacketNumber = 0
     this.moneyStreams = []
@@ -139,7 +144,7 @@ export class Connection extends EventEmitter3 {
         this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
         this.destinationAccount = frame.sourceAccount
         // Try sending in case we stopped because we didn't know their address before
-        this.emit('_send')
+        this.startSendLoop()
       } else if (isMinimumDestinationAmountFrame(frame)) {
         if (frame.amount.isLessThan(prepare.amount)) {
           this.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${frame.amount}`)
@@ -150,6 +155,19 @@ export class Connection extends EventEmitter3 {
 
         // Count the total number of "shares" to be able to distribute the packet amount amongst the MoneyStreams
         totalMoneyShares = totalMoneyShares.plus(frame.shares)
+      } else if (isStreamMoneyReceiveTotalFrame(frame)) {
+        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        if (stream) {
+          this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
+          stream._remoteReceived = BigNumber.maximum(stream._remoteReceived || 0, frame.totalReceived)
+          // TODO should it let you lower the maximum?
+          stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax || 0, frame.receiveMax)
+
+          // If the remote side can receive, try starting the send loop
+          if (stream._remoteReceiveMax.isGreaterThan(stream._remoteReceived)) {
+            this.startSendLoop()
+          }
+        }
       }
     }
 
@@ -161,16 +179,14 @@ export class Connection extends EventEmitter3 {
       throwFinalApplicationError()
     }
 
-    // Make sure prepare amount >= sum of stream frame amounts
-
-    // TODO ensure that no money frame exceeds a stream's buffer
-
-    // Handle money stream frames
+    // Handle new streams
+    let includesNewStream = false
     for (let frame of streamMoneyFrames) {
       const streamId = frame.streamId.toNumber()
 
       // Handle new incoming MoneyStreams
       if (!this.moneyStreams[streamId]) {
+        includesNewStream = true
         this.debug(`got new money stream: ${streamId}`)
         const stream = new MoneyStream({
           id: streamId,
@@ -181,24 +197,58 @@ export class Connection extends EventEmitter3 {
         this.emit('money_stream', stream)
         stream.on('_send', this.startSendLoop.bind(this))
 
-        // Handle the new frame on the next tick of the event loop
-        // to wait for event handlers that may be added to the new stream
-        await new Promise((resolve, reject) => setImmediate(resolve))
       }
+    }
+    // Handle the new frames on the next tick of the event loop
+    // to wait for event handlers that may be added to the new stream
+    if (includesNewStream) {
+      await new Promise((resolve, reject) => setImmediate(resolve))
+    }
 
-      // TODO check that all of the streams are able to receive the amount of money before accepting any of them
-      const amount = new BigNumber(prepare.amount)
+    // Determine amount to receive on each frame
+    const amountsToReceive = []
+    for (let frame of streamMoneyFrames) {
+      const streamId = frame.streamId.toNumber()
+      const streamAmount = new BigNumber(prepare.amount)
         .times(frame.shares)
         .dividedBy(totalMoneyShares)
         // TODO make sure we don't lose any because of rounding issues
         .integerValue(BigNumber.ROUND_FLOOR)
-      this.moneyStreams[streamId]._addToIncoming(amount)
+      amountsToReceive[streamId] = streamAmount
+
+      // Ensure that this amount isn't more than the stream can receive
+      const maxStreamCanReceive = this.moneyStreams[streamId]._getAmountStreamCanReceive()
+        .times(this.allowableReceiveExtra)
+        .integerValue(BigNumber.ROUND_CEIL)
+      if (maxStreamCanReceive.isLessThan(streamAmount)) {
+        // TODO should this be distributed to other streams if it can be?
+        this.debug(`peer sent too much for stream: ${streamId}. got: ${streamAmount}, max receivable: ${maxStreamCanReceive}`)
+        // Tell peer how much the streams they sent for can receive
+        responseFrames.push(new StreamMoneyReceiveTotalFrame(streamId, this.moneyStreams[streamId].receiveMax, this.moneyStreams[streamId].totalReceived))
+
+        // TODO include error frame
+        throwFinalApplicationError()
+      }
     }
 
+    // Add incoming amounts to each stream
+    for (let streamId in amountsToReceive) {
+      if (amountsToReceive[streamId]) {
+        this.moneyStreams[streamId]._addToIncoming(amountsToReceive[streamId])
+      }
+    }
+
+    // Tell peer how much each stream can receive
+    // TODO only send the max amount when it changes
+    for (let moneyStream of this.moneyStreams) {
+      if (moneyStream) {
+        responseFrames.push(new StreamMoneyReceiveTotalFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
+      }
+    }
+
+    // Return fulfillment and response packet
     const responsePacket = new Packet(requestPacket.sequence, IlpPacket.Type.TYPE_ILP_FULFILL, responseFrames)
     this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')}`)
-
-    // Return fulfillment
     return {
       fulfillment,
       data: responsePacket.serializeAndEncrypt(this.sharedSecret)
@@ -211,12 +261,14 @@ export class Connection extends EventEmitter3 {
       return
     }
     this.sending = true
+    this.debug('starting send loop')
 
     // Send a test packet first to determine the exchange rate
     if (!this.exchangeRate && this.destinationAccount) {
       try {
         await this.sendTestPacket()
       } catch (err) {
+        this.sending = false
         this.debug('error sending test packet:', err)
         this.emit('error', err)
 
@@ -249,6 +301,7 @@ export class Connection extends EventEmitter3 {
 
       // Figure out if we need to wait before sending the next one
     }
+    this.debug('finished sending')
   }
 
   protected async sendPacket (): Promise<void> {
@@ -264,9 +317,15 @@ export class Connection extends EventEmitter3 {
     const requestPacket = new Packet(this.outgoingPacketNumber++, IlpPacket.Type.TYPE_ILP_PREPARE)
 
     // Send control frames
+    // TODO only send the max amount when it changes
+    for (let moneyStream of this.moneyStreams) {
+      if (moneyStream) {
+        requestPacket.frames.push(new StreamMoneyReceiveTotalFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
+      }
+    }
 
     // Determine how much to send based on amount frames and path maximum packet amount
-    let maxAmountFromStream = this.testMaximumPacketAmount
+    let maxAmountFromNextStream = this.testMaximumPacketAmount
     const moneyStreamsSentFrom = []
     for (let moneyStream of this.moneyStreams) {
       if (!moneyStream || moneyStream._sentClose) {
@@ -274,22 +333,39 @@ export class Connection extends EventEmitter3 {
         continue
       }
 
-      const amountToSendFromStream = moneyStream._holdOutgoing(requestPacket.sequence.toString(), maxAmountFromStream)
+      // Determine how much to send from this stream based on how much it has available
+      // and how much the receiver side of this stream can receive
+      let amountToSendFromStream = BigNumber.minimum(moneyStream._getAmountAvailableToSend(), maxAmountFromNextStream)
+      this.debug(`amount to send from stream ${moneyStream.id}: ${amountToSendFromStream}, exchange rate: ${this.exchangeRate}, ${moneyStream._remoteReceived}, ${moneyStream._remoteReceiveMax}`)
+      if (this.exchangeRate
+        && moneyStream._remoteReceived !== undefined
+        && moneyStream._remoteReceiveMax !== undefined) {
+        const maxDestinationAmount = moneyStream._remoteReceiveMax.minus(moneyStream._remoteReceived)
+        const maxSourceAmount = maxDestinationAmount.dividedBy(this.exchangeRate).integerValue(BigNumber.ROUND_CEIL)
+        this.debug(`amount from stream: ${amountToSendFromStream}, max destination amount: ${maxDestinationAmount}, max source amount: ${maxSourceAmount}`)
+        if (maxSourceAmount.isLessThan(amountToSendFromStream)) {
+          this.debug(`stream ${moneyStream.id} could send ${amountToSendFromStream} but that would be more than the receiver says they can receive, so we'll send ${maxSourceAmount} instead`)
+          amountToSendFromStream = maxSourceAmount
+        }
+      }
+
       if (amountToSendFromStream.isEqualTo(0)) {
         continue
       }
+      moneyStream._holdOutgoing(requestPacket.sequence.toString(), amountToSendFromStream)
 
-      const isEnd = moneyStream.isClosed() && moneyStream.amountOutgoing.isEqualTo(0)
+      // TODO is it only the end when the amount to send is 0?
+      const isEnd = moneyStream.isClosed()
       const frame = new StreamMoneyFrame(moneyStream.id, amountToSendFromStream, isEnd)
       // TODO make sure the length of the frame's doesn't exceed packet data limit
       requestPacket.frames.push(frame)
       amountToSend = amountToSend.plus(amountToSendFromStream)
-      maxAmountFromStream = maxAmountFromStream.minus(amountToSendFromStream)
+      maxAmountFromNextStream = maxAmountFromNextStream.minus(amountToSendFromStream)
 
       moneyStream._sentClose = isEnd || moneyStream._sentClose
       moneyStreamsSentFrom.push(moneyStream)
 
-      if (maxAmountFromStream.isEqualTo(0)) {
+      if (maxAmountFromNextStream.isEqualTo(0)) {
         // TODO make sure that we start with those later frames the next time around
         break
       }
@@ -298,8 +374,9 @@ export class Connection extends EventEmitter3 {
     // Stop sending if there's no more to send
     // TODO don't stop if there's still data to send
     if (amountToSend.isEqualTo(0)) {
+      this.debug(`packet value is 0 so we'll this packet and then stop`)
       this.sending = false
-      return
+      // TODO figure out if there are control frames we need to send and stop sending if not
     }
 
     // Set minimum destination amount
@@ -352,6 +429,7 @@ export class Connection extends EventEmitter3 {
         this.debug(`got invalid fulfillment: ${response.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
         throw new Error(`Got invalid fulfillment. Actual: ${response.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
       }
+      this.debug(`packet ${requestPacket.sequence} was fulfilled`)
       for (let moneyStream of moneyStreamsSentFrom) {
         moneyStream._executeHold(requestPacket.sequence.toString())
       }
@@ -370,6 +448,7 @@ export class Connection extends EventEmitter3 {
       this.retryDelay = RETRY_DELAY_START
     } else {
       // Handle reject
+      this.debug(`packet ${requestPacket.sequence} was rejected`)
 
       // Put money back into MoneyStreams
       for (let moneyStream of moneyStreamsSentFrom) {
@@ -402,6 +481,17 @@ export class Connection extends EventEmitter3 {
     }
 
     // Handle response data from receiver
+    for (let frame of responsePacket.frames) {
+      if (isStreamMoneyReceiveTotalFrame(frame)) {
+        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        if (stream) {
+          this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
+          stream._remoteReceived = BigNumber.maximum(stream._remoteReceived || 0, frame.totalReceived)
+          // TODO should it let you lower the maximum?
+          stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax || 0, frame.receiveMax)
+        }
+      }
+    }
   }
 
   protected async sendTestPacket (amount?: BigNumber): Promise<void> {

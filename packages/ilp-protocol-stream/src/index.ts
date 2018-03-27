@@ -23,6 +23,31 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
     sharedSecret: opts.sharedSecret,
     isServer: false
   })
+  opts.plugin.registerDataHandler(async (data: Buffer): Promise<Buffer> => {
+    let prepare: IlpPacket.IlpPrepare
+    try {
+      prepare = IlpPacket.deserializeIlpPrepare(data)
+    } catch (err) {
+      this.debug(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
+      throw new IlpPacket.Errors.BadRequestError('Expected an ILP Prepare packet')
+    }
+
+    try {
+      const fulfill = await connection.handlePrepare(prepare)
+      return IlpPacket.serializeIlpFulfill(fulfill)
+    } catch (err) {
+      if (!err.ilpErrorCode) {
+        this.debug('error handling prepare:', err)
+      }
+      // TODO should the default be F00 or T00?
+      return IlpPacket.serializeIlpReject({
+        code: err.ilpErrorCode || 'F00',
+        message: err.ilpErrorMessage || '',
+        data: err.ilpErrorData || Buffer.alloc(0),
+        triggeredBy: sourceAccount
+      })
+    }
+  })
   connection.connect()
   // TODO resolve only when it is connected
   return connection

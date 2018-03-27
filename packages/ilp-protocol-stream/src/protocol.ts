@@ -61,7 +61,8 @@ export enum FrameType {
   SourceAccount = 1,
   AmountArrived = 2,
   MinimumDestinationAmount = 3,
-  StreamMoney = 4
+  StreamMoney = 4,
+  StreamMoneyReceiveTotal = 5
 }
 
 export abstract class Frame {
@@ -218,6 +219,46 @@ export function isMinimumDestinationAmountFrame (frame: Frame): frame is Minimum
   return frame.type === FrameType.MinimumDestinationAmount
 }
 
+export class StreamMoneyReceiveTotalFrame extends Frame {
+  readonly streamId: BigNumber
+  readonly receiveMax: BigNumber
+  readonly totalReceived: BigNumber
+
+  constructor (streamId: BigNumber.Value, receiveMax: BigNumber.Value, totalReceived: BigNumber.Value) {
+    super(FrameType.StreamMoneyReceiveTotal, 'StreamMoneyReceiveTotal')
+    this.streamId = new BigNumber(streamId)
+    this.receiveMax = new BigNumber(receiveMax)
+    this.totalReceived = new BigNumber(totalReceived)
+  }
+
+  static fromBuffer (reader: Reader): StreamMoneyReceiveTotalFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.StreamMoneyReceiveTotal) {
+      throw new Error(`Cannot read StreamMoneyReceiveTotalFrame from Buffer. Expected type ${FrameType.StreamMoneyReceiveTotal}, got: ${type}`)
+    }
+
+    const contents = Reader.from(reader.readVarOctetString())
+    const streamId = contents.readVarUIntBigNum()
+    const receiveMax = contents.readVarUIntBigNum()
+    const totalReceived = contents.readVarUIntBigNum()
+    return new StreamMoneyReceiveTotalFrame(streamId, receiveMax, totalReceived)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.streamId)
+    contents.writeVarUInt(this.receiveMax)
+    contents.writeVarUInt(this.totalReceived)
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export function isStreamMoneyReceiveTotalFrame (frame: Frame): frame is StreamMoneyReceiveTotalFrame {
+  return frame.type === FrameType.StreamMoneyReceiveTotal
+}
+
 function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.peekUInt8BigNum().toNumber()
 
@@ -230,6 +271,8 @@ function parseFrame (reader: Reader): Frame | undefined {
       return AmountArrivedFrame.fromBuffer(reader)
     case FrameType.MinimumDestinationAmount:
       return MinimumDestinationAmountFrame.fromBuffer(reader)
+    case FrameType.StreamMoneyReceiveTotal:
+      return StreamMoneyReceiveTotalFrame.fromBuffer(reader)
     default:
       return undefined
   }
