@@ -75,7 +75,7 @@ export class MoneyStream extends EventEmitter3 {
     }
     if (this._totalSent.isGreaterThan(amount)) {
       this.debug(`cannot set sendMax to ${amount} because we have already sent: ${this._totalSent}`)
-      throw new Error(`Cannot lower sendMax beyond how much has already been sent`)
+      throw new Error(`Cannot set sendMax lower than the totalSent`)
     }
     this.debug(`setting sendMax to ${amount}`)
     this._sendMax = new BigNumber(amount)
@@ -88,7 +88,7 @@ export class MoneyStream extends EventEmitter3 {
     }
     if (this._totalReceived.isGreaterThan(amount)) {
       this.debug(`cannot set receiveMax to ${amount} because we have already received: ${this._totalReceived}`)
-      throw new Error(`Cannot lower receiveMax beyond how much has already been received`)
+      throw new Error(`Cannot set receiveMax lower than the totalReceived`)
     }
     this.debug(`setting receiveMax to ${amount}`)
     this._receiveMax = new BigNumber(amount)
@@ -96,11 +96,12 @@ export class MoneyStream extends EventEmitter3 {
   }
 
   async sendTotal (amount: BigNumber.Value): Promise<void> {
-    this.setSendMax(amount)
     if (this._totalSent.isGreaterThanOrEqualTo(amount)) {
       this.debug(`already sent ${this._totalSent}, not sending any more`)
       return Promise.resolve()
     }
+
+    this.setSendMax(amount)
     await new Promise((resolve, reject) => {
       const self = this
       function outgoingHandler () {
@@ -136,11 +137,12 @@ export class MoneyStream extends EventEmitter3 {
   }
 
   async receiveTotal (amount: BigNumber.Value): Promise<void> {
-    this.setReceiveMax(amount)
     if (this._totalReceived.isGreaterThanOrEqualTo(amount)) {
       this.debug(`already received ${this._totalReceived}, not waiting for more`)
       return Promise.resolve()
     }
+
+    this.setReceiveMax(amount)
     await new Promise((resolve, reject) => {
       const self = this
       function incomingHandler () {
