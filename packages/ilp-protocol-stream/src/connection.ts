@@ -1,6 +1,7 @@
 import EventEmitter3 = require('eventemitter3')
 import * as Debug from 'debug'
 import { MoneyStream } from './money-stream'
+import { DataStream } from './data-stream'
 import * as IlpPacket from 'ilp-packet'
 import * as cryptoHelper from './crypto'
 import {
@@ -18,7 +19,9 @@ import {
   isStreamMoneyReceiveTotalFrame,
   StreamMoneyCloseFrame,
   StreamErrorCode,
-  isStreamMoneyCloseFrame
+  isStreamMoneyCloseFrame,
+  isStreamDataFrame,
+  StreamDataFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
@@ -52,7 +55,9 @@ export class Connection extends EventEmitter3 {
 
   protected outgoingPacketNumber: number
   protected moneyStreams: MoneyStream[]
-  protected nextStreamId: number
+  protected nextMoneyStreamId: number
+  protected dataStreams: DataStream[]
+  protected nextDataStreamId: number
   protected debug: Debug.IDebugger
   protected sending: boolean
   /** Used to probe for the Maximum Packet Amount if the connectors don't tell us directly */
@@ -78,7 +83,10 @@ export class Connection extends EventEmitter3 {
 
     this.outgoingPacketNumber = 0
     this.moneyStreams = []
-    this.nextStreamId = (this.isServer ? 1 : 2)
+    this.dataStreams = []
+    // TODO should the data and money streams use the same number space?
+    this.nextMoneyStreamId = (this.isServer ? 1 : 2)
+    this.nextDataStreamId = (this.isServer ? 1 : 2)
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
     this.closed = true
@@ -100,12 +108,25 @@ export class Connection extends EventEmitter3 {
   createMoneyStream (): MoneyStream {
     // TODO should this inform the other side?
     const stream = new MoneyStream({
-      id: this.nextStreamId,
+      id: this.nextMoneyStreamId,
       isServer: this.isServer
     })
-    this.moneyStreams[this.nextStreamId] = stream
-    this.debug(`created money stream: ${this.nextStreamId}`)
-    this.nextStreamId += 2
+    this.moneyStreams[this.nextMoneyStreamId] = stream
+    this.debug(`created money stream: ${this.nextMoneyStreamId}`)
+    this.nextMoneyStreamId += 2
+
+    stream.on('_send', this.startSendLoop.bind(this))
+    // TODO notify when the stream is closed
+
+    return stream
+  }
+
+  createDataStream (): DataStream {
+    const stream = new DataStream(this.nextDataStreamId)
+
+    this.dataStreams[this.nextDataStreamId] = stream
+    this.debug(`created data stream: ${this.nextDataStreamId}`)
+    this.nextDataStreamId += 2
 
     stream.on('_send', this.startSendLoop.bind(this))
     // TODO notify when the stream is closed
@@ -187,23 +208,35 @@ export class Connection extends EventEmitter3 {
     // Handle new streams
     let includesNewStream = false
     for (let frame of requestPacket.frames) {
-      if (!isStreamMoneyFrame(frame) && !isStreamMoneyReceiveTotalFrame(frame)) {
-        continue
-      }
-      const streamId = frame.streamId.toNumber()
+      if (isStreamMoneyFrame(frame) || isStreamMoneyReceiveTotalFrame(frame)) {
+        const streamId = frame.streamId.toNumber()
 
-      // Handle new incoming MoneyStreams
-      if (!this.moneyStreams[streamId]) {
-        includesNewStream = true
-        this.debug(`got new money stream: ${streamId}`)
-        const stream = new MoneyStream({
-          id: streamId,
-          isServer: this.isServer
-        })
-        this.moneyStreams[streamId] = stream
+        // Handle new incoming MoneyStreams
+        if (!this.moneyStreams[streamId]) {
+          includesNewStream = true
+          this.debug(`got new money stream: ${streamId}`)
+          const stream = new MoneyStream({
+            id: streamId,
+            isServer: this.isServer
+          })
+          this.moneyStreams[streamId] = stream
 
-        this.emit('money_stream', stream)
-        stream.on('_send', this.startSendLoop.bind(this))
+          this.emit('money_stream', stream)
+          stream.on('_send', this.startSendLoop.bind(this))
+
+        }
+      } else if (isStreamDataFrame(frame)) {
+        const streamId = frame.streamId.toNumber()
+
+        if (!this.dataStreams[streamId]) {
+          includesNewStream = true
+          this.debug(`got new data stream: ${streamId}`)
+          const stream = new DataStream(streamId)
+          this.dataStreams[streamId] = stream
+
+          this.emit('data_stream', stream)
+          stream.on('_send', this.startSendLoop.bind(this))
+        }
 
       }
     }
@@ -211,6 +244,15 @@ export class Connection extends EventEmitter3 {
     // to wait for event handlers that may be added to the new stream
     if (includesNewStream) {
       await new Promise((resolve, reject) => setImmediate(resolve))
+    }
+
+    // Handle data
+    for (let frame of requestPacket.frames) {
+      if (isStreamDataFrame(frame)) {
+        const stream = this.dataStreams[frame.streamId.toNumber()]
+
+        stream._pushIncomingData(frame.data, frame.offset.toNumber())
+      }
     }
 
     // Determine amount to receive on each frame
@@ -410,9 +452,24 @@ export class Connection extends EventEmitter3 {
       }
     }
 
+    // Send data
+    let sendingData = false
+    for (let dataStream of this.dataStreams) {
+      // TODO send only up to the max packet data
+      if (!dataStream) {
+        continue
+      }
+      const { data, offset } = dataStream._getAvailableDataToSend(MAX_DATA_SIZE)
+      if (data && data.length > 0) {
+        requestPacket.frames.push(new StreamDataFrame(dataStream.id, offset, data || Buffer.alloc(0)))
+        // TODO actually figure out if there's more data to send
+        sendingData = true
+      }
+    }
+
     // Stop sending if there's no more to send
     // TODO don't stop if there's still data to send
-    if (amountToSend.isEqualTo(0)) {
+    if (amountToSend.isEqualTo(0) && !sendingData) {
       this.debug(`packet value is 0 so we'll this packet and then stop`)
       this.sending = false
       // TODO figure out if there are control frames we need to send and stop sending if not

@@ -75,7 +75,8 @@ export enum FrameType {
   MinimumDestinationAmount = 3,
   StreamMoney = 4,
   StreamMoneyReceiveTotal = 5,
-  StreamMoneyClose = 6
+  StreamMoneyClose = 6,
+  StreamData = 7
 }
 
 export abstract class Frame {
@@ -316,6 +317,46 @@ export function isStreamMoneyCloseFrame (frame: Frame): frame is StreamMoneyClos
   return frame.type === FrameType.StreamMoneyClose
 }
 
+export class StreamDataFrame extends Frame {
+  readonly streamId: BigNumber
+  readonly offset: BigNumber
+  readonly data: Buffer
+
+  constructor (streamId: BigNumber.Value, offset: BigNumber.Value, data: Buffer) {
+    super(FrameType.StreamData, 'StreamData')
+    this.streamId = new BigNumber(streamId)
+    this.offset = new BigNumber(offset)
+    this.data = data
+  }
+
+  static fromBuffer (reader: Reader): StreamDataFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.StreamData) {
+      throw new Error(`Cannot read StreamDataFrame from Buffer. Expected type ${FrameType.StreamData}, got: ${type}`)
+    }
+
+    const contents = Reader.from(reader.readVarOctetString())
+    const streamId = contents.readVarUIntBigNum()
+    const offset = contents.readVarUIntBigNum()
+    const data = contents.readVarOctetString()
+    return new StreamDataFrame(streamId, offset, data)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.streamId)
+    contents.writeVarUInt(this.offset)
+    contents.writeVarOctetString(this.data)
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export function isStreamDataFrame (frame: Frame): frame is StreamDataFrame {
+  return frame.type === FrameType.StreamData
+}
+
 function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.peekUInt8BigNum().toNumber()
 
@@ -335,6 +376,8 @@ function parseFrame (reader: Reader): Frame | undefined {
       return StreamMoneyReceiveTotalFrame.fromBuffer(reader)
     case FrameType.StreamMoneyClose:
       return StreamMoneyCloseFrame.fromBuffer(reader)
+    case FrameType.StreamData:
+      return StreamDataFrame.fromBuffer(reader)
     default:
       reader.skipUInt8()
       reader.skipVarOctetString()
