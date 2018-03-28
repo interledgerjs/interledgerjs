@@ -15,7 +15,10 @@ import {
   isMinimumDestinationAmountFrame,
   MinimumDestinationAmountFrame,
   StreamMoneyReceiveTotalFrame,
-  isStreamMoneyReceiveTotalFrame
+  isStreamMoneyReceiveTotalFrame,
+  StreamMoneyCloseFrame,
+  StreamErrorCode,
+  isStreamMoneyCloseFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
@@ -181,7 +184,10 @@ export class Connection extends EventEmitter3 {
 
     // Handle new streams
     let includesNewStream = false
-    for (let frame of streamMoneyFrames) {
+    for (let frame of requestPacket.frames) {
+      if (!isStreamMoneyFrame(frame) && !isStreamMoneyReceiveTotalFrame(frame)) {
+        continue
+      }
       const streamId = frame.streamId.toNumber()
 
       // Handle new incoming MoneyStreams
@@ -229,6 +235,14 @@ export class Connection extends EventEmitter3 {
         // TODO include error frame
         throwFinalApplicationError()
       }
+
+      // Reject the packet if any of the streams is already closed
+      if (!this.moneyStreams[streamId].isOpen()) {
+        this.debug(`peer sent money for stream that was already closed: ${streamId}`)
+        responseFrames.push(new StreamMoneyCloseFrame(streamId, StreamErrorCode.StreamStateError, 'Stream is already closed'))
+
+        throwFinalApplicationError()
+      }
     }
 
     // Add incoming amounts to each stream
@@ -238,17 +252,39 @@ export class Connection extends EventEmitter3 {
       }
     }
 
-    // Tell peer how much each stream can receive
-    // TODO only send the max amount when it changes
+    // Handle stream closes
+    for (let frame of requestPacket.frames) {
+      if (isStreamMoneyCloseFrame(frame)) {
+        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        if (stream) {
+          this.debug(`peer closed stream ${stream.id}`)
+          // TODO should we confirm with the other side that we closed it?
+          stream._sentEnd = true
+          stream.end()
+          // TODO delete the stream record
+        } else {
+          this.debug(`peer said they closed stream ${frame.streamId} but we did not have a record of that stream`)
+        }
+      }
+    }
+
+    // Tell peer about closed streams and how much each stream can receive
     for (let moneyStream of this.moneyStreams) {
       if (moneyStream) {
-        responseFrames.push(new StreamMoneyReceiveTotalFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
+        if (!moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isEqualTo(0)) {
+          this.debug(`telling other side that stream ${moneyStream.id} is closed`)
+          responseFrames.push(new StreamMoneyCloseFrame(moneyStream.id, StreamErrorCode.NoError, ''))
+          moneyStream._sentEnd = true
+        } else {
+          // TODO only send the max amount when it changes
+          responseFrames.push(new StreamMoneyReceiveTotalFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
+        }
       }
     }
 
     // Return fulfillment and response packet
     const responsePacket = new Packet(requestPacket.sequence, IlpPacket.Type.TYPE_ILP_FULFILL, responseFrames)
-    this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')}`)
+    this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
     return {
       fulfillment,
       data: responsePacket.serializeAndEncrypt(this.sharedSecret)
@@ -293,7 +329,7 @@ export class Connection extends EventEmitter3 {
 
         // TODO should a connection error be an error on all of the streams?
         for (let moneyStream of this.moneyStreams) {
-          if (moneyStream && !moneyStream._sentClose) {
+          if (moneyStream && !moneyStream._sentEnd) {
             moneyStream.emit('error', err)
           }
         }
@@ -319,7 +355,7 @@ export class Connection extends EventEmitter3 {
     // Send control frames
     // TODO only send the max amount when it changes
     for (let moneyStream of this.moneyStreams) {
-      if (moneyStream) {
+      if (moneyStream && moneyStream.isOpen()) {
         requestPacket.frames.push(new StreamMoneyReceiveTotalFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
       }
     }
@@ -328,7 +364,7 @@ export class Connection extends EventEmitter3 {
     let maxAmountFromNextStream = this.testMaximumPacketAmount
     const moneyStreamsSentFrom = []
     for (let moneyStream of this.moneyStreams) {
-      if (!moneyStream || moneyStream._sentClose) {
+      if (!moneyStream || moneyStream._sentEnd) {
         // TODO just remove closed streams?
         continue
       }
@@ -349,21 +385,22 @@ export class Connection extends EventEmitter3 {
         }
       }
 
-      if (amountToSendFromStream.isEqualTo(0)) {
-        continue
+      // Hold the money and add a frame to the packet
+      if (amountToSendFromStream.isGreaterThan(0)) {
+        moneyStream._holdOutgoing(requestPacket.sequence.toString(), amountToSendFromStream)
+        // TODO make sure the length of the frames doesn't exceed packet data limit
+        requestPacket.frames.push(new StreamMoneyFrame(moneyStream.id, amountToSendFromStream))
+        amountToSend = amountToSend.plus(amountToSendFromStream)
+        maxAmountFromNextStream = maxAmountFromNextStream.minus(amountToSendFromStream)
+        moneyStreamsSentFrom.push(moneyStream)
       }
-      moneyStream._holdOutgoing(requestPacket.sequence.toString(), amountToSendFromStream)
 
-      // TODO is it only the end when the amount to send is 0?
-      const isEnd = moneyStream.isClosed()
-      const frame = new StreamMoneyFrame(moneyStream.id, amountToSendFromStream, isEnd)
-      // TODO make sure the length of the frame's doesn't exceed packet data limit
-      requestPacket.frames.push(frame)
-      amountToSend = amountToSend.plus(amountToSendFromStream)
-      maxAmountFromNextStream = maxAmountFromNextStream.minus(amountToSendFromStream)
-
-      moneyStream._sentClose = isEnd || moneyStream._sentClose
-      moneyStreamsSentFrom.push(moneyStream)
+      // Tell the other side if the stream is closed
+      if (!moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isGreaterThanOrEqualTo(0)) {
+        requestPacket.frames.push(new StreamMoneyCloseFrame(moneyStream.id, StreamErrorCode.NoError, ''))
+        // TODO only set this to true if the packet gets through to the receiver
+        moneyStream._sentEnd = true
+      }
 
       if (maxAmountFromNextStream.isEqualTo(0)) {
         // TODO make sure that we start with those later frames the next time around
@@ -384,11 +421,21 @@ export class Connection extends EventEmitter3 {
       const minimumDestinationAmount = amountToSend.times(this.exchangeRate)
         .times(new BigNumber(1).minus(this.slippage))
         .integerValue(BigNumber.ROUND_FLOOR)
-      requestPacket.frames.push(new MinimumDestinationAmountFrame(minimumDestinationAmount))
+      if (minimumDestinationAmount.isGreaterThan(0)) {
+        requestPacket.frames.push(new MinimumDestinationAmountFrame(minimumDestinationAmount))
+      }
+    }
+
+    if (amountToSend.isEqualTo(0) && requestPacket.frames.length === 0) {
+      this.debug(`no money or data needs to be send, stopping loop`)
+      this.sending = false
+      return
     }
 
     // Load packet data with available data frames (keep track of max data length)
     // TODO implement sending data
+
+    this.debug(`sending packet: ${JSON.stringify(requestPacket)}`)
 
     // Encrypt
     const data = requestPacket.serializeAndEncrypt(this.sharedSecret)
@@ -489,6 +536,15 @@ export class Connection extends EventEmitter3 {
           stream._remoteReceived = BigNumber.maximum(stream._remoteReceived || 0, frame.totalReceived)
           // TODO should it let you lower the maximum?
           stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax || 0, frame.receiveMax)
+        }
+      } else if (isStreamMoneyCloseFrame(frame)) {
+        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        if (stream) {
+          this.debug(`peer closed stream ${frame.streamId}`)
+          // TODO should we confirm with the other side that we closed it?
+          stream._sentEnd = true
+          stream.end()
+          // TODO delete the stream record
         }
       }
     }

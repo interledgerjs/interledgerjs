@@ -177,7 +177,14 @@ describe('MoneyStream', function () {
       assert.equal(spy.callCount, count)
     })
 
-    it.skip('should reject if the stream closes before the amount has been sent')
+    it('should reject if the stream closes before the amount has been sent', async function () {
+      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+        stream.end()
+      })
+
+      const clientStream = this.clientConn.createMoneyStream()
+      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before desired amount was sent (target: 1000, totalSent: 0)')
+    })
 
     it.skip('should reject if there is an error sending before the amount has been sent')
   })
@@ -228,8 +235,56 @@ describe('MoneyStream', function () {
       clientStream.setSendMax(2000)
     })
 
-    it.skip('should reject if the stream closes before the amount has been received')
+    it('should reject if the stream closes before the amount has been received', async function () {
+      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+        stream.end()
+      })
+
+      const clientStream = this.clientConn.createMoneyStream()
+      await assert.isRejected(clientStream.receiveTotal(1000), 'Stream was closed before desired amount was received (target: 1000, totalReceived: 0)')
+    })
 
     it.skip('should reject if there is an error sending before the amount has been received')
+  })
+
+  describe('end', function () {
+    it('should close the stream on the other side', function (done) {
+      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+        stream.setReceiveMax(1000)
+        stream.on('end', done)
+      })
+
+      const clientStream = this.clientConn.createMoneyStream()
+      clientStream.sendTotal(1000)
+        .then(() => clientStream.end())
+    })
+
+    it('should allow a stream to send some money and be closed right away', function (done) {
+      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+        stream.setReceiveMax(1000)
+        stream.on('end', done)
+      })
+
+      const clientStream = this.clientConn.createMoneyStream()
+      clientStream.setSendMax(1000)
+      clientStream.end()
+    })
+
+    it('should reject all incoming packets with money for the closed stream', function (done) {
+      const spy = sinon.spy()
+      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+        stream.setReceiveMax(1000)
+        stream.end()
+        stream.on('incoming', spy)
+      })
+
+      const clientStream = this.clientConn.createMoneyStream()
+      clientStream.setSendMax(1000)
+      clientStream.on('end', () => {
+        assert.equal(clientStream.totalSent, '0')
+        assert.notCalled(spy)
+        done()
+      })
+    })
   })
 })

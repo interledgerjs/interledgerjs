@@ -10,10 +10,10 @@ export interface MoneyStreamOpts {
 
 export class MoneyStream extends EventEmitter3 {
   readonly id: number
-  _sentClose: boolean
 
   _remoteReceiveMax?: BigNumber
   _remoteReceived?: BigNumber
+  _sentEnd: boolean
 
   protected debug: Debug.IDebugger
   protected isServer: boolean
@@ -39,7 +39,7 @@ export class MoneyStream extends EventEmitter3 {
     this._receiveMax = new BigNumber(0)
     this._outgoingHeldAmount = new BigNumber(0)
 
-    this._sentClose = false
+    this._sentEnd = false
     this.closed = false
     this.holds = {}
   }
@@ -60,13 +60,22 @@ export class MoneyStream extends EventEmitter3 {
     return this._receiveMax.toString()
   }
 
-  close (): void {
-    this.emit('close')
+  end (): void {
+    if (this.closed) {
+      this.debug('tried to close stream that was already closed')
+      return
+    }
+    this.debug('closing stream')
+    this.emit('end')
     this.closed = true
+    if (!this._sentEnd) {
+      this.debug('starting another send loop to tell the peer the stream was closed')
+      this.emit('_send')
+    }
   }
 
-  isClosed (): boolean {
-    return this.closed
+  isOpen (): boolean {
+    return !this.closed
   }
 
   setSendMax (amount: BigNumber.Value): void {
@@ -115,8 +124,8 @@ export class MoneyStream extends EventEmitter3 {
         if ((this._totalSent.isGreaterThanOrEqualTo(amount))) {
           resolve()
         } else {
-          this.debug(`Stream ended before desired amount was sent (target: ${amount}, totalSent: ${this._totalSent})`)
-          reject(new Error(`Stream ended before desired amount was sent (target: ${amount}, totalSent: ${this._totalSent})`))
+          this.debug(`Stream was closed before desired amount was sent (target: ${amount}, totalSent: ${this._totalSent})`)
+          reject(new Error(`Stream was closed before desired amount was sent (target: ${amount}, totalSent: ${this._totalSent})`))
         }
       }
       function errorHandler (err: Error) {
@@ -156,8 +165,8 @@ export class MoneyStream extends EventEmitter3 {
         if (this._totalReceived.isGreaterThanOrEqualTo(amount)) {
           resolve()
         } else {
-          this.debug(`Stream ended before desired amount was received (target: ${amount}, totalReceived: ${this._totalReceived})`)
-          reject(new Error(`Stream ended before desired amount was received (target: ${amount}, totalReceived: ${this._totalReceived})`))
+          this.debug(`Stream was closed before desired amount was received (target: ${amount}, totalReceived: ${this._totalReceived})`)
+          reject(new Error(`Stream was closed before desired amount was received (target: ${amount}, totalReceived: ${this._totalReceived})`))
         }
       }
       function errorHandler (err: Error) {

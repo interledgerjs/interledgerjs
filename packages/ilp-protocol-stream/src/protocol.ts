@@ -62,7 +62,8 @@ export enum FrameType {
   AmountArrived = 2,
   MinimumDestinationAmount = 3,
   StreamMoney = 4,
-  StreamMoneyReceiveTotal = 5
+  StreamMoneyReceiveTotal = 5,
+  StreamMoneyClose = 6
 }
 
 export abstract class Frame {
@@ -84,14 +85,12 @@ export abstract class Frame {
 export class StreamMoneyFrame extends Frame {
   readonly streamId: BigNumber
   readonly shares: BigNumber
-  readonly isEnd: boolean
   protected encoded?: Buffer
 
-  constructor (streamId: BigNumber.Value, amount: BigNumber.Value, isEnd: boolean = false) {
+  constructor (streamId: BigNumber.Value, amount: BigNumber.Value) {
     super(FrameType.StreamMoney, 'StreamMoney')
     this.streamId = new BigNumber(streamId)
     this.shares = new BigNumber(amount)
-    this.isEnd = isEnd
   }
 
   static fromBuffer (reader: Reader): StreamMoneyFrame {
@@ -103,8 +102,7 @@ export class StreamMoneyFrame extends Frame {
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const amount = contents.readVarUIntBigNum()
-    const isEnd = contents.readUInt8BigNum().toNumber() === 1
-    return new StreamMoneyFrame(streamId, amount, isEnd)
+    return new StreamMoneyFrame(streamId, amount)
   }
 
   writeTo (writer: Writer): Writer {
@@ -112,8 +110,6 @@ export class StreamMoneyFrame extends Frame {
     const contents = new Writer()
     contents.writeVarUInt(this.streamId)
     contents.writeVarUInt(this.shares)
-    // TODO should this be a bitmask instead?
-    contents.writeUInt8(this.isEnd ? 1 : 0)
     writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
@@ -259,6 +255,55 @@ export function isStreamMoneyReceiveTotalFrame (frame: Frame): frame is StreamMo
   return frame.type === FrameType.StreamMoneyReceiveTotal
 }
 
+export enum StreamErrorCode {
+  NoError = 0,
+  InternalError = 1,
+  ServerBusy = 2,
+  FlowControlError = 3,
+  StreamIdError = 4,
+  StreamStateError = 5
+}
+
+export class StreamMoneyCloseFrame extends Frame {
+  readonly streamId: BigNumber
+  readonly errorCode: StreamErrorCode
+  readonly errorMessage: string
+
+  constructor (streamId: BigNumber.Value, errorCode: StreamErrorCode, errorMessage: string) {
+    super(FrameType.StreamMoneyClose, 'StreamMoneyClose')
+    this.streamId = new BigNumber(streamId)
+    this.errorCode = errorCode
+    this.errorMessage = errorMessage
+  }
+
+  static fromBuffer (reader: Reader): StreamMoneyCloseFrame {
+    const type = reader.readUInt8BigNum().toNumber()
+    if (type !== FrameType.StreamMoneyClose) {
+      throw new Error(`Cannot read StreamMoneyCloseFrame from Buffer. Expected type ${FrameType.StreamMoneyClose}, got: ${type}`)
+    }
+
+    const contents = Reader.from(reader.readVarOctetString())
+    const streamId = contents.readVarUIntBigNum()
+    const errorCode = contents.readUInt8BigNum().toNumber()
+    const errorMessage = contents.readVarOctetString().toString('utf8')
+    return new StreamMoneyCloseFrame(streamId, errorCode, errorMessage)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.streamId)
+    contents.writeUInt8(this.errorCode)
+    contents.writeVarOctetString(Buffer.from(this.errorMessage, 'utf8'))
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export function isStreamMoneyCloseFrame (frame: Frame): frame is StreamMoneyCloseFrame {
+  return frame.type === FrameType.StreamMoneyClose
+}
+
 function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.peekUInt8BigNum().toNumber()
 
@@ -273,6 +318,8 @@ function parseFrame (reader: Reader): Frame | undefined {
       return MinimumDestinationAmountFrame.fromBuffer(reader)
     case FrameType.StreamMoneyReceiveTotal:
       return StreamMoneyReceiveTotalFrame.fromBuffer(reader)
+    case FrameType.StreamMoneyClose:
+      return StreamMoneyCloseFrame.fromBuffer(reader)
     default:
       return undefined
   }
