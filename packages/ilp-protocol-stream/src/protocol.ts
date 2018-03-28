@@ -1,6 +1,6 @@
 import { Reader, Writer } from 'oer-utils'
 import BigNumber from 'bignumber.js'
-import { encrypt, decrypt } from './crypto'
+import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
 import 'source-map-support/register'
 
 const VERSION = 1
@@ -51,13 +51,25 @@ export class Packet {
     return writer.getBuffer()
   }
 
-  serializeAndEncrypt (sharedSecret: Buffer): Buffer {
-    return encrypt(sharedSecret, this._serialize())
+  serializeAndEncrypt (sharedSecret: Buffer, padPacketToSize?: number): Buffer {
+    const serialized = this._serialize()
+    if (padPacketToSize !== undefined) {
+      const paddingSize = padPacketToSize - ENCRYPTION_OVERHEAD - serialized.length
+      const zeroBytes = Buffer.alloc(32, 0)
+      const args = [sharedSecret, serialized]
+      for (let i = 0; i < Math.floor(paddingSize / 32); i++) {
+        args.push(zeroBytes)
+      }
+      args.push(zeroBytes.slice(0, paddingSize % 32))
+      return encrypt.apply(null, args)
+    }
+    return encrypt(sharedSecret, serialized)
   }
 }
 
 export enum FrameType {
   // TODO reorder frame numbers to something sensible
+  Padding = 0,
   SourceAccount = 1,
   AmountArrived = 2,
   MinimumDestinationAmount = 3,
@@ -308,6 +320,9 @@ function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.peekUInt8BigNum().toNumber()
 
   switch (type) {
+    case FrameType.Padding:
+      reader.skipUInt8()
+      return undefined
     case FrameType.StreamMoney:
       return StreamMoneyFrame.fromBuffer(reader)
     case FrameType.SourceAccount:
@@ -321,6 +336,8 @@ function parseFrame (reader: Reader): Frame | undefined {
     case FrameType.StreamMoneyClose:
       return StreamMoneyCloseFrame.fromBuffer(reader)
     default:
+      reader.skipUInt8()
+      reader.skipVarOctetString()
       return undefined
   }
 }
@@ -333,9 +350,6 @@ function parseFrames (buffer: Reader | Buffer): Frame[] {
     const frame = parseFrame(reader)
     if (frame) {
       frames.push(frame)
-    } else {
-      reader.skipUInt8()
-      reader.skipVarOctetString()
     }
   }
   return frames

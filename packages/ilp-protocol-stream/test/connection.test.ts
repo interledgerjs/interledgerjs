@@ -257,4 +257,54 @@ describe('Connection', function () {
       assert.equal(clientStream1.totalSent, '0')
     })
   })
+
+  describe('Padding', function () {
+    it('should allow packets to be padded to the maximum size', async function () {
+      this.clientPlugin.deregisterDataHandler()
+      this.serverPlugin.deregisterDataHandler()
+
+      this.server = new Server({
+        plugin: this.serverPlugin,
+        serverSecret: Buffer.alloc(32),
+        enablePadding: true
+      })
+      await this.server.listen()
+
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      this.destinationAccount = destinationAccount
+      this.sharedSecret = sharedSecret
+
+      const connectionPromise = this.server.acceptConnection()
+
+      this.clientConn = await createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret,
+        enablePadding: true
+      })
+      this.serverConn = await connectionPromise
+      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+        stream.setReceiveMax(10000)
+      })
+
+      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
+      const lengths: number[] = []
+      this.clientPlugin.sendData = async (data: Buffer): Promise<Buffer> => {
+        lengths.push(IlpPacket.deserializeIlpPrepare(data).data.length)
+        const response = await realSendData(data)
+        if (response[0] === IlpPacket.Type.TYPE_ILP_FULFILL) {
+          lengths.push(IlpPacket.deserializeIlpFulfill(response).data.length)
+        } else {
+          lengths.push(IlpPacket.deserializeIlpReject(response).data.length)
+        }
+        return response
+      }
+      const clientStream = this.clientConn.createMoneyStream()
+      await clientStream.sendTotal(117)
+
+      for (let length of lengths) {
+        assert.equal(length, 32767)
+      }
+    })
+  })
 })

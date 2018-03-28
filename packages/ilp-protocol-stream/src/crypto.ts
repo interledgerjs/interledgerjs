@@ -7,6 +7,7 @@ const ENCRYPTION_ALGORITHM = 'aes-256-gcm'
 const ENCRYPTION_KEY_STRING = Buffer.from('ilp_stream_encryption', 'utf8')
 const IV_LENGTH = 12
 const AUTH_TAG_LENGTH = 16
+export const ENCRYPTION_OVERHEAD = 28
 
 const FULFILLMENT_GENERATION_STRING = Buffer.from('ilp_stream_fulfillment', 'utf8')
 
@@ -41,21 +42,20 @@ export function hash (preimage: Buffer) {
   return h.digest()
 }
 
-export function encrypt (sharedSecret: Buffer, data: Buffer): Buffer {
+export function encrypt (sharedSecret: Buffer, ...buffers: Buffer[]): Buffer {
   const iv = crypto.randomBytes(IV_LENGTH)
   // TODO only generate the key once per connection
   const pskEncryptionKey = hmac(sharedSecret, ENCRYPTION_KEY_STRING)
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, iv)
 
-  const encryptedInitial = cipher.update(data)
-  const encryptedFinal = cipher.final()
+  const ciphertext = []
+  for (let buffer of buffers) {
+    ciphertext.push(cipher.update(buffer))
+  }
+  ciphertext.push(cipher.final())
   const tag = cipher.getAuthTag()
-  return Buffer.concat([
-    iv,
-    tag,
-    encryptedInitial,
-    encryptedFinal
-  ])
+  ciphertext.unshift(iv, tag)
+  return Buffer.concat(ciphertext)
 }
 
 export function decrypt (sharedSecret: Buffer, data: Buffer): Buffer {

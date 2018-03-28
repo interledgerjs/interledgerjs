@@ -27,6 +27,7 @@ import 'source-map-support/register'
 
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
 const RETRY_DELAY_START = 100
+const MAX_DATA_SIZE = 32767
 
 export interface ConnectionOpts {
   plugin: Plugin,
@@ -34,7 +35,8 @@ export interface ConnectionOpts {
   sourceAccount: string,
   sharedSecret: Buffer,
   isServer: boolean,
-  slippage?: BigNumber.Value
+  slippage?: BigNumber.Value,
+  enablePadding?: boolean
 }
 
 export class Connection extends EventEmitter3 {
@@ -46,6 +48,7 @@ export class Connection extends EventEmitter3 {
   protected slippage: BigNumber
   /** How much more than the money stream specified it will accept */
   protected allowableReceiveExtra: BigNumber
+  protected enablePadding: boolean
 
   protected outgoingPacketNumber: number
   protected moneyStreams: MoneyStream[]
@@ -71,6 +74,7 @@ export class Connection extends EventEmitter3 {
     this.isServer = opts.isServer
     this.slippage = new BigNumber(opts.slippage || 0)
     this.allowableReceiveExtra = new BigNumber(1.01)
+    this.enablePadding = !!opts.enablePadding
 
     this.outgoingPacketNumber = 0
     this.moneyStreams = []
@@ -111,8 +115,6 @@ export class Connection extends EventEmitter3 {
 
   /** @private */
   async handlePrepare (prepare: IlpPacket.IlpPrepare): Promise<IlpPacket.IlpFulfill> {
-    this.debug(`got ILP Prepare:`, prepare)
-
     // Parse packet
     let requestPacket: Packet
     try {
@@ -135,7 +137,7 @@ export class Connection extends EventEmitter3 {
 
     const throwFinalApplicationError = () => {
       const responsePacket = new Packet(requestPacket.sequence, IlpPacket.Type.TYPE_ILP_REJECT, responseFrames)
-      throw new IlpPacket.Errors.FinalApplicationError('', responsePacket.serializeAndEncrypt(this.sharedSecret))
+      throw new IlpPacket.Errors.FinalApplicationError('', responsePacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined)))
     }
 
     // Handle non-money frames
@@ -287,7 +289,7 @@ export class Connection extends EventEmitter3 {
     this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
     return {
       fulfillment,
-      data: responsePacket.serializeAndEncrypt(this.sharedSecret)
+      data: responsePacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined))
     }
   }
 
@@ -438,7 +440,7 @@ export class Connection extends EventEmitter3 {
     this.debug(`sending packet: ${JSON.stringify(requestPacket)}`)
 
     // Encrypt
-    const data = requestPacket.serializeAndEncrypt(this.sharedSecret)
+    const data = requestPacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined))
 
     // Generate condition
     const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, data)
@@ -453,7 +455,6 @@ export class Connection extends EventEmitter3 {
       // TODO more intelligent expiry
       expiresAt: new Date(Date.now() + 30000)
     }
-    this.debug(`sending packet number ${requestPacket.sequence}: ${JSON.stringify(prepare)}`)
     const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
 
     let response: IlpPacket.IlpFulfill | IlpPacket.IlpRejection
@@ -571,7 +572,7 @@ export class Connection extends EventEmitter3 {
     const prepare = {
       destination: this.destinationAccount,
       amount: (sourceAmount).toString(),
-      data: requestPacket.serializeAndEncrypt(this.sharedSecret),
+      data: requestPacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined)),
       executionCondition: cryptoHelper.generateRandomCondition(),
       expiresAt: new Date(Date.now() + 30000)
     }

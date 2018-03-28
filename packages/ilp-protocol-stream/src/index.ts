@@ -10,7 +10,8 @@ import 'source-map-support/register'
 export interface CreateConnectionOpts {
   plugin: Plugin,
   destinationAccount: string,
-  sharedSecret: Buffer
+  sharedSecret: Buffer,
+  enablePadding?: boolean
 }
 
 export async function createConnection (opts: CreateConnectionOpts): Promise<Connection> {
@@ -21,7 +22,8 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
     destinationAccount: opts.destinationAccount,
     sourceAccount,
     sharedSecret: opts.sharedSecret,
-    isServer: false
+    isServer: false,
+    enablePadding: opts.enablePadding
   })
   opts.plugin.registerDataHandler(async (data: Buffer): Promise<Buffer> => {
     let prepare: IlpPacket.IlpPrepare
@@ -55,7 +57,8 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
 
 export interface ServerOpts {
   serverSecret: Buffer,
-  plugin: Plugin
+  plugin: Plugin,
+  enablePadding?: boolean
 }
 
 export class Server extends EventEmitter3 {
@@ -64,6 +67,7 @@ export class Server extends EventEmitter3 {
   protected sourceAccount: string
   protected connections: { [key: string]: Connection }
   protected debug: Debug.IDebugger
+  protected enablePadding?: boolean
 
   constructor (opts: ServerOpts) {
     super()
@@ -71,6 +75,7 @@ export class Server extends EventEmitter3 {
     this.plugin = opts.plugin
     this.debug = Debug('ilp-protocol-stream:Server')
     this.connections = {}
+    this.enablePadding = opts.enablePadding
   }
 
   async listen (): Promise<void> {
@@ -122,7 +127,8 @@ export class Server extends EventEmitter3 {
             plugin: this.plugin,
             sourceAccount: this.sourceAccount,
             sharedSecret,
-            isServer: true
+            isServer: true,
+            enablePadding: this.enablePadding
           })
           this.connections[connectionId] = connection
           this.debug(`got incoming packet for new connection: ${connectionId}`)
