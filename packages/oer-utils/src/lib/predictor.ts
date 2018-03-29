@@ -1,4 +1,5 @@
 import { isInteger } from './util'
+import BigNumber from 'bignumber.js'
 
 /**
  * Writable stream which tracks the amount of data written.
@@ -8,54 +9,59 @@ import { isInteger } from './util'
  */
 class Predictor {
   size: number
+  components: Buffer[]
 
   constructor () {
     this.size = 0
+    this.components = []
   }
 
   /**
-   * Add the size of a fixed-length integer to the predicted size.
-   *
-   * @param {number} value Value of integer. Irrelevant here, but included in
-   *                       order to have the same interface as the Writer.
-   * @param {number} length Size of integer in bytes.
+   * Add the size of a fixed-length unsigned integer to the predicted size.
    */
-  writeUInt (value: number, length: number) {
+  writeUInt (value: BigNumber.Value, length: number) {
     this.size += length
   }
 
   /**
-   * Calculate the size of a variable-length integer.
-   *
-   * A VARUINT is a variable length integer encoded as base128 where the highest
-   * bit indicates that another byte is following. The first byte contains the
-   * seven least significant bits of the number represented.
-   *
-   * @param {number} value Integer to be encoded
+   * Add the size of a fixed-length integer to the predicted size.
    */
-  writeVarUInt (value: number | Buffer) {
-    if (Buffer.isBuffer(value)) {
-      // If the integer was already passed as a buffer, we can just treat it as
-      // an octet string.
-      this.writeVarOctetString(value)
-      return
-    } else if (!isInteger(value)) {
+  writeInt (value: BigNumber.Value, length: number) {
+    this.size += length
+  }
+
+  /**
+   * Calculate the size of a variable-length unsigned integer.
+   */
+  writeVarUInt (_value: BigNumber.Value) {
+    if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
-    } else if (value < 0) {
+    }
+    const value = new BigNumber(_value)
+
+    if (value.isNegative()) {
       throw new Error('UInt must be positive')
     }
 
-    const length = Math.ceil(value.toString(2).length / 8)
-    this.skipVarOctetString(length)
+    const lengthOfValue = Math.ceil(value.toString(16).length / 2)
+    this.skipVarOctetString(lengthOfValue)
+  }
+
+  /**
+   * Calculate the size of a variable-length integer.
+   */
+  writeVarInt (_value: BigNumber.Value) {
+    if (!isInteger(_value)) {
+      throw new Error('UInt must be an integer')
+    }
+    const value = new BigNumber(_value)
+
+    const lengthOfValue = Math.ceil(value.toString(16).length / 2)
+    this.skipVarOctetString(lengthOfValue)
   }
 
   /**
    * Skip bytes for a fixed-length octet string.
-   *
-   * Just an alias for skip. Included to provide consistency with Writer.
-   *
-   * @param {Buffer} buffer Data to write.
-   * @param {Number} length Length of data according to the format.
    */
   writeOctetString (buffer: Buffer, length: number) {
     this.skip(length)
@@ -63,10 +69,6 @@ class Predictor {
 
   /**
    * Calculate the size of a variable-length octet string.
-   *
-   * A variable-length octet string is a length-prefixed set of arbitrary bytes.
-   *
-   * @param {Buffer} value Contents of the octet string.
    */
   writeVarOctetString (buffer: Buffer) {
     this.skipVarOctetString(buffer.length)
@@ -99,6 +101,13 @@ class Predictor {
     return this.size
   }
 
+  /**
+   * Dummy function just to mimic Writer API
+   */
+  getBuffer (): Buffer {
+    return Buffer.alloc(0)
+  }
+
   private skipVarOctetString (length: number) {
     // Skip initial byte
     this.skip(1)
@@ -118,11 +127,19 @@ interface Predictor {
   writeUInt16 (value: number): undefined
   writeUInt32 (value: number): undefined
   writeUInt64 (value: number): undefined
+  writeInt8 (value: number): undefined
+  writeInt16 (value: number): undefined
+  writeInt32 (value: number): undefined
+  writeInt64 (value: number): undefined
 }
 
 // Create writeUInt{8,16,32,64} shortcuts
 [1, 2, 4, 8].forEach((bytes) => {
   Predictor.prototype['writeUInt' + bytes * 8] = function (value: number) {
+    return this.writeUInt(value, bytes)
+  }
+
+  Predictor.prototype['writeInt' + bytes * 8] = function (value: number) {
     return this.writeUInt(value, bytes)
   }
 })
