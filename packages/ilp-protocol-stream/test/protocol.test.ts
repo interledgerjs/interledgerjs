@@ -1,6 +1,6 @@
 import 'mocha'
 import { assert } from 'chai'
-import { Packet, StreamMoneyFrame, Frame } from '../src/protocol'
+import { Packet, StreamMoneyFrame, BaseFrame } from '../src/protocol'
 import { Reader, Writer } from 'oer-utils'
 
 describe('Packet Format', function () {
@@ -18,33 +18,29 @@ describe('Packet Format', function () {
     })
 
     it('should skip unknown frames', function () {
-      class UnknownFrame extends Frame {
-        constructor () {
-          super(255, 'UnknownFrame')
-        }
+      const unknownFrameWriter = new Writer()
+      unknownFrameWriter.writeUInt8(255)
+      unknownFrameWriter.writeVarOctetString(Buffer.alloc(47, '0F', 'hex'))
+      const unknownFrame = unknownFrameWriter.getBuffer()
 
-        static fromBuffer (reader: Reader): UnknownFrame {
-          return new UnknownFrame()
-        }
+      const lastFrame = new StreamMoneyFrame(3, 3).writeTo(new Writer()).getBuffer()
 
-        writeTo (writer: Writer): Writer {
-          writer.writeUInt8(this.type)
-          writer.writeVarOctetString(Buffer.alloc(47, '0F', 'hex'))
-          return writer
-        }
-      }
-      const packet = new Packet(0, 14, [
+      const packet = new Packet(0, 14, 5, [
         new StreamMoneyFrame(1, 1),
-        new StreamMoneyFrame(2, 2),
-        new UnknownFrame(),
-        new StreamMoneyFrame(3, 3),
-        new UnknownFrame()
+        new StreamMoneyFrame(2, 2)
       ])
 
       const serialized = packet._serialize()
-      const deserializedPacket = Packet._deserializeUnencrypted(serialized)
+      const serializedWithExtraFrames = Buffer.concat([
+        serialized,
+        unknownFrame,
+        lastFrame,
+        unknownFrame
+      ])
+      const deserializedPacket = Packet._deserializeUnencrypted(serializedWithExtraFrames)
 
       assert.equal(deserializedPacket.frames.length, 3)
+      assert.equal((deserializedPacket.frames[2] as StreamMoneyFrame).streamId.toNumber(), 3)
     })
   })
 })

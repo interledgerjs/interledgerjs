@@ -11,7 +11,7 @@ import * as chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
 const assert = Object.assign(Chai.assert, sinon.assert)
 
-describe.only('DataStream', function () {
+describe('DataStream', function () {
   beforeEach(async function () {
     this.clientPlugin = new MockPlugin(0.5)
     this.serverPlugin = this.clientPlugin.mirror

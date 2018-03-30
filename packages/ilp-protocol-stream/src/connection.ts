@@ -7,21 +7,15 @@ import * as cryptoHelper from './crypto'
 import {
   Packet,
   Frame,
+  BaseFrame,
   StreamMoneyFrame,
-  isStreamMoneyFrame,
-  SourceAccountFrame,
-  isSourceAccountFrame,
-  AmountArrivedFrame,
-  isAmountArrivedFrame,
-  isMinimumDestinationAmountFrame,
-  MinimumDestinationAmountFrame,
-  StreamMoneyReceiveTotalFrame,
-  isStreamMoneyReceiveTotalFrame,
-  StreamMoneyCloseFrame,
-  StreamErrorCode,
-  isStreamMoneyCloseFrame,
-  isStreamDataFrame,
-  StreamDataFrame
+  StreamMoneyErrorFrame,
+  StreamDataFrame,
+  StreamMoneyMaxFrame,
+  FrameType,
+  IlpPacketType,
+  ConnectionNewAddressFrame,
+  ErrorCode
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
@@ -146,18 +140,15 @@ export class Connection extends EventEmitter3 {
     }
     this.debug('handling packet:', JSON.stringify(requestPacket))
 
-    if (requestPacket.ilpPacketType !== IlpPacket.Type.TYPE_ILP_PREPARE) {
+    if (requestPacket.ilpPacketType.valueOf() !== IlpPacket.Type.TYPE_ILP_PREPARE) {
       this.debug(`prepare packet contains a frame that says it should be something other than a prepare: ${requestPacket.ilpPacketType}`)
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
     }
 
     const responseFrames: Frame[] = []
 
-    // Tell sender how much arrived
-    responseFrames.push(new AmountArrivedFrame(prepare.amount))
-
     const throwFinalApplicationError = () => {
-      const responsePacket = new Packet(requestPacket.sequence, IlpPacket.Type.TYPE_ILP_REJECT, responseFrames)
+      const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Reject, prepare.amount, responseFrames)
       throw new IlpPacket.Errors.FinalApplicationError('', responsePacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined)))
     }
 
@@ -166,22 +157,81 @@ export class Connection extends EventEmitter3 {
     let totalMoneyShares = new BigNumber(0)
     const streamMoneyFrames: StreamMoneyFrame[] = []
     for (let frame of requestPacket.frames) {
-      if (isSourceAccountFrame(frame)) {
+      if (frame.type === FrameType.ConnectionNewAddress) {
         this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
         this.destinationAccount = frame.sourceAccount
         // Try sending in case we stopped because we didn't know their address before
         this.startSendLoop()
-      } else if (isMinimumDestinationAmountFrame(frame)) {
-        if (frame.amount.isLessThan(prepare.amount)) {
-          this.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${frame.amount}`)
-          throwFinalApplicationError()
-        }
-      } else if (isStreamMoneyFrame(frame)) {
+      } else if (frame.type === FrameType.StreamMoney) {
         streamMoneyFrames.push(frame)
 
         // Count the total number of "shares" to be able to distribute the packet amount amongst the MoneyStreams
         totalMoneyShares = totalMoneyShares.plus(frame.shares)
-      } else if (isStreamMoneyReceiveTotalFrame(frame)) {
+      }
+    }
+
+    if (requestPacket.prepareAmount.isGreaterThan(prepare.amount)) {
+      this.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${requestPacket.prepareAmount}`)
+      throwFinalApplicationError()
+    }
+
+    // Ensure we can generate correct fulfillment
+    const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, prepare.data)
+    const generatedCondition = cryptoHelper.hash(fulfillment)
+    if (!generatedCondition.equals(prepare.executionCondition)) {
+      this.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
+      throwFinalApplicationError()
+    }
+
+    // Handle new streams
+    let includesNewStream = false
+    for (let frame of requestPacket.frames) {
+      switch (frame.type) {
+        case FrameType.StreamMoney:
+        case FrameType.StreamMoneyEnd:
+        case FrameType.StreamMoneyMax:
+          const moneyStreamId = frame.streamId.toNumber()
+          if (this.moneyStreams[moneyStreamId]) {
+            continue
+          }
+          includesNewStream = true
+          this.debug(`got new money stream: ${moneyStreamId}`)
+          const moneyStream = new MoneyStream({
+            id: moneyStreamId,
+            isServer: this.isServer
+          })
+          this.moneyStreams[moneyStreamId] = moneyStream
+
+          this.emit('money_stream', moneyStream)
+          moneyStream.on('_send', this.startSendLoop.bind(this))
+          break
+        case FrameType.StreamData:
+        case FrameType.StreamDataEnd:
+          const dataStreamId = frame.streamId.toNumber()
+          if (this.dataStreams[dataStreamId]) {
+            continue
+          }
+          includesNewStream = true
+          this.debug(`got new data stream: ${dataStreamId}`)
+          const stream = new DataStream(dataStreamId)
+          this.dataStreams[dataStreamId] = stream
+
+          this.emit('data_stream', stream)
+          stream.on('_send', this.startSendLoop.bind(this))
+          break
+        default:
+          continue
+      }
+    }
+    // Handle the new frames on the next tick of the event loop
+    // to wait for event handlers that may be added to the new stream
+    if (includesNewStream) {
+      await new Promise((resolve, reject) => setImmediate(resolve))
+    }
+
+    // Handle receive max amount frames
+    for (let frame of requestPacket.frames) {
+      if (frame.type === FrameType.StreamMoneyMax) {
         const stream = this.moneyStreams[frame.streamId.toNumber()]
         if (stream) {
           this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
@@ -197,61 +247,13 @@ export class Connection extends EventEmitter3 {
       }
     }
 
-    // Ensure we can generate correct fulfillment
-    const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, prepare.data)
-    const generatedCondition = cryptoHelper.hash(fulfillment)
-    if (!generatedCondition.equals(prepare.executionCondition)) {
-      this.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
-      throwFinalApplicationError()
-    }
-
-    // Handle new streams
-    let includesNewStream = false
-    for (let frame of requestPacket.frames) {
-      if (isStreamMoneyFrame(frame) || isStreamMoneyReceiveTotalFrame(frame)) {
-        const streamId = frame.streamId.toNumber()
-
-        // Handle new incoming MoneyStreams
-        if (!this.moneyStreams[streamId]) {
-          includesNewStream = true
-          this.debug(`got new money stream: ${streamId}`)
-          const stream = new MoneyStream({
-            id: streamId,
-            isServer: this.isServer
-          })
-          this.moneyStreams[streamId] = stream
-
-          this.emit('money_stream', stream)
-          stream.on('_send', this.startSendLoop.bind(this))
-
-        }
-      } else if (isStreamDataFrame(frame)) {
-        const streamId = frame.streamId.toNumber()
-
-        if (!this.dataStreams[streamId]) {
-          includesNewStream = true
-          this.debug(`got new data stream: ${streamId}`)
-          const stream = new DataStream(streamId)
-          this.dataStreams[streamId] = stream
-
-          this.emit('data_stream', stream)
-          stream.on('_send', this.startSendLoop.bind(this))
-        }
-
-      }
-    }
-    // Handle the new frames on the next tick of the event loop
-    // to wait for event handlers that may be added to the new stream
-    if (includesNewStream) {
-      await new Promise((resolve, reject) => setImmediate(resolve))
-    }
-
     // Handle data
     for (let frame of requestPacket.frames) {
-      if (isStreamDataFrame(frame)) {
+      if (frame.type === FrameType.StreamData || frame.type === FrameType.StreamDataEnd) {
         const stream = this.dataStreams[frame.streamId.toNumber()]
 
         stream._pushIncomingData(frame.data, frame.offset.toNumber())
+        // TODO handle stream end
       }
     }
 
@@ -274,7 +276,7 @@ export class Connection extends EventEmitter3 {
         // TODO should this be distributed to other streams if it can be?
         this.debug(`peer sent too much for stream: ${streamId}. got: ${streamAmount}, max receivable: ${maxStreamCanReceive}`)
         // Tell peer how much the streams they sent for can receive
-        responseFrames.push(new StreamMoneyReceiveTotalFrame(streamId, this.moneyStreams[streamId].receiveMax, this.moneyStreams[streamId].totalReceived))
+        responseFrames.push(new StreamMoneyMaxFrame(streamId, this.moneyStreams[streamId].receiveMax, this.moneyStreams[streamId].totalReceived))
 
         // TODO include error frame
         throwFinalApplicationError()
@@ -283,7 +285,7 @@ export class Connection extends EventEmitter3 {
       // Reject the packet if any of the streams is already closed
       if (!this.moneyStreams[streamId].isOpen()) {
         this.debug(`peer sent money for stream that was already closed: ${streamId}`)
-        responseFrames.push(new StreamMoneyCloseFrame(streamId, StreamErrorCode.StreamStateError, 'Stream is already closed'))
+        responseFrames.push(new StreamMoneyErrorFrame(streamId, 'StreamStateError', 'Stream is already closed'))
 
         throwFinalApplicationError()
       }
@@ -298,10 +300,10 @@ export class Connection extends EventEmitter3 {
 
     // Handle stream closes
     for (let frame of requestPacket.frames) {
-      if (isStreamMoneyCloseFrame(frame)) {
+      if (frame.type === FrameType.StreamMoneyError) {
         const stream = this.moneyStreams[frame.streamId.toNumber()]
         if (stream) {
-          this.debug(`peer closed stream ${stream.id}`)
+          this.debug(`peer closed stream ${stream.id} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
           // TODO should we confirm with the other side that we closed it?
           stream._sentEnd = true
           stream.end()
@@ -317,17 +319,17 @@ export class Connection extends EventEmitter3 {
       if (moneyStream) {
         if (!moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isEqualTo(0)) {
           this.debug(`telling other side that stream ${moneyStream.id} is closed`)
-          responseFrames.push(new StreamMoneyCloseFrame(moneyStream.id, StreamErrorCode.NoError, ''))
+          responseFrames.push(new StreamMoneyErrorFrame(moneyStream.id, 'NoError', ''))
           moneyStream._sentEnd = true
         } else {
           // TODO only send the max amount when it changes
-          responseFrames.push(new StreamMoneyReceiveTotalFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
+          responseFrames.push(new StreamMoneyMaxFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
         }
       }
     }
 
     // Return fulfillment and response packet
-    const responsePacket = new Packet(requestPacket.sequence, IlpPacket.Type.TYPE_ILP_FULFILL, responseFrames)
+    const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Fulfill, prepare.amount, responseFrames)
     this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
     return {
       fulfillment,
@@ -394,13 +396,13 @@ export class Connection extends EventEmitter3 {
     }
 
     // Set packet number to correlate response with request
-    const requestPacket = new Packet(this.outgoingPacketNumber++, IlpPacket.Type.TYPE_ILP_PREPARE)
+    const requestPacket = new Packet(this.outgoingPacketNumber++, IlpPacketType.Prepare)
 
     // Send control frames
     // TODO only send the max amount when it changes
     for (let moneyStream of this.moneyStreams) {
       if (moneyStream && moneyStream.isOpen()) {
-        requestPacket.frames.push(new StreamMoneyReceiveTotalFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
+        requestPacket.frames.push(new StreamMoneyMaxFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
       }
     }
 
@@ -441,7 +443,7 @@ export class Connection extends EventEmitter3 {
 
       // Tell the other side if the stream is closed
       if (!moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isGreaterThanOrEqualTo(0)) {
-        requestPacket.frames.push(new StreamMoneyCloseFrame(moneyStream.id, StreamErrorCode.NoError, ''))
+        requestPacket.frames.push(new StreamMoneyErrorFrame(moneyStream.id, 'NoError', ''))
         // TODO only set this to true if the packet gets through to the receiver
         moneyStream._sentEnd = true
       }
@@ -481,7 +483,7 @@ export class Connection extends EventEmitter3 {
         .times(new BigNumber(1).minus(this.slippage))
         .integerValue(BigNumber.ROUND_FLOOR)
       if (minimumDestinationAmount.isGreaterThan(0)) {
-        requestPacket.frames.push(new MinimumDestinationAmountFrame(minimumDestinationAmount))
+        requestPacket.prepareAmount = minimumDestinationAmount
       }
     }
 
@@ -587,7 +589,7 @@ export class Connection extends EventEmitter3 {
 
     // Handle response data from receiver
     for (let frame of responsePacket.frames) {
-      if (isStreamMoneyReceiveTotalFrame(frame)) {
+      if (frame.type === FrameType.StreamMoneyMax) {
         const stream = this.moneyStreams[frame.streamId.toNumber()]
         if (stream) {
           this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
@@ -595,10 +597,10 @@ export class Connection extends EventEmitter3 {
           // TODO should it let you lower the maximum?
           stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax || 0, frame.receiveMax)
         }
-      } else if (isStreamMoneyCloseFrame(frame)) {
+      } else if (frame.type === FrameType.StreamMoneyError) {
         const stream = this.moneyStreams[frame.streamId.toNumber()]
         if (stream) {
-          this.debug(`peer closed stream ${frame.streamId}`)
+          this.debug(`peer closed stream ${frame.streamId} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
           // TODO should we confirm with the other side that we closed it?
           stream._sentEnd = true
           stream.end()
@@ -614,11 +616,11 @@ export class Connection extends EventEmitter3 {
     }
 
     // Set packet number to correlate response with request
-    const requestPacket = new Packet(this.outgoingPacketNumber++, IlpPacket.Type.TYPE_ILP_PREPARE, [])
+    const requestPacket = new Packet(this.outgoingPacketNumber++, IlpPacketType.Prepare)
 
     if (this.shouldSendSourceAccount) {
       // TODO attach a token to the account?
-      requestPacket.frames.push(new SourceAccountFrame(this.sourceAccount))
+      requestPacket.frames.push(new ConnectionNewAddressFrame(this.sourceAccount))
 
       // TODO make sure to reset this if the packet fails
       this.shouldSendSourceAccount = false
@@ -669,16 +671,9 @@ export class Connection extends EventEmitter3 {
     }
 
     // Determine exchange rate from amount that arrived
-    for (let frame of responsePacket.frames) {
-      if (isAmountArrivedFrame(frame)) {
-        this.exchangeRate = frame.amount.dividedBy(sourceAmount)
-        this.debug(`determined exchange rate to be: ${this.exchangeRate}`)
-        break
-      }
-    }
-    if (!this.exchangeRate) {
-      throw new Error('No AmountArrivedFrame in test packet response')
-    } else if (this.exchangeRate.isEqualTo(0)) {
+    this.exchangeRate = responsePacket.prepareAmount.dividedBy(sourceAmount)
+    this.debug(`determined exchange rate to be: ${this.exchangeRate}`)
+    if (this.exchangeRate.isEqualTo(0)) {
       // TODO this could also happen if the exchange rate is less than 1 / TEST_PACKET_AMOUNT
       throw new Error('Exchange rate is 0. We will not be able to send anything through this path')
     }
