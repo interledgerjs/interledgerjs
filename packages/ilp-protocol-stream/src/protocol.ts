@@ -5,6 +5,8 @@ import 'source-map-support/register'
 
 const VERSION = 1
 
+const ZERO_BYTES = Buffer.alloc(32)
+
 export enum IlpPacketType {
   Prepare = 12,
   Fulfill = 13,
@@ -55,12 +57,11 @@ export class Packet {
     const serialized = this._serialize()
     if (padPacketToSize !== undefined) {
       const paddingSize = padPacketToSize - ENCRYPTION_OVERHEAD - serialized.length
-      const zeroBytes = Buffer.alloc(32, 0)
       const args = [sharedSecret, serialized]
       for (let i = 0; i < Math.floor(paddingSize / 32); i++) {
-        args.push(zeroBytes)
+        args.push(ZERO_BYTES)
       }
-      args.push(zeroBytes.slice(0, paddingSize % 32))
+      args.push(ZERO_BYTES.slice(0, paddingSize % 32))
       return encrypt.apply(null, args)
     }
     return encrypt(sharedSecret, serialized)
@@ -363,9 +364,6 @@ function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.peekUInt8BigNum().toNumber()
 
   switch (type) {
-    case FrameType.Padding:
-      reader.skipUInt8()
-      return undefined
     case FrameType.StreamMoney:
       return StreamMoneyFrame.fromBuffer(reader)
     case FrameType.ConnectionNewAddress:
@@ -387,7 +385,9 @@ function parseFrames (buffer: Reader | Buffer): Frame[] {
   const reader = (Buffer.isBuffer(buffer) ? Reader.from(buffer) : buffer)
   const frames: Frame[] = []
 
-  while (reader.cursor < reader.buffer.length) {
+  // Keep reading frames until the end or until we hit the padding (which must come at the end)
+  while (reader.cursor < reader.buffer.length
+    && !reader.peekUInt8BigNum().isEqualTo(FrameType.Padding)) {
     const frame = parseFrame(reader)
     if (frame) {
       frames.push(frame)
