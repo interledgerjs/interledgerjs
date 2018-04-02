@@ -8,6 +8,9 @@ export interface MoneyStreamOpts {
   isServer: boolean
 }
 
+/**
+ * Stream for sending money over an ILP STREAM connection.
+ */
 export class MoneyStream extends EventEmitter3 {
   readonly id: number
 
@@ -44,22 +47,39 @@ export class MoneyStream extends EventEmitter3 {
     this.holds = {}
   }
 
+  /**
+   * Total amount sent so far, denominated in the connection plugin's units.
+   */
   get totalSent (): string {
     return this._totalSent.toString()
   }
 
+  /**
+   * Total amount received so far, denominated in the connection plugin's units.
+   */
   get totalReceived (): string {
     return this._totalReceived.toString()
   }
 
+  /**
+   * The current limit up to which the stream will try to send, denominated in the connection plugin's units.
+   * (If the `sendMax` is greater than the `totalSent`, the stream will continue to send the difference)
+   */
   get sendMax (): string {
     return this._sendMax.toString()
   }
 
+  /**
+   * The current limit up to which the stream will try to send, denominated in the connection plugin's units.
+   * (If the `receiveMax` is greater than the `totalReceived`, the stream will continue to receive money when the other side sends it)
+   */
   get receiveMax (): string {
     return this._receiveMax.toString()
   }
 
+  /**
+   * Close the stream and indicate to the other side that it has been closed.
+   */
   end (): void {
     if (this.closed) {
       this.debug('tried to close stream that was already closed')
@@ -74,58 +94,75 @@ export class MoneyStream extends EventEmitter3 {
     }
   }
 
+  /**
+   * Returns true if the stream is open for sending and/or receiving.
+   */
   isOpen (): boolean {
     return !this.closed
   }
 
-  setSendMax (amount: BigNumber.Value): void {
+  /**
+   * Set the total amount this stream will send, denominated in the connection plugin's units.
+   * Note that this is absolute, not relative so calling `setSendMax(100)` twice will only send 100 units.
+   */
+  setSendMax (limit: BigNumber.Value): void {
     if (this.closed) {
       throw new Error('Stream already closed')
     }
-    if (this._totalSent.isGreaterThan(amount)) {
-      this.debug(`cannot set sendMax to ${amount} because we have already sent: ${this._totalSent}`)
+    if (this._totalSent.isGreaterThan(limit)) {
+      this.debug(`cannot set sendMax to ${limit} because we have already sent: ${this._totalSent}`)
       throw new Error(`Cannot set sendMax lower than the totalSent`)
     }
-    this.debug(`setting sendMax to ${amount}`)
-    this._sendMax = new BigNumber(amount)
+    this.debug(`setting sendMax to ${limit}`)
+    this._sendMax = new BigNumber(limit)
     this.emit('_send')
   }
 
-  setReceiveMax (amount: BigNumber.Value): void {
+  /**
+   * Set the total amount this stream will receive, denominated in the connection plugin's units.
+   * Note that this is absolute, not relative so calling `setReceiveMax(100)` twice will only let the stream receive 100 units.
+   */
+  setReceiveMax (limit: BigNumber.Value): void {
     if (this.closed) {
       throw new Error('Stream already closed')
     }
-    if (this._totalReceived.isGreaterThan(amount)) {
-      this.debug(`cannot set receiveMax to ${amount} because we have already received: ${this._totalReceived}`)
+    if (this._totalReceived.isGreaterThan(limit)) {
+      this.debug(`cannot set receiveMax to ${limit} because we have already received: ${this._totalReceived}`)
       throw new Error(`Cannot set receiveMax lower than the totalReceived`)
     }
-    this.debug(`setting receiveMax to ${amount}`)
-    this._receiveMax = new BigNumber(amount)
+    this.debug(`setting receiveMax to ${limit}`)
+    this._receiveMax = new BigNumber(limit)
     this.emit('_send')
   }
 
-  async sendTotal (amount: BigNumber.Value): Promise<void> {
-    if (this._totalSent.isGreaterThanOrEqualTo(amount)) {
+  /**
+   * Set the total amount the stream will send and wait for that amount to be sent.
+   * Note that this is absolute, not relative so calling `sendTotal(100)` twice will only send 100 units.
+   *
+   * This promise will only resolve when the absolute amount specified is reached, so lowering the `sendMax` may cause this not to resolve.
+   */
+  async sendTotal (limit: BigNumber.Value): Promise<void> {
+    if (this._totalSent.isGreaterThanOrEqualTo(limit)) {
       this.debug(`already sent ${this._totalSent}, not sending any more`)
       return Promise.resolve()
     }
 
-    this.setSendMax(amount)
+    this.setSendMax(limit)
     await new Promise((resolve, reject) => {
       const self = this
       function outgoingHandler () {
-        if (this._totalSent.isGreaterThanOrEqualTo(amount)) {
+        if (this._totalSent.isGreaterThanOrEqualTo(limit)) {
           cleanup()
           resolve()
         }
       }
       function endHandler () {
         cleanup()
-        if ((this._totalSent.isGreaterThanOrEqualTo(amount))) {
+        if ((this._totalSent.isGreaterThanOrEqualTo(limit))) {
           resolve()
         } else {
-          this.debug(`Stream was closed before desired amount was sent (target: ${amount}, totalSent: ${this._totalSent})`)
-          reject(new Error(`Stream was closed before desired amount was sent (target: ${amount}, totalSent: ${this._totalSent})`))
+          this.debug(`Stream was closed before desired amount was sent (target: ${limit}, totalSent: ${this._totalSent})`)
+          reject(new Error(`Stream was closed before desired amount was sent (target: ${limit}, totalSent: ${this._totalSent})`))
         }
       }
       function errorHandler (err: Error) {
@@ -145,28 +182,34 @@ export class MoneyStream extends EventEmitter3 {
     })
   }
 
-  async receiveTotal (amount: BigNumber.Value): Promise<void> {
-    if (this._totalReceived.isGreaterThanOrEqualTo(amount)) {
+  /**
+   * Set the total amount the stream will receive and wait for that amount to be received.
+   * Note that this is absolute, not relative so calling `receiveTotal(100)` twice will only receive 100 units.
+   *
+   * This promise will only resolve when the absolute amount specified is reached, so lowering the `receiveMax` may cause this not to resolve.
+   */
+  async receiveTotal (limit: BigNumber.Value): Promise<void> {
+    if (this._totalReceived.isGreaterThanOrEqualTo(limit)) {
       this.debug(`already received ${this._totalReceived}, not waiting for more`)
       return Promise.resolve()
     }
 
-    this.setReceiveMax(amount)
+    this.setReceiveMax(limit)
     await new Promise((resolve, reject) => {
       const self = this
       function incomingHandler () {
-        if (this._totalReceived.isGreaterThanOrEqualTo(amount)) {
+        if (this._totalReceived.isGreaterThanOrEqualTo(limit)) {
           cleanup()
           resolve()
         }
       }
       function endHandler () {
         cleanup()
-        if (this._totalReceived.isGreaterThanOrEqualTo(amount)) {
+        if (this._totalReceived.isGreaterThanOrEqualTo(limit)) {
           resolve()
         } else {
-          this.debug(`Stream was closed before desired amount was received (target: ${amount}, totalReceived: ${this._totalReceived})`)
-          reject(new Error(`Stream was closed before desired amount was received (target: ${amount}, totalReceived: ${this._totalReceived})`))
+          this.debug(`Stream was closed before desired amount was received (target: ${limit}, totalReceived: ${this._totalReceived})`)
+          reject(new Error(`Stream was closed before desired amount was received (target: ${limit}, totalReceived: ${this._totalReceived})`))
         }
       }
       function errorHandler (err: Error) {

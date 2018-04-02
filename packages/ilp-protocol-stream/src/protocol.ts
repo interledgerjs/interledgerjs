@@ -55,6 +55,8 @@ export class Packet {
 
   serializeAndEncrypt (sharedSecret: Buffer, padPacketToSize?: number): Buffer {
     const serialized = this._serialize()
+
+    // Pad packet to max data size, if desired
     if (padPacketToSize !== undefined) {
       const paddingSize = padPacketToSize - ENCRYPTION_OVERHEAD - serialized.length
       const args = [sharedSecret, serialized]
@@ -64,6 +66,7 @@ export class Packet {
       args.push(ZERO_BYTES.slice(0, paddingSize % 32))
       return encrypt.apply(null, args)
     }
+
     return encrypt(sharedSecret, serialized)
   }
 

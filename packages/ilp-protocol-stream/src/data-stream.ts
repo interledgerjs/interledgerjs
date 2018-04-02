@@ -1,5 +1,10 @@
 import { Duplex } from 'stream'
 
+/**
+ * Stream used for sending data over an ILP STREAM connection.
+ *
+ * This exposes the Node Duplex Stream interface.
+ */
 export class DataStream extends Duplex {
   readonly id: number
   protected _incoming: OffsetSorter
@@ -22,6 +27,7 @@ export class DataStream extends Duplex {
 
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
     this._outgoing.push(chunk)
+    this.emit('_send')
     callback()
   }
 
