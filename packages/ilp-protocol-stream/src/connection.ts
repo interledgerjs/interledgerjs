@@ -82,9 +82,8 @@ export class Connection extends EventEmitter3 {
     this.outgoingPacketNumber = 0
     this.moneyStreams = []
     this.dataStreams = []
-    // TODO should the data and money streams use the same number space?
-    this.nextMoneyStreamId = (this.isServer ? 1 : 2)
-    this.nextDataStreamId = (this.isServer ? 1 : 2)
+    this.nextMoneyStreamId = (this.isServer ? 2 : 1)
+    this.nextDataStreamId = (this.isServer ? 2 : 1)
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
     this.closed = true
