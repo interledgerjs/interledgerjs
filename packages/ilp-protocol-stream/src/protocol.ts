@@ -111,15 +111,15 @@ export enum FrameType {
 }
 
 export enum ErrorCode {
-  NoError = 0x00,
-  InternalError = 0x01,
-  ServerBusy = 0x02,
-  FlowControlError = 0x03,
-  StreamIdError = 0x04,
-  StreamStateError = 0x05,
-  FinalOffsetError = 0x06,
-  FrameFormatError = 0x07,
-  ProtocolViolation = 0x08
+  NoError = 0x01,
+  InternalError = 0x02,
+  ServerBusy = 0x03,
+  FlowControlError = 0x04,
+  StreamIdError = 0x05,
+  StreamStateError = 0x06,
+  FinalOffsetError = 0x07,
+  FrameFormatError = 0x08,
+  ProtocolViolation = 0x09
   // TODO add frame-specific errors
 }
 
