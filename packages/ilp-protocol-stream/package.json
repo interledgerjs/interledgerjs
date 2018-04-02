@@ -24,6 +24,7 @@
   "author": "Evan Schwartz <evan@ripple.com>",
   "license": "Apache-2.0",
   "dependencies": {
+    "@types/node": "^9.6.1",
     "bignumber.js": "^6.0.0",
     "debug": "^3.1.0",
     "eventemitter3": "^3.0.1",
