@@ -24,6 +24,7 @@ import 'source-map-support/register'
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
 const RETRY_DELAY_START = 100
 const MAX_DATA_SIZE = 32767
+const MAX_UINT64 = new BigNumber('18446744073709551615')
 
 export interface ConnectionOpts {
   plugin: Plugin,
@@ -295,7 +296,8 @@ export class Connection extends EventEmitter3 {
         // TODO should this be distributed to other streams if it can be?
         this.debug(`peer sent too much for stream: ${streamId}. got: ${streamAmount}, max receivable: ${maxStreamCanReceive}`)
         // Tell peer how much the streams they sent for can receive
-        responseFrames.push(new StreamMoneyMaxFrame(streamId, this.moneyStreams[streamId].receiveMax, this.moneyStreams[streamId].totalReceived))
+        const receiveMax = (this.moneyStreams[streamId].receiveMax === 'Infinity' ? MAX_UINT64 : this.moneyStreams[streamId].receiveMax)
+        responseFrames.push(new StreamMoneyMaxFrame(streamId, receiveMax, this.moneyStreams[streamId].totalReceived))
 
         // TODO include error frame
         throwFinalApplicationError()
@@ -342,7 +344,8 @@ export class Connection extends EventEmitter3 {
           moneyStream._sentEnd = true
         } else {
           // TODO only send the max amount when it changes
-          responseFrames.push(new StreamMoneyMaxFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
+          const receiveMax = (moneyStream.receiveMax === 'Infinity' ? MAX_UINT64 : moneyStream.receiveMax)
+          responseFrames.push(new StreamMoneyMaxFrame(moneyStream.id, receiveMax, moneyStream.totalReceived))
         }
       }
     }

@@ -109,12 +109,16 @@ export class MoneyStream extends EventEmitter3 {
     if (this.closed) {
       throw new Error('Stream already closed')
     }
-    if (this._totalSent.isGreaterThan(limit)) {
-      this.debug(`cannot set sendMax to ${limit} because we have already sent: ${this._totalSent}`)
+    const sendMax = new BigNumber(limit)
+    if (this._totalSent.isGreaterThan(sendMax)) {
+      this.debug(`cannot set sendMax to ${sendMax} because we have already sent: ${this._totalSent}`)
       throw new Error(`Cannot set sendMax lower than the totalSent`)
     }
-    this.debug(`setting sendMax to ${limit}`)
-    this._sendMax = new BigNumber(limit)
+    if (!sendMax.isFinite()) {
+      throw new Error('sendMax must be finite')
+    }
+    this.debug(`setting sendMax to ${sendMax}`)
+    this._sendMax = sendMax
     this.emit('_send')
   }
 

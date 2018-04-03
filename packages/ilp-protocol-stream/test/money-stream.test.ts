@@ -64,6 +64,11 @@ describe('MoneyStream', function () {
 
       assert.throws(() => clientStream.setSendMax(500), 'Cannot set sendMax lower than the totalSent')
     })
+
+    it('should throw if the amount is infinite', function () {
+      const clientStream = this.clientConn.createMoneyStream()
+      assert.throws(() => clientStream.setSendMax(Infinity), 'sendMax must be finite')
+    })
   })
 
   describe('setReceiveMax', function () {
@@ -138,6 +143,19 @@ describe('MoneyStream', function () {
 
       const clientStream = this.clientConn.createMoneyStream()
       clientStream.setSendMax(2000)
+    })
+
+    it('should allow the limit to be set to Infinity', async function () {
+      const spy = sinon.spy()
+      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+        stream.setReceiveMax(Infinity)
+        stream.on('incoming', spy)
+      })
+      const clientStream = this.clientConn.createMoneyStream()
+      await clientStream.sendTotal(1000)
+      assert.callCount(spy, 1)
+      assert.calledWith(spy, '500')
+      assert.equal(clientStream.totalSent, '1000')
     })
   })
 
