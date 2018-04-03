@@ -127,6 +127,9 @@ export class Server extends EventEmitter3 {
    * Two different clients SHOULD NOT be given the same address and secret.
    */
   generateAddressAndSecret (): { destinationAccount: string, sharedSecret: Buffer } {
+    if (!this.connected) {
+      throw new Error('Server must be connected to generate address and secret')
+    }
     const { token, sharedSecret } = cryptoHelper.generateTokenAndSharedSecret(this.serverSecret)
     return {
       // TODO should this be called serverAccount or serverAddress instead?
