@@ -87,15 +87,15 @@ export class Packet {
 export enum FrameType {
   Padding = 0x00,
 
-  ConnectionError = 0x01,
-  ApplicationError = 0x02,
-  ConnectionMaxMoney = 0x03,
-  ConnectionMoneyBlocked = 0x04,
-  ConnectionMaxData = 0x05,
-  ConnectionDataBlocked = 0x06,
-  ConnectionMaxStreamId = 0x07,
-  ConnectionStreamIdBlocked = 0x08,
-  ConnectionNewAddress = 0x09,
+  ConnectionNewAddress = 0x01,
+  ConnectionError = 0x02,
+  ApplicationError = 0x03,
+  ConnectionMaxMoney = 0x04,
+  ConnectionMoneyBlocked = 0x05,
+  ConnectionMaxData = 0x06,
+  ConnectionDataBlocked = 0x07,
+  ConnectionMaxStreamId = 0x08,
+  ConnectionStreamIdBlocked = 0x09,
 
   StreamMoney = 0x10,
   StreamMoneyEnd = 0x11,
@@ -145,7 +145,9 @@ export abstract class BaseFrame {
   }
 }
 
-export type Frame = ConnectionErrorFrame
+export type Frame =
+  ConnectionNewAddressFrame
+  | ConnectionErrorFrame
 //  | ApplicationErrorFrame
 //  | ConnectionMaxMoneyFrame
 //  | ConnectionMoneyBlockedFrame
@@ -153,14 +155,11 @@ export type Frame = ConnectionErrorFrame
 //  | ConnectionDataBlockedFrame
 //  | ConnectionMaxStreamIdFrame
 //  | ConnectionStreamIdBlockedFrame
- | ConnectionNewAddressFrame
  | StreamMoneyFrame
-//  | StreamMoneyEndFrame
  | StreamMoneyMaxFrame
 //  | StreamMoneyBlockedFrame
  | StreamMoneyErrorFrame
  | StreamDataFrame
-//  | StreamDataEndFrame
 //  | StreamDataMaxFrame
 //  | StreamDataBlockedFrame
 //  | StreamDataErrorFrame
@@ -174,6 +173,31 @@ function assertType (reader: Reader, frameType: keyof typeof FrameType | (keyof 
     }
   }
   throw new Error(`Cannot read ${acceptableTypes.join('Frame or ')} from Buffer. Got type: ${type}, expected type(s): ${acceptableTypes.map((name) => FrameType[name]).join(' or ')}`)
+}
+
+export class ConnectionNewAddressFrame extends BaseFrame {
+  type: FrameType.ConnectionNewAddress
+  sourceAccount: string
+
+  constructor (sourceAccount: string) {
+    super('ConnectionNewAddress')
+    this.sourceAccount = sourceAccount
+  }
+
+  static fromBuffer (reader: Reader): ConnectionNewAddressFrame {
+    assertType(reader, 'ConnectionNewAddress')
+    const contents = Reader.from(reader.readVarOctetString())
+    const sourceAccount = contents.readVarOctetString().toString('utf8')
+    return new ConnectionNewAddressFrame(sourceAccount)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarOctetString(Buffer.from(this.sourceAccount))
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
 }
 
 export class ConnectionErrorFrame extends BaseFrame {
@@ -232,31 +256,6 @@ export class StreamMoneyFrame extends BaseFrame {
     const contents = new Writer()
     contents.writeVarUInt(this.streamId)
     contents.writeVarUInt(this.shares)
-    writer.writeVarOctetString(contents.getBuffer())
-    return writer
-  }
-}
-
-export class ConnectionNewAddressFrame extends BaseFrame {
-  type: FrameType.ConnectionNewAddress
-  sourceAccount: string
-
-  constructor (sourceAccount: string) {
-    super('ConnectionNewAddress')
-    this.sourceAccount = sourceAccount
-  }
-
-  static fromBuffer (reader: Reader): ConnectionNewAddressFrame {
-    assertType(reader, 'ConnectionNewAddress')
-    const contents = Reader.from(reader.readVarOctetString())
-    const sourceAccount = contents.readVarOctetString().toString('utf8')
-    return new ConnectionNewAddressFrame(sourceAccount)
-  }
-
-  writeTo (writer: Writer): Writer {
-    writer.writeUInt8(this.type)
-    const contents = new Writer()
-    contents.writeVarOctetString(Buffer.from(this.sourceAccount))
     writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
