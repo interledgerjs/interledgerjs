@@ -14,6 +14,10 @@ const FULFILLMENT_GENERATION_STRING = Buffer.from('ilp_stream_fulfillment', 'utf
 const TOKEN_LENGTH = 18
 const SHARED_SECRET_GENERATION_STRING = Buffer.from('ilp_stream_shared_secret', 'utf8')
 
+export function generateToken (): Buffer {
+  return crypto.randomBytes(TOKEN_LENGTH)
+}
+
 export function generateTokenAndSharedSecret (seed: Buffer): { token: Buffer, sharedSecret: Buffer } {
   const token = crypto.randomBytes(TOKEN_LENGTH)
   const sharedSecret = generateSharedSecretFromToken(seed, token)

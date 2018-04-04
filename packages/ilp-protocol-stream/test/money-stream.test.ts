@@ -115,11 +115,14 @@ describe('MoneyStream', function () {
 
       await new Promise((resolve, reject) => setImmediate(resolve))
       await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise((resolve, reject) => setImmediate(resolve))
       assert.callCount(spy, 1)
       assert.calledWith(spy, '500')
       assert.equal(clientStream.totalSent, '1000')
 
       serverStream!.setReceiveMax(1000)
+      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise((resolve, reject) => setImmediate(resolve))
       await new Promise((resolve, reject) => setImmediate(resolve))
 
       assert.callCount(spy, 2)

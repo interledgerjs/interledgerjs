@@ -7,6 +7,8 @@ import { Connection } from './connection'
 import { Plugin } from './types'
 import 'source-map-support/register'
 
+const CONNECTION_ID_REGEX = /^[a-zA-Z0-9_-]+$/
+
 export interface CreateConnectionOpts {
   plugin: Plugin,
   /** ILP Address of the server */
@@ -56,7 +58,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
       })
     }
   })
-  connection.connect()
+  await connection.connect()
   // TODO resolve only when it is connected
   return connection
 }
@@ -125,15 +127,24 @@ export class Server extends EventEmitter3 {
    * Generate an address and secret for a specific client to enable them to create a connection to the server.
    *
    * Two different clients SHOULD NOT be given the same address and secret.
+   *
+   * @param connectionTag Optional connection identifier that will be appended to the ILP address and can be used to identify incoming connections. Can only include characters that can go into an ILP Address
    */
-  generateAddressAndSecret (): { destinationAccount: string, sharedSecret: Buffer } {
+  generateAddressAndSecret (connectionTag?: string): { destinationAccount: string, sharedSecret: Buffer } {
     if (!this.connected) {
       throw new Error('Server must be connected to generate address and secret')
     }
-    const { token, sharedSecret } = cryptoHelper.generateTokenAndSharedSecret(this.serverSecret)
+    let token = base64url(cryptoHelper.generateToken())
+    if (connectionTag) {
+      if (!CONNECTION_ID_REGEX.test(connectionTag)) {
+        throw new Error('connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", and "-"')
+      }
+      token = token + '~' + connectionTag
+    }
+    const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, Buffer.from(token, 'ascii'))
     return {
       // TODO should this be called serverAccount or serverAddress instead?
-      destinationAccount: `${this.sourceAccount}.${base64url(token)}`,
+      destinationAccount: `${this.sourceAccount}.${token}`,
       sharedSecret
     }
   }
@@ -157,20 +168,22 @@ export class Server extends EventEmitter3 {
 
       if (!this.connections[connectionId]) {
         try {
-          const token = Buffer.from(connectionId, 'base64')
+          const token = Buffer.from(connectionId, 'ascii')
           const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
           cryptoHelper.decrypt(sharedSecret, prepare.data)
 
           // If we get here, that means it was a token + sharedSecret we created
+          const connectionTag = (connectionId.indexOf('~') !== -1 ? connectionId.slice(connectionId.indexOf('~') + 1) : undefined)
           const connection = new Connection({
             plugin: this.plugin,
             sourceAccount: this.sourceAccount,
             sharedSecret,
             isServer: true,
-            enablePadding: this.enablePadding
+            enablePadding: this.enablePadding,
+            connectionTag
           })
           this.connections[connectionId] = connection
-          this.debug(`got incoming packet for new connection: ${connectionId}`)
+          this.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
           this.emit('connection', connection)
 
           // Wait for the next tick of the event loop before handling the prepare

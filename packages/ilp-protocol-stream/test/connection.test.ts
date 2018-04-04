@@ -54,6 +54,55 @@ describe('Connection', function () {
     })
   })
 
+  describe('Identifying Connections', function () {
+    it('should accept a connectionTag when generating an address and secret and attach the tag to the incoming connection', async function () {
+      const connectionTag = 'hello-there_123'
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionTag)
+      const connectionPromise = this.server.acceptConnection()
+
+      const clientConn = await createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret
+      })
+
+      const connection = await connectionPromise
+      assert.equal(connection.connectionTag, connectionTag)
+    })
+
+    it('should reject the connection if the connectionTag is modified', async function () {
+      const connectionName = 'hello-there_123'
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionName)
+
+      const spy = sinon.spy()
+      this.server.on('connection', spy)
+
+      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
+      const responses: Buffer[] = []
+      this.clientPlugin.sendData = async (data: Buffer): Promise<Buffer> => {
+        const response = await realSendData(data)
+        responses.push(response)
+        return response
+      }
+
+      await assert.isRejected(createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount: destinationAccount + '456',
+        sharedSecret
+      }), 'Error connecting: Unexpected error while sending packet. Code: F02, message: ')
+
+      assert.notCalled(spy)
+    })
+
+    it('should not have a connectionTag by default', async function () {
+      assert.isUndefined(this.serverConn.connectionTag)
+    })
+
+    it('should throw an error if the connectionTag includes characters that cannot go into an ILP address', function () {
+      assert.throws(() => this.server.generateAddressAndSecret('invalid\n'), 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", and "-"')
+    })
+  })
+
   describe('Multiplexed MoneyStreams', function () {
     it('should send one packet for two streams if the amount does not exceed the Maximum Packet Amount', async function () {
       const incomingSpy = sinon.spy()
@@ -72,7 +121,6 @@ describe('Connection', function () {
       assert.calledWith(incomingSpy.firstCall, '58')
       assert.calledWith(incomingSpy.secondCall, '101')
       assert.equal(IlpPacket.deserializeIlpPrepare(sendDataSpy.getCall(0).args[0]).amount, '321')
-      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataSpy.getCall(1).args[0]).amount, '0')
     })
   })
 
@@ -87,11 +135,9 @@ describe('Connection', function () {
       const clientStream = this.clientConn.createMoneyStream()
       await clientStream.sendTotal(2000)
 
-      assert.callCount(spy, 4)
       assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(0).args[0]).amount, '2000')
       assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(1).args[0]).amount, '1500')
       assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(2).args[0]).amount, '500')
-      assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(3).args[0]).amount, '0')
     })
 
     it('should keep reducing the packet amount if there are multiple connectors with progressively smaller maximums', async function () {
@@ -111,9 +157,9 @@ describe('Connection', function () {
       const clientStream = this.clientConn.createMoneyStream()
       await clientStream.sendTotal(3000)
 
-      assert.equal(callCount, 6)
-      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 3]).amount, '1675')
-      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 2]).amount, '1325')
+      assert.equal(callCount, 5)
+      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 2]).amount, '1675')
+      assert.equal(IlpPacket.deserializeIlpPrepare(args[args.length - 1]).amount, '1325')
       // last call is 0
     })
 
@@ -138,13 +184,12 @@ describe('Connection', function () {
       const clientStream = this.clientConn.createMoneyStream()
       await clientStream.sendTotal(2000)
 
-      assert.equal(callCount, 6)
+      assert.equal(callCount, 5)
       assert.equal(IlpPacket.deserializeIlpPrepare(args[0]).amount, '2000')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[1]).amount, '999')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[2]).amount, '499')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[3]).amount, '748')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[4]).amount, '753')
-      assert.equal(IlpPacket.deserializeIlpPrepare(args[5]).amount, '0')
     })
 
     it('should approximate the maximum amount if the error data is non-sensical', async function () {
@@ -168,13 +213,11 @@ describe('Connection', function () {
       const clientStream = this.clientConn.createMoneyStream()
       await clientStream.sendTotal(2000)
 
-      assert.equal(callCount, 6)
       assert.equal(IlpPacket.deserializeIlpPrepare(args[0]).amount, '2000')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[1]).amount, '999')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[2]).amount, '499')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[3]).amount, '748')
       assert.equal(IlpPacket.deserializeIlpPrepare(args[4]).amount, '753')
-      assert.equal(IlpPacket.deserializeIlpPrepare(args[5]).amount, '0')
     })
 
     it('should stop sending if the maximum amount is too small to send any money through', async function () {

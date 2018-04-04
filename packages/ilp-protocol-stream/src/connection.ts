@@ -33,7 +33,8 @@ export interface ConnectionOpts {
   sharedSecret: Buffer,
   isServer: boolean,
   slippage?: BigNumber.Value,
-  enablePadding?: boolean
+  enablePadding?: boolean,
+  connectionTag?: string
 }
 
 /**
@@ -42,6 +43,8 @@ export interface ConnectionOpts {
  * A single connection can be used to send or receive on multiple money streams and multiple data streams.
  */
 export class Connection extends EventEmitter3 {
+  /** Application identifier for a certain connection */
+  readonly connectionTag?: string
   protected plugin: Plugin
   protected destinationAccount?: string
   protected sourceAccount: string
@@ -79,8 +82,9 @@ export class Connection extends EventEmitter3 {
     this.slippage = new BigNumber(opts.slippage || 0)
     this.allowableReceiveExtra = new BigNumber(1.01)
     this.enablePadding = !!opts.enablePadding
+    this.connectionTag = opts.connectionTag
 
-    this.outgoingPacketNumber = 0
+    this.outgoingPacketNumber = 1
     this.moneyStreams = []
     this.dataStreams = []
     this.nextMoneyStreamId = (this.isServer ? 2 : 1)
@@ -103,9 +107,16 @@ export class Connection extends EventEmitter3 {
    * The connection will emit the "money_stream" and "data_stream" events when new streams are received.
    */
   // TODO should this be async and resolve when it's connected?
-  connect (): void {
+  async connect (): Promise<void> {
     /* tslint:disable-next-line:no-floating-promises */
     this.startSendLoop()
+    await new Promise((resolve, reject) => {
+      this.once('connect', resolve)
+      this.once('error', (error: Error) => {
+        reject(new Error(`Error connecting: ${error.message}`))
+      })
+      this.once('close', () => reject(new Error('Connection was closed before it was connected')))
+    })
   }
 
   /**
@@ -373,6 +384,7 @@ export class Connection extends EventEmitter3 {
 
     // Send a test packet first to determine the exchange rate
     if (!this.exchangeRate && this.destinationAccount) {
+      this.debug('determining exchange rate')
       try {
         await this.sendTestPacket()
       } catch (err) {
@@ -389,6 +401,9 @@ export class Connection extends EventEmitter3 {
         return
       }
     }
+
+    this.emit('connect')
+    this.debug('connected')
 
     while (this.sending) {
       // Send multiple packets at the same time (don't await promise)
@@ -417,6 +432,10 @@ export class Connection extends EventEmitter3 {
    * @private
    */
   protected async sendPacket (): Promise<void> {
+    // Actually send on the next tick of the event loop in case multiple streams
+    // have their limits raised at the same time
+    await new Promise((resolve, reject) => setImmediate(resolve))
+
     this.debug('sendPacket')
     let amountToSend = new BigNumber(0)
 
@@ -448,18 +467,17 @@ export class Connection extends EventEmitter3 {
       // Determine how much to send from this stream based on how much it has available
       // and how much the receiver side of this stream can receive
       let amountToSendFromStream = BigNumber.minimum(moneyStream._getAmountAvailableToSend(), maxAmountFromNextStream)
-      this.debug(`amount to send from stream ${moneyStream.id}: ${amountToSendFromStream}, exchange rate: ${this.exchangeRate}, ${moneyStream._remoteReceived}, ${moneyStream._remoteReceiveMax}`)
       if (this.exchangeRate
         && moneyStream._remoteReceived !== undefined
         && moneyStream._remoteReceiveMax !== undefined) {
         const maxDestinationAmount = moneyStream._remoteReceiveMax.minus(moneyStream._remoteReceived)
         const maxSourceAmount = maxDestinationAmount.dividedBy(this.exchangeRate).integerValue(BigNumber.ROUND_CEIL)
-        this.debug(`amount from stream: ${amountToSendFromStream}, max destination amount: ${maxDestinationAmount}, max source amount: ${maxSourceAmount}`)
         if (maxSourceAmount.isLessThan(amountToSendFromStream)) {
           this.debug(`stream ${moneyStream.id} could send ${amountToSendFromStream} but that would be more than the receiver says they can receive, so we'll send ${maxSourceAmount} instead`)
           amountToSendFromStream = maxSourceAmount
         }
       }
+      this.debug(`amount to send from stream ${moneyStream.id}: ${amountToSendFromStream}, exchange rate: ${this.exchangeRate}, remote total received: ${moneyStream._remoteReceived}, remote receive max: ${moneyStream._remoteReceiveMax}`)
 
       // Hold the money and add a frame to the packet
       if (amountToSendFromStream.isGreaterThan(0)) {
@@ -526,7 +544,7 @@ export class Connection extends EventEmitter3 {
     // Load packet data with available data frames (keep track of max data length)
     // TODO implement sending data
 
-    this.debug(`sending packet: ${JSON.stringify(requestPacket)}`)
+    this.debug(`sending packet ${requestPacket.sequence}: ${JSON.stringify(requestPacket)}`)
 
     // Encrypt
     const data = requestPacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined))
