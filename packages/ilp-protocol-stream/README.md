@@ -30,10 +30,13 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [x] Protocol error frame
 - [x] Padding frame
 - [x] Data stream
+- [x] Should money and data streams use different sets of numbers for stream ids?
+- [ ] Multiple packets in flight at the same time
+- [ ] Backpressure for data streams
+- [ ] Connection closing
 - [ ] Don't send extra packet at the end if it isn't necessary
 - [ ] Max number of streams
 - [ ] Blocked frames (when more is available to send)
-- [ ] Should money and data streams use different sets of numbers for stream ids?
 - [ ] Refactor handleData and sendPacket functions to make them easier to understand and reason about
 
 ## Credits
