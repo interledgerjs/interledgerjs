@@ -39,7 +39,12 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
       prepare = IlpPacket.deserializeIlpPrepare(data)
     } catch (err) {
       this.debug(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
-      throw new IlpPacket.Errors.BadRequestError('Expected an ILP Prepare packet')
+      return IlpPacket.serializeIlpReject({
+        code: 'F00',
+        message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
+        data: Buffer.alloc(0),
+        triggeredBy: sourceAccount
+      })
     }
 
     try {
@@ -128,18 +133,18 @@ export class Server extends EventEmitter3 {
    *
    * Two different clients SHOULD NOT be given the same address and secret.
    *
-   * @param connectionTag Optional connection identifier that will be appended to the ILP address and can be used to identify incoming connections. Can only include characters that can go into an ILP Address
+   * @param connectionName Optional connection identifier that will be appended to the ILP address and can be used to identify incoming connections. Can only include characters that can go into an ILP Address
    */
-  generateAddressAndSecret (connectionTag?: string): { destinationAccount: string, sharedSecret: Buffer } {
+  generateAddressAndSecret (connectionName?: string): { destinationAccount: string, sharedSecret: Buffer } {
     if (!this.connected) {
       throw new Error('Server must be connected to generate address and secret')
     }
     let token = base64url(cryptoHelper.generateToken())
-    if (connectionTag) {
-      if (!CONNECTION_ID_REGEX.test(connectionTag)) {
+    if (connectionName) {
+      if (!CONNECTION_ID_REGEX.test(connectionName)) {
         throw new Error('connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", and "-"')
       }
-      token = token + '~' + connectionTag
+      token = token + '~' + connectionName
     }
     const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, Buffer.from(token, 'ascii'))
     return {
@@ -156,7 +161,12 @@ export class Server extends EventEmitter3 {
         prepare = IlpPacket.deserializeIlpPrepare(data)
       } catch (err) {
         this.debug(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
-        throw new IlpPacket.Errors.BadRequestError('Expected an ILP Prepare packet')
+        return IlpPacket.serializeIlpReject({
+          code: 'F00',
+          message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
+          data: Buffer.alloc(0),
+          triggeredBy: this.sourceAccount
+        })
       }
 
       const localAddressParts = prepare.destination.replace(this.sourceAccount + '.', '').split('.')
