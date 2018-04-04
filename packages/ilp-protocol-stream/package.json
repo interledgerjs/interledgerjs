@@ -31,7 +31,8 @@
     "eventemitter3": "^3.0.1",
     "ilp-packet": "^2.2.0",
     "ilp-protocol-ildcp": "^1.0.0",
-    "oer-utils": "^2.0.1"
+    "oer-utils": "^2.0.1",
+    "source-map-support": "^0.5.4"
   },
   "devDependencies": {
     "@types/chai": "^4.1.2",
@@ -48,7 +49,6 @@
     "mocha-typescript": "^1.1.12",
     "nyc": "^11.6.0",
     "sinon": "^4.4.6",
-    "source-map-support": "^0.5.3",
     "ts-node": "^5.0.1",
     "tslint": "^5.9.1",
     "tslint-config-standard": "^7.0.0",
