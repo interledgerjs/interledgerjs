@@ -5,7 +5,7 @@ import * as Debug from 'debug'
 import * as cryptoHelper from './crypto'
 import { Connection } from './connection'
 import { Plugin } from './types'
-import 'source-map-support/register'
+require('source-map-support').install()
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9_-]+$/
 

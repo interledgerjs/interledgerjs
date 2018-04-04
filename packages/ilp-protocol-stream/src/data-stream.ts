@@ -1,4 +1,5 @@
 import { Duplex } from 'stream'
+require('source-map-support').install()
 
 /**
  * Stream used for sending data over an ILP STREAM connection.

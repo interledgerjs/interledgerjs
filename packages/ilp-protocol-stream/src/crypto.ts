@@ -1,6 +1,6 @@
 import * as crypto from 'crypto'
 import * as assert from 'assert'
-import 'source-map-support/register'
+require('source-map-support').install()
 
 const HASH_ALGORITHM = 'sha256'
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm'

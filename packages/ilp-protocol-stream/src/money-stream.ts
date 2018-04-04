@@ -1,7 +1,7 @@
 import EventEmitter3 = require('eventemitter3')
 import * as Debug from 'debug'
 import BigNumber from 'bignumber.js'
-import 'source-map-support/register'
+require('source-map-support').install()
 
 export interface MoneyStreamOpts {
   id: number,

@@ -2,6 +2,7 @@ import 'mocha'
 import { assert } from 'chai'
 import { Packet, StreamMoneyFrame, BaseFrame } from '../src/protocol'
 import { Reader, Writer } from 'oer-utils'
+require('source-map-support').install()
 
 describe('Packet Format', function () {
   describe('decryptAndDeserialize()', function () {

@@ -1,7 +1,7 @@
 import { Reader, Writer, Predictor } from 'oer-utils'
 import BigNumber from 'bignumber.js'
 import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
-import 'source-map-support/register'
+require('source-map-support').install()
 
 const VERSION = 1
 

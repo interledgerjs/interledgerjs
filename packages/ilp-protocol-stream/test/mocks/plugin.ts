@@ -3,6 +3,7 @@ import * as IlpPacket from 'ilp-packet'
 import BigNumber from 'bignumber.js'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import { Writer } from 'oer-utils'
+require('source-map-support').install()
 
 export interface DataHandler {
   (data: Buffer): Promise<Buffer>

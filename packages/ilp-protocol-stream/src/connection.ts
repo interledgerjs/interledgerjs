@@ -19,7 +19,7 @@ import {
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
 import BigNumber from 'bignumber.js'
-import 'source-map-support/register'
+require('source-map-support').install()
 
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
 const RETRY_DELAY_START = 100
