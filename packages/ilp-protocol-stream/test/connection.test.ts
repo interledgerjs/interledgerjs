@@ -3,6 +3,7 @@ import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
 import MockPlugin from './mocks/plugin'
 import { MoneyStream } from '../src/money-stream'
+import { DataStream } from '../src/data-stream'
 import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
 import * as lolex from 'lolex'
@@ -38,6 +39,58 @@ describe('Connection', function () {
     this.serverConn = await connectionPromise
     this.serverConn.on('money_stream', (stream: MoneyStream) => {
       stream.setReceiveMax(10000)
+    })
+  })
+
+  describe('end', function () {
+    it('should close the other side of the connection', async function () {
+      const spy = sinon.spy()
+      this.clientConn.on('end', spy)
+
+      await this.serverConn.end()
+      assert.callCount(spy, 1)
+    })
+
+    it('should close all outgoing streams', async function () {
+      const moneySpy = sinon.spy()
+      const dataSpy = sinon.spy()
+      const outgoingMoney = this.clientConn.createMoneyStream()
+      outgoingMoney.on('end', moneySpy)
+      outgoingMoney.setSendMax(100)
+      const outgoingData = this.clientConn.createDataStream()
+      outgoingData.write('hello')
+      outgoingData.on('finish', dataSpy)
+
+      await this.clientConn.end()
+
+      assert.callCount(moneySpy, 1)
+      assert.callCount(dataSpy, 1)
+    })
+
+    it.skip('should close all incoming streams', async function () {
+      const moneySpy = sinon.spy()
+      const dataSpy = sinon.spy()
+      this.clientConn.on('money_stream', (stream: MoneyStream) => {
+        stream.on('end', () => {
+          console.log('money stream end')
+          moneySpy()
+        })
+      })
+      this.clientConn.on('data_stream', (stream: DataStream) => {
+        stream.on('finish', () => {
+          console.log('data strem end')
+          dataSpy()
+        })
+      })
+      this.serverConn.createMoneyStream().setSendMax(100)
+      this.serverConn.createDataStream().write('hello')
+
+      console.log('about to end')
+      await this.clientConn.end()
+      console.log('ended')
+
+      assert.callCount(moneySpy, 1)
+      assert.callCount(dataSpy, 1)
     })
   })
 

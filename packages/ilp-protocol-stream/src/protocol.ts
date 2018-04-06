@@ -370,6 +370,8 @@ function parseFrame (reader: Reader): Frame | undefined {
       return StreamMoneyFrame.fromBuffer(reader)
     case FrameType.ConnectionNewAddress:
       return ConnectionNewAddressFrame.fromBuffer(reader)
+    case FrameType.ConnectionError:
+      return ConnectionErrorFrame.fromBuffer(reader)
     case FrameType.StreamMoneyMax:
       return StreamMoneyMaxFrame.fromBuffer(reader)
     case FrameType.StreamMoneyError:

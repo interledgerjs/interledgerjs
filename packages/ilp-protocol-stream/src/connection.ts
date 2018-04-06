@@ -14,7 +14,8 @@ import {
   FrameType,
   IlpPacketType,
   ConnectionNewAddressFrame,
-  ErrorCode
+  ErrorCode,
+  ConnectionErrorFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
@@ -67,6 +68,8 @@ export class Connection extends EventEmitter3 {
   /** The path's Maximum Packet Amount, discovered through F08 errors */
   protected maximumPacketAmount: BigNumber
   protected closed: boolean
+  protected remoteClosed: boolean
+  protected sentConnectionClose: boolean
   /** Indicates whether we need to tell the other side our account (mostly for the client side on startup) */
   protected shouldSendSourceAccount: boolean
   protected exchangeRate?: BigNumber
@@ -92,6 +95,8 @@ export class Connection extends EventEmitter3 {
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
     this.closed = true
+    this.remoteClosed = false
+    this.sentConnectionClose = false
     this.shouldSendSourceAccount = !opts.isServer
 
     this.maximumPacketAmount = new BigNumber(Infinity)
@@ -106,7 +111,6 @@ export class Connection extends EventEmitter3 {
    *
    * The connection will emit the "money_stream" and "data_stream" events when new streams are received.
    */
-  // TODO should this be async and resolve when it's connected?
   async connect (): Promise<void> {
     /* tslint:disable-next-line:no-floating-promises */
     this.startSendLoop()
@@ -116,7 +120,32 @@ export class Connection extends EventEmitter3 {
         reject(new Error(`Error connecting: ${error.message}`))
       })
       this.once('close', () => reject(new Error('Connection was closed before it was connected')))
+      this.once('end', () => reject(new Error('Connection was closed before it was connected')))
     })
+    this.closed = false
+  }
+
+  async end (): Promise<void> {
+    this.debug('closing connection')
+    this.closed = true
+
+    for (let moneyStream of this.moneyStreams) {
+      if (moneyStream && moneyStream.isOpen()) {
+        moneyStream.end()
+      }
+    }
+
+    for (let dataStream of this.dataStreams) {
+      if (dataStream) {
+        dataStream.end()
+      }
+    }
+
+    await new Promise((resolve, reject) => {
+      this.once('_send_loop_finished', resolve)
+      this.once('error', reject)
+    })
+    this.safeEmit('end')
   }
 
   /**
@@ -193,18 +222,21 @@ export class Connection extends EventEmitter3 {
         this.destinationAccount = frame.sourceAccount
         // Try sending in case we stopped because we didn't know their address before
         this.startSendLoop()
+        if (this.closed) {
+          this.closed = false
+          this.debug('connected')
+          this.safeEmit('connect')
+        }
       } else if (frame.type === FrameType.StreamMoney) {
         streamMoneyFrames.push(frame)
 
         // Count the total number of "shares" to be able to distribute the packet amount amongst the MoneyStreams
         totalMoneyShares = totalMoneyShares.plus(frame.shares)
+      } else if (frame.type === FrameType.ConnectionError) {
+        this.debug(`peer closed connection with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
+        this.remoteClosed = true
+        this.end()
       }
-    }
-
-    if (this.closed && this.destinationAccount) {
-      this.closed = false
-      this.safeEmit('connect')
-      await new Promise((resolve, reject) => setImmediate(resolve))
     }
 
     if (requestPacket.prepareAmount.isGreaterThan(prepare.amount)) {
@@ -355,7 +387,9 @@ export class Connection extends EventEmitter3 {
     // Tell peer about closed streams and how much each stream can receive
     for (let moneyStream of this.moneyStreams) {
       if (moneyStream) {
-        if (!moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isEqualTo(0)) {
+        if (!this.remoteClosed
+          && !moneyStream.isOpen()
+          && moneyStream._getAmountAvailableToSend().isEqualTo(0)) {
           this.debug(`telling other side that stream ${moneyStream.id} is closed`)
           responseFrames.push(new StreamMoneyErrorFrame(moneyStream.id, 'NoError', ''))
           moneyStream._sentEnd = true
@@ -383,6 +417,11 @@ export class Connection extends EventEmitter3 {
   protected async startSendLoop () {
     if (this.sending) {
       this.debug('already sending, not starting another loop')
+      return
+    }
+    if (this.remoteClosed) {
+      this.debug('remote connection is already closed, not starting another loop')
+      this.safeEmit('_send_loop_finished')
       return
     }
     this.sending = true
@@ -437,6 +476,7 @@ export class Connection extends EventEmitter3 {
       // Figure out if we need to wait before sending the next one
     }
     this.debug('finished sending')
+    this.safeEmit('_send_loop_finished')
   }
 
   /**
@@ -460,6 +500,12 @@ export class Connection extends EventEmitter3 {
       if (moneyStream && moneyStream.isOpen()) {
         requestPacket.frames.push(new StreamMoneyMaxFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
       }
+    }
+    if (this.closed && !this.remoteClosed && !this.sentConnectionClose) {
+      // TODO how do we know if there was an error?
+      this.debug('sending connection close frame')
+      requestPacket.frames.push(new ConnectionErrorFrame('NoError', ''))
+      this.sentConnectionClose = true
     }
 
     // Determine how much to send based on amount frames and path maximum packet amount
@@ -497,7 +543,7 @@ export class Connection extends EventEmitter3 {
       }
 
       // Tell the other side if the stream is closed
-      if (!moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isGreaterThanOrEqualTo(0)) {
+      if (!this.closed && !moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isGreaterThanOrEqualTo(0)) {
         requestPacket.frames.push(new StreamMoneyErrorFrame(moneyStream.id, 'NoError', ''))
         // TODO only set this to true if the packet gets through to the receiver
         moneyStream._sentEnd = true
