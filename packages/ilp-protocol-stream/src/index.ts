@@ -177,31 +177,36 @@ export class Server extends EventEmitter3 {
       const connectionId = localAddressParts[0]
 
       if (!this.connections[connectionId]) {
+        let sharedSecret
         try {
           const token = Buffer.from(connectionId, 'ascii')
-          const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
+          sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
           cryptoHelper.decrypt(sharedSecret, prepare.data)
-
-          // If we get here, that means it was a token + sharedSecret we created
-          const connectionTag = (connectionId.indexOf('~') !== -1 ? connectionId.slice(connectionId.indexOf('~') + 1) : undefined)
-          const connection = new Connection({
-            plugin: this.plugin,
-            sourceAccount: this.sourceAccount,
-            sharedSecret,
-            isServer: true,
-            enablePadding: this.enablePadding,
-            connectionTag
-          })
-          this.connections[connectionId] = connection
-          this.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
-          this.emit('connection', connection)
-
-          // Wait for the next tick of the event loop before handling the prepare
-          await new Promise((resolve, reject) => setImmediate(resolve))
         } catch (err) {
           this.debug(`got prepare for an address and token that we did not generate: ${prepare.destination}`)
           throw new IlpPacket.Errors.UnreachableError('')
         }
+
+        // If we get here, that means it was a token + sharedSecret we created
+        const connectionTag = (connectionId.indexOf('~') !== -1 ? connectionId.slice(connectionId.indexOf('~') + 1) : undefined)
+        const connection = new Connection({
+          plugin: this.plugin,
+          sourceAccount: this.sourceAccount,
+          sharedSecret,
+          isServer: true,
+          enablePadding: this.enablePadding,
+          connectionTag
+        })
+        this.connections[connectionId] = connection
+        this.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
+        try {
+          this.emit('connection', connection)
+        } catch (err) {
+          this.debug('error in connection event handler:', err)
+        }
+
+        // Wait for the next tick of the event loop before handling the prepare
+        await new Promise((resolve, reject) => setImmediate(resolve))
       }
 
       const fulfill = await this.connections[connectionId].handlePrepare(prepare)

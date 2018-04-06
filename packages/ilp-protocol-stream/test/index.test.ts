@@ -42,6 +42,20 @@ describe('Server', function () {
       assert.typeOf(result.destinationAccount, 'string')
     })
 
+    it('should accept connections created without connectionTags', async function () {
+      await this.server.listen()
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      const connectionPromise = this.server.acceptConnection()
+
+      const clientConn = await index.createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret
+      })
+
+      const connection = await connectionPromise
+    })
+
     it('should accept a connectionTag and attach it to the incoming connection', async function () {
       await this.server.listen()
       const connectionTag = 'hello-there_123'
@@ -86,6 +100,27 @@ describe('Server', function () {
     it('should throw an error if the connectionTag includes characters that cannot go into an ILP address', async function () {
       await this.server.listen()
       assert.throws(() => this.server.generateAddressAndSecret('invalid\n'), 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", and "-"')
+    })
+  })
+
+  describe('"connection" event', function () {
+    beforeEach(async function () {
+      this.server = new index.Server({
+        serverSecret: Buffer.alloc(32),
+        plugin: this.serverPlugin
+      })
+      await this.server.listen()
+    })
+
+    it('should not reject the packet if there is an error in the connection event handler', async function () {
+      this.server.on('connection', () => {
+        throw new Error('blah')
+      })
+
+      await index.createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
     })
   })
 })

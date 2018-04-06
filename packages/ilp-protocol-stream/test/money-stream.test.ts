@@ -94,10 +94,21 @@ describe('MoneyStream', function () {
         stream.on('incoming', spy)
       })
       const clientStream = this.clientConn.createMoneyStream()
-      clientStream.setSendMax(1000)
+      await clientStream.sendTotal(1000)
+      assert.callCount(spy, 1)
+      assert.calledWith(spy, '500')
+      assert.equal(clientStream.totalSent, '1000')
+    })
 
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
+    it('should accept money if the receiveMax is raised after an async call', async function () {
+      const spy = sinon.spy()
+      this.serverConn.on('money_stream', async (stream: MoneyStream) => {
+        await new Promise((resolve, reject) => setTimeout(resolve, 10))
+        stream.setReceiveMax(500)
+        stream.on('incoming', spy)
+      })
+      const clientStream = this.clientConn.createMoneyStream()
+      await clientStream.sendTotal(1000)
       assert.callCount(spy, 1)
       assert.calledWith(spy, '500')
       assert.equal(clientStream.totalSent, '1000')
@@ -114,6 +125,7 @@ describe('MoneyStream', function () {
       const clientStream = this.clientConn.createMoneyStream()
       clientStream.setSendMax(2000)
 
+      await new Promise((resolve, reject) => setImmediate(resolve))
       await new Promise((resolve, reject) => setImmediate(resolve))
       await new Promise((resolve, reject) => setImmediate(resolve))
       await new Promise((resolve, reject) => setImmediate(resolve))
@@ -221,6 +233,7 @@ describe('MoneyStream', function () {
       })
       const clientStream = this.clientConn.createMoneyStream()
       clientStream.setSendMax(1000)
+      await new Promise((resolve, reject) => setImmediate(resolve))
       await new Promise((resolve, reject) => setImmediate(resolve))
 
       await receivedPromise!

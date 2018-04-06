@@ -41,6 +41,17 @@ describe('Connection', function () {
     })
   })
 
+  describe('"money_stream" event', function () {
+    it('should accept the money even if there is an error thrown in the event handler', async function () {
+      this.serverConn.on('money_stream', (moneyStream: MoneyStream) => {
+        throw new Error('blah')
+      })
+      const clientStream = this.clientConn.createMoneyStream()
+      await clientStream.sendTotal(117)
+      assert.equal(clientStream.totalSent, '117')
+    })
+  })
+
   describe('Sending Money', function () {
     it('should send money', async function () {
       const spy = sinon.spy()

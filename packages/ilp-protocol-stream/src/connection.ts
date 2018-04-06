@@ -201,6 +201,12 @@ export class Connection extends EventEmitter3 {
       }
     }
 
+    if (this.closed && this.destinationAccount) {
+      this.closed = false
+      this.safeEmit('connect')
+      await new Promise((resolve, reject) => setImmediate(resolve))
+    }
+
     if (requestPacket.prepareAmount.isGreaterThan(prepare.amount)) {
       this.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${requestPacket.prepareAmount}`)
       throwFinalApplicationError()
@@ -233,7 +239,7 @@ export class Connection extends EventEmitter3 {
           })
           this.moneyStreams[moneyStreamId] = moneyStream
 
-          this.emit('money_stream', moneyStream)
+          this.safeEmit('money_stream', moneyStream)
           moneyStream.on('_send', this.startSendLoop.bind(this))
           break
         case FrameType.StreamData:
@@ -247,7 +253,7 @@ export class Connection extends EventEmitter3 {
           const stream = new DataStream(dataStreamId)
           this.dataStreams[dataStreamId] = stream
 
-          this.emit('data_stream', stream)
+          this.safeEmit('data_stream', stream)
           stream.on('_send', this.startSendLoop.bind(this))
           break
         default:
@@ -382,15 +388,21 @@ export class Connection extends EventEmitter3 {
     this.sending = true
     this.debug('starting send loop')
 
+    if (!this.destinationAccount) {
+      this.debug('not sending because we do not know the client\'s address')
+      this.sending = false
+      return
+    }
+
     // Send a test packet first to determine the exchange rate
-    if (!this.exchangeRate && this.destinationAccount) {
+    if (!this.exchangeRate) {
       this.debug('determining exchange rate')
       try {
         await this.sendTestPacket()
       } catch (err) {
         this.sending = false
         this.debug('error sending test packet:', err)
-        this.emit('error', err)
+        this.safeEmit('error', err)
 
         // TODO should a connection error be an error on all of the streams?
         for (let moneyStream of this.moneyStreams) {
@@ -402,7 +414,7 @@ export class Connection extends EventEmitter3 {
       }
     }
 
-    this.emit('connect')
+    this.safeEmit('connect')
     this.debug('connected')
 
     while (this.sending) {
@@ -438,11 +450,6 @@ export class Connection extends EventEmitter3 {
 
     this.debug('sendPacket')
     let amountToSend = new BigNumber(0)
-
-    if (!this.destinationAccount) {
-      this.debug('not sending because we do not know the client\'s address')
-      return
-    }
 
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.outgoingPacketNumber++, IlpPacketType.Prepare)
@@ -555,7 +562,7 @@ export class Connection extends EventEmitter3 {
 
     // Send
     const prepare = {
-      destination: this.destinationAccount,
+      destination: this.destinationAccount!,
       amount: amountToSend.toString(),
       data,
       executionCondition,
@@ -671,6 +678,7 @@ export class Connection extends EventEmitter3 {
     const requestPacket = new Packet(this.outgoingPacketNumber++, IlpPacketType.Prepare)
 
     if (this.shouldSendSourceAccount) {
+      this.debug('sending source address to peer')
       // TODO attach a token to the account?
       requestPacket.frames.push(new ConnectionNewAddressFrame(this.sourceAccount))
 
@@ -679,7 +687,7 @@ export class Connection extends EventEmitter3 {
     }
 
     const sourceAmount = amount || BigNumber.minimum(TEST_PACKET_AMOUNT, this.testMaximumPacketAmount)
-    this.debug(`sending test packet number: ${requestPacket.sequence} for amount: ${sourceAmount}`)
+    this.debug(`sending test packet number: ${requestPacket.sequence} for amount: ${sourceAmount}: ${JSON.stringify(requestPacket)}`)
     const prepare = {
       destination: this.destinationAccount,
       amount: (sourceAmount).toString(),
@@ -774,6 +782,15 @@ export class Connection extends EventEmitter3 {
     } else {
       this.debug(`unexpected error. code: ${reject.code}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
       throw new Error(`Unexpected error while sending packet. Code: ${reject.code}, message: ${reject.message}`)
+    }
+  }
+
+  protected safeEmit (event: string, ...args: any[]) {
+    try {
+      args.unshift(event)
+      this.emit.apply(this, args)
+    } catch (err) {
+      this.debug(`error in ${event} handler:`, err)
     }
   }
 }
