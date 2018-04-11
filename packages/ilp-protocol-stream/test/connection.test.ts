@@ -108,7 +108,7 @@ describe('Connection', function () {
     it('should send money', async function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
-        moneyStream.on('incoming', spy)
+        moneyStream.on('money', spy)
       })
       const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(117)
@@ -125,7 +125,7 @@ describe('Connection', function () {
       const sendDataSpy = sinon.spy(this.clientPlugin, 'sendData')
       this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
         moneyStreamSpy()
-        moneyStream.on('incoming', incomingSpy)
+        moneyStream.on('money', incomingSpy)
       })
       const clientStream1 = this.clientConn.createStream()
       const clientStream2 = this.clientConn.createStream()

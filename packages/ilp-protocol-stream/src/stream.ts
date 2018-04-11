@@ -31,8 +31,8 @@ export class DataAndMoneyStream extends Duplex {
   protected closed: boolean
   protected holds: { [id: string]: BigNumber }
 
-  protected _incoming: OffsetSorter
-  protected _outgoing: DataQueue
+  protected _incomingData: OffsetSorter
+  protected _outgoingData: DataQueue
   protected outgoingOffset: number
   protected ended: boolean
 
@@ -52,8 +52,8 @@ export class DataAndMoneyStream extends Duplex {
     this.closed = false
     this.holds = {}
 
-    this._incoming = new OffsetSorter()
-    this._outgoing = new DataQueue()
+    this._incomingData = new OffsetSorter()
+    this._outgoingData = new DataQueue()
     this.outgoingOffset = 0
     this.ended = false
   }
@@ -188,12 +188,12 @@ export class DataAndMoneyStream extends Duplex {
         reject(err)
       }
       function cleanup () {
-        self.removeListener('outgoing', outgoingHandler)
+        self.removeListener('outgoing_money', outgoingHandler)
         self.removeListener('error', errorHandler)
         self.removeListener('end', endHandler)
       }
 
-      this.on('outgoing', outgoingHandler)
+      this.on('outgoing_money', outgoingHandler)
       this.once('error', errorHandler)
       this.once('end', endHandler)
     })
@@ -214,7 +214,7 @@ export class DataAndMoneyStream extends Duplex {
     this.setReceiveMax(limit)
     await new Promise((resolve, reject) => {
       const self = this
-      function incomingHandler () {
+      function moneyHandler () {
         if (this._totalReceived.isGreaterThanOrEqualTo(limit)) {
           cleanup()
           resolve()
@@ -235,12 +235,12 @@ export class DataAndMoneyStream extends Duplex {
         reject(err)
       }
       function cleanup () {
-        self.removeListener('incoming', incomingHandler)
+        self.removeListener('money', moneyHandler)
         self.removeListener('error', errorHandler)
         self.removeListener('end', endHandler)
       }
 
-      this.on('incoming', incomingHandler)
+      this.on('money', moneyHandler)
       this.once('error', errorHandler)
       this.once('end', endHandler)
     })
@@ -261,7 +261,7 @@ export class DataAndMoneyStream extends Duplex {
   _addToIncoming (amount: BigNumber): void {
     this._totalReceived = this._totalReceived.plus(amount)
     this.debug(`received ${amount} (totalReceived: ${this._totalReceived})`)
-    this.emit('incoming', amount.toString())
+    this.emit('money', amount.toString())
   }
 
   /**
@@ -304,10 +304,10 @@ export class DataAndMoneyStream extends Duplex {
     this._totalSent = this._totalSent.plus(amount)
     delete this.holds[holdId]
     this.debug(`executed holdId: ${holdId} for: ${amount}`)
-    this.emit('outgoing', amount.toString())
+    this.emit('outgoing_money', amount.toString())
 
     if (this._totalSent.isGreaterThanOrEqualTo(this._sendMax)) {
-      this.emit('total_sent')
+      this.emit('outgoing_total_sent')
     }
   }
 
@@ -330,13 +330,13 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
-    this._outgoing.push(chunk)
+    this._outgoingData.push(chunk)
     this.emit('_send')
     callback()
   }
 
   _read (size: number): void {
-    const data = this._incoming.read()
+    const data = this._incomingData.read()
     if (data) {
       if (this.push(data) && size > data.length) {
         this._read(size - data.length)
@@ -344,14 +344,14 @@ export class DataAndMoneyStream extends Duplex {
       }
     }
 
-    if (!this.ended && this._incoming.isEnd()) {
+    if (!this.ended && this._incomingData.isEnd()) {
       this.ended = true
       this.push(null)
     }
   }
 
   _getAvailableDataToSend (size: number): { data: Buffer | undefined, offset: number } {
-    const data = this._outgoing.read(size)
+    const data = this._outgoingData.read(size)
     const offset = this.outgoingOffset
     if (data) {
       this.outgoingOffset = this.outgoingOffset += data.length
@@ -360,7 +360,7 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   _pushIncomingData (data: Buffer, offset: number) {
-    this._incoming.push(data, offset)
+    this._incomingData.push(data, offset)
 
     // TODO how much should we try to read?
     this._read(data.length)

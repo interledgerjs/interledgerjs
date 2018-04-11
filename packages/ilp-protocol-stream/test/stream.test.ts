@@ -48,7 +48,7 @@ describe('DataAndMoneyStream', function () {
       clientStream.setSendMax(1000)
 
       await new Promise((resolve, reject) => {
-        clientStream.on('total_sent', resolve)
+        clientStream.on('outgoing_total_sent', resolve)
       })
       assert.equal(clientStream.totalSent, '1000')
     })
@@ -61,7 +61,7 @@ describe('DataAndMoneyStream', function () {
       clientStream.setSendMax(1000)
 
       await new Promise((resolve, reject) => {
-        clientStream.on('total_sent', resolve)
+        clientStream.on('outgoing_total_sent', resolve)
       })
 
       assert.throws(() => clientStream.setSendMax(500), 'Cannot set sendMax lower than the totalSent')
@@ -77,7 +77,7 @@ describe('DataAndMoneyStream', function () {
     it('should start at 0', async function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.on('incoming', spy)
+        stream.on('money', spy)
       })
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
@@ -92,7 +92,7 @@ describe('DataAndMoneyStream', function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(500)
-        stream.on('incoming', spy)
+        stream.on('money', spy)
       })
       const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(1000)
@@ -106,7 +106,7 @@ describe('DataAndMoneyStream', function () {
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
         await new Promise((resolve, reject) => setTimeout(resolve, 10))
         stream.setReceiveMax(500)
-        stream.on('incoming', spy)
+        stream.on('money', spy)
       })
       const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(1000)
@@ -121,7 +121,7 @@ describe('DataAndMoneyStream', function () {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         serverStream = stream
         stream.setReceiveMax(500)
-        stream.on('incoming', spy)
+        stream.on('money', spy)
       })
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(2000)
@@ -166,7 +166,7 @@ describe('DataAndMoneyStream', function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(Infinity)
-        stream.on('incoming', spy)
+        stream.on('money', spy)
       })
       const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(1000)
@@ -311,7 +311,7 @@ describe('DataAndMoneyStream', function () {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(1000)
         stream.end()
-        stream.on('incoming', spy)
+        stream.on('money', spy)
       })
 
       const clientStream = this.clientConn.createStream()
