@@ -269,6 +269,9 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _getAmountAvailableToSend (): BigNumber {
+    if (this.closed) {
+      return new BigNumber(0)
+    }
     const amountAvailable = this._sendMax.minus(this._totalSent).minus(this._outgoingHeldAmount)
     return BigNumber.maximum(amountAvailable, 0)
   }
@@ -278,9 +281,6 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _holdOutgoing (holdId: string, maxAmount?: BigNumber): BigNumber {
-    if (this.closed) {
-      return new BigNumber(0)
-    }
     const amountAvailable = this._getAmountAvailableToSend()
     const amountToHold = (maxAmount ? BigNumber.minimum(amountAvailable, maxAmount) : amountAvailable)
     if (amountToHold.isGreaterThan(0)) {

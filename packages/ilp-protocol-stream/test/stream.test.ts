@@ -295,15 +295,11 @@ describe('DataAndMoneyStream', function () {
         .then(() => clientStream.end())
     })
 
-    it('should allow a stream to send some money and be closed right away', function (done) {
-      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.setReceiveMax(1000)
-        stream.on('end', done)
-      })
-
+    it('should close the stream even if it has not sent the total', async function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
-      clientStream.end()
+      await clientStream.end()
+      assert.equal(clientStream.totalSent, '0')
     })
 
     it('should reject all incoming packets with money for the closed stream', function (done) {
