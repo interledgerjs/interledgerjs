@@ -2,8 +2,7 @@ import 'mocha'
 import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
 import MockPlugin from './mocks/plugin'
-import { MoneyStream } from '../src/money-stream'
-import { DataStream } from '../src/data-stream'
+import { DataAndMoneyStream } from '../src/stream'
 import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
 import * as lolex from 'lolex'
@@ -37,7 +36,7 @@ describe('Connection', function () {
     })
 
     this.serverConn = await connectionPromise
-    this.serverConn.on('money_stream', (stream: MoneyStream) => {
+    this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
       stream.setReceiveMax(10000)
     })
   })
@@ -52,38 +51,38 @@ describe('Connection', function () {
     })
 
     it('should close all outgoing streams', async function () {
-      const moneySpy = sinon.spy()
-      const dataSpy = sinon.spy()
-      const outgoingMoney = this.clientConn.createMoneyStream()
-      outgoingMoney.on('end', moneySpy)
-      outgoingMoney.setSendMax(100)
-      const outgoingData = this.clientConn.createDataStream()
-      outgoingData.write('hello')
-      outgoingData.on('finish', dataSpy)
+      const spy1 = sinon.spy()
+      const spy2 = sinon.spy()
+      const stream1 = this.clientConn.createStream()
+      stream1.on('end', spy1)
+      stream1.setSendMax(100)
+      const stream2 = this.clientConn.createStream()
+      stream2.write('hello')
+      stream2.on('finish', spy2)
 
       await this.clientConn.end()
 
-      assert.callCount(moneySpy, 1)
-      assert.callCount(dataSpy, 1)
+      assert.callCount(spy1, 1)
+      assert.callCount(spy2, 1)
     })
 
     it.skip('should close all incoming streams', async function () {
       const moneySpy = sinon.spy()
       const dataSpy = sinon.spy()
-      this.clientConn.on('money_stream', (stream: MoneyStream) => {
+      this.clientConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('end', () => {
           console.log('money stream end')
           moneySpy()
         })
       })
-      this.clientConn.on('data_stream', (stream: DataStream) => {
+      this.clientConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('finish', () => {
           console.log('data strem end')
           dataSpy()
         })
       })
-      this.serverConn.createMoneyStream().setSendMax(100)
-      this.serverConn.createDataStream().write('hello')
+      this.serverConn.createStream().setSendMax(100)
+      this.serverConn.createStream().write('hello')
 
       console.log('about to end')
       await this.clientConn.end()
@@ -94,12 +93,12 @@ describe('Connection', function () {
     })
   })
 
-  describe('"money_stream" event', function () {
+  describe('"stream" event', function () {
     it('should accept the money even if there is an error thrown in the event handler', async function () {
-      this.serverConn.on('money_stream', (moneyStream: MoneyStream) => {
+      this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
         throw new Error('blah')
       })
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(117)
       assert.equal(clientStream.totalSent, '117')
     })
@@ -108,10 +107,10 @@ describe('Connection', function () {
   describe('Sending Money', function () {
     it('should send money', async function () {
       const spy = sinon.spy()
-      this.serverConn.on('money_stream', (moneyStream: MoneyStream) => {
+      this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
         moneyStream.on('incoming', spy)
       })
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(117)
 
       assert.calledOnce(spy)
@@ -124,12 +123,12 @@ describe('Connection', function () {
       const incomingSpy = sinon.spy()
       const moneyStreamSpy = sinon.spy()
       const sendDataSpy = sinon.spy(this.clientPlugin, 'sendData')
-      this.serverConn.on('money_stream', (moneyStream: MoneyStream) => {
+      this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
         moneyStreamSpy()
         moneyStream.on('incoming', incomingSpy)
       })
-      const clientStream1 = this.clientConn.createMoneyStream()
-      const clientStream2 = this.clientConn.createMoneyStream()
+      const clientStream1 = this.clientConn.createStream()
+      const clientStream2 = this.clientConn.createStream()
       await Promise.all([clientStream1.sendTotal(117), clientStream2.sendTotal(204)])
 
       assert.calledTwice(moneyStreamSpy)
@@ -148,7 +147,7 @@ describe('Connection', function () {
     it('should find the maximum amount immediately if the connector returns the receivedAmount and maximumAmount in the F08 error data', async function () {
       const spy = sinon.spy(this.clientPlugin, 'sendData')
       this.clientPlugin.maxAmount = 1500
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(2000)
 
       assert.equal(IlpPacket.deserializeIlpPrepare(spy.getCall(0).args[0]).amount, '2000')
@@ -170,7 +169,7 @@ describe('Connection', function () {
         return realSendData.call(this.clientPlugin, data)
       }
 
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(3000)
 
       assert.equal(callCount, 5)
@@ -197,7 +196,7 @@ describe('Connection', function () {
         return result
       }
 
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(2000)
 
       assert.equal(callCount, 5)
@@ -226,7 +225,7 @@ describe('Connection', function () {
         return result
       }
 
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(2000)
 
       assert.equal(IlpPacket.deserializeIlpPrepare(args[0]).amount, '2000')
@@ -238,7 +237,7 @@ describe('Connection', function () {
 
     it('should stop sending if the maximum amount is too small to send any money through', async function () {
       this.clientPlugin.maxAmount = 0
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
 
       return assert.isRejected(clientStream.sendTotal(1000))
     })
@@ -254,8 +253,8 @@ describe('Connection', function () {
         triggeredBy: 'test.connector'
       }))
 
-      const clientStream1 = this.clientConn.createMoneyStream()
-      const clientStream2 = this.clientConn.createMoneyStream()
+      const clientStream1 = this.clientConn.createStream()
+      const clientStream2 = this.clientConn.createStream()
 
       return Promise.all([
         assert.isRejected(clientStream1.sendTotal(117), 'Unexpected error while sending packet. Code: F89, message: Blah'),
@@ -294,7 +293,7 @@ describe('Connection', function () {
         }))
         .callThrough()
 
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(100)
       assert.callCount(sendDataStub, 4)
       clearInterval(interval)
@@ -310,7 +309,7 @@ describe('Connection', function () {
         triggeredBy: 'test.connector'
       }))
 
-      const clientStream1 = this.clientConn.createMoneyStream()
+      const clientStream1 = this.clientConn.createStream()
 
       await assert.isRejected(clientStream1.sendTotal(117), 'Unexpected error while sending packet. Code: F89, message: Blah')
       assert.equal(clientStream1.totalSent, '0')
@@ -342,7 +341,7 @@ describe('Connection', function () {
         enablePadding: true
       })
       this.serverConn = await connectionPromise
-      this.serverConn.on('money_stream', (stream: MoneyStream) => {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(10000)
       })
 
@@ -358,7 +357,7 @@ describe('Connection', function () {
         }
         return response
       }
-      const clientStream = this.clientConn.createMoneyStream()
+      const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(117)
 
       for (let length of lengths) {

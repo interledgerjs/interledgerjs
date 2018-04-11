@@ -1,7 +1,6 @@
 import EventEmitter3 = require('eventemitter3')
 import * as Debug from 'debug'
-import { MoneyStream } from './money-stream'
-import { DataStream } from './data-stream'
+import { DataAndMoneyStream } from './stream'
 import * as IlpPacket from 'ilp-packet'
 import * as cryptoHelper from './crypto'
 import {
@@ -57,10 +56,8 @@ export class Connection extends EventEmitter3 {
   protected enablePadding: boolean
 
   protected outgoingPacketNumber: number
-  protected moneyStreams: MoneyStream[]
-  protected nextMoneyStreamId: number
-  protected dataStreams: DataStream[]
-  protected nextDataStreamId: number
+  protected streams: DataAndMoneyStream[]
+  protected nextStreamId: number
   protected debug: Debug.IDebugger
   protected sending: boolean
   /** Used to probe for the Maximum Packet Amount if the connectors don't tell us directly */
@@ -88,10 +85,8 @@ export class Connection extends EventEmitter3 {
     this.connectionTag = opts.connectionTag
 
     this.outgoingPacketNumber = 1
-    this.moneyStreams = []
-    this.dataStreams = []
-    this.nextMoneyStreamId = (this.isServer ? 2 : 1)
-    this.nextDataStreamId = (this.isServer ? 2 : 1)
+    this.streams = []
+    this.nextStreamId = (this.isServer ? 2 : 1)
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
     this.closed = true
@@ -129,15 +124,9 @@ export class Connection extends EventEmitter3 {
     this.debug('closing connection')
     this.closed = true
 
-    for (let moneyStream of this.moneyStreams) {
+    for (let moneyStream of this.streams) {
       if (moneyStream && moneyStream.isOpen()) {
         moneyStream.end()
-      }
-    }
-
-    for (let dataStream of this.dataStreams) {
-      if (dataStream) {
-        dataStream.end()
       }
     }
 
@@ -149,33 +138,17 @@ export class Connection extends EventEmitter3 {
   }
 
   /**
-   * Returns a new MoneyStream that can be used to send or receive value over this connection.
+   * Returns a new bidirectional money and data stream
    */
-  createMoneyStream (): MoneyStream {
+  createStream (): DataAndMoneyStream {
     // TODO should this inform the other side?
-    const stream = new MoneyStream({
-      id: this.nextMoneyStreamId,
+    const stream = new DataAndMoneyStream({
+      id: this.nextStreamId,
       isServer: this.isServer
     })
-    this.moneyStreams[this.nextMoneyStreamId] = stream
-    this.debug(`created money stream: ${this.nextMoneyStreamId}`)
-    this.nextMoneyStreamId += 2
-
-    stream.on('_send', this.startSendLoop.bind(this))
-    // TODO notify when the stream is closed
-
-    return stream
-  }
-
-  /**
-   * Returns a new DataStream that can be used to send or receive data over this connection.
-   */
-  createDataStream (): DataStream {
-    const stream = new DataStream(this.nextDataStreamId)
-
-    this.dataStreams[this.nextDataStreamId] = stream
-    this.debug(`created data stream: ${this.nextDataStreamId}`)
-    this.nextDataStreamId += 2
+    this.streams[this.nextStreamId] = stream
+    this.debug(`created money stream: ${this.nextStreamId}`)
+    this.nextStreamId += 2
 
     stream.on('_send', this.startSendLoop.bind(this))
     // TODO notify when the stream is closed
@@ -259,33 +232,21 @@ export class Connection extends EventEmitter3 {
         case FrameType.StreamMoney:
         case FrameType.StreamMoneyEnd:
         case FrameType.StreamMoneyMax:
-          const moneyStreamId = frame.streamId.toNumber()
-          if (this.moneyStreams[moneyStreamId]) {
-            continue
-          }
-          includesNewStream = true
-          this.debug(`got new money stream: ${moneyStreamId}`)
-          const moneyStream = new MoneyStream({
-            id: moneyStreamId,
-            isServer: this.isServer
-          })
-          this.moneyStreams[moneyStreamId] = moneyStream
-
-          this.safeEmit('money_stream', moneyStream)
-          moneyStream.on('_send', this.startSendLoop.bind(this))
-          break
         case FrameType.StreamData:
         case FrameType.StreamDataEnd:
-          const dataStreamId = frame.streamId.toNumber()
-          if (this.dataStreams[dataStreamId]) {
+          const streamId = frame.streamId.toNumber()
+          if (this.streams[streamId]) {
             continue
           }
           includesNewStream = true
-          this.debug(`got new data stream: ${dataStreamId}`)
-          const stream = new DataStream(dataStreamId)
-          this.dataStreams[dataStreamId] = stream
+          this.debug(`got new stream: ${streamId}`)
+          const stream = new DataAndMoneyStream({
+            id: streamId,
+            isServer: this.isServer
+          })
+          this.streams[streamId] = stream
 
-          this.safeEmit('data_stream', stream)
+          this.safeEmit('stream', stream)
           stream.on('_send', this.startSendLoop.bind(this))
           break
         default:
@@ -301,7 +262,7 @@ export class Connection extends EventEmitter3 {
     // Handle receive max amount frames
     for (let frame of requestPacket.frames) {
       if (frame.type === FrameType.StreamMoneyMax) {
-        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        const stream = this.streams[frame.streamId.toNumber()]
         if (stream) {
           this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
           stream._remoteReceived = BigNumber.maximum(stream._remoteReceived || 0, frame.totalReceived)
@@ -319,7 +280,7 @@ export class Connection extends EventEmitter3 {
     // Handle data
     for (let frame of requestPacket.frames) {
       if (frame.type === FrameType.StreamData || frame.type === FrameType.StreamDataEnd) {
-        const stream = this.dataStreams[frame.streamId.toNumber()]
+        const stream = this.streams[frame.streamId.toNumber()]
 
         stream._pushIncomingData(frame.data, frame.offset.toNumber())
         // TODO handle stream end
@@ -338,22 +299,22 @@ export class Connection extends EventEmitter3 {
       amountsToReceive[streamId] = streamAmount
 
       // Ensure that this amount isn't more than the stream can receive
-      const maxStreamCanReceive = this.moneyStreams[streamId]._getAmountStreamCanReceive()
+      const maxStreamCanReceive = this.streams[streamId]._getAmountStreamCanReceive()
         .times(this.allowableReceiveExtra)
         .integerValue(BigNumber.ROUND_CEIL)
       if (maxStreamCanReceive.isLessThan(streamAmount)) {
         // TODO should this be distributed to other streams if it can be?
         this.debug(`peer sent too much for stream: ${streamId}. got: ${streamAmount}, max receivable: ${maxStreamCanReceive}`)
         // Tell peer how much the streams they sent for can receive
-        const receiveMax = (this.moneyStreams[streamId].receiveMax === 'Infinity' ? MAX_UINT64 : this.moneyStreams[streamId].receiveMax)
-        responseFrames.push(new StreamMoneyMaxFrame(streamId, receiveMax, this.moneyStreams[streamId].totalReceived))
+        const receiveMax = (this.streams[streamId].receiveMax === 'Infinity' ? MAX_UINT64 : this.streams[streamId].receiveMax)
+        responseFrames.push(new StreamMoneyMaxFrame(streamId, receiveMax, this.streams[streamId].totalReceived))
 
         // TODO include error frame
         throwFinalApplicationError()
       }
 
       // Reject the packet if any of the streams is already closed
-      if (!this.moneyStreams[streamId].isOpen()) {
+      if (!this.streams[streamId].isOpen()) {
         this.debug(`peer sent money for stream that was already closed: ${streamId}`)
         responseFrames.push(new StreamMoneyErrorFrame(streamId, 'StreamStateError', 'Stream is already closed'))
 
@@ -364,14 +325,14 @@ export class Connection extends EventEmitter3 {
     // Add incoming amounts to each stream
     for (let streamId in amountsToReceive) {
       if (amountsToReceive[streamId]) {
-        this.moneyStreams[streamId]._addToIncoming(amountsToReceive[streamId])
+        this.streams[streamId]._addToIncoming(amountsToReceive[streamId])
       }
     }
 
     // Handle stream closes
     for (let frame of requestPacket.frames) {
       if (frame.type === FrameType.StreamMoneyError) {
-        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        const stream = this.streams[frame.streamId.toNumber()]
         if (stream) {
           this.debug(`peer closed stream ${stream.id} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
           // TODO should we confirm with the other side that we closed it?
@@ -385,7 +346,7 @@ export class Connection extends EventEmitter3 {
     }
 
     // Tell peer about closed streams and how much each stream can receive
-    for (let moneyStream of this.moneyStreams) {
+    for (let moneyStream of this.streams) {
       if (moneyStream) {
         if (!this.remoteClosed
           && !moneyStream.isOpen()
@@ -444,7 +405,7 @@ export class Connection extends EventEmitter3 {
         this.safeEmit('error', err)
 
         // TODO should a connection error be an error on all of the streams?
-        for (let moneyStream of this.moneyStreams) {
+        for (let moneyStream of this.streams) {
           if (moneyStream) {
             moneyStream.emit('error', err)
           }
@@ -466,7 +427,7 @@ export class Connection extends EventEmitter3 {
         this.emit('error', err)
 
         // TODO should a connection error be an error on all of the streams?
-        for (let moneyStream of this.moneyStreams) {
+        for (let moneyStream of this.streams) {
           if (moneyStream && !moneyStream._sentEnd) {
             moneyStream.emit('error', err)
           }
@@ -496,7 +457,7 @@ export class Connection extends EventEmitter3 {
 
     // Send control frames
     // TODO only send the max amount when it changes
-    for (let moneyStream of this.moneyStreams) {
+    for (let moneyStream of this.streams) {
       if (moneyStream && moneyStream.isOpen()) {
         requestPacket.frames.push(new StreamMoneyMaxFrame(moneyStream.id, moneyStream.receiveMax, moneyStream.totalReceived))
       }
@@ -510,8 +471,8 @@ export class Connection extends EventEmitter3 {
 
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromNextStream = this.testMaximumPacketAmount
-    const moneyStreamsSentFrom = []
-    for (let moneyStream of this.moneyStreams) {
+    const streamsSentFrom = []
+    for (let moneyStream of this.streams) {
       if (!moneyStream || moneyStream._sentEnd) {
         // TODO just remove closed streams?
         continue
@@ -539,7 +500,7 @@ export class Connection extends EventEmitter3 {
         requestPacket.frames.push(new StreamMoneyFrame(moneyStream.id, amountToSendFromStream))
         amountToSend = amountToSend.plus(amountToSendFromStream)
         maxAmountFromNextStream = maxAmountFromNextStream.minus(amountToSendFromStream)
-        moneyStreamsSentFrom.push(moneyStream)
+        streamsSentFrom.push(moneyStream)
       }
 
       // Tell the other side if the stream is closed
@@ -557,7 +518,7 @@ export class Connection extends EventEmitter3 {
 
     // Send data
     let sendingData = false
-    for (let dataStream of this.dataStreams) {
+    for (let dataStream of this.streams) {
       // TODO send only up to the max packet data
       if (!dataStream) {
         continue
@@ -638,7 +599,7 @@ export class Connection extends EventEmitter3 {
         throw new Error(`Got invalid fulfillment. Actual: ${response.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
       }
       this.debug(`packet ${requestPacket.sequence} was fulfilled`)
-      for (let moneyStream of moneyStreamsSentFrom) {
+      for (let moneyStream of streamsSentFrom) {
         moneyStream._executeHold(requestPacket.sequence.toString())
       }
 
@@ -659,7 +620,7 @@ export class Connection extends EventEmitter3 {
       this.debug(`packet ${requestPacket.sequence} was rejected`)
 
       // Put money back into MoneyStreams
-      for (let moneyStream of moneyStreamsSentFrom) {
+      for (let moneyStream of streamsSentFrom) {
         moneyStream._cancelHold(requestPacket.sequence.toString())
       }
 
@@ -691,7 +652,7 @@ export class Connection extends EventEmitter3 {
     // Handle response data from receiver
     for (let frame of responsePacket.frames) {
       if (frame.type === FrameType.StreamMoneyMax) {
-        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        const stream = this.streams[frame.streamId.toNumber()]
         if (stream) {
           this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
           stream._remoteReceived = BigNumber.maximum(stream._remoteReceived || 0, frame.totalReceived)
@@ -699,7 +660,7 @@ export class Connection extends EventEmitter3 {
           stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax || 0, frame.receiveMax)
         }
       } else if (frame.type === FrameType.StreamMoneyError) {
-        const stream = this.moneyStreams[frame.streamId.toNumber()]
+        const stream = this.streams[frame.streamId.toNumber()]
         if (stream) {
           this.debug(`peer closed stream ${frame.streamId} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
           // TODO should we confirm with the other side that we closed it?
