@@ -343,5 +343,30 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.write('hello')
     })
+
+    it('should split data across multiple packets if necessary', function (done) {
+      const dataToSend = Buffer.alloc(40000, 'af39', 'hex')
+      const spy = sinon.spy()
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        const chunks: Buffer[] = []
+        stream.on('data', (chunk: Buffer) => {
+          if (chunk) {
+            chunks.push(chunk)
+          }
+        })
+        stream.on('end', (chunk: Buffer) => {
+          spy()
+          if (chunk) {
+            chunks.push(chunk)
+          }
+          assert(dataToSend.equals(Buffer.concat(chunks)))
+          assert.callCount(spy, 1)
+          done()
+        })
+      })
+      const clientStream = this.clientConn.createStream()
+      clientStream.write(dataToSend)
+      clientStream.end()
+    })
   })
 })

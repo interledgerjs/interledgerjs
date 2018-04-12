@@ -360,6 +360,17 @@ export class StreamDataFrame extends BaseFrame {
     writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
+
+  // Leave out the data because that may be very long
+  toJSON (): Object {
+    return {
+      type: this.type,
+      streamId: this.streamId,
+      offset: this.offset,
+      dataLength: this.data.length,
+      isEnd: this.isEnd
+    }
+  }
 }
 
 function parseFrame (reader: Reader): Frame | undefined {

@@ -351,6 +351,10 @@ export class DataAndMoneyStream extends Duplex {
     }
   }
 
+  _hasDataToSend (): boolean {
+    return !this._outgoingData.isEmpty()
+  }
+
   _getAvailableDataToSend (size: number): { data: Buffer | undefined, offset: number } {
     const data = this._outgoingData.read(size)
     const offset = this.outgoingOffset
@@ -430,6 +434,10 @@ export class DataQueue {
     }
     this.shift()
     return ret // ret.length <= n
+  }
+
+  isEmpty (): boolean {
+    return this.length === 0
   }
 }
 

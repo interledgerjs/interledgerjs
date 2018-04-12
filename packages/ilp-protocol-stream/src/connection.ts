@@ -503,13 +503,6 @@ export class Connection extends EventEmitter3 {
         streamsSentFrom.push(moneyStream)
       }
 
-      // Tell the other side if the stream is closed
-      if (!this.closed && !moneyStream.isOpen() && moneyStream._getAmountAvailableToSend().isGreaterThanOrEqualTo(0)) {
-        requestPacket.frames.push(new StreamMoneyErrorFrame(moneyStream.id, 'NoError', ''))
-        // TODO only set this to true if the packet gets through to the receiver
-        moneyStream._sentEnd = true
-      }
-
       if (maxAmountFromNextStream.isEqualTo(0)) {
         // TODO make sure that we start with those later frames the next time around
         break
@@ -537,6 +530,27 @@ export class Connection extends EventEmitter3 {
       this.debug(`packet value is 0 so we'll this packet and then stop`)
       this.sending = false
       // TODO figure out if there are control frames we need to send and stop sending if not
+    }
+
+    // Tell other side which streams are closed
+    // TODO how do we tell them the stream is half closed but there's still data or money to send
+    for (let stream of this.streams) {
+      if (!stream || this.closed || stream.isOpen() || stream._sentEnd) {
+        continue
+      }
+      if (stream._getAmountAvailableToSend().isGreaterThan(0)) {
+        this.debug(`stream ${stream.id} is closed but still has money to send, not sending end frame yet`)
+        continue
+      }
+      if (stream._hasDataToSend()) {
+        this.debug(`stream ${stream.id} is closed but still has data to send, not sending end frame yet`)
+        continue
+      }
+      this.debug(`sending end frame for stream ${stream.id}`)
+      // TODO should this be a Stream{Money,Data} frame with isEnd set instead?
+      requestPacket.frames.push(new StreamMoneyErrorFrame(stream.id, 'NoError', ''))
+      // TODO only set this to true if the packet gets through to the receiver
+      stream._sentEnd = true
     }
 
     // Set minimum destination amount
