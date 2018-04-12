@@ -585,6 +585,11 @@ export interface IlpRejection {
   data: Buffer
 }
 
+export interface IlpF08Rejection extends IlpRejection {
+  receivedAmount: string,
+  maximumAmount: string
+}
+
 export const serializeIlpRejection = (json: IlpRejection) => {
   const writer = new Writer()
 
@@ -630,6 +635,22 @@ export const deserializeIlpRejection = (binary: Buffer): IlpRejection => {
   const data = reader.readVarOctetString()
 
   // Ignore remaining bytes for extensibility
+
+  if (code === 'F08') {
+    const dataReader = Reader.from(data)
+    const highBitsRcv = dataReader.readUInt32()
+    const lowBitsRcv = dataReader.readUInt32()
+    const highBitsMax = dataReader.readUInt32()
+    const lowBitsMax = dataReader.readUInt32()
+    return <IlpF08Rejection> {
+      code,
+      triggeredBy,
+      message,
+      data,
+      receivedAmount: Long.fromBits(lowBitsRcv, highBitsRcv, true).toString(),
+      maximumAmount: Long.fromBits(lowBitsMax, highBitsMax, true).toString()
+    }
+  }
 
   return {
     code,
