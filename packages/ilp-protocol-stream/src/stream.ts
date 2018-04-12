@@ -97,10 +97,11 @@ export class DataAndMoneyStream extends Duplex {
       return
     }
     this.debug('closing stream')
-    this.emit('end')
-    // TODO should it emit the finish event too?
-    this.emit('finish')
     this.closed = true
+    super.end()
+    this.emit('end')
+    // TODO should we emit the event (or return a promise that resolves)
+    // after we're done sending all the queued data and money?
     if (!this._sentEnd) {
       this.debug('starting another send loop to tell the peer the stream was closed')
       this.emit('_send')

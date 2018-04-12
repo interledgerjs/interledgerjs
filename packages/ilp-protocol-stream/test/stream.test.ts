@@ -318,6 +318,12 @@ describe('DataAndMoneyStream', function () {
         done()
       })
     })
+
+    it('should not allow more data to be written once the stream is closed', async function () {
+      const clientStream = this.clientConn.createStream()
+      clientStream.end()
+      assert.throws(() => clientStream.write('hello'), 'write after end')
+    })
   })
 
   describe('Sending Data', function () {
