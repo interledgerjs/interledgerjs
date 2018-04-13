@@ -15,6 +15,20 @@ const server = new IlpStream.Server({
 async function run () {
   await server.listen()
 
+  server.on('connection', (connection) => {
+    console.log('server got connection')
+    connection.on('stream', (stream) => {
+      console.log('server got a new stream')
+      stream.setReceiveMax(10000)
+      stream.on('money', (amount) => {
+        console.log(`got incoming payment for: ${amount}`)
+      })
+      stream.on('data', (chunk) => {
+        console.log(`stream got data: ${chunk.toString('utf8')}`)
+      })
+    })
+  })
+
   const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
   const clientConn = await IlpStream.createConnection({
     plugin: clientPlugin,
@@ -22,31 +36,13 @@ async function run () {
     sharedSecret
   })
 
-  server.on('connection', (connection) => {
-    console.log('server got connection')
-    connection.on('money_stream', (moneyStream) => {
-      moneyStream.setReceiveMax(10000)
-      console.log('server got a new money stream')
-      moneyStream.on('incoming', (amount) => {
-        console.log(`got incoming payment for: ${amount}`)
-      })
-    })
-
-    connection.on('data_stream', (dataStream) => {
-      console.log('server got a new data stream')
-      dataStream.on('data', (chunk) => {
-        console.log(`stream got data: ${chunk.toString('utf8')}`)
-      })
-    })
-  })
-
-  const moneyStream = clientConn.createMoneyStream()
-  await moneyStream.sendTotal(100)
-  console.log('sent 100 units')
-
-  const dataStream = clientConn.createDataStream()
+  const stream = clientConn.createStream()
   console.log('sending data to server')
-  dataStream.write('hello there!')
+  stream.write('hello there!')
+
+  console.log('sending money')
+  await stream.sendTotal(100)
+  console.log('sent 100 units')
 }
 
 run().catch((err) => console.log(err))

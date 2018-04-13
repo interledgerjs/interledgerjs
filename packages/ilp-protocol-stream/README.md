@@ -29,14 +29,19 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [x] Padding frame
 - [x] Data stream
 - [x] Should money and data streams use different sets of numbers for stream ids?
+- [x] Connection closing
+- [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
+- [ ] Backpressure for data
+- [ ] Switch stream ending to use StreamEnd frame instead of error
 - [ ] Multiple packets in flight at the same time
-- [ ] Backpressure for data streams
-- [ ] Connection closing
 - [ ] Don't send extra packet at the end if it isn't necessary
 - [ ] Max number of streams
 - [ ] Blocked frames (when more is available to send)
 - [ ] Refactor handleData and sendPacket functions to make them easier to understand and reason about
 - [ ] Use `ilp-plugin` to get plugin from environment
+- [ ] Drop connection when it has sent a certain number of packets
+- [ ] Randomize expiry time
+- [ ] Merge sending test and normal packets? Or at least handle frames in the same way
 
 ## Credits
 
