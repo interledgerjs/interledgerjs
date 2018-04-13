@@ -511,14 +511,18 @@ export class Connection extends EventEmitter3 {
 
     // Send data
     let sendingData = false
+    let bytesLeftInPacket = MAX_DATA_SIZE - requestPacket.byteLength()
     for (let dataStream of this.streams) {
       // TODO send only up to the max packet data
       if (!dataStream) {
         continue
       }
-      const { data, offset } = dataStream._getAvailableDataToSend(MAX_DATA_SIZE)
+      // TODO use a sensible estimate for the StreamDataFrame overhead
+      const { data, offset } = dataStream._getAvailableDataToSend(bytesLeftInPacket - 20)
       if (data && data.length > 0) {
-        requestPacket.frames.push(new StreamDataFrame(dataStream.id, offset, data || Buffer.alloc(0)))
+        const streamDataFrame = new StreamDataFrame(dataStream.id, offset, data || Buffer.alloc(0))
+        bytesLeftInPacket -= streamDataFrame.byteLength()
+        requestPacket.frames.push(streamDataFrame)
         // TODO actually figure out if there's more data to send
         sendingData = true
       }
@@ -546,9 +550,18 @@ export class Connection extends EventEmitter3 {
         this.debug(`stream ${stream.id} is closed but still has data to send, not sending end frame yet`)
         continue
       }
+      const streamEndFrame = new StreamMoneyErrorFrame(stream.id, 'NoError', '')
+
+      // Make sure the packet has space left
+      if (streamEndFrame.byteLength() > bytesLeftInPacket) {
+        // TODO make sure it will actually make another pass to send these later
+        this.debug('not sending more stream end frames because the packet is full')
+        break
+      }
       this.debug(`sending end frame for stream ${stream.id}`)
       // TODO should this be a Stream{Money,Data} frame with isEnd set instead?
-      requestPacket.frames.push(new StreamMoneyErrorFrame(stream.id, 'NoError', ''))
+      requestPacket.frames.push(streamEndFrame)
+      bytesLeftInPacket -= streamEndFrame.byteLength()
       // TODO only set this to true if the packet gets through to the receiver
       stream._sentEnd = true
     }

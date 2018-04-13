@@ -368,5 +368,19 @@ describe('DataAndMoneyStream', function () {
       clientStream.write(dataToSend)
       clientStream.end()
     })
+
+    it('should not send more than 32767 bytes in the packet', function (done) {
+      const dataToSend = Buffer.alloc(40000, 'af39', 'hex')
+      const spy = sinon.spy(this.clientPlugin, 'sendData')
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('end', (chunk: Buffer) => {
+          assert.isAtMost(IlpPacket.deserializeIlpPrepare(spy.args[0][0]).data.length, 32767)
+          done()
+        })
+      })
+      const clientStream = this.clientConn.createStream()
+      clientStream.write(dataToSend)
+      clientStream.end()
+    })
   })
 })

@@ -73,6 +73,11 @@ export class Packet {
   /** @private */
   _serialize (): Buffer {
     const writer = new Writer()
+    this.writeTo(writer)
+    return writer.getBuffer()
+  }
+
+  writeTo (writer: Writer): void {
     writer.writeUInt8(VERSION)
     writer.writeUInt8(this.ilpPacketType)
     writer.writeVarUInt(this.sequence)
@@ -80,7 +85,12 @@ export class Packet {
     for (let frame of this.frames) {
       frame.writeTo(writer)
     }
-    return writer.getBuffer()
+  }
+
+  byteLength (): number {
+    const predictor = new Predictor()
+    this.writeTo(predictor)
+    return predictor.getSize() + ENCRYPTION_OVERHEAD
   }
 }
 
