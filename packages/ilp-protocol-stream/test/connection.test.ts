@@ -118,7 +118,7 @@ describe('Connection', function () {
     })
   })
 
-  describe('Multiplexed MoneyStreams', function () {
+  describe('Multiplexed Money', function () {
     it('should send one packet for two streams if the amount does not exceed the Maximum Packet Amount', async function () {
       const incomingSpy = sinon.spy()
       const moneyStreamSpy = sinon.spy()

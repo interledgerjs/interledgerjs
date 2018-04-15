@@ -33,6 +33,11 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
 - [ ] Backpressure for data
 - [ ] Switch stream ending to use StreamEnd frame instead of error
+- [ ] Put a sequence for the receive max amount and allow it to be lowered
+- [ ] When waiting to receive money, occasionally resend the max receive amount in case the sender hasn't gotten it (and also send it if they send too much)
+- [ ] Add ACKs for data so that you know if data was received even if packet is rejected
+- [ ] stream.end should accept data like node stream
+- [ ] Use stream.destroy instead of end to close immediately -- end should flush data and money and emit finish or whatever when it's done, destroy closes it right away
 - [ ] Multiple packets in flight at the same time
 - [ ] Don't send extra packet at the end if it isn't necessary
 - [ ] Max number of streams
@@ -42,7 +47,52 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Drop connection when it has sent a certain number of packets
 - [ ] Randomize expiry time
 - [ ] Merge sending test and normal packets? Or at least handle frames in the same way
+- [ ] Make it work even if one side can only receive 0 amount packets
+- [ ] Separate connection "close" and "kill", where the former flushes everything first
 
 ## Credits
 
 Thanks to @sharafian for coming up with the acronym for STREAM.
+
+
+
+
+### Connection
+
+Closed
+Open / Connected (know the exchange rate, other side's address - )
+Stream ID blocked
+
+**TODO** Should frames be handled as they go or in a specific order?
+Handle connection ID max changes
+Handle new streams
+Handle receive limit changes
+Handle data, send acks
+Handle money (if it's a prepare)
+  - Check total number of shares
+  - Determine how much is destined for each stream
+  - Make sure those streams are open
+  - Make sure those streams can receive that amount
+
+Handle Non-Money Frames
+  ConnectionNewAddress = 0x01,
+  ConnectionError = 0x02,
+  ApplicationError = 0x03,
+  ConnectionMaxMoney = 0x04,
+  ConnectionMoneyBlocked = 0x05,
+  ConnectionMaxData = 0x06,
+  ConnectionDataBlocked = 0x07,
+  ConnectionMaxStreamId = 0x08,
+  ConnectionStreamIdBlocked = 0x09,
+
+  StreamMoney = 0x10,
+  StreamMoneyEnd = 0x11,
+  StreamMoneyMax = 0x12,
+  StreamMoneyBlocked = 0x13,
+  StreamMoneyError = 0x14,
+
+  StreamData = 0x20,
+  StreamDataEnd = 0x21,
+  StreamDataMax = 0x22,
+  StreamDataBlocked = 0x23,
+  StreamDataError = 0x24

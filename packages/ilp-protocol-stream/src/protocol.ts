@@ -1,11 +1,13 @@
 import { Reader, Writer, Predictor } from 'oer-utils'
 import BigNumber from 'bignumber.js'
 import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
+import * as assert from 'assert'
 require('source-map-support').install()
 
 const VERSION = 1
 
 const ZERO_BYTES = Buffer.alloc(32)
+const MAX_UINT64 = new BigNumber('18446744073709551615')
 
 export enum IlpPacketType {
   Prepare = 12,
@@ -158,7 +160,7 @@ export abstract class BaseFrame {
 export type Frame =
   ConnectionNewAddressFrame
   | ConnectionErrorFrame
-//  | ApplicationErrorFrame
+  | ApplicationErrorFrame
 //  | ConnectionMaxMoneyFrame
 //  | ConnectionMoneyBlockedFrame
 //  | ConnectionMaxDataFrame
@@ -239,17 +241,48 @@ export class ConnectionErrorFrame extends BaseFrame {
   }
 }
 
+export class ApplicationErrorFrame extends BaseFrame {
+  type: FrameType.ApplicationError
+  errorCode: number
+  errorMessage: string
+
+  constructor (errorCode: number, errorMessage: string) {
+    super('ApplicationError')
+    this.errorCode = errorCode
+    this.errorMessage = errorMessage
+  }
+
+  static fromBuffer (reader: Reader): ApplicationErrorFrame {
+    assertType(reader, 'ApplicationError')
+    const contents = Reader.from(reader.readVarOctetString())
+    const errorCode = contents.readUInt8BigNum().toNumber()
+    const errorMessage = contents.readVarOctetString().toString()
+    return new ApplicationErrorFrame(errorCode, errorMessage)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeUInt8(this.errorCode)
+    contents.writeVarOctetString(Buffer.from(this.errorMessage))
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
 export class StreamMoneyFrame extends BaseFrame {
   type: FrameType.StreamMoney | FrameType.StreamMoneyEnd
   streamId: BigNumber
   shares: BigNumber
   isEnd: boolean
 
-  constructor (streamId: BigNumber.Value, amount: BigNumber.Value, isEnd = false) {
+  constructor (streamId: BigNumber.Value, shares: BigNumber.Value, isEnd = false) {
     super((isEnd ? 'StreamMoneyEnd' : 'StreamMoney'))
     this.streamId = new BigNumber(streamId)
-    this.shares = new BigNumber(amount)
+    this.shares = new BigNumber(shares)
     this.isEnd = isEnd
+
+    assert(this.shares.isInteger() && this.shares.isPositive(), `shares must be a positive integer: ${shares}`)
   }
 
   static fromBuffer (reader: Reader): StreamMoneyFrame {
@@ -282,6 +315,13 @@ export class StreamMoneyMaxFrame extends BaseFrame {
     this.streamId = new BigNumber(streamId)
     this.receiveMax = new BigNumber(receiveMax)
     this.totalReceived = new BigNumber(totalReceived)
+
+    if (!this.receiveMax.isFinite()) {
+      this.receiveMax = MAX_UINT64
+    }
+
+    assert(this.receiveMax.isInteger() && this.receiveMax.isPositive(), `receiveMax must be a positive integer. got: ${receiveMax}`)
+    assert(this.totalReceived.isInteger() && this.totalReceived.isPositive(), `totalReceived must be a positive integer. got: ${totalReceived}`)
   }
 
   static fromBuffer (reader: Reader): StreamMoneyMaxFrame {

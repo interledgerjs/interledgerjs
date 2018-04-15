@@ -221,7 +221,7 @@ export class Server extends EventEmitter3 {
         code: err.ilpErrorCode || 'F00',
         message: err.ilpErrorMessage || '',
         data: err.ilpErrorData || Buffer.alloc(0),
-        triggeredBy: this.sourceAccount
+        triggeredBy: this.sourceAccount || ''
       })
     }
   }
