@@ -30,18 +30,23 @@ const MAX_DATA_SIZE = 32767
 export interface ConnectionOpts {
   plugin: Plugin,
   destinationAccount?: string,
-  sourceAccount: string,
-  sharedSecret: Buffer,
-  isServer: boolean,
+  sourceAccount?: string,
   slippage?: BigNumber.Value,
   enablePadding?: boolean,
-  connectionTag?: string
+  connectionTag?: string,
+  maxOpenStreams?: number
+}
+
+export interface FullConnectionOpts extends ConnectionOpts {
+  sourceAccount: string,
+  isServer: boolean,
+  sharedSecret: Buffer
 }
 
 /**
  * The ILP STREAM connection between client and server.
  *
- * A single connection can be used to send or receive on multiple money streams and multiple data streams.
+ * A single connection can be used to send or receive on multiple streams.
  */
 export class Connection extends EventEmitter3 {
   /** Application identifier for a certain connection */
@@ -51,13 +56,13 @@ export class Connection extends EventEmitter3 {
   protected sharedSecret: Buffer
   protected isServer: boolean
   protected slippage: BigNumber
-  /** How much more than the money stream specified it will accept */
   protected allowableReceiveExtra: BigNumber
   protected enablePadding: boolean
 
   protected nextPacketSequence: number
   protected streams: DataAndMoneyStream[]
   protected nextStreamId: number
+  protected maxStreamId: number
   protected debug: Debug.IDebugger
   protected sending: boolean
   /** Used to probe for the Maximum Packet Amount if the connectors don't tell us directly */
@@ -71,7 +76,7 @@ export class Connection extends EventEmitter3 {
 
   protected remoteConnection: RemoteConnection
 
-  constructor (opts: ConnectionOpts) {
+  constructor (opts: FullConnectionOpts) {
     super()
     this.plugin = opts.plugin
     this.sourceAccount = opts.sourceAccount
@@ -81,6 +86,7 @@ export class Connection extends EventEmitter3 {
     this.allowableReceiveExtra = new BigNumber(1.01)
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
+    this.maxStreamId = 1 + (opts.maxOpenStreams || 20)
 
     this.nextPacketSequence = 1
     this.streams = []
@@ -107,6 +113,9 @@ export class Connection extends EventEmitter3 {
    * The connection will emit the "money_stream" and "data_stream" events when new streams are received.
    */
   async connect (): Promise<void> {
+    if (!this.closed) {
+      return Promise.resolve()
+    }
     /* tslint:disable-next-line:no-floating-promises */
     this.startSendLoop()
     await new Promise((resolve, reject) => {
@@ -151,7 +160,7 @@ export class Connection extends EventEmitter3 {
     })
     this.streams[this.nextStreamId] = stream
     this.remoteConnection.createStream(this.nextStreamId)
-    this.debug(`created money stream: ${this.nextStreamId}`)
+    this.debug(`created stream: ${this.nextStreamId}`)
     this.nextStreamId += 2
 
     stream.on('_send', this.startSendLoop.bind(this))
@@ -195,6 +204,7 @@ export class Connection extends EventEmitter3 {
     try {
       this.handleFrames(requestPacket.frames)
     } catch (err) {
+      this.debug('error handling frames:', err)
       throwFinalApplicationError()
     }
 
@@ -378,11 +388,24 @@ export class Connection extends EventEmitter3 {
     if (this.isServer && streamId % 2 === 0) {
       this.debug(`got invalid stream ID ${streamId} from peer (should be odd)`)
       this.queuedFrames.push(new ConnectionErrorFrame('ProtocolViolation', `Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`))
-      throw new Error(`Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`)
+      const err = new Error(`Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`)
+      this.safeEmit('error', err)
+      throw err
     } else if (!this.isServer && streamId % 2 === 1) {
       this.debug(`got invalid stream ID ${streamId} from peer (should be even)`)
       this.queuedFrames.push(new ConnectionErrorFrame('ProtocolViolation', `Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`))
-      throw new Error(`Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`)
+      const err = new Error(`Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`)
+      this.safeEmit('error', err)
+      throw err
+    }
+
+    // Make sure there aren't too many open streams
+    if (streamId > this.maxStreamId) {
+      this.debug(`peer opened too many streams. got stream: ${streamId}, but max stream id is: ${this.maxStreamId}. closing connection`)
+      this.queuedFrames.push(new ConnectionErrorFrame('StreamIdError', `Maximum number of open streams exceeded. Got stream: ${streamId}, current max stream ID: ${this.maxStreamId}`))
+      const err = new Error(`Maximum number of open streams exceeded. Got stream: ${streamId}, current max stream ID: ${this.maxStreamId}`)
+      this.safeEmit('error', err)
+      throw err
     }
 
     this.debug(`got new stream: ${streamId}`)
