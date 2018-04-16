@@ -1,4 +1,5 @@
 import BigNumber from 'bignumber.js'
+import { DEFAULT_MAX_REMOTE_STREAMS } from './connection'
 
 /**
  * Class to track our view of the remote entity's Connection and Streams
@@ -9,11 +10,13 @@ export class RemoteConnection {
   packetSequence: number
   sourceAccount?: string
   knowsOurAccount: boolean
+  maxStreamId: number
 
   constructor () {
     this.closed = false
     this.streams = []
     this.knowsOurAccount = false
+    this.maxStreamId = Infinity
   }
 
   createStream (id: number) {

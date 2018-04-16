@@ -30,6 +30,7 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [x] Data stream
 - [x] Should money and data streams use different sets of numbers for stream ids?
 - [x] Connection closing
+- [x] Max number of streams
 - [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
 - [ ] Backpressure for data
 - [ ] Switch stream ending to use StreamEnd frame instead of error
@@ -40,7 +41,6 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Use stream.destroy instead of end to close immediately -- end should flush data and money and emit finish or whatever when it's done, destroy closes it right away
 - [ ] Multiple packets in flight at the same time
 - [ ] Don't send extra packet at the end if it isn't necessary
-- [ ] Max number of streams
 - [ ] Blocked frames (when more is available to send)
 - [ ] Refactor handleData and sendPacket functions to make them easier to understand and reason about
 - [ ] Use `ilp-plugin` to get plugin from environment

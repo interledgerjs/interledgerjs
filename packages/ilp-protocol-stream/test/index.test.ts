@@ -123,34 +123,4 @@ describe('Server', function () {
       })
     })
   })
-
-  describe('Multiple Connections', function () {
-    beforeEach(async function () {
-      this.server = new index.Server({
-        serverSecret: Buffer.alloc(32),
-        plugin: this.serverPlugin
-      })
-      await this.server.listen()
-    })
-
-    it('should accept multiple connections with different addresses and shared secrets', async function () {
-      this.server.on('connection', (conn: Connection) => {
-        conn.on('stream', (stream: DataAndMoneyStream) => {
-          stream.setReceiveMax(1000)
-        })
-      })
-      const connections = await Promise.all([
-        index.createConnection({
-          ...this.server.generateAddressAndSecret(),
-          plugin: this.clientPlugin
-        }),
-        index.createConnection({
-          ...this.server.generateAddressAndSecret(),
-          plugin: this.clientPlugin
-        })
-      ])
-
-      await Promise.all(connections.map((conn: Connection) => conn.createStream().sendTotal(10)))
-    })
-  })
 })

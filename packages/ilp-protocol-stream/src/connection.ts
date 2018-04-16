@@ -15,7 +15,9 @@ import {
   ConnectionNewAddressFrame,
   ErrorCode,
   ConnectionErrorFrame,
-  ApplicationErrorFrame
+  ApplicationErrorFrame,
+  ConnectionStreamIdBlockedFrame,
+  ConnectionMaxStreamIdFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
@@ -26,6 +28,7 @@ require('source-map-support').install()
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
 const RETRY_DELAY_START = 100
 const MAX_DATA_SIZE = 32767
+export const DEFAULT_MAX_REMOTE_STREAMS = 10
 
 export interface ConnectionOpts {
   plugin: Plugin,
@@ -34,7 +37,7 @@ export interface ConnectionOpts {
   slippage?: BigNumber.Value,
   enablePadding?: boolean,
   connectionTag?: string,
-  maxOpenStreams?: number
+  maxRemoteStreams?: number
 }
 
 export interface FullConnectionOpts extends ConnectionOpts {
@@ -86,7 +89,7 @@ export class Connection extends EventEmitter3 {
     this.allowableReceiveExtra = new BigNumber(1.01)
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
-    this.maxStreamId = 1 + (opts.maxOpenStreams || 20)
+    this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
 
     this.nextPacketSequence = 1
     this.streams = []
@@ -153,6 +156,13 @@ export class Connection extends EventEmitter3 {
    * Returns a new bidirectional money and data stream
    */
   createStream (): DataAndMoneyStream {
+    // Make sure we don't open more streams than the remote will allow
+    if (this.remoteConnection.maxStreamId < this.nextStreamId) {
+      this.debug(`cannot creat another stream. nextStreamId: ${this.nextStreamId}, remote maxStreamId: ${this.remoteConnection.maxStreamId}`)
+      this.queuedFrames.push(new ConnectionStreamIdBlockedFrame(this.nextStreamId))
+      throw new Error(`Creating another stream would exceed the remote connection's maximum number of open streams`)
+    }
+
     // TODO should this inform the other side?
     const stream = new DataAndMoneyStream({
       id: this.nextStreamId,
@@ -313,9 +323,7 @@ export class Connection extends EventEmitter3 {
           const firstConnection = this.remoteConnection.sourceAccount === undefined
           this.remoteConnection.sourceAccount = frame.sourceAccount
           if (firstConnection) {
-            this.closed = false
-            this.debug('connected')
-            this.safeEmit('connect')
+            this.handleConnect()
           }
           // TODO reset the exchange rate and send a test packet to make sure they haven't spoofed the address
           break
@@ -333,17 +341,26 @@ export class Connection extends EventEmitter3 {
           this.end()
           break
         case FrameType.ApplicationError:
-          this.debug(`Remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`)
+          this.debug(`remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`)
           this.emit('error', new Error(`Remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`))
           // TODO end the connection in some other way
           this.closed = true
           this.remoteConnection.closed = true
           this.end()
           break
+        case FrameType.ConnectionMaxStreamId:
+          // TODO make sure the number isn't lowered
+          this.debug(`remote set max stream id to ${frame.maxStreamId}`)
+          this.remoteConnection.maxStreamId = frame.maxStreamId.toNumber()
+          break
+        case FrameType.ConnectionStreamIdBlocked:
+          this.debug(`remote wants to open more streams but we are blocking them`)
+          break
         case FrameType.StreamMoney:
           this.handleNewStream(frame)
           break
         case FrameType.StreamMoneyEnd:
+          this.handleNewStream(frame)
           this.handleStreamEnd(frame)
           break
         case FrameType.StreamMoneyMax:
@@ -361,6 +378,7 @@ export class Connection extends EventEmitter3 {
           }
           break
         case FrameType.StreamMoneyError:
+          this.handleNewStream(frame)
           this.handleStreamError(frame)
           break
         case FrameType.StreamData:
@@ -378,7 +396,16 @@ export class Connection extends EventEmitter3 {
     }
   }
 
-  protected handleNewStream (frame: StreamMoneyFrame | StreamMoneyMaxFrame | StreamDataFrame): void {
+  protected handleConnect () {
+    this.closed = false
+    this.debug('connected')
+    this.safeEmit('connect')
+
+    // Tell the other side our max stream id
+    this.queuedFrames.push(new ConnectionMaxStreamIdFrame(this.maxStreamId))
+  }
+
+  protected handleNewStream (frame: StreamMoneyFrame | StreamMoneyMaxFrame | StreamMoneyErrorFrame | StreamDataFrame): void {
     const streamId = frame.streamId.toNumber()
     if (this.streams[streamId]) {
       return
@@ -408,6 +435,12 @@ export class Connection extends EventEmitter3 {
       throw err
     }
 
+    // Let the other side know if they're getting close to the number of streams
+    if (this.maxStreamId * .75 < streamId) {
+      this.debug(`informing peer that our max stream id is: ${this.maxStreamId}`)
+      this.queuedFrames.push(new ConnectionMaxStreamIdFrame(this.maxStreamId))
+    }
+
     this.debug(`got new stream: ${streamId}`)
     const stream = new DataAndMoneyStream({
       id: streamId,
@@ -427,10 +460,14 @@ export class Connection extends EventEmitter3 {
       return
     }
 
+    // TODO delete stream record and make sure the other side can't reopen it
+
     this.debug(`peer closed stream ${stream.id}`)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
     stream.end()
+
+    this.raiseMaxStreamId()
   }
 
   protected handleStreamError (frame: StreamMoneyErrorFrame) {
@@ -441,11 +478,22 @@ export class Connection extends EventEmitter3 {
       return
     }
 
+    // TODO delete stream record and make sure the other side can't reopen it
+
     this.debug(`peer closed stream ${stream.id} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
     // TODO should we emit an error on the stream?
     stream.end()
+
+    this.raiseMaxStreamId()
+  }
+
+  protected raiseMaxStreamId () {
+    // TODO make sure we don't send more than one of these frames per packet
+    this.maxStreamId += 2
+    this.debug(`raising maxStreamId to ${this.maxStreamId}`)
+    this.queuedFrames.push(new ConnectionMaxStreamIdFrame(this.maxStreamId))
   }
 
   protected handleData (frame: StreamDataFrame) {
@@ -656,6 +704,10 @@ export class Connection extends EventEmitter3 {
 
     const responsePacket = await this.sendPacket(requestPacket, amountToSend, false)
 
+    if (responsePacket) {
+      this.handleFrames(responsePacket.frames)
+    }
+
     if (!responsePacket || responsePacket.ilpPacketType === IlpPacketType.Reject) {
       // Handle reject
       this.debug(`packet ${requestPacket.sequence} was rejected`)
@@ -663,10 +715,6 @@ export class Connection extends EventEmitter3 {
       // Put money back into MoneyStreams
       for (let stream of streamsSentFrom) {
         stream._cancelHold(requestPacket.sequence.toString())
-      }
-
-      if (responsePacket) {
-        this.handleFrames(responsePacket.frames)
       }
     } else {
       for (let stream of streamsSentFrom) {
@@ -812,6 +860,8 @@ export class Connection extends EventEmitter3 {
       this.debug(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
       throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
     }
+
+    this.debug(`got response to packet: ${packet.sequence}: ${JSON.stringify(responsePacket)}`)
 
     return responsePacket
   }

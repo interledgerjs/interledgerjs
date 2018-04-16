@@ -165,8 +165,8 @@ export type Frame =
 //  | ConnectionMoneyBlockedFrame
 //  | ConnectionMaxDataFrame
 //  | ConnectionDataBlockedFrame
-//  | ConnectionMaxStreamIdFrame
-//  | ConnectionStreamIdBlockedFrame
+ | ConnectionMaxStreamIdFrame
+ | ConnectionStreamIdBlockedFrame
  | StreamMoneyFrame
  | StreamMoneyMaxFrame
 //  | StreamMoneyBlockedFrame
@@ -265,6 +265,56 @@ export class ApplicationErrorFrame extends BaseFrame {
     const contents = new Writer()
     contents.writeUInt8(this.errorCode)
     contents.writeVarOctetString(Buffer.from(this.errorMessage))
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export class ConnectionMaxStreamIdFrame extends BaseFrame {
+  type: FrameType.ConnectionMaxStreamId
+  maxStreamId: BigNumber
+
+  constructor (maxStreamId: BigNumber.Value) {
+    super('ConnectionMaxStreamId')
+    this.maxStreamId = new BigNumber(maxStreamId)
+  }
+
+  static fromBuffer (reader: Reader): ConnectionMaxStreamIdFrame {
+    const type = assertType(reader, 'ConnectionMaxStreamId')
+    const contents = Reader.from(reader.readVarOctetString())
+    const maxStreamId = contents.readVarUIntBigNum()
+    return new ConnectionMaxStreamIdFrame(maxStreamId)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.maxStreamId)
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export class ConnectionStreamIdBlockedFrame extends BaseFrame {
+  type: FrameType.ConnectionStreamIdBlocked
+  maxStreamId: BigNumber
+
+  constructor (maxStreamId: BigNumber.Value) {
+    super('ConnectionStreamIdBlocked')
+    this.maxStreamId = new BigNumber(maxStreamId)
+  }
+
+  static fromBuffer (reader: Reader): ConnectionStreamIdBlockedFrame {
+    const type = assertType(reader, 'ConnectionStreamIdBlocked')
+    const contents = Reader.from(reader.readVarOctetString())
+    const maxStreamId = contents.readVarUIntBigNum()
+    return new ConnectionStreamIdBlockedFrame(maxStreamId)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.maxStreamId)
     writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
@@ -433,6 +483,10 @@ function parseFrame (reader: Reader): Frame | undefined {
       return ConnectionNewAddressFrame.fromBuffer(reader)
     case FrameType.ConnectionError:
       return ConnectionErrorFrame.fromBuffer(reader)
+    case FrameType.ConnectionMaxStreamId:
+      return ConnectionMaxStreamIdFrame.fromBuffer(reader)
+    case FrameType.ConnectionStreamIdBlocked:
+      return ConnectionStreamIdBlockedFrame.fromBuffer(reader)
     case FrameType.StreamMoneyMax:
       return StreamMoneyMaxFrame.fromBuffer(reader)
     case FrameType.StreamMoneyError:

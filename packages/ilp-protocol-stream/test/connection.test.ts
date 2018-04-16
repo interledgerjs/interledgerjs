@@ -3,6 +3,7 @@ import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
 import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
+import { RemoteConnection } from '../src/remote'
 import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
 import * as lolex from 'lolex'
@@ -412,21 +413,27 @@ describe('Connection', function () {
 
     it('should close the connection if the peer opens too many streams', async function () {
       const spy = sinon.spy()
-      this.clientConn.on('error', spy)
-      await this.clientConn.connect()
-      const streams = [
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream(),
-        this.clientConn.createStream()
-      ]
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      const clientPlugin = this.clientPlugin
+      class BadConnection extends Connection {
+        remoteConnection: RemoteConnection
+
+        constructor () {
+          super({
+            plugin: clientPlugin,
+            destinationAccount,
+            sourceAccount: 'test.peerB',
+            sharedSecret,
+            isServer: false
+          })
+        }
+      }
+      const clientConn = new BadConnection()
+      clientConn.on('error', spy)
+      await clientConn.connect()
+      clientConn.remoteConnection.maxStreamId = 100
+      const streams = new Array(11).fill(0).map(() => clientConn.createStream())
+
       await assert.isRejected(Promise.all(streams.map((stream: DataAndMoneyStream) => stream.sendTotal(10))))
 
       assert.equal(spy.firstCall.args[0].message, 'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 21, current max stream ID: 20')
@@ -437,12 +444,9 @@ describe('Connection', function () {
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        maxOpenStreams: 1
+        maxRemoteStreams: 1
       })
       const serverConn = await serverConnPromise
-      serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.setReceiveMax(1000)
-      })
 
       const spy = sinon.spy()
       const clientSpy = sinon.spy()
@@ -459,12 +463,42 @@ describe('Connection', function () {
       assert.equal(serverSpy.args[0][0].message, 'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 4, current max stream ID: 2')
     })
 
-    it('should send the max stream id when it gets close to the max number of open streams')
-
-    it('should increase the max stream id as streams are closed')
-
     it('should throw an error when the user calls createStream if it would exceed the other side\'s limit', async function () {
+      const serverConnPromise = this.server.acceptConnection()
+      const clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin,
+        maxRemoteStreams: 2
+      })
+      const serverConn = await serverConnPromise
+      clientConn.on('stream', (stream: DataAndMoneyStream) => { stream.setReceiveMax(100) })
 
+      await Promise.all([
+        serverConn.createStream().sendTotal(10),
+        serverConn.createStream().sendTotal(10)
+      ])
+
+      assert.throws(() => serverConn.createStream(), `Creating another stream would exceed the remote connection's maximum number of open streams`)
+    })
+
+    it('should increase the max stream id as streams are closed', async function () {
+      const serverConnPromise = this.server.acceptConnection()
+      const clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin,
+        maxRemoteStreams: 2
+      })
+      const serverConn = await serverConnPromise
+      clientConn.on('stream', (stream: DataAndMoneyStream) => { stream.setReceiveMax(100) })
+      const streams = [serverConn.createStream(), serverConn.createStream()]
+      await Promise.all(streams.map((stream: DataAndMoneyStream) => stream.sendTotal(10)))
+      assert.throws(() => serverConn.createStream())
+
+      streams[0].end()
+      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise((resolve, reject) => setImmediate(resolve))
+
+      assert.doesNotThrow(() => serverConn.createStream())
     })
   })
 })
