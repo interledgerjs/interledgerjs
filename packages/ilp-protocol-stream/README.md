@@ -49,50 +49,8 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Merge sending test and normal packets? Or at least handle frames in the same way
 - [ ] Make it work even if one side can only receive 0 amount packets
 - [ ] Separate connection "close" and "kill", where the former flushes everything first
+- [ ] Clean up closed streams (and throw error if packet is received for a closed stream)
 
 ## Credits
 
 Thanks to @sharafian for coming up with the acronym for STREAM.
-
-
-
-
-### Connection
-
-Closed
-Open / Connected (know the exchange rate, other side's address - )
-Stream ID blocked
-
-**TODO** Should frames be handled as they go or in a specific order?
-Handle connection ID max changes
-Handle new streams
-Handle receive limit changes
-Handle data, send acks
-Handle money (if it's a prepare)
-  - Check total number of shares
-  - Determine how much is destined for each stream
-  - Make sure those streams are open
-  - Make sure those streams can receive that amount
-
-Handle Non-Money Frames
-  ConnectionNewAddress = 0x01,
-  ConnectionError = 0x02,
-  ApplicationError = 0x03,
-  ConnectionMaxMoney = 0x04,
-  ConnectionMoneyBlocked = 0x05,
-  ConnectionMaxData = 0x06,
-  ConnectionDataBlocked = 0x07,
-  ConnectionMaxStreamId = 0x08,
-  ConnectionStreamIdBlocked = 0x09,
-
-  StreamMoney = 0x10,
-  StreamMoneyEnd = 0x11,
-  StreamMoneyMax = 0x12,
-  StreamMoneyBlocked = 0x13,
-  StreamMoneyError = 0x14,
-
-  StreamData = 0x20,
-  StreamDataEnd = 0x21,
-  StreamDataMax = 0x22,
-  StreamDataBlocked = 0x23,
-  StreamDataError = 0x24

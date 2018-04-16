@@ -1,5 +1,8 @@
 import BigNumber from 'bignumber.js'
 
+/**
+ * Class to track our view of the remote entity's Connection and Streams
+ */
 export class RemoteConnection {
   closed: boolean
   streams: RemoteStream[]
@@ -23,6 +26,9 @@ export interface ByteSegment {
   endOffset: number
 }
 
+/**
+ * Class to keep track of the remote entity's view of a given Stream
+ */
 export class RemoteStream {
   closed: boolean
   receiveMax: BigNumber

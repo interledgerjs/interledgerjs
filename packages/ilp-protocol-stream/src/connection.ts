@@ -55,7 +55,7 @@ export class Connection extends EventEmitter3 {
   protected allowableReceiveExtra: BigNumber
   protected enablePadding: boolean
 
-  protected packetSequence: number
+  protected nextPacketSequence: number
   protected streams: DataAndMoneyStream[]
   protected nextStreamId: number
   protected debug: Debug.IDebugger
@@ -67,6 +67,7 @@ export class Connection extends EventEmitter3 {
   protected closed: boolean
   protected exchangeRate?: BigNumber
   protected retryDelay: number
+  protected queuedFrames: Frame[]
 
   protected remoteConnection: RemoteConnection
 
@@ -81,12 +82,13 @@ export class Connection extends EventEmitter3 {
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
 
-    this.packetSequence = 1
+    this.nextPacketSequence = 1
     this.streams = []
     this.nextStreamId = (this.isServer ? 2 : 1)
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
     this.closed = true
+    this.queuedFrames = []
 
     this.maximumPacketAmount = new BigNumber(Infinity)
     this.testMaximumPacketAmount = new BigNumber(Infinity)
@@ -180,14 +182,21 @@ export class Connection extends EventEmitter3 {
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
     }
 
-    const responseFrames: Frame[] = []
+    let responseFrames: Frame[] = []
 
     const throwFinalApplicationError = () => {
+      responseFrames = responseFrames.concat(this.queuedFrames)
+      this.queuedFrames = []
       const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Reject, prepare.amount, responseFrames)
+      this.debug(`rejecting packet ${requestPacket.sequence}: ${JSON.stringify(responsePacket)}`)
       throw new IlpPacket.Errors.FinalApplicationError('', responsePacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined)))
     }
 
-    this.handleFrames(requestPacket.frames)
+    try {
+      this.handleFrames(requestPacket.frames)
+    } catch (err) {
+      throwFinalApplicationError()
+    }
 
     if (requestPacket.prepareAmount.isGreaterThan(prepare.amount)) {
       this.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${requestPacket.prepareAmount}`)
@@ -273,6 +282,10 @@ export class Connection extends EventEmitter3 {
       }
     }
 
+    // TODO make sure the queued frames aren't too big
+    responseFrames = responseFrames.concat(this.queuedFrames)
+    this.queuedFrames = []
+
     // Return fulfillment and response packet
     const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Fulfill, prepare.amount, responseFrames)
     this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
@@ -282,9 +295,7 @@ export class Connection extends EventEmitter3 {
     }
   }
 
-  protected handleFrames (frames: Frame[]): Frame[] {
-    const responseFrames: Frame[] = []
-
+  protected handleFrames (frames: Frame[]): void {
     for (let frame of frames) {
       switch (frame.type) {
         case FrameType.ConnectionNewAddress:
@@ -299,11 +310,11 @@ export class Connection extends EventEmitter3 {
           // TODO reset the exchange rate and send a test packet to make sure they haven't spoofed the address
           break
         case FrameType.ConnectionError:
-          if (frame.errorCode !== 'NoError') {
+          if (frame.errorCode === 'NoError') {
             this.debug(`remote closed connection`)
           } else {
-            this.debug(`remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`)
-            this.emit('error', new Error(`Remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`))
+            this.debug(`remote connection error. code: ${frame.errorCode}, message: ${frame.errorMessage}`)
+            this.emit('error', new Error(`Remote connection error. Code: ${frame.errorCode}, message: ${frame.errorMessage}`))
           }
 
           // TODO end the connection in some other way
@@ -355,8 +366,6 @@ export class Connection extends EventEmitter3 {
           continue
       }
     }
-
-    return responseFrames
   }
 
   protected handleNewStream (frame: StreamMoneyFrame | StreamMoneyMaxFrame | StreamDataFrame): void {
@@ -364,7 +373,18 @@ export class Connection extends EventEmitter3 {
     if (this.streams[streamId]) {
       return
     }
-    // TODO check that they aren't violating the stream numbering rules
+
+    // Validate stream ID
+    if (this.isServer && streamId % 2 === 0) {
+      this.debug(`got invalid stream ID ${streamId} from peer (should be odd)`)
+      this.queuedFrames.push(new ConnectionErrorFrame('ProtocolViolation', `Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`))
+      throw new Error(`Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`)
+    } else if (!this.isServer && streamId % 2 === 1) {
+      this.debug(`got invalid stream ID ${streamId} from peer (should be even)`)
+      this.queuedFrames.push(new ConnectionErrorFrame('ProtocolViolation', `Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`))
+      throw new Error(`Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`)
+    }
+
     this.debug(`got new stream: ${streamId}`)
     const stream = new DataAndMoneyStream({
       id: streamId,
@@ -418,7 +438,6 @@ export class Connection extends EventEmitter3 {
    */
   protected async startSendLoop () {
     if (this.sending) {
-      this.debug('already sending, not starting another loop')
       return
     }
     if (this.remoteConnection.closed) {
@@ -435,47 +454,31 @@ export class Connection extends EventEmitter3 {
       return
     }
 
-    // Send a test packet first to determine the exchange rate
-    if (!this.exchangeRate) {
-      this.debug('determining exchange rate')
-      try {
-        await this.sendTestPacket()
-      } catch (err) {
-        this.sending = false
-        this.debug('error sending test packet:', err)
-        this.safeEmit('error', err)
+    try {
+      while (this.sending) {
+        // Send a test packet first to determine the exchange rate
+        if (!this.exchangeRate) {
+          this.debug('determining exchange rate')
+          await this.sendTestPacket()
 
-        // TODO should a connection error be an error on all of the streams?
-        for (let stream of this.streams) {
-          if (stream) {
-            stream.emit('error', err)
+          if (this.exchangeRate) {
+            this.safeEmit('connect')
+            this.debug('connected')
           }
-        }
-        return
-      }
-    }
-
-    this.safeEmit('connect')
-    this.debug('connected')
-
-    while (this.sending) {
-      // Send multiple packets at the same time (don't await promise)
-      try {
-        await this.sendPacket()
-      } catch (err) {
-        this.sending = false
-        this.debug('error in sendPacket loop:', err)
-        this.emit('error', err)
-
-        // TODO should a connection error be an error on all of the streams?
-        for (let stream of this.streams) {
-          if (stream && !stream._sentEnd) {
-            stream.emit('error', err)
-          }
+        } else {
+          // TODO Send multiple packets at the same time (don't await promise)
+          // TODO Figure out if we need to wait before sending the next one
+          await this.loadAndSendPacket()
         }
       }
-
-      // Figure out if we need to wait before sending the next one
+    } catch (err) {
+      // TODO should a connection error be an error on all of the streams?
+      for (let stream of this.streams) {
+        if (stream) {
+          stream.emit('error', err)
+        }
+      }
+      return this.connectionError(err)
     }
     this.debug('finished sending')
     this.safeEmit('_send_loop_finished')
@@ -485,16 +488,20 @@ export class Connection extends EventEmitter3 {
    * Load up a packet money and/or data, send it to the other party, and handle the result.
    * @private
    */
-  protected async sendPacket (): Promise<void> {
+  protected async loadAndSendPacket (): Promise<void> {
     // Actually send on the next tick of the event loop in case multiple streams
     // have their limits raised at the same time
     await new Promise((resolve, reject) => setImmediate(resolve))
 
-    this.debug('sendPacket')
+    this.debug('loadAndSendPacket')
     let amountToSend = new BigNumber(0)
 
     // Set packet number to correlate response with request
-    const requestPacket = new Packet(this.packetSequence++, IlpPacketType.Prepare)
+    const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
+
+    // TODO make sure these aren't too big
+    requestPacket.frames = this.queuedFrames
+    this.queuedFrames = []
 
     // Send control frames
     // TODO only send the max amount when it changes
@@ -624,50 +631,21 @@ export class Connection extends EventEmitter3 {
       return
     }
 
-    // Load packet data with available data frames (keep track of max data length)
-    // TODO implement sending data
+    const responsePacket = await this.sendPacket(requestPacket, amountToSend, false)
 
-    this.debug(`sending packet ${requestPacket.sequence}: ${JSON.stringify(requestPacket)}`)
+    if (!responsePacket || responsePacket.ilpPacketType === IlpPacketType.Reject) {
+      // Handle reject
+      this.debug(`packet ${requestPacket.sequence} was rejected`)
 
-    // Encrypt
-    const data = requestPacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined))
-
-    // Generate condition
-    const fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, data)
-    const executionCondition = cryptoHelper.hash(fulfillment)
-
-    // Send
-    const prepare = {
-      destination: this.remoteConnection.sourceAccount!,
-      amount: amountToSend.toString(),
-      data,
-      executionCondition,
-      // TODO more intelligent expiry
-      expiresAt: new Date(Date.now() + 30000)
-    }
-    const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
-
-    let response: IlpPacket.IlpFulfill | IlpPacket.IlpRejection
-    try {
-      if (responseData[0] === IlpPacket.Type.TYPE_ILP_FULFILL) {
-        response = IlpPacket.deserializeIlpFulfill(responseData)
-      } else if (responseData[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
-        response = IlpPacket.deserializeIlpReject(responseData)
-      } else {
-        throw new Error(`Invalid response packet type: ${responseData[0]}`)
+      // Put money back into MoneyStreams
+      for (let stream of streamsSentFrom) {
+        stream._cancelHold(requestPacket.sequence.toString())
       }
-    } catch (err) {
-      this.debug(`got invalid response from sendData:`, err, responseData.toString('hex'))
-      throw new Error(`Invalid response when sending packet: ${err.message}`)
-    }
 
-    // Handle fulfillment
-    if (isFulfill(response)) {
-      if (!cryptoHelper.hash(response.fulfillment).equals(executionCondition)) {
-        this.debug(`got invalid fulfillment: ${response.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
-        throw new Error(`Got invalid fulfillment. Actual: ${response.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
+      if (responsePacket) {
+        this.handleFrames(responsePacket.frames)
       }
-      this.debug(`packet ${requestPacket.sequence} was fulfilled`)
+    } else {
       for (let stream of streamsSentFrom) {
         stream._executeHold(requestPacket.sequence.toString())
       }
@@ -684,41 +662,7 @@ export class Connection extends EventEmitter3 {
 
       // Reset the retry delay
       this.retryDelay = RETRY_DELAY_START
-    } else {
-      // Handle reject
-      this.debug(`packet ${requestPacket.sequence} was rejected`)
-
-      // Put money back into MoneyStreams
-      for (let stream of streamsSentFrom) {
-        stream._cancelHold(requestPacket.sequence.toString())
-      }
-
-      if (response.code !== 'F99') {
-        return this.handleConnectorError(response, amountToSend, this.sendPacket.bind(this))
-      }
     }
-
-    // Parse response data from receiver
-    let responsePacket: Packet
-    try {
-      responsePacket = Packet.decryptAndDeserialize(this.sharedSecret, response.data)
-    } catch (err) {
-      this.debug(`unable to decrypt and parse response data:`, err, response.data.toString('hex'))
-      // TODO should we continue processing anyway? what if it was fulfilled?
-      throw new Error('Unable to decrypt and parse response data: ' + err.message)
-    }
-
-    // Ensure the response corresponds to the request
-    if (!responsePacket.sequence.isEqualTo(requestPacket.sequence)) {
-      this.debug(`response packet sequence does not match the request packet. expected sequence: ${requestPacket.sequence}, got response packet:`, JSON.stringify(responsePacket))
-      throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${requestPacket.sequence}`)
-    }
-    if (responsePacket.ilpPacketType !== responseData[0]) {
-      this.debug(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
-      throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
-    }
-
-    this.handleFrames(responsePacket.frames)
   }
 
   /**
@@ -726,65 +670,28 @@ export class Connection extends EventEmitter3 {
    * @private
    */
   protected async sendTestPacket (amount?: BigNumber): Promise<void> {
+    this.debug('sendTestPacket')
     if (!this.remoteConnection.sourceAccount) {
       throw new Error('Cannot send test packet. Destination account is unknown')
     }
 
     // Set packet number to correlate response with request
-    const requestPacket = new Packet(this.packetSequence++, IlpPacketType.Prepare)
+    const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
 
     if (!this.remoteConnection.knowsOurAccount) {
       this.debug('sending source address to peer')
       // TODO attach a token to the account?
       requestPacket.frames.push(new ConnectionNewAddressFrame(this.sourceAccount))
-
-      // TODO make sure to reset this if the packet fails
-      this.remoteConnection.knowsOurAccount = true
     }
 
     const sourceAmount = amount || BigNumber.minimum(TEST_PACKET_AMOUNT, this.testMaximumPacketAmount)
-    this.debug(`sending test packet number: ${requestPacket.sequence} for amount: ${sourceAmount}: ${JSON.stringify(requestPacket)}`)
-    const prepare = {
-      destination: this.remoteConnection.sourceAccount,
-      amount: (sourceAmount).toString(),
-      data: requestPacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined)),
-      executionCondition: cryptoHelper.generateRandomCondition(),
-      expiresAt: new Date(Date.now() + 30000)
+
+    const responsePacket = await this.sendPacket(requestPacket, sourceAmount, true)
+    if (!responsePacket) {
+      return
     }
 
-    const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
-
-    let response: IlpPacket.IlpRejection
-    try {
-      response = IlpPacket.deserializeIlpReject(responseData)
-    } catch (err) {
-      this.debug(`response is not an ILP Reject packet:`, responseData.toString('hex'))
-      throw new Error('Response to sendTestPacket is not an ILP Reject packet')
-    }
-
-    if (response.code !== 'F99') {
-      return this.handleConnectorError(response, sourceAmount, this.sendTestPacket.bind(this))
-    }
-
-    // Parse response data from receiver
-    let responsePacket: Packet
-    try {
-      responsePacket = Packet.decryptAndDeserialize(this.sharedSecret, response.data)
-    } catch (err) {
-      this.debug(`unable to decrypt and parse response data:`, err, response.data.toString('hex'))
-      // TODO should we continue processing anyway? what if it was fulfilled?
-      throw new Error('Unable to decrypt and parse response data: ' + err.message)
-    }
-
-    // Ensure the response corresponds to the request
-    if (!responsePacket.sequence.isEqualTo(requestPacket.sequence)) {
-      this.debug(`response packet sequence does not match the request packet. expected sequence: ${requestPacket.sequence}, got response packet:`, JSON.stringify(responsePacket))
-      throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${requestPacket.sequence}`)
-    }
-    if (responsePacket.ilpPacketType !== responseData[0]) {
-      this.debug(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
-      throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
-    }
+    this.remoteConnection.knowsOurAccount = true
 
     // Determine exchange rate from amount that arrived
     this.exchangeRate = responsePacket.prepareAmount.dividedBy(sourceAmount)
@@ -797,11 +704,100 @@ export class Connection extends EventEmitter3 {
     this.handleFrames(responsePacket.frames)
   }
 
+  protected async connectionError (error: ConnectionError | Error | string): Promise<void> {
+    const err = (error instanceof ConnectionError || error instanceof Error ? error : new Error(error))
+    this.debug(`closing connection with error:`, err)
+    this.safeEmit('error', err)
+
+    this.closed = true
+    this.sending = false
+    const errorCode = (error instanceof ConnectionError ? error.streamErrorCode : ErrorCode.InternalError)
+    const packet = new Packet(this.nextPacketSequence, IlpPacketType.Prepare, 0, [
+      new ConnectionErrorFrame(errorCode, err.message)
+    ])
+    try {
+      await this.sendPacket(packet, new BigNumber(0), true)
+    } catch (err) {
+      this.debug(`error while trying to inform peer that connection is closing, but closing anyway`, err)
+    }
+    this.remoteConnection.closed = true
+  }
+
+  protected async sendPacket (packet: Packet, sourceAmount: BigNumber, unfulfillable = false): Promise<Packet | void> {
+    this.debug(`sending packet ${packet.sequence} with source amount: ${sourceAmount}: ${JSON.stringify(packet)})`)
+    const data = packet.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined))
+
+    let fulfillment: Buffer | undefined
+    let executionCondition: Buffer
+    if (unfulfillable) {
+      fulfillment = undefined
+      executionCondition = cryptoHelper.generateRandomCondition()
+    } else {
+      fulfillment = cryptoHelper.generateFulfillment(this.sharedSecret, data)
+      executionCondition = cryptoHelper.hash(fulfillment)
+    }
+    const prepare = {
+      destination: this.remoteConnection.sourceAccount!,
+      amount: (sourceAmount).toString(),
+      data,
+      executionCondition,
+      expiresAt: new Date(Date.now() + 30000)
+    }
+
+    const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
+
+    let response: IlpPacket.IlpFulfill | IlpPacket.IlpRejection
+    try {
+      if (responseData[0] === IlpPacket.Type.TYPE_ILP_FULFILL) {
+        response = IlpPacket.deserializeIlpFulfill(responseData)
+      } else if (responseData[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
+        response = IlpPacket.deserializeIlpReject(responseData)
+      } else {
+        throw new Error(`Invalid response packet type: ${responseData[0]}`)
+      }
+    } catch (err) {
+      this.debug(`got invalid response from sending packet ${packet.sequence}:`, err, responseData.toString('hex'))
+      throw new Error(`Invalid response when sending packet ${packet.sequence}: ${err.message}`)
+    }
+
+    // Handle fulfillment
+    if (fulfillment && isFulfill(response)) {
+      if (!cryptoHelper.hash(response.fulfillment).equals(executionCondition)) {
+        this.debug(`got invalid fulfillment for packet ${packet.sequence}: ${response.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
+        throw new Error(`Got invalid fulfillment for packet ${packet.sequence}. Actual: ${response.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
+      }
+    } else if ((response as IlpPacket.IlpRejection).code !== 'F99') {
+      return this.handleConnectorError((response as IlpPacket.IlpRejection), sourceAmount)
+    }
+
+    // Parse response data from receiver
+    let responsePacket: Packet
+    try {
+      responsePacket = Packet.decryptAndDeserialize(this.sharedSecret, response.data)
+    } catch (err) {
+      this.debug(`unable to decrypt and parse response data:`, err, response.data.toString('hex'))
+      // TODO should we continue processing anyway? what if it was fulfilled?
+      throw new Error('Unable to decrypt and parse response data: ' + err.message)
+    }
+
+    // Ensure the response corresponds to the request
+    if (!responsePacket.sequence.isEqualTo(packet.sequence)) {
+      this.debug(`response packet sequence does not match the request packet. expected sequence: ${packet.sequence}, got response packet:`, JSON.stringify(responsePacket))
+      throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${packet.sequence}`)
+    }
+    if (responsePacket.ilpPacketType !== responseData[0]) {
+      this.debug(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
+      throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
+    }
+
+    return responsePacket
+  }
+
   /**
    * (Internal) Handle final and temporary errors that were not generated by the receiver.
    * @private
    */
-  protected async handleConnectorError (reject: IlpPacket.IlpRejection, amountSent: BigNumber, retry: () => Promise<void>) {
+  protected async handleConnectorError (reject: IlpPacket.IlpRejection, amountSent: BigNumber) {
     this.debug(`handling reject:`, JSON.stringify(reject))
     if (reject.code === 'F08') {
       let receivedAmount
@@ -830,13 +826,11 @@ export class Connection extends EventEmitter3 {
         this.debug(`cannot send anything through this path. the maximum packet amount is 0`)
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
-      return retry()
     } else if (reject.code[0] === 'T') {
       this.debug(`got temporary error. waiting ${this.retryDelay} before trying again`)
       const delay = this.retryDelay
       this.retryDelay = this.retryDelay * 2
       await new Promise((resolve, reject) => setTimeout(resolve, delay))
-      return retry()
     } else {
       this.debug(`unexpected error. code: ${reject.code}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
       throw new Error(`Unexpected error while sending packet. Code: ${reject.code}, message: ${reject.message}`)
@@ -855,4 +849,13 @@ export class Connection extends EventEmitter3 {
 
 function isFulfill (packet: IlpPacket.IlpFulfill | IlpPacket.IlpRejection): packet is IlpPacket.IlpFulfill {
   return packet.hasOwnProperty('fulfillment')
+}
+
+export class ConnectionError extends Error {
+  streamErrorCode: ErrorCode
+
+  constructor (message: string, streamErrorCode?: ErrorCode) {
+    super(message)
+    this.streamErrorCode = streamErrorCode || ErrorCode.InternalError
+  }
 }

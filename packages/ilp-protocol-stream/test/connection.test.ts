@@ -246,6 +246,7 @@ describe('Connection', function () {
   describe('Error Handling', function () {
     it('should emit an error and reject all flushed promises if a packet is rejected with an unexpected final error code', async function () {
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+      const spy = sinon.spy()
       sendDataStub.resolves(IlpPacket.serializeIlpReject({
         code: 'F89',
         message: 'Blah',
@@ -255,11 +256,13 @@ describe('Connection', function () {
 
       const clientStream1 = this.clientConn.createStream()
       const clientStream2 = this.clientConn.createStream()
+      this.clientConn.on('error', spy)
 
-      return Promise.all([
+      await Promise.all([
         assert.isRejected(clientStream1.sendTotal(117), 'Unexpected error while sending packet. Code: F89, message: Blah'),
         assert.isRejected(clientStream2.sendTotal(204), 'Unexpected error while sending packet. Code: F89, message: Blah')
       ])
+      assert.callCount(spy, 1)
     })
 
     it('should retry on temporary errors', async function () {
@@ -363,6 +366,32 @@ describe('Connection', function () {
       for (let length of lengths) {
         assert.equal(length, 32767)
       }
+    })
+  })
+
+  describe('Stream IDs', function () {
+    it('should close the connection if the peer uses the wrong numbered stream ID', function (done) {
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      const clientPlugin = this.clientPlugin
+      class BadConnection extends Connection {
+        constructor () {
+          super({
+            plugin: clientPlugin,
+            destinationAccount,
+            sourceAccount: 'test.peerB',
+            sharedSecret,
+            isServer: false
+          })
+          this.nextStreamId = 2
+        }
+      }
+      const clientConn = new BadConnection()
+      clientConn.on('error', (err: Error) => {
+        assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
+        done()
+      })
+      clientConn.connect()
+      clientConn.createStream()
     })
   })
 })

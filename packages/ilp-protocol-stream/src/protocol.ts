@@ -217,9 +217,9 @@ export class ConnectionErrorFrame extends BaseFrame {
   errorCode: keyof typeof ErrorCode
   errorMessage: string
 
-  constructor (errorCode: keyof typeof ErrorCode, errorMessage: string) {
+  constructor (errorCode: ErrorCode | keyof typeof ErrorCode, errorMessage: string) {
     super('ConnectionError')
-    this.errorCode = errorCode
+    this.errorCode = (typeof errorCode === 'string' ? errorCode : ErrorCode[errorCode] as keyof typeof ErrorCode)
     this.errorMessage = errorMessage
   }
 
