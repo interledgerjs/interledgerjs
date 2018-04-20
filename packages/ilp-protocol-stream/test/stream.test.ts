@@ -284,6 +284,21 @@ describe('DataAndMoneyStream', function () {
   })
 
   describe('end', function () {
+    it('should accept data', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        let data: Buffer
+        stream.on('data', (chunk: Buffer) => {
+          data = chunk
+        })
+        stream.on('end', () => {
+          assert.equal(data.toString(), 'hello')
+          done()
+        })
+      })
+      const stream = this.clientConn.createStream()
+      stream.end('hello')
+    })
+
     it('should close the stream on the other side', function (done) {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(1000)
@@ -302,7 +317,7 @@ describe('DataAndMoneyStream', function () {
       assert.equal(clientStream.totalSent, '0')
     })
 
-    it('should reject all incoming packets with money for the closed stream', function (done) {
+    it('should accept incoming money for closed streams', function (done) {
       const spy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(1000)
@@ -313,8 +328,8 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
       clientStream.on('end', () => {
-        assert.equal(clientStream.totalSent, '0')
-        assert.notCalled(spy)
+        assert.equal(clientStream.totalSent, '1000')
+        assert.calledWith(spy, '500')
         done()
       })
     })
@@ -373,6 +388,7 @@ describe('DataAndMoneyStream', function () {
       const dataToSend = Buffer.alloc(40000, 'af39', 'hex')
       const spy = sinon.spy(this.clientPlugin, 'sendData')
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('data', () => {})
         stream.on('end', (chunk: Buffer) => {
           assert.isAtMost(IlpPacket.deserializeIlpPrepare(spy.args[0][0]).data.length, 32767)
           done()

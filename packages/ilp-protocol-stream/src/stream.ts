@@ -18,6 +18,7 @@ export class DataAndMoneyStream extends Duplex {
   _remoteReceiveMax?: BigNumber
   _remoteReceived?: BigNumber
   _sentEnd: boolean
+  _remoteSentEnd: boolean
 
   protected debug: Debug.IDebugger
   protected isServer: boolean
@@ -34,13 +35,14 @@ export class DataAndMoneyStream extends Duplex {
   protected _incomingData: OffsetSorter
   protected _outgoingData: DataQueue
   protected outgoingOffset: number
+  protected bytesRead: number
   protected ended: boolean
 
   constructor (opts: StreamOpts) {
     super()
     this.id = opts.id
     this.isServer = opts.isServer
-    this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:MoneyStream:${this.id}`)
+    this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Stream:${this.id}`)
 
     this._totalSent = new BigNumber(0)
     this._totalReceived = new BigNumber(0)
@@ -55,6 +57,7 @@ export class DataAndMoneyStream extends Duplex {
     this._incomingData = new OffsetSorter()
     this._outgoingData = new DataQueue()
     this.outgoingOffset = 0
+    this.bytesRead = 0
     this.ended = false
   }
 
@@ -86,26 +89,6 @@ export class DataAndMoneyStream extends Duplex {
    */
   get receiveMax (): string {
     return this._receiveMax.toString()
-  }
-
-  /**
-   * Close the stream and indicate to the other side that it has been closed.
-   */
-  end (): void {
-    if (this.closed) {
-      this.debug('tried to close stream that was already closed')
-      return
-    }
-    this.debug('closing stream')
-    this.closed = true
-    super.end()
-    this.emit('end')
-    // TODO should we emit the event (or return a promise that resolves)
-    // after we're done sending all the queued data and money?
-    if (!this._sentEnd) {
-      this.debug('starting another send loop to tell the peer the stream was closed')
-      this.emit('_send')
-    }
   }
 
   /**
@@ -327,7 +310,23 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   _final (callback: (...args: any[]) => void): void {
+    this.debug('closing stream')
+    // TODO should we emit the event (or return a promise that resolves)
+    // after we're done sending all the queued data and money?
+    if (!this._sentEnd && !this._remoteSentEnd) {
+      this.debug('starting another send loop to tell the peer the stream was closed')
+      this.emit('_send')
+    }
+    this.closed = true
+    if (this.bytesRead === 0) {
+      // Node streams only emit the 'end' event if data was actually read
+      this.emit('end')
+    }
     callback()
+  }
+
+  _destroy (error: Error, callback: (...args: any[]) => void): void {
+    // TODO handle this
   }
 
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
@@ -338,16 +337,13 @@ export class DataAndMoneyStream extends Duplex {
 
   _read (size: number): void {
     const data = this._incomingData.read()
-    if (data) {
-      if (this.push(data) && size > data.length) {
-        this._read(size - data.length)
-        return
-      }
+    if (!data) {
+      return
     }
-
-    if (!this.ended && this._incomingData.isEnd()) {
-      this.ended = true
-      this.push(null)
+    this.bytesRead += data.length
+    this.push(data)
+    if (data.length < size) {
+      this._read(size - data.length)
     }
   }
 
@@ -367,12 +363,14 @@ export class DataAndMoneyStream extends Duplex {
   _pushIncomingData (data: Buffer, offset: number) {
     this._incomingData.push(data, offset)
 
-    // TODO how much should we try to read?
-    this._read(data.length)
+    this._read(this.readableHighWaterMark - this.readableLength)
   }
 
   _remoteEnded (): void {
-    this.ended = true
+    this.debug('remote closed stream')
+    this._remoteSentEnd = true
+    this.push(null)
+    this.end()
   }
 }
 

@@ -460,11 +460,16 @@ export class Connection extends EventEmitter3 {
       return
     }
 
+    if (!stream.isOpen() || stream._remoteSentEnd) {
+      return
+    }
+
     // TODO delete stream record and make sure the other side can't reopen it
 
     this.debug(`peer closed stream ${stream.id}`)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
+    stream._remoteEnded()
     stream.end()
 
     this.raiseMaxStreamId()
@@ -478,11 +483,16 @@ export class Connection extends EventEmitter3 {
       return
     }
 
+    if (!stream.isOpen() || stream._remoteSentEnd) {
+      return
+    }
+
     // TODO delete stream record and make sure the other side can't reopen it
 
     this.debug(`peer closed stream ${stream.id} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
+    stream._remoteEnded()
     // TODO should we emit an error on the stream?
     stream.end()
 
