@@ -1,7 +1,8 @@
-import EventEmitter3 = require('eventemitter3')
 import * as Debug from 'debug'
 import BigNumber from 'bignumber.js'
 import { Duplex } from 'stream'
+import { DataQueue } from './util/data-queue'
+import { OffsetSorter } from './util/data-offset-sorter'
 require('source-map-support').install()
 
 export interface StreamOpts {
@@ -421,134 +422,5 @@ export class DataAndMoneyStream extends Duplex {
     } catch (err) {
       this.debug(`error in ${event} handler:`, err)
     }
-  }
-}
-
-// Inspired by https://github.com/toajs/quic/blob/master/src/stream.ts
-
-export class DataQueueEntry {
-  data: Buffer
-  next?: DataQueueEntry
-  constructor (buf: Buffer, entry?: DataQueueEntry) {
-    this.data = buf
-    this.next = entry
-  }
-}
-
-export class DataQueue {
-  head?: DataQueueEntry
-  tail?: DataQueueEntry
-  length: number
-  constructor () {
-    this.length = 0
-  }
-
-  push (buf: Buffer): void {
-    const entry = new DataQueueEntry(buf)
-
-    if (this.tail != null) {
-      this.tail.next = entry
-    } else {
-      this.head = entry
-    }
-    this.tail = entry
-    this.length += 1
-  }
-
-  shift () {
-    if (this.head == null) {
-      return null
-    }
-    const ret = this.head.data
-    if (this.length === 1) {
-      this.head = this.tail = undefined
-    } else {
-      this.head = this.head.next
-    }
-    this.length -= 1
-    return ret
-  }
-
-  read (n: number): Buffer | undefined {
-    if (this.head === undefined) {
-      return undefined
-    }
-
-    let ret = this.head.data
-    if (ret.length > n) {
-      this.head.data = ret.slice(n)
-      ret = ret.slice(0, n)
-      return ret
-    }
-    this.shift()
-    return ret // ret.length <= n
-  }
-
-  isEmpty (): boolean {
-    return this.length === 0
-  }
-}
-
-export class OffsetDataEntry {
-  data?: Buffer
-  offset: number
-  next?: OffsetDataEntry
-  constructor (data: Buffer, offset: number, next?: OffsetDataEntry) {
-    this.data = data
-    this.offset = offset
-    this.next = next
-  }
-}
-
-export class OffsetSorter {
-  head?: OffsetDataEntry
-  readOffset: number
-  endOffset: number
-  constructor () {
-    this.readOffset = 0
-    this.endOffset = -1
-  }
-
-  setEndOffset (offset: number) {
-    this.endOffset = offset
-  }
-
-  isEnd (): boolean {
-    return this.readOffset === this.endOffset
-  }
-
-  push (data: Buffer, offset: number) {
-    const entry = new OffsetDataEntry(data, offset)
-
-    if (this.head == null) {
-      this.head = entry
-    } else if (this.head.offset > offset) {
-      entry.next = this.head
-      this.head = entry
-    } else {
-      let prev = this.head
-      while (true) {
-        if (prev.next == null) {
-          prev.next = entry
-          break
-        }
-        if (prev.next.offset > offset) {
-          entry.next = prev.next
-          prev.next = entry
-          break
-        }
-        prev = prev.next
-      }
-    }
-  }
-
-  read (): Buffer | undefined {
-    let data
-    if (this.head != null && this.readOffset === this.head.offset) {
-      data = this.head.data
-      this.readOffset = this.head.offset + (data != null ? data.length : 0)
-      this.head = this.head.next
-    }
-    return data
   }
 }

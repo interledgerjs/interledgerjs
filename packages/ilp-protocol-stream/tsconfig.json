@@ -10,6 +10,5 @@
     "inlineSources": true,
     "strictNullChecks": true,
     "suppressImplicitAnyIndexErrors": true
-  },
-  "compileOnSave": true
+  }
 }

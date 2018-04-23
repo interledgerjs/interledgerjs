@@ -1,4 +1,4 @@
-import EventEmitter3 = require('eventemitter3')
+import { EventEmitter } from 'events'
 import * as Debug from 'debug'
 import { DataAndMoneyStream } from './stream'
 import * as IlpPacket from 'ilp-packet'
@@ -19,7 +19,7 @@ import {
   ConnectionMaxStreamIdFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
-import { Plugin } from './types'
+import { Plugin } from './util/plugin-interface'
 import BigNumber from 'bignumber.js'
 require('source-map-support').install()
 
@@ -44,12 +44,21 @@ export interface FullConnectionOpts extends ConnectionOpts {
   sharedSecret: Buffer
 }
 
+export class ConnectionError extends Error {
+  streamErrorCode: ErrorCode
+
+  constructor (message: string, streamErrorCode?: ErrorCode) {
+    super(message)
+    this.streamErrorCode = streamErrorCode || ErrorCode.InternalError
+  }
+}
+
 /**
  * The ILP STREAM connection between client and server.
  *
  * A single connection can be used to send or receive on multiple streams.
  */
-export class Connection extends EventEmitter3 {
+export class Connection extends EventEmitter {
   /** Application identifier for a certain connection */
   readonly connectionTag?: string
   protected plugin: Plugin
@@ -149,6 +158,7 @@ export class Connection extends EventEmitter3 {
       this.once('_send_loop_finished', resolve)
       this.once('error', reject)
 
+      /* tslint:disable-next-line:no-floating-promises */
       this.startSendLoop()
     })
     this.safeEmit('end')
@@ -298,7 +308,7 @@ export class Connection extends EventEmitter3 {
 
     // Tell peer about closed streams and how much each stream can receive
     if (!this.closed && !this.remoteClosed) {
-      for (let [id, stream] of this.streams) {
+      for (let [_, stream] of this.streams) {
         const streamIsClosed = !stream.isOpen() && stream._getAmountAvailableToSend().isEqualTo(0)
         if (streamIsClosed && !stream._remoteClosed) {
           this.debug(`telling other side that stream ${stream.id} is closed`)
@@ -349,6 +359,7 @@ export class Connection extends EventEmitter3 {
           this.remoteClosed = true
           if (frame.errorCode === 'NoError') {
             this.debug(`remote closed connection`)
+            /* tslint:disable-next-line:no-floating-promises */
             this.end()
           } else {
             this.debug(`remote connection error. code: ${frame.errorCode}, message: ${frame.errorMessage}`)
@@ -382,6 +393,7 @@ export class Connection extends EventEmitter3 {
           }
           if (stream._remoteReceiveMax.isGreaterThan(stream._remoteReceived)
             && stream._getAmountAvailableToSend().isGreaterThan(0)) {
+            /* tslint:disable-next-line:no-floating-promises */
             this.startSendLoop()
           }
           break
@@ -944,13 +956,4 @@ export class Connection extends EventEmitter3 {
 
 function isFulfill (packet: IlpPacket.IlpFulfill | IlpPacket.IlpRejection): packet is IlpPacket.IlpFulfill {
   return packet.hasOwnProperty('fulfillment')
-}
-
-export class ConnectionError extends Error {
-  streamErrorCode: ErrorCode
-
-  constructor (message: string, streamErrorCode?: ErrorCode) {
-    super(message)
-    this.streamErrorCode = streamErrorCode || ErrorCode.InternalError
-  }
 }

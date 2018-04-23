@@ -177,7 +177,7 @@ export type Frame =
 
 function assertType (reader: Reader, frameType: keyof typeof FrameType | (keyof typeof FrameType)[], advanceCursor = true): FrameType {
   const type = (advanceCursor ? reader.readUInt8BigNum() : reader.peekUInt8BigNum()).toNumber()
-  const acceptableTypes = (Array.isArray(frameType) ? frameType : [frameType]) as (keyof typeof FrameType)[]
+  const acceptableTypes = (Array.isArray(frameType) ? frameType : [frameType])
   for (let test of acceptableTypes) {
     if (type === FrameType[test]) {
       return type
@@ -250,7 +250,7 @@ export class ConnectionMaxStreamIdFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): ConnectionMaxStreamIdFrame {
-    const type = assertType(reader, 'ConnectionMaxStreamId')
+    assertType(reader, 'ConnectionMaxStreamId')
     const contents = Reader.from(reader.readVarOctetString())
     const maxStreamId = contents.readVarUIntBigNum()
     return new ConnectionMaxStreamIdFrame(maxStreamId)
@@ -275,7 +275,7 @@ export class ConnectionStreamIdBlockedFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): ConnectionStreamIdBlockedFrame {
-    const type = assertType(reader, 'ConnectionStreamIdBlocked')
+    assertType(reader, 'ConnectionStreamIdBlocked')
     const contents = Reader.from(reader.readVarOctetString())
     const maxStreamId = contents.readVarUIntBigNum()
     return new ConnectionStreamIdBlockedFrame(maxStreamId)
@@ -418,7 +418,7 @@ export class StreamDataFrame extends BaseFrame {
     const streamId = contents.readVarUIntBigNum()
     const offset = contents.readVarUIntBigNum()
     const data = contents.readVarOctetString()
-    return new StreamDataFrame(streamId, offset, data)
+    return new StreamDataFrame(streamId, offset, data, type === FrameType.StreamDataEnd)
   }
 
   writeTo (writer: Writer): Writer {
