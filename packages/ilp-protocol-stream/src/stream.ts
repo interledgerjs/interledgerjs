@@ -15,8 +15,9 @@ export interface StreamOpts {
 export class DataAndMoneyStream extends Duplex {
   readonly id: number
 
-  _remoteReceiveMax?: BigNumber
-  _remoteReceived?: BigNumber
+  _remoteClosed: boolean
+  _remoteReceiveMax: BigNumber
+  _remoteReceived: BigNumber
   _sentEnd: boolean
   _remoteSentEnd: boolean
 
@@ -61,6 +62,10 @@ export class DataAndMoneyStream extends Duplex {
     this.outgoingOffset = 0
     this.bytesRead = 0
     this.ended = false
+
+    this._remoteClosed = false
+    this._remoteReceived = new BigNumber(0)
+    this._remoteReceiveMax = new BigNumber(Infinity)
   }
 
   /**
@@ -118,7 +123,7 @@ export class DataAndMoneyStream extends Duplex {
     }
     this.debug(`setting sendMax to ${sendMax}`)
     this._sendMax = sendMax
-    this.emit('_send')
+    this.emit('_maybe_start_send_loop')
   }
 
   /**
@@ -135,7 +140,7 @@ export class DataAndMoneyStream extends Duplex {
     }
     this.debug(`setting receiveMax to ${limit}`)
     this._receiveMax = new BigNumber(limit)
-    this.emit('_send')
+    this.emit('_maybe_start_send_loop')
   }
 
   /**
@@ -318,7 +323,7 @@ export class DataAndMoneyStream extends Duplex {
     // after we're done sending all the queued data and money?
     if (!this._sentEnd && !this._remoteSentEnd) {
       this.debug('starting another send loop to tell the peer the stream was closed')
-      this.emit('_send')
+      this.emit('_maybe_start_send_loop')
     }
     const finish = (err?: Error) => {
       if (err) {
@@ -349,13 +354,14 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   _destroy (error: Error, callback: (...args: any[]) => void): void {
+    this.debug('destroying stream because of error:', error)
     callback(error)
     // TODO handle this
   }
 
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
     this._outgoingData.push(chunk)
-    this.emit('_send')
+    this.emit('_maybe_start_send_loop')
     callback()
   }
 

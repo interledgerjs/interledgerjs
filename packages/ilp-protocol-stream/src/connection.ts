@@ -22,7 +22,6 @@ import {
 import { Reader } from 'oer-utils'
 import { Plugin } from './types'
 import BigNumber from 'bignumber.js'
-import { RemoteConnection, RemoteStream, ByteSegment } from './remote'
 require('source-map-support').install()
 
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
@@ -56,6 +55,7 @@ export class Connection extends EventEmitter3 {
   readonly connectionTag?: string
   protected plugin: Plugin
   protected sourceAccount: string
+  protected destinationAccount?: string
   protected sharedSecret: Buffer
   protected isServer: boolean
   protected slippage: BigNumber
@@ -63,7 +63,7 @@ export class Connection extends EventEmitter3 {
   protected enablePadding: boolean
 
   protected nextPacketSequence: number
-  protected streams: DataAndMoneyStream[]
+  protected streams: Map<number, DataAndMoneyStream>
   protected nextStreamId: number
   protected maxStreamId: number
   protected debug: Debug.IDebugger
@@ -77,12 +77,15 @@ export class Connection extends EventEmitter3 {
   protected retryDelay: number
   protected queuedFrames: Frame[]
 
-  protected remoteConnection: RemoteConnection
+  protected remoteClosed: boolean
+  protected remoteMaxStreamId: number
+  protected remoteKnowsOurAccount: boolean
 
   constructor (opts: FullConnectionOpts) {
     super()
     this.plugin = opts.plugin
     this.sourceAccount = opts.sourceAccount
+    this.destinationAccount = opts.destinationAccount
     this.sharedSecret = opts.sharedSecret
     this.isServer = opts.isServer
     this.slippage = new BigNumber(opts.slippage || 0)
@@ -92,7 +95,7 @@ export class Connection extends EventEmitter3 {
     this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
 
     this.nextPacketSequence = 1
-    this.streams = []
+    this.streams = new Map()
     this.nextStreamId = (this.isServer ? 2 : 1)
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
@@ -103,9 +106,9 @@ export class Connection extends EventEmitter3 {
     this.testMaximumPacketAmount = new BigNumber(Infinity)
     this.retryDelay = RETRY_DELAY_START
 
-    this.remoteConnection = new RemoteConnection()
-    this.remoteConnection.sourceAccount = opts.destinationAccount
-    this.remoteConnection.knowsOurAccount = this.isServer
+    this.remoteClosed = false
+    this.remoteKnowsOurAccount = this.isServer
+    this.remoteMaxStreamId = DEFAULT_MAX_REMOTE_STREAMS
 
     // TODO limit total amount buffered for all streams?
   }
@@ -136,8 +139,8 @@ export class Connection extends EventEmitter3 {
     this.debug('closing connection')
     this.closed = true
 
-    for (let stream of this.streams) {
-      if (stream && stream.isOpen()) {
+    for (let [_, stream] of this.streams) {
+      if (stream.isOpen()) {
         stream.end()
         // TODO should this mark the remoteStreams as closed?
       }
@@ -156,10 +159,8 @@ export class Connection extends EventEmitter3 {
   destroy (err?: Error): void {
     this.debug('destroying connection with error:', err)
     this.safeEmit('error', err)
-    for (let stream of this.streams) {
-      if (stream) {
-        stream.destroy(err)
-      }
+    for (let [_, stream] of this.streams) {
+      stream.destroy(err)
     }
     this.safeEmit('close')
   }
@@ -169,8 +170,8 @@ export class Connection extends EventEmitter3 {
    */
   createStream (): DataAndMoneyStream {
     // Make sure we don't open more streams than the remote will allow
-    if (this.remoteConnection.maxStreamId < this.nextStreamId) {
-      this.debug(`cannot creat another stream. nextStreamId: ${this.nextStreamId}, remote maxStreamId: ${this.remoteConnection.maxStreamId}`)
+    if (this.remoteMaxStreamId < this.nextStreamId) {
+      this.debug(`cannot creat another stream. nextStreamId: ${this.nextStreamId}, remote maxStreamId: ${this.remoteMaxStreamId}`)
       this.queuedFrames.push(new ConnectionStreamIdBlockedFrame(this.nextStreamId))
       throw new Error(`Creating another stream would exceed the remote connection's maximum number of open streams`)
     }
@@ -180,12 +181,11 @@ export class Connection extends EventEmitter3 {
       id: this.nextStreamId,
       isServer: this.isServer
     })
-    this.streams[this.nextStreamId] = stream
-    this.remoteConnection.createStream(this.nextStreamId)
+    this.streams.set(this.nextStreamId, stream)
     this.debug(`created stream: ${this.nextStreamId}`)
     this.nextStreamId += 2
 
-    stream.on('_send', this.startSendLoop.bind(this))
+    stream.on('_maybe_start_send_loop', this.startSendLoop.bind(this))
     // TODO notify when the stream is closed
 
     return stream
@@ -244,7 +244,8 @@ export class Connection extends EventEmitter3 {
     }
 
     // Determine amount to receive on each frame
-    const amountsToReceive = []
+    // TODO don't use a sparse array
+    const amountsToReceive: { stream: DataAndMoneyStream, amount: BigNumber }[] = []
     const totalMoneyShares = requestPacket.frames.reduce((sum: BigNumber, frame: Frame) => {
       if (frame instanceof StreamMoneyFrame) {
         return sum.plus(frame.shares)
@@ -261,24 +262,28 @@ export class Connection extends EventEmitter3 {
         .dividedBy(totalMoneyShares)
         // TODO make sure we don't lose any because of rounding issues
         .integerValue(BigNumber.ROUND_FLOOR)
-      amountsToReceive[streamId] = streamAmount
+      const stream = this.streams.get(streamId)!
+      amountsToReceive.push({
+        stream,
+        amount: streamAmount
+      })
 
       // Ensure that this amount isn't more than the stream can receive
-      const maxStreamCanReceive = this.streams[streamId]._getAmountStreamCanReceive()
+      const maxStreamCanReceive = stream._getAmountStreamCanReceive()
         .times(this.allowableReceiveExtra)
         .integerValue(BigNumber.ROUND_CEIL)
       if (maxStreamCanReceive.isLessThan(streamAmount)) {
         // TODO should this be distributed to other streams if it can be?
         this.debug(`peer sent too much for stream: ${streamId}. got: ${streamAmount}, max receivable: ${maxStreamCanReceive}`)
         // Tell peer how much the streams they sent for can receive
-        responseFrames.push(new StreamMoneyMaxFrame(streamId, this.streams[streamId].receiveMax, this.streams[streamId].totalReceived))
+        responseFrames.push(new StreamMoneyMaxFrame(streamId, stream.receiveMax, stream.totalReceived))
 
         // TODO include error frame
         throwFinalApplicationError()
       }
 
       // Reject the packet if any of the streams is already closed
-      if (!this.streams[streamId].isOpen()) {
+      if (!stream.isOpen()) {
         this.debug(`peer sent money for stream that was already closed: ${streamId}`)
         responseFrames.push(new StreamMoneyErrorFrame(streamId, 'StreamStateError', 'Stream is already closed'))
 
@@ -287,29 +292,23 @@ export class Connection extends EventEmitter3 {
     }
 
     // Add incoming amounts to each stream
-    for (let streamId in amountsToReceive) {
-      if (amountsToReceive[streamId]) {
-        this.streams[streamId]._addToIncoming(amountsToReceive[streamId])
-      }
+    for (let { stream, amount } of amountsToReceive) {
+      stream._addToIncoming(amount)
     }
 
     // Tell peer about closed streams and how much each stream can receive
-    for (let stream of this.streams) {
-      if (stream) {
-        const remoteStream = this.remoteConnection.streams[stream.id]
-        if (!this.remoteConnection.closed
-          && !stream.isOpen()
-          && !remoteStream.closed
-          && stream._getAmountAvailableToSend().isEqualTo(0)) {
+    if (!this.remoteClosed) {
+      for (let [id, stream] of this.streams) {
+        const streamIsClosed = !stream.isOpen() && stream._getAmountAvailableToSend().isEqualTo(0)
+        if (streamIsClosed && !stream._remoteClosed) {
           this.debug(`telling other side that stream ${stream.id} is closed`)
           // TODO don't use an error frame
           responseFrames.push(new StreamMoneyErrorFrame(stream.id, 'NoError', ''))
           // TODO confirm that they get this
-          remoteStream.closed = true
-        } else if (!remoteStream.remoteReceiveMax.isEqualTo(stream.receiveMax)) {
+          stream._remoteClosed = true
+        } else {
           this.debug(`telling other side that stream ${stream.id} can receive ${stream.receiveMax}`)
           responseFrames.push(new StreamMoneyMaxFrame(stream.id, stream.receiveMax, stream.totalReceived))
-          remoteStream.remoteReceiveMax = new BigNumber(stream.receiveMax)
         }
       }
     }
@@ -332,8 +331,8 @@ export class Connection extends EventEmitter3 {
       switch (frame.type) {
         case FrameType.ConnectionNewAddress:
           this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
-          const firstConnection = this.remoteConnection.sourceAccount === undefined
-          this.remoteConnection.sourceAccount = frame.sourceAccount
+          const firstConnection = this.destinationAccount === undefined
+          this.destinationAccount = frame.sourceAccount
           if (firstConnection) {
             this.handleConnect()
           }
@@ -343,7 +342,7 @@ export class Connection extends EventEmitter3 {
           // TODO end the connection in some other way
           this.sending = false
           this.closed = true
-          this.remoteConnection.closed = true
+          this.remoteClosed = true
           if (frame.errorCode === 'NoError') {
             this.debug(`remote closed connection`)
             this.end()
@@ -358,13 +357,13 @@ export class Connection extends EventEmitter3 {
           // TODO end the connection in some other way
           this.sending = false
           this.closed = true
-          this.remoteConnection.closed = true
+          this.remoteClosed = true
           this.end()
           break
         case FrameType.ConnectionMaxStreamId:
           // TODO make sure the number isn't lowered
           this.debug(`remote set max stream id to ${frame.maxStreamId}`)
-          this.remoteConnection.maxStreamId = frame.maxStreamId.toNumber()
+          this.remoteMaxStreamId = frame.maxStreamId.toNumber()
           break
         case FrameType.ConnectionStreamIdBlocked:
           this.debug(`remote wants to open more streams but we are blocking them`)
@@ -379,14 +378,15 @@ export class Connection extends EventEmitter3 {
         case FrameType.StreamMoneyMax:
           this.handleNewStream(frame)
           this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
-          const remoteStream = this.remoteConnection.streams[frame.streamId.toNumber()]
-          remoteStream.totalReceived = BigNumber.maximum(remoteStream.totalReceived, frame.totalReceived)
-          if (remoteStream.receiveMax.isFinite()) {
-            remoteStream.receiveMax = BigNumber.maximum(remoteStream.receiveMax, frame.receiveMax)
+          const stream = this.streams.get(frame.streamId.toNumber())!
+          stream._remoteReceived = BigNumber.maximum(stream._remoteReceived, frame.totalReceived)
+          if (stream._remoteReceiveMax.isFinite()) {
+            stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax, frame.receiveMax)
           } else {
-            remoteStream.receiveMax = frame.receiveMax
+            stream._remoteReceiveMax = frame.receiveMax
           }
-          if (remoteStream.receiveMax.isGreaterThan(remoteStream.totalReceived)) {
+          if (stream._remoteReceiveMax.isGreaterThan(stream._remoteReceived)
+            && stream._getAmountAvailableToSend().isGreaterThan(0)) {
             this.startSendLoop()
           }
           break
@@ -420,7 +420,7 @@ export class Connection extends EventEmitter3 {
 
   protected handleNewStream (frame: StreamMoneyFrame | StreamMoneyMaxFrame | StreamMoneyErrorFrame | StreamDataFrame): void {
     const streamId = frame.streamId.toNumber()
-    if (this.streams[streamId]) {
+    if (this.streams.has(streamId)) {
       return
     }
 
@@ -460,15 +460,14 @@ export class Connection extends EventEmitter3 {
       id: streamId,
       isServer: this.isServer
     })
-    this.streams[streamId] = stream
-    this.remoteConnection.streams[streamId] = new RemoteStream()
-    stream.on('_send', () => this.startSendLoop())
+    this.streams.set(streamId, stream)
+    stream.on('_maybe_start_send_loop', () => this.startSendLoop())
     this.safeEmit('stream', stream)
   }
 
   protected handleStreamEnd (frame: StreamMoneyFrame | StreamDataFrame) {
     const streamId = frame.streamId.toNumber()
-    const stream = this.streams[streamId]
+    const stream = this.streams.get(streamId)
     if (!stream) {
       this.debug(`told to close stream ${streamId}, but we don't have a record of that stream`)
       return
@@ -490,7 +489,7 @@ export class Connection extends EventEmitter3 {
 
   protected handleStreamError (frame: StreamMoneyErrorFrame) {
     const streamId = frame.streamId.toNumber()
-    const stream = this.streams[streamId]
+    const stream = this.streams.get(streamId)
     if (!stream) {
       this.debug(`remote error on stream ${streamId}, but we don't have a record of that stream`)
       return
@@ -522,7 +521,7 @@ export class Connection extends EventEmitter3 {
     this.debug(`got data for stream ${frame.streamId}`)
 
     // TODO handle if it's too much
-    this.streams[frame.streamId.toNumber()]._pushIncomingData(frame.data, frame.offset.toNumber())
+    this.streams.get(frame.streamId.toNumber())!._pushIncomingData(frame.data, frame.offset.toNumber())
   }
 
   /**
@@ -534,12 +533,12 @@ export class Connection extends EventEmitter3 {
       this.debug('already sending, not starting another loop')
       return
     }
-    if (this.remoteConnection.closed) {
+    if (this.remoteClosed) {
       this.debug('remote connection is already closed, not starting another loop')
       this.safeEmit('_send_loop_finished')
       return
     }
-    if (!this.remoteConnection.sourceAccount) {
+    if (!this.destinationAccount) {
       this.debug('not sending because we do not know the client\'s address')
       this.sending = false
       return
@@ -571,10 +570,7 @@ export class Connection extends EventEmitter3 {
     }
     this.debug('finished sending')
     this.safeEmit('_send_loop_finished')
-    for (let stream of this.streams) {
-      if (!stream) {
-        continue
-      }
+    for (let [_, stream] of this.streams) {
       stream.emit('_send_loop_finished')
     }
   }
@@ -600,42 +596,40 @@ export class Connection extends EventEmitter3 {
 
     // Send control frames
     // TODO only send the max amount when it changes
-    for (let stream of this.streams) {
+    for (let [_, stream] of this.streams) {
       if (stream && stream.isOpen()) {
         requestPacket.frames.push(new StreamMoneyMaxFrame(stream.id, stream.receiveMax, stream.totalReceived))
       }
     }
-    if (this.closed && !this.remoteConnection.closed) {
+    if (this.closed && !this.remoteClosed) {
       // TODO how do we know if there was an error?
       this.debug('sending connection close frame')
       requestPacket.frames.push(new ConnectionErrorFrame('NoError', ''))
       // TODO don't put any more frames because the connection is closed
       // TODO only mark this as closed once we confirm that with the receiver
-      this.remoteConnection.closed = true
+      this.remoteClosed = true
     }
 
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromNextStream = this.testMaximumPacketAmount
     const streamsSentFrom = []
-    for (let stream of this.streams) {
-      if (!stream || stream._sentEnd) {
+    for (let [_, stream] of this.streams) {
+      if (stream._sentEnd) {
         // TODO just remove closed streams?
         continue
       }
-      const remoteStream = this.remoteConnection.streams[stream.id]
-
       // Determine how much to send from this stream based on how much it has available
       // and how much the receiver side of this stream can receive
       let amountToSendFromStream = BigNumber.minimum(stream._getAmountAvailableToSend(), maxAmountFromNextStream)
       if (this.exchangeRate) {
-        const maxDestinationAmount = remoteStream.receiveMax.minus(remoteStream.totalReceived)
+        const maxDestinationAmount = stream._remoteReceiveMax.minus(stream._remoteReceived)
         const maxSourceAmount = maxDestinationAmount.dividedBy(this.exchangeRate).integerValue(BigNumber.ROUND_CEIL)
         if (maxSourceAmount.isLessThan(amountToSendFromStream)) {
           this.debug(`stream ${stream.id} could send ${amountToSendFromStream} but that would be more than the receiver says they can receive, so we'll send ${maxSourceAmount} instead`)
           amountToSendFromStream = maxSourceAmount
         }
       }
-      this.debug(`amount to send from stream ${stream.id}: ${amountToSendFromStream}, exchange rate: ${this.exchangeRate}, remote total received: ${remoteStream.totalReceived}, remote receive max: ${remoteStream.receiveMax}`)
+      this.debug(`amount to send from stream ${stream.id}: ${amountToSendFromStream}, exchange rate: ${this.exchangeRate}, remote total received: ${stream._remoteReceived}, remote receive max: ${stream._remoteReceiveMax}`)
 
       // Hold the money and add a frame to the packet
       if (amountToSendFromStream.isGreaterThan(0)) {
@@ -656,11 +650,8 @@ export class Connection extends EventEmitter3 {
     // Send data
     let sendingData = false
     let bytesLeftInPacket = MAX_DATA_SIZE - requestPacket.byteLength()
-    for (let stream of this.streams) {
+    for (let [_, stream] of this.streams) {
       // TODO send only up to the max packet data
-      if (!stream) {
-        continue
-      }
       // TODO use a sensible estimate for the StreamDataFrame overhead
       const { data, offset } = stream._getAvailableDataToSend(bytesLeftInPacket - 20)
       if (data && data.length > 0) {
@@ -682,32 +673,34 @@ export class Connection extends EventEmitter3 {
 
     // Tell other side which streams are closed
     // TODO how do we tell them the stream is half closed but there's still data or money to send
-    for (let stream of this.streams) {
-      if (!stream || this.closed || stream.isOpen() || stream._sentEnd) {
-        continue
-      }
-      if (stream._getAmountAvailableToSend().isGreaterThan(0)) {
-        this.debug(`stream ${stream.id} is closed but still has money to send, not sending end frame yet`)
-        continue
-      }
-      if (stream._hasDataToSend()) {
-        this.debug(`stream ${stream.id} is closed but still has data to send, not sending end frame yet`)
-        continue
-      }
-      const streamEndFrame = new StreamMoneyErrorFrame(stream.id, 'NoError', '')
+    if (!this.closed) {
+      for (let [_, stream] of this.streams) {
+        if (stream.isOpen() || stream._sentEnd) {
+          continue
+        }
+        if (stream._getAmountAvailableToSend().isGreaterThan(0)) {
+          this.debug(`stream ${stream.id} is closed but still has money to send, not sending end frame yet`)
+          continue
+        }
+        if (stream._hasDataToSend()) {
+          this.debug(`stream ${stream.id} is closed but still has data to send, not sending end frame yet`)
+          continue
+        }
+        const streamEndFrame = new StreamMoneyErrorFrame(stream.id, 'NoError', '')
 
-      // Make sure the packet has space left
-      if (streamEndFrame.byteLength() > bytesLeftInPacket) {
-        // TODO make sure it will actually make another pass to send these later
-        this.debug('not sending more stream end frames because the packet is full')
-        break
+        // Make sure the packet has space left
+        if (streamEndFrame.byteLength() > bytesLeftInPacket) {
+          // TODO make sure it will actually make another pass to send these later
+          this.debug('not sending more stream end frames because the packet is full')
+          break
+        }
+        this.debug(`sending end frame for stream ${stream.id}`)
+        // TODO should this be a Stream{Money,Data} frame with isEnd set instead?
+        requestPacket.frames.push(streamEndFrame)
+        bytesLeftInPacket -= streamEndFrame.byteLength()
+        // TODO only set this to true if the packet gets through to the receiver
+        stream._sentEnd = true
       }
-      this.debug(`sending end frame for stream ${stream.id}`)
-      // TODO should this be a Stream{Money,Data} frame with isEnd set instead?
-      requestPacket.frames.push(streamEndFrame)
-      bytesLeftInPacket -= streamEndFrame.byteLength()
-      // TODO only set this to true if the packet gets through to the receiver
-      stream._sentEnd = true
     }
 
     // Set minimum destination amount
@@ -766,14 +759,14 @@ export class Connection extends EventEmitter3 {
    */
   protected async sendTestPacket (amount?: BigNumber): Promise<void> {
     this.debug('sendTestPacket')
-    if (!this.remoteConnection.sourceAccount) {
+    if (!this.destinationAccount) {
       throw new Error('Cannot send test packet. Destination account is unknown')
     }
 
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
 
-    if (!this.remoteConnection.knowsOurAccount) {
+    if (!this.remoteKnowsOurAccount) {
       this.debug('sending source address to peer')
       // TODO attach a token to the account?
       requestPacket.frames.push(new ConnectionNewAddressFrame(this.sourceAccount))
@@ -786,7 +779,7 @@ export class Connection extends EventEmitter3 {
       return
     }
 
-    this.remoteConnection.knowsOurAccount = true
+    this.remoteKnowsOurAccount = true
 
     // Determine exchange rate from amount that arrived
     this.exchangeRate = responsePacket.prepareAmount.dividedBy(sourceAmount)
@@ -805,7 +798,7 @@ export class Connection extends EventEmitter3 {
     const err = (error instanceof ConnectionError || error instanceof Error ? error : new Error(error))
     this.debug(`closing connection with error:`, err)
 
-    if (this.remoteConnection.closed) {
+    if (this.remoteClosed) {
       return
     }
 
@@ -818,7 +811,7 @@ export class Connection extends EventEmitter3 {
     } catch (err) {
       this.debug(`error while trying to inform peer that connection is closing, but closing anyway`, err)
     }
-    this.remoteConnection.closed = true
+    this.remoteClosed = true
     this.destroy(err)
   }
 
@@ -836,7 +829,7 @@ export class Connection extends EventEmitter3 {
       executionCondition = cryptoHelper.hash(fulfillment)
     }
     const prepare = {
-      destination: this.remoteConnection.sourceAccount!,
+      destination: this.destinationAccount!,
       amount: (sourceAmount).toString(),
       data,
       executionCondition,

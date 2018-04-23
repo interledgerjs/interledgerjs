@@ -3,7 +3,6 @@ import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
 import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
-import { RemoteConnection } from '../src/remote'
 import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
 import * as lolex from 'lolex'
@@ -434,7 +433,7 @@ describe('Connection', function () {
       })
       const clientPlugin = this.clientPlugin
       class BadConnection extends Connection {
-        remoteConnection: RemoteConnection
+        remoteMaxStreamId: number
 
         constructor () {
           super({
@@ -449,7 +448,7 @@ describe('Connection', function () {
       const clientConn = new BadConnection()
       clientConn.on('error', spy)
       await clientConn.connect()
-      clientConn.remoteConnection.maxStreamId = 100
+      clientConn.remoteMaxStreamId = 100
       const streams = [
         clientConn.createStream(),
         clientConn.createStream(),
