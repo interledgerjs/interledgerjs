@@ -32,13 +32,14 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [x] Connection closing
 - [x] Max number of streams
 - [x] stream.end should accept data like node stream
+- [x] Separate connection "end" and "destroy", where the former flushes everything first
+- [x] Use stream.destroy instead of end to close immediately -- end should flush data and money and emit finish or whatever when it's done, destroy closes it right away
 - [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
 - [ ] Backpressure for data
 - [ ] Switch stream ending to use StreamEnd frame instead of error
 - [ ] Put a sequence for the receive max amount and allow it to be lowered
 - [ ] When waiting to receive money, occasionally resend the max receive amount in case the sender hasn't gotten it (and also send it if they send too much)
 - [ ] Add ACKs for data so that you know if data was received even if packet is rejected
-- [ ] Use stream.destroy instead of end to close immediately -- end should flush data and money and emit finish or whatever when it's done, destroy closes it right away
 - [ ] Multiple packets in flight at the same time
 - [ ] Don't send extra packet at the end if it isn't necessary
 - [ ] Blocked frames (when more is available to send)
@@ -48,7 +49,6 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Randomize expiry time
 - [ ] Merge sending test and normal packets? Or at least handle frames in the same way
 - [ ] Make it work even if one side can only receive 0 amount packets
-- [ ] Separate connection "close" and "kill", where the former flushes everything first
 - [ ] Clean up closed streams (and throw error if packet is received for a closed stream)
 
 ## Credits

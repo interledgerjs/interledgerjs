@@ -364,6 +364,49 @@ describe('DataAndMoneyStream', function () {
     })
   })
 
+  describe('destroy', function () {
+    it('should close the stream on the other side', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(1000)
+        stream.on('end', done)
+      })
+
+      const clientStream = this.clientConn.createStream()
+      clientStream.sendTotal(1000)
+        .then(() => clientStream.destroy())
+    })
+
+    it('should cause the remote stream to emit the error passed in', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(1000)
+        stream.on('error', (err: Error) => {
+          assert.equal(err.message, 'oops, something went wrong')
+          done()
+        })
+      })
+
+      const clientStream = this.clientConn.createStream()
+      clientStream.on('error', (err: Error) => {
+        assert.equal(err.message, 'oops, something went wrong')
+      })
+      clientStream.sendTotal(1000)
+        .then(() => clientStream.destroy(new Error('oops, something went wrong')))
+    })
+
+    it('should close the stream even if there is money to be sent', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(1000)
+      })
+      const clientStream = this.clientConn.createStream()
+      clientStream.setSendMax(1000)
+      clientStream.on('end', () => {
+        assert.equal(clientStream.totalSent, '0')
+        done()
+      })
+      clientStream.destroy()
+    })
+  })
+
   describe('Sending Data', function () {
     it('should be a Duplex stream', function () {
       const dataStream = this.clientConn.createStream()

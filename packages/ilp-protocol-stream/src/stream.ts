@@ -15,6 +15,7 @@ export interface StreamOpts {
 export class DataAndMoneyStream extends Duplex {
   readonly id: number
 
+  _errorMessage?: string
   _remoteClosed: boolean
   _remoteReceiveMax: BigNumber
   _remoteReceived: BigNumber
@@ -37,7 +38,6 @@ export class DataAndMoneyStream extends Duplex {
   protected _outgoingData: DataQueue
   protected outgoingOffset: number
   protected bytesRead: number
-  protected ended: boolean
 
   constructor (opts: StreamOpts) {
     super()
@@ -61,7 +61,6 @@ export class DataAndMoneyStream extends Duplex {
     this._outgoingData = new DataQueue()
     this.outgoingOffset = 0
     this.bytesRead = 0
-    this.ended = false
 
     this._remoteClosed = false
     this._remoteReceived = new BigNumber(0)
@@ -353,10 +352,17 @@ export class DataAndMoneyStream extends Duplex {
     }
   }
 
-  _destroy (error: Error, callback: (...args: any[]) => void): void {
+  _destroy (error: Error | undefined | null, callback: (...args: any[]) => void): void {
     this.debug('destroying stream because of error:', error)
+    this.closed = true
+    if (error) {
+      this._errorMessage = error.message
+    }
+    if (this.bytesRead === 0) {
+      // Node streams only emit the 'end' event if data was actually read
+      this.safeEmit('end')
+    }
     callback(error)
-    // TODO handle this
   }
 
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
@@ -396,11 +402,16 @@ export class DataAndMoneyStream extends Duplex {
     this._read(this.readableHighWaterMark - this.readableLength)
   }
 
-  _remoteEnded (): void {
+  _remoteEnded (err?: Error): void {
     this.debug('remote closed stream')
     this._remoteSentEnd = true
-    this.push(null)
-    this.end()
+    this._remoteClosed = true
+    if (err) {
+      this.destroy(err)
+    } else {
+      this.push(null)
+      this.end()
+    }
   }
 
   protected safeEmit (event: string, ...args: any[]) {

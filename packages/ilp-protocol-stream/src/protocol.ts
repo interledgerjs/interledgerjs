@@ -101,13 +101,12 @@ export enum FrameType {
 
   ConnectionNewAddress = 0x01,
   ConnectionError = 0x02,
-  ApplicationError = 0x03,
-  ConnectionMaxMoney = 0x04,
-  ConnectionMoneyBlocked = 0x05,
-  ConnectionMaxData = 0x06,
-  ConnectionDataBlocked = 0x07,
-  ConnectionMaxStreamId = 0x08,
-  ConnectionStreamIdBlocked = 0x09,
+  ConnectionMaxMoney = 0x03,
+  ConnectionMoneyBlocked = 0x04,
+  ConnectionMaxData = 0x05,
+  ConnectionDataBlocked = 0x06,
+  ConnectionMaxStreamId = 0x07,
+  ConnectionStreamIdBlocked = 0x08,
 
   StreamMoney = 0x10,
   StreamMoneyEnd = 0x11,
@@ -131,7 +130,8 @@ export enum ErrorCode {
   StreamStateError = 0x06,
   FinalOffsetError = 0x07,
   FrameFormatError = 0x08,
-  ProtocolViolation = 0x09
+  ProtocolViolation = 0x09,
+  ApplicationError = 0x0a
   // TODO add frame-specific errors
 }
 
@@ -160,7 +160,6 @@ export abstract class BaseFrame {
 export type Frame =
   ConnectionNewAddressFrame
   | ConnectionErrorFrame
-  | ApplicationErrorFrame
 //  | ConnectionMaxMoneyFrame
 //  | ConnectionMoneyBlockedFrame
 //  | ConnectionMaxDataFrame
@@ -235,35 +234,6 @@ export class ConnectionErrorFrame extends BaseFrame {
     writer.writeUInt8(this.type)
     const contents = new Writer()
     contents.writeUInt8(ErrorCode[this.errorCode])
-    contents.writeVarOctetString(Buffer.from(this.errorMessage))
-    writer.writeVarOctetString(contents.getBuffer())
-    return writer
-  }
-}
-
-export class ApplicationErrorFrame extends BaseFrame {
-  type: FrameType.ApplicationError
-  errorCode: number
-  errorMessage: string
-
-  constructor (errorCode: number, errorMessage: string) {
-    super('ApplicationError')
-    this.errorCode = errorCode
-    this.errorMessage = errorMessage
-  }
-
-  static fromBuffer (reader: Reader): ApplicationErrorFrame {
-    assertType(reader, 'ApplicationError')
-    const contents = Reader.from(reader.readVarOctetString())
-    const errorCode = contents.readUInt8BigNum().toNumber()
-    const errorMessage = contents.readVarOctetString().toString()
-    return new ApplicationErrorFrame(errorCode, errorMessage)
-  }
-
-  writeTo (writer: Writer): Writer {
-    writer.writeUInt8(this.type)
-    const contents = new Writer()
-    contents.writeUInt8(this.errorCode)
     contents.writeVarOctetString(Buffer.from(this.errorMessage))
     writer.writeVarOctetString(contents.getBuffer())
     return writer

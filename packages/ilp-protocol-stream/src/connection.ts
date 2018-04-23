@@ -15,7 +15,6 @@ import {
   ConnectionNewAddressFrame,
   ErrorCode,
   ConnectionErrorFrame,
-  ApplicationErrorFrame,
   ConnectionStreamIdBlockedFrame,
   ConnectionMaxStreamIdFrame
 } from './protocol'
@@ -160,7 +159,8 @@ export class Connection extends EventEmitter3 {
     this.debug('destroying connection with error:', err)
     this.safeEmit('error', err)
     for (let [_, stream] of this.streams) {
-      stream.destroy(err)
+      // TODO should we pass the error to each stream?
+      stream.destroy()
     }
     this.safeEmit('close')
   }
@@ -297,13 +297,17 @@ export class Connection extends EventEmitter3 {
     }
 
     // Tell peer about closed streams and how much each stream can receive
-    if (!this.remoteClosed) {
+    if (!this.closed && !this.remoteClosed) {
       for (let [id, stream] of this.streams) {
         const streamIsClosed = !stream.isOpen() && stream._getAmountAvailableToSend().isEqualTo(0)
         if (streamIsClosed && !stream._remoteClosed) {
           this.debug(`telling other side that stream ${stream.id} is closed`)
           // TODO don't use an error frame
-          responseFrames.push(new StreamMoneyErrorFrame(stream.id, 'NoError', ''))
+          if (stream._errorMessage) {
+            responseFrames.push(new StreamMoneyErrorFrame(stream.id, 'ApplicationError', stream._errorMessage))
+          } else {
+            responseFrames.push(new StreamMoneyErrorFrame(stream.id, 'NoError', ''))
+          }
           // TODO confirm that they get this
           stream._remoteClosed = true
         } else {
@@ -350,15 +354,6 @@ export class Connection extends EventEmitter3 {
             this.debug(`remote connection error. code: ${frame.errorCode}, message: ${frame.errorMessage}`)
             this.destroy(new Error(`Remote connection error. Code: ${frame.errorCode}, message: ${frame.errorMessage}`))
           }
-          break
-        case FrameType.ApplicationError:
-          this.debug(`remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`)
-          this.emit('error', new Error(`Remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`))
-          // TODO end the connection in some other way
-          this.sending = false
-          this.closed = true
-          this.remoteClosed = true
-          this.end()
           break
         case FrameType.ConnectionMaxStreamId:
           // TODO make sure the number isn't lowered
@@ -504,7 +499,12 @@ export class Connection extends EventEmitter3 {
     this.debug(`peer closed stream ${stream.id} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
-    stream._remoteEnded()
+    let err
+    if (frame.errorMessage) {
+      err = new Error(frame.errorMessage)
+      err.name = frame.errorCode
+    }
+    stream._remoteEnded(err)
     // TODO should we emit an error on the stream?
 
     this.raiseMaxStreamId()
@@ -672,7 +672,6 @@ export class Connection extends EventEmitter3 {
     }
 
     // Tell other side which streams are closed
-    // TODO how do we tell them the stream is half closed but there's still data or money to send
     if (!this.closed) {
       for (let [_, stream] of this.streams) {
         if (stream.isOpen() || stream._sentEnd) {
@@ -686,7 +685,9 @@ export class Connection extends EventEmitter3 {
           this.debug(`stream ${stream.id} is closed but still has data to send, not sending end frame yet`)
           continue
         }
-        const streamEndFrame = new StreamMoneyErrorFrame(stream.id, 'NoError', '')
+        const streamEndFrame = (stream._errorMessage
+          ? new StreamMoneyErrorFrame(stream.id, 'ApplicationError', stream._errorMessage)
+          : new StreamMoneyErrorFrame(stream.id, 'NoError', ''))
 
         // Make sure the packet has space left
         if (streamEndFrame.byteLength() > bytesLeftInPacket) {

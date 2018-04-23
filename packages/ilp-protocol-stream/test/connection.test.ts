@@ -258,11 +258,14 @@ describe('Connection', function () {
         assert.equal(err.message, 'Cannot send. Path has a Maximum Packet Amount of 0')
       })
       const clientStream = this.clientConn.createStream()
+      clientStream.on('error', (err: Error) => {
+        assert.equal(err.message, 'Cannot send. Path has a Maximum Packet Amount of 0')
+      })
       this.clientConn.on('error', (err: Error) => {
         assert.equal(err.message, 'Cannot send. Path has a Maximum Packet Amount of 0')
       })
 
-      await assert.isRejected(clientStream.sendTotal(1000))
+      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before desired amount was sent (target: 1000, totalSent: 0)')
     })
   })
 
@@ -270,6 +273,7 @@ describe('Connection', function () {
     it('should emit an error and reject all flushed promises if a packet is rejected with an unexpected final error code', async function () {
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
       const spy = sinon.spy()
+      this.clientConn.on('error', spy)
       sendDataStub.resolves(IlpPacket.serializeIlpReject({
         code: 'F89',
         message: 'Blah',
@@ -279,12 +283,12 @@ describe('Connection', function () {
 
       const clientStream1 = this.clientConn.createStream()
       const clientStream2 = this.clientConn.createStream()
-      this.clientConn.on('error', spy)
 
       await Promise.all([
-        assert.isRejected(clientStream1.sendTotal(117), 'Unexpected error while sending packet. Code: F89, message: Blah'),
-        assert.isRejected(clientStream2.sendTotal(204), 'Unexpected error while sending packet. Code: F89, message: Blah')
+        assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before desired amount was sent (target: 117, totalSent: 0)'),
+        assert.isRejected(clientStream2.sendTotal(204), 'Stream was closed before desired amount was sent (target: 204, totalSent: 0)')
       ])
+      await new Promise(setImmediate)
       assert.callCount(spy, 1)
     })
 
@@ -337,7 +341,7 @@ describe('Connection', function () {
 
       const clientStream1 = this.clientConn.createStream()
 
-      await assert.isRejected(clientStream1.sendTotal(117), 'Unexpected error while sending packet. Code: F89, message: Blah')
+      await assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before desired amount was sent (target: 117, totalSent: 0)')
       assert.equal(clientStream1.totalSent, '0')
     })
   })
