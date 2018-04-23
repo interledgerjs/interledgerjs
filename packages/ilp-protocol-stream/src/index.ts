@@ -57,6 +57,10 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
       })
     }
   })
+  connection.once('close', () => {
+    opts.plugin.deregisterDataHandler()
+    opts.plugin.disconnect()
+  })
   await connection.connect()
   // TODO resolve only when it is connected
   return connection

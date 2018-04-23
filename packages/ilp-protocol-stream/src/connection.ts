@@ -150,6 +150,18 @@ export class Connection extends EventEmitter3 {
       this.startSendLoop()
     })
     this.safeEmit('end')
+    this.safeEmit('close')
+  }
+
+  destroy (err?: Error): void {
+    this.debug('destroying connection with error:', err)
+    this.safeEmit('error', err)
+    for (let stream of this.streams) {
+      if (stream) {
+        stream.destroy(err)
+      }
+    }
+    this.safeEmit('close')
   }
 
   /**
@@ -328,22 +340,23 @@ export class Connection extends EventEmitter3 {
           // TODO reset the exchange rate and send a test packet to make sure they haven't spoofed the address
           break
         case FrameType.ConnectionError:
-          if (frame.errorCode === 'NoError') {
-            this.debug(`remote closed connection`)
-          } else {
-            this.debug(`remote connection error. code: ${frame.errorCode}, message: ${frame.errorMessage}`)
-            this.emit('error', new Error(`Remote connection error. Code: ${frame.errorCode}, message: ${frame.errorMessage}`))
-          }
-
           // TODO end the connection in some other way
+          this.sending = false
           this.closed = true
           this.remoteConnection.closed = true
-          this.end()
+          if (frame.errorCode === 'NoError') {
+            this.debug(`remote closed connection`)
+            this.end()
+          } else {
+            this.debug(`remote connection error. code: ${frame.errorCode}, message: ${frame.errorMessage}`)
+            this.destroy(new Error(`Remote connection error. Code: ${frame.errorCode}, message: ${frame.errorMessage}`))
+          }
           break
         case FrameType.ApplicationError:
           this.debug(`remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`)
           this.emit('error', new Error(`Remote connection error code: ${frame.errorCode}, message: ${frame.errorMessage}`))
           // TODO end the connection in some other way
+          this.sending = false
           this.closed = true
           this.remoteConnection.closed = true
           this.end()
@@ -415,6 +428,7 @@ export class Connection extends EventEmitter3 {
     if (this.isServer && streamId % 2 === 0) {
       this.debug(`got invalid stream ID ${streamId} from peer (should be odd)`)
       this.queuedFrames.push(new ConnectionErrorFrame('ProtocolViolation', `Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`))
+      // TODO this should probably call this.destroy
       const err = new Error(`Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`)
       this.safeEmit('error', err)
       throw err
@@ -470,7 +484,6 @@ export class Connection extends EventEmitter3 {
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
     stream._remoteEnded()
-    stream.end()
 
     this.raiseMaxStreamId()
   }
@@ -494,7 +507,6 @@ export class Connection extends EventEmitter3 {
     stream._sentEnd = true
     stream._remoteEnded()
     // TODO should we emit an error on the stream?
-    stream.end()
 
     this.raiseMaxStreamId()
   }
@@ -519,6 +531,7 @@ export class Connection extends EventEmitter3 {
    */
   protected async startSendLoop () {
     if (this.sending) {
+      this.debug('already sending, not starting another loop')
       return
     }
     if (this.remoteConnection.closed) {
@@ -526,14 +539,14 @@ export class Connection extends EventEmitter3 {
       this.safeEmit('_send_loop_finished')
       return
     }
-    this.sending = true
-    this.debug('starting send loop')
-
     if (!this.remoteConnection.sourceAccount) {
       this.debug('not sending because we do not know the client\'s address')
       this.sending = false
       return
     }
+
+    this.sending = true
+    this.debug('starting send loop')
 
     try {
       while (this.sending) {
@@ -554,15 +567,16 @@ export class Connection extends EventEmitter3 {
       }
     } catch (err) {
       // TODO should a connection error be an error on all of the streams?
-      for (let stream of this.streams) {
-        if (stream) {
-          stream.emit('error', err)
-        }
-      }
       return this.connectionError(err)
     }
     this.debug('finished sending')
     this.safeEmit('_send_loop_finished')
+    for (let stream of this.streams) {
+      if (!stream) {
+        continue
+      }
+      stream.emit('_send_loop_finished')
+    }
   }
 
   /**
@@ -786,12 +800,15 @@ export class Connection extends EventEmitter3 {
   }
 
   protected async connectionError (error: ConnectionError | Error | string): Promise<void> {
-    const err = (error instanceof ConnectionError || error instanceof Error ? error : new Error(error))
-    this.debug(`closing connection with error:`, err)
-    this.safeEmit('error', err)
-
     this.closed = true
     this.sending = false
+    const err = (error instanceof ConnectionError || error instanceof Error ? error : new Error(error))
+    this.debug(`closing connection with error:`, err)
+
+    if (this.remoteConnection.closed) {
+      return
+    }
+
     const errorCode = (error instanceof ConnectionError ? error.streamErrorCode : ErrorCode.InternalError)
     const packet = new Packet(this.nextPacketSequence, IlpPacketType.Prepare, 0, [
       new ConnectionErrorFrame(errorCode, err.message)
@@ -802,6 +819,7 @@ export class Connection extends EventEmitter3 {
       this.debug(`error while trying to inform peer that connection is closing, but closing anyway`, err)
     }
     this.remoteConnection.closed = true
+    this.destroy(err)
   }
 
   protected async sendPacket (packet: Packet, sourceAmount: BigNumber, unfulfillable = false): Promise<Packet | void> {

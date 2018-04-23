@@ -20,7 +20,8 @@ describe('Connection', function () {
 
     this.server = new Server({
       plugin: this.serverPlugin,
-      serverSecret: Buffer.alloc(32)
+      serverSecret: Buffer.alloc(32),
+      maxRemoteStreams: 3
     })
     await this.server.listen()
 
@@ -254,9 +255,15 @@ describe('Connection', function () {
 
     it('should stop sending if the maximum amount is too small to send any money through', async function () {
       this.clientPlugin.maxAmount = 0
+      this.serverConn.on('error', (err: Error) => {
+        assert.equal(err.message, 'Cannot send. Path has a Maximum Packet Amount of 0')
+      })
       const clientStream = this.clientConn.createStream()
+      this.clientConn.on('error', (err: Error) => {
+        assert.equal(err.message, 'Cannot send. Path has a Maximum Packet Amount of 0')
+      })
 
-      return assert.isRejected(clientStream.sendTotal(1000))
+      await assert.isRejected(clientStream.sendTotal(1000))
     })
   })
 
@@ -408,12 +415,23 @@ describe('Connection', function () {
         done()
       })
       clientConn.connect()
-      clientConn.createStream()
+      const stream = clientConn.createStream()
+      stream.on('error', (err: Error) => {
+        assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
+      })
     })
+
+    it.skip('should remove the connection on the server side if the client violates the protocol')
 
     it('should close the connection if the peer opens too many streams', async function () {
       const spy = sinon.spy()
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      this.server.on('connection', (serverConn: Connection) => {
+        serverConn.on('stream', (stream: DataAndMoneyStream) => {
+          stream.on('error', (err: Error) => {})
+        })
+        serverConn.on('error', (err: Error) => {})
+      })
       const clientPlugin = this.clientPlugin
       class BadConnection extends Connection {
         remoteConnection: RemoteConnection
@@ -432,11 +450,16 @@ describe('Connection', function () {
       clientConn.on('error', spy)
       await clientConn.connect()
       clientConn.remoteConnection.maxStreamId = 100
-      const streams = new Array(11).fill(0).map(() => clientConn.createStream())
+      const streams = [
+        clientConn.createStream(),
+        clientConn.createStream(),
+        clientConn.createStream(),
+        clientConn.createStream()
+      ]
 
-      await assert.isRejected(Promise.all(streams.map((stream: DataAndMoneyStream) => stream.sendTotal(10))))
+      await Promise.all(streams.map((stream: DataAndMoneyStream) => assert.isRejected(stream.sendTotal(10))))
 
-      assert.equal(spy.firstCall.args[0].message, 'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 21, current max stream ID: 20')
+      assert.equal(spy.firstCall.args[0].message, 'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 7, current max stream ID: 6')
     })
 
     it('should allow the user to set the maximum number of open streams', async function () {

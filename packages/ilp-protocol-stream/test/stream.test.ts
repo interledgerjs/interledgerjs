@@ -221,7 +221,14 @@ describe('DataAndMoneyStream', function () {
       await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before desired amount was sent (target: 1000, totalSent: 0)')
     })
 
-    it.skip('should reject if there is an error sending before the amount has been sent')
+    it.skip('should reject if there is an error sending before the amount has been sent', async function () {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.destroy(new Error('blah'))
+      })
+
+      const clientStream = this.clientConn.createStream()
+      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before desired amount was sent (target: 1000, totalSent: 0)')
+    })
   })
 
   describe('receiveTotal', function () {
@@ -310,11 +317,27 @@ describe('DataAndMoneyStream', function () {
         .then(() => clientStream.end())
     })
 
-    it('should close the stream even if it has not sent the total', async function () {
+    it('should not close the stream until all the money has been sent', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(1000)
+      })
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
-      await clientStream.end()
-      assert.equal(clientStream.totalSent, '0')
+      clientStream.end()
+      clientStream.on('end', () => {
+        assert.equal(clientStream.totalSent, '1000')
+        done()
+      })
+    })
+
+    it('should close the stream if it could send more money but the other side is blocking it', function (done) {
+      const clientStream = this.clientConn.createStream()
+      clientStream.setSendMax(1000)
+      clientStream.end()
+      clientStream.on('end', () => {
+        assert.equal(clientStream.totalSent, '0')
+        done()
+      })
     })
 
     it('should accept incoming money for closed streams', function (done) {
