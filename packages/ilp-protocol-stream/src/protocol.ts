@@ -166,15 +166,11 @@ export type Frame =
 //  | StreamMaxDataFrame
 //  | StreamDataBlockedFrame
 
-function assertType (reader: Reader, frameType: keyof typeof FrameType | (keyof typeof FrameType)[], advanceCursor = true): FrameType {
-  const type = (advanceCursor ? reader.readUInt8BigNum() : reader.peekUInt8BigNum()).toNumber()
-  const acceptableTypes = (Array.isArray(frameType) ? frameType : [frameType])
-  for (let test of acceptableTypes) {
-    if (type === FrameType[test]) {
-      return type
-    }
+function assertType (reader: Reader, frameType: keyof typeof FrameType): void {
+  const type = reader.readUInt8BigNum().toNumber()
+  if (type !== FrameType[frameType]) {
+    throw new Error(`Cannot read ${frameType} (${FrameType[frameType]}) from Buffer. Got type: ${type} instead`)
   }
-  throw new Error(`Cannot read ${acceptableTypes.join('Frame or ')} from Buffer. Got type: ${type}, expected type(s): ${acceptableTypes.map((name) => FrameType[name]).join(' or ')}`)
 }
 
 export class ConnectionNewAddressFrame extends BaseFrame {
@@ -295,7 +291,7 @@ export class StreamMoneyFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): StreamMoneyFrame {
-    const type = assertType(reader, 'StreamMoney')
+    assertType(reader, 'StreamMoney')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const amount = contents.readVarUIntBigNum()
@@ -455,8 +451,7 @@ function parseFrame (reader: Reader): Frame | undefined {
   }
 }
 
-function parseFrames (buffer: Reader | Buffer): Frame[] {
-  const reader = (Buffer.isBuffer(buffer) ? Reader.from(buffer) : buffer)
+function parseFrames (reader: Reader): Frame[] {
   const frames: Frame[] = []
 
   // Keep reading frames until the end or until we hit the padding (which must come at the end)
