@@ -5,3 +5,4 @@ node_modules
 !example.js
 coverage
 .nyc_output
+doc

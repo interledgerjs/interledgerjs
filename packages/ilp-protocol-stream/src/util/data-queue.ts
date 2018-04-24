@@ -1,5 +1,6 @@
 // Inspired by https://github.com/toajs/quic/blob/master/src/stream.ts
 
+/** @private */
 export class DataQueueEntry {
   data: Buffer
   next?: DataQueueEntry
@@ -9,6 +10,7 @@ export class DataQueueEntry {
   }
 }
 
+/** @private */
 export class DataQueue {
   head?: DataQueueEntry
   tail?: DataQueueEntry

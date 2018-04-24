@@ -16,11 +16,17 @@ export interface StreamOpts {
 export class DataAndMoneyStream extends Duplex {
   readonly id: number
 
+  /** @private */
   _errorMessage?: string
+  /** @private */
   _remoteClosed: boolean
+  /** @private */
   _remoteReceiveMax: BigNumber
+  /** @private */
   _remoteReceived: BigNumber
+  /** @private */
   _sentEnd: boolean
+  /** @private */
   _remoteSentEnd: boolean
 
   protected debug: Debug.IDebugger
@@ -328,6 +334,10 @@ export class DataAndMoneyStream extends Duplex {
     delete this.holds[holdId]
   }
 
+  /**
+   * Called internally by the Node Stream when the stream ends
+   * @private
+   */
   _final (callback: (...args: any[]) => void): void {
     this.debug('stream is closing')
     // TODO should we emit the event (or return a promise that resolves)
@@ -365,6 +375,10 @@ export class DataAndMoneyStream extends Duplex {
     }
   }
 
+  /**
+   * Called internally by the Node Stream when stream.destroy is called
+   * @private
+   */
   _destroy (error: Error | undefined | null, callback: (...args: any[]) => void): void {
     this.debug('destroying stream because of error:', error)
     this.closed = true
@@ -379,12 +393,32 @@ export class DataAndMoneyStream extends Duplex {
     callback(error)
   }
 
+  /**
+   * Called internally by the Node Stream when stream.write is called
+   * @private
+   */
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
     this._outgoingData.push(chunk)
     this.emit('_maybe_start_send_loop')
     callback()
   }
 
+  /**
+   * Called internally by the Node Stream when stream.write is called
+   * @private
+   */
+  _writev (chunks: { chunk: Buffer, encoding: string }[], callback: (...args: any[]) => void): void {
+    for (let chunk of chunks) {
+      this._outgoingData.push(chunk.chunk)
+    }
+    this.emit('_maybe_start_send_loop')
+    callback()
+  }
+
+  /**
+   * Called internally by the Node Stream when stream.read is called
+   * @private
+   */
   _read (size: number): void {
     const data = this._incomingData.read()
     if (!data) {
@@ -397,10 +431,12 @@ export class DataAndMoneyStream extends Duplex {
     }
   }
 
+  /** @private */
   _hasDataToSend (): boolean {
     return !this._outgoingData.isEmpty()
   }
 
+  /** @private */
   _getAvailableDataToSend (size: number): { data: Buffer | undefined, offset: number } {
     const data = this._outgoingData.read(size)
     const offset = this.outgoingOffset
@@ -410,12 +446,14 @@ export class DataAndMoneyStream extends Duplex {
     return { data, offset }
   }
 
+  /** @private */
   _pushIncomingData (data: Buffer, offset: number) {
     this._incomingData.push(data, offset)
 
     this._read(this.readableHighWaterMark - this.readableLength)
   }
 
+  /** @private */
   _remoteEnded (err?: Error): void {
     this.debug('remote closed stream')
     this._remoteSentEnd = true

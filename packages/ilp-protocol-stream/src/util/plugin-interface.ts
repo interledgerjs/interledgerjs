@@ -1,3 +1,4 @@
+/** @private */
 export interface Plugin {
   connect: () => Promise<void>,
   disconnect: () => Promise<void>,

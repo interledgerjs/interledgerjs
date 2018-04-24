@@ -1,5 +1,6 @@
 // Inspired by https://github.com/toajs/quic/blob/master/src/stream.ts
 
+/** @private */
 export class OffsetDataEntry {
   data?: Buffer
   offset: number
@@ -11,6 +12,7 @@ export class OffsetDataEntry {
   }
 }
 
+/** @private */
 export class OffsetSorter {
   head?: OffsetDataEntry
   readOffset: number
