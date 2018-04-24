@@ -52,6 +52,7 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Merge sending test and normal packets? Or at least handle frames in the same way
 - [ ] Make it work even if one side can only receive 0 amount packets
 - [ ] Add timeouts for lack of activity
+- [ ] Handle plugin disconnecting
 
 ## Credits
 

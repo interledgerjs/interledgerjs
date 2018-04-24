@@ -101,12 +101,10 @@ export enum FrameType {
 
   ConnectionNewAddress = 0x01,
   ConnectionError = 0x02,
-  ConnectionMaxMoney = 0x03,
-  ConnectionMoneyBlocked = 0x04,
-  ConnectionMaxData = 0x05,
-  ConnectionDataBlocked = 0x06,
-  ConnectionMaxStreamId = 0x07,
-  ConnectionStreamIdBlocked = 0x08,
+  ConnectionMaxData = 0x03,
+  ConnectionDataBlocked = 0x04,
+  ConnectionMaxStreamId = 0x05,
+  ConnectionStreamIdBlocked = 0x06,
 
   StreamMoney = 0x10,
   StreamMoneyEnd = 0x11,
@@ -160,8 +158,6 @@ export abstract class BaseFrame {
 export type Frame =
   ConnectionNewAddressFrame
   | ConnectionErrorFrame
-//  | ConnectionMaxMoneyFrame
-//  | ConnectionMoneyBlockedFrame
 //  | ConnectionMaxDataFrame
 //  | ConnectionDataBlockedFrame
  | ConnectionMaxStreamIdFrame
