@@ -99,24 +99,20 @@ export class Packet {
 export enum FrameType {
   Padding = 0x00,
 
-  ConnectionNewAddress = 0x01,
-  ConnectionError = 0x02,
+  ConnectionClose = 0x01,
+  ConnectionNewAddress = 0x02,
   ConnectionMaxData = 0x03,
   ConnectionDataBlocked = 0x04,
   ConnectionMaxStreamId = 0x05,
   ConnectionStreamIdBlocked = 0x06,
 
-  StreamMoney = 0x10,
-  StreamMoneyEnd = 0x11,
-  StreamMoneyMax = 0x12,
+  StreamClose = 0x10,
+  StreamMoney = 0x11,
+  StreamMaxMoney = 0x12,
   StreamMoneyBlocked = 0x13,
-  StreamMoneyError = 0x14,
-
-  StreamData = 0x20,
-  StreamDataEnd = 0x21,
-  StreamDataMax = 0x22,
-  StreamDataBlocked = 0x23,
-  StreamDataError = 0x24
+  StreamData = 0x14,
+  StreamMaxData = 0x15,
+  StreamDataBlocked = 0x16
 }
 
 export enum ErrorCode {
@@ -157,19 +153,18 @@ export abstract class BaseFrame {
 
 export type Frame =
   ConnectionNewAddressFrame
-  | ConnectionErrorFrame
+  | ConnectionCloseFrame
 //  | ConnectionMaxDataFrame
 //  | ConnectionDataBlockedFrame
  | ConnectionMaxStreamIdFrame
  | ConnectionStreamIdBlockedFrame
  | StreamMoneyFrame
- | StreamMoneyMaxFrame
+ | StreamMaxMoneyFrame
 //  | StreamMoneyBlockedFrame
- | StreamMoneyErrorFrame
+ | StreamCloseFrame
  | StreamDataFrame
-//  | StreamDataMaxFrame
+//  | StreamMaxDataFrame
 //  | StreamDataBlockedFrame
-//  | StreamDataErrorFrame
 
 function assertType (reader: Reader, frameType: keyof typeof FrameType | (keyof typeof FrameType)[], advanceCursor = true): FrameType {
   const type = (advanceCursor ? reader.readUInt8BigNum() : reader.peekUInt8BigNum()).toNumber()
@@ -207,23 +202,23 @@ export class ConnectionNewAddressFrame extends BaseFrame {
   }
 }
 
-export class ConnectionErrorFrame extends BaseFrame {
-  type: FrameType.ConnectionError
+export class ConnectionCloseFrame extends BaseFrame {
+  type: FrameType.ConnectionClose
   errorCode: keyof typeof ErrorCode
   errorMessage: string
 
   constructor (errorCode: ErrorCode | keyof typeof ErrorCode, errorMessage: string) {
-    super('ConnectionError')
+    super('ConnectionClose')
     this.errorCode = (typeof errorCode === 'string' ? errorCode : ErrorCode[errorCode] as keyof typeof ErrorCode)
     this.errorMessage = errorMessage
   }
 
-  static fromBuffer (reader: Reader): ConnectionErrorFrame {
-    assertType(reader, 'ConnectionError')
+  static fromBuffer (reader: Reader): ConnectionCloseFrame {
+    assertType(reader, 'ConnectionClose')
     const contents = Reader.from(reader.readVarOctetString())
     const errorCode = ErrorCode[contents.readUInt8BigNum().toNumber()] as keyof typeof ErrorCode
     const errorMessage = contents.readVarOctetString().toString()
-    return new ConnectionErrorFrame(errorCode, errorMessage)
+    return new ConnectionCloseFrame(errorCode, errorMessage)
   }
 
   writeTo (writer: Writer): Writer {
@@ -287,27 +282,24 @@ export class ConnectionStreamIdBlockedFrame extends BaseFrame {
 }
 
 export class StreamMoneyFrame extends BaseFrame {
-  type: FrameType.StreamMoney | FrameType.StreamMoneyEnd
+  type: FrameType.StreamMoney
   streamId: BigNumber
   shares: BigNumber
-  isEnd: boolean
 
-  constructor (streamId: BigNumber.Value, shares: BigNumber.Value, isEnd = false) {
-    super((isEnd ? 'StreamMoneyEnd' : 'StreamMoney'))
+  constructor (streamId: BigNumber.Value, shares: BigNumber.Value) {
+    super('StreamMoney')
     this.streamId = new BigNumber(streamId)
     this.shares = new BigNumber(shares)
-    this.isEnd = isEnd
 
     assert(this.shares.isInteger() && this.shares.isPositive(), `shares must be a positive integer: ${shares}`)
   }
 
   static fromBuffer (reader: Reader): StreamMoneyFrame {
-    const type = assertType(reader, ['StreamMoney', 'StreamMoneyEnd'])
-    const isEnd = (type === FrameType.StreamMoneyEnd)
+    const type = assertType(reader, 'StreamMoney')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const amount = contents.readVarUIntBigNum()
-    return new StreamMoneyFrame(streamId, amount, isEnd)
+    return new StreamMoneyFrame(streamId, amount)
   }
 
   writeTo (writer: Writer): Writer {
@@ -320,14 +312,14 @@ export class StreamMoneyFrame extends BaseFrame {
   }
 }
 
-export class StreamMoneyMaxFrame extends BaseFrame {
-  type: FrameType.StreamMoneyMax
+export class StreamMaxMoneyFrame extends BaseFrame {
+  type: FrameType.StreamMaxMoney
   streamId: BigNumber
   receiveMax: BigNumber
   totalReceived: BigNumber
 
   constructor (streamId: BigNumber.Value, receiveMax: BigNumber.Value, totalReceived: BigNumber.Value) {
-    super('StreamMoneyMax')
+    super('StreamMaxMoney')
     this.streamId = new BigNumber(streamId)
     this.receiveMax = new BigNumber(receiveMax)
     this.totalReceived = new BigNumber(totalReceived)
@@ -340,13 +332,13 @@ export class StreamMoneyMaxFrame extends BaseFrame {
     assert(this.totalReceived.isInteger() && this.totalReceived.isPositive(), `totalReceived must be a positive integer. got: ${totalReceived}`)
   }
 
-  static fromBuffer (reader: Reader): StreamMoneyMaxFrame {
-    assertType(reader, 'StreamMoneyMax')
+  static fromBuffer (reader: Reader): StreamMaxMoneyFrame {
+    assertType(reader, 'StreamMaxMoney')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const receiveMax = contents.readVarUIntBigNum()
     const totalReceived = contents.readVarUIntBigNum()
-    return new StreamMoneyMaxFrame(streamId, receiveMax, totalReceived)
+    return new StreamMaxMoneyFrame(streamId, receiveMax, totalReceived)
   }
 
   writeTo (writer: Writer): Writer {
@@ -360,26 +352,26 @@ export class StreamMoneyMaxFrame extends BaseFrame {
   }
 }
 
-export class StreamMoneyErrorFrame extends BaseFrame {
-  type: FrameType.StreamMoneyError
+export class StreamCloseFrame extends BaseFrame {
+  type: FrameType.StreamClose
   streamId: BigNumber
   errorCode: keyof typeof ErrorCode
   errorMessage: string
 
   constructor (streamId: BigNumber.Value, errorCode: keyof typeof ErrorCode, errorMessage: string) {
-    super('StreamMoneyError')
+    super('StreamClose')
     this.streamId = new BigNumber(streamId)
     this.errorCode = errorCode
     this.errorMessage = errorMessage
   }
 
-  static fromBuffer (reader: Reader): StreamMoneyErrorFrame {
-    assertType(reader, 'StreamMoneyError')
+  static fromBuffer (reader: Reader): StreamCloseFrame {
+    assertType(reader, 'StreamClose')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const errorCode = ErrorCode[contents.readUInt8BigNum().toNumber()] as keyof typeof ErrorCode
     const errorMessage = contents.readVarOctetString().toString('utf8')
-    return new StreamMoneyErrorFrame(streamId, errorCode, errorMessage)
+    return new StreamCloseFrame(streamId, errorCode, errorMessage)
   }
 
   writeTo (writer: Writer): Writer {
@@ -394,27 +386,25 @@ export class StreamMoneyErrorFrame extends BaseFrame {
 }
 
 export class StreamDataFrame extends BaseFrame {
-  type: FrameType.StreamData | FrameType.StreamDataEnd
+  type: FrameType.StreamData
   streamId: BigNumber
   offset: BigNumber
   data: Buffer
-  isEnd: boolean
 
   constructor (streamId: BigNumber.Value, offset: BigNumber.Value, data: Buffer, isEnd = false) {
-    super((isEnd ? 'StreamDataEnd' : 'StreamData'))
+    super('StreamData')
     this.streamId = new BigNumber(streamId)
     this.offset = new BigNumber(offset)
     this.data = data
-    this.isEnd = isEnd
   }
 
   static fromBuffer (reader: Reader): StreamDataFrame {
-    const type = assertType(reader, ['StreamData', 'StreamDataEnd'])
+    const type = assertType(reader, 'StreamData')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const offset = contents.readVarUIntBigNum()
     const data = contents.readVarOctetString()
-    return new StreamDataFrame(streamId, offset, data, type === FrameType.StreamDataEnd)
+    return new StreamDataFrame(streamId, offset, data)
   }
 
   writeTo (writer: Writer): Writer {
@@ -433,8 +423,7 @@ export class StreamDataFrame extends BaseFrame {
       type: this.type,
       streamId: this.streamId,
       offset: this.offset,
-      dataLength: this.data.length,
-      isEnd: this.isEnd
+      dataLength: this.data.length
     }
   }
 }
@@ -443,20 +432,20 @@ function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.peekUInt8BigNum().toNumber()
 
   switch (type) {
-    case FrameType.StreamMoney:
-      return StreamMoneyFrame.fromBuffer(reader)
+    case FrameType.ConnectionClose:
+      return ConnectionCloseFrame.fromBuffer(reader)
     case FrameType.ConnectionNewAddress:
       return ConnectionNewAddressFrame.fromBuffer(reader)
-    case FrameType.ConnectionError:
-      return ConnectionErrorFrame.fromBuffer(reader)
     case FrameType.ConnectionMaxStreamId:
       return ConnectionMaxStreamIdFrame.fromBuffer(reader)
     case FrameType.ConnectionStreamIdBlocked:
       return ConnectionStreamIdBlockedFrame.fromBuffer(reader)
-    case FrameType.StreamMoneyMax:
-      return StreamMoneyMaxFrame.fromBuffer(reader)
-    case FrameType.StreamMoneyError:
-      return StreamMoneyErrorFrame.fromBuffer(reader)
+    case FrameType.StreamClose:
+      return StreamCloseFrame.fromBuffer(reader)
+    case FrameType.StreamMoney:
+      return StreamMoneyFrame.fromBuffer(reader)
+    case FrameType.StreamMaxMoney:
+      return StreamMaxMoneyFrame.fromBuffer(reader)
     case FrameType.StreamData:
       return StreamDataFrame.fromBuffer(reader)
     default:

@@ -38,7 +38,6 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] connection.end should only close it when the streams are finished sending
 - [ ] Backpressure for data
 - [ ] Add ACKs for data or only send data in prepares
-- [ ] Switch stream ending to use StreamEnd frame instead of error (or take out the StreamEnd type frames)
 - [ ] Clean up closed streams (and throw error if packet is received for a closed stream)
 - [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
 - [ ] When waiting to receive money, occasionally resend the max receive amount in case the sender hasn't gotten it (and also send it if they send too much)
