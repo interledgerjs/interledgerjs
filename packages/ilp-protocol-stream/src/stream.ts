@@ -98,6 +98,10 @@ export class DataAndMoneyStream extends Duplex {
     return this._receiveMax.toString()
   }
 
+  get readableLength (): number {
+    return super.readableLength + this._incomingData.byteLength()
+  }
+
   /**
    * Number of bytes buffered and waiting to be sent
    */

@@ -62,4 +62,15 @@ export class OffsetSorter {
     }
     return data
   }
+
+  // Only returns contiguous data
+  byteLength (): number {
+    let length = 0
+    let entry = this.head
+    while (entry) {
+      length += entry.data ? entry.data.length : 0
+      entry = entry.next
+    }
+    return length
+  }
 }

@@ -425,6 +425,19 @@ describe('DataAndMoneyStream', function () {
       clientStream.write('hello')
     })
 
+    it('should accurately report the readableLength and writableLength', function (done) {
+      this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
+        await new Promise(setImmediate)
+        assert.equal(stream.readableLength, 5)
+        stream.on('data', () => {})
+        done()
+      })
+
+      const clientStream = this.clientConn.createStream()
+      clientStream.write('hello')
+      assert.equal(clientStream.writableLength, 5)
+    })
+
     it('should split data across multiple packets if necessary', function (done) {
       const dataToSend = Buffer.alloc(40000, 'af39', 'hex')
       const spy = sinon.spy()
