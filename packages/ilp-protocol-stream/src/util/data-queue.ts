@@ -61,4 +61,14 @@ export class DataQueue {
   isEmpty (): boolean {
     return this.length === 0
   }
+
+  byteLength (): number {
+    let length = 0
+    let entry = this.head
+    while (entry) {
+      length += entry.data.length
+      entry = entry.next
+    }
+    return length
+  }
 }

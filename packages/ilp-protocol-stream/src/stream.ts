@@ -99,6 +99,13 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
+   * Number of bytes buffered and waiting to be sent
+   */
+  get writableLength (): number {
+    return super.writableLength + this._outgoingData.byteLength()
+  }
+
+  /**
    * Returns true if the stream is open for sending and/or receiving.
    */
   isOpen (): boolean {
@@ -335,6 +342,7 @@ export class DataAndMoneyStream extends Duplex {
         // Node streams only emit the 'end' event if data was actually read
         this.safeEmit('end')
       }
+      this.safeEmit('close')
       callback(err)
     }
 
@@ -363,6 +371,7 @@ export class DataAndMoneyStream extends Duplex {
       // Node streams only emit the 'end' event if data was actually read
       this.safeEmit('end')
     }
+    this.safeEmit('close')
     callback(error)
   }
 

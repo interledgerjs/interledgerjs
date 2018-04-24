@@ -133,16 +133,35 @@ export class Connection extends EventEmitter {
     /* tslint:disable-next-line:no-floating-promises */
     this.startSendLoop()
     await new Promise((resolve, reject) => {
-      this.once('connect', resolve)
-      this.once('error', (error: Error) => {
-        reject(new Error(`Error connecting: ${error.message}`))
-      })
-      this.once('close', () => reject(new Error('Connection was closed before it was connected')))
-      this.once('end', () => reject(new Error('Connection was closed before it was connected')))
+      const connectHandler = () => {
+        cleanup()
+        resolve()
+      }
+      const closeHandler = () => {
+        cleanup()
+        reject(new Error('Connection was closed before it was connected'))
+      }
+      const errorHandler = (error?: Error) => {
+        cleanup()
+        reject(new Error(`Error connecting${error ? ': ' + error.message : ''}`))
+      }
+      this.once('connect', connectHandler)
+      this.once('error', errorHandler)
+      this.once('close', closeHandler)
+      this.once('end', closeHandler)
+
+      const self = this
+      function cleanup () {
+        self.removeListener('connect', connectHandler)
+        self.removeListener('error', errorHandler)
+        self.removeListener('close', closeHandler)
+        self.removeListener('end', closeHandler)
+      }
     })
     this.closed = false
   }
 
+  // TODO should this be sync or async?
   async end (): Promise<void> {
     this.debug('closing connection')
     this.closed = true
@@ -161,17 +180,20 @@ export class Connection extends EventEmitter {
       /* tslint:disable-next-line:no-floating-promises */
       this.startSendLoop()
     })
+    await this.sendConnectionError()
     this.safeEmit('end')
     this.safeEmit('close')
   }
 
-  destroy (err?: Error): void {
+  // TODO should this be sync or async?
+  async destroy (err?: Error): Promise<void> {
     this.debug('destroying connection with error:', err)
     this.safeEmit('error', err)
     for (let [_, stream] of this.streams) {
       // TODO should we pass the error to each stream?
       stream.destroy()
     }
+    await this.sendConnectionError(err)
     this.safeEmit('close')
   }
 
@@ -363,6 +385,7 @@ export class Connection extends EventEmitter {
             this.end()
           } else {
             this.debug(`remote connection error. code: ${frame.errorCode}, message: ${frame.errorMessage}`)
+            /* tslint:disable-next-line:no-floating-promises */
             this.destroy(new Error(`Remote connection error. Code: ${frame.errorCode}, message: ${frame.errorMessage}`))
           }
           break
@@ -578,7 +601,7 @@ export class Connection extends EventEmitter {
       }
     } catch (err) {
       // TODO should a connection error be an error on all of the streams?
-      return this.connectionError(err)
+      return this.destroy(err)
     }
     this.debug('finished sending')
     this.safeEmit('_send_loop_finished')
@@ -805,19 +828,27 @@ export class Connection extends EventEmitter {
     this.handleFrames(responsePacket.frames)
   }
 
-  protected async connectionError (error: ConnectionError | Error | string): Promise<void> {
-    this.closed = true
-    this.sending = false
-    const err = (error instanceof ConnectionError || error instanceof Error ? error : new Error(error))
-    this.debug(`closing connection with error:`, err)
-
+  protected async sendConnectionError (err?: ConnectionError | Error): Promise<void> {
     if (this.remoteClosed) {
+      this.debug('not sending connection error because remote is already closed')
       return
     }
 
-    const errorCode = (error instanceof ConnectionError ? error.streamErrorCode : ErrorCode.InternalError)
+    let errorCode: ErrorCode | keyof typeof ErrorCode
+    let errorMessage
+    if (err && err instanceof ConnectionError) {
+      errorCode = err.streamErrorCode
+      errorMessage = err.message
+    } else if (err) {
+      errorCode = 'InternalError'
+      errorMessage = err.message
+    } else {
+      errorCode = 'NoError'
+      errorMessage = ''
+    }
+
     const packet = new Packet(this.nextPacketSequence, IlpPacketType.Prepare, 0, [
-      new ConnectionErrorFrame(errorCode, err.message)
+      new ConnectionErrorFrame(errorCode, errorMessage)
     ])
     try {
       await this.sendPacket(packet, new BigNumber(0), true)
@@ -825,7 +856,6 @@ export class Connection extends EventEmitter {
       this.debug(`error while trying to inform peer that connection is closing, but closing anyway`, err)
     }
     this.remoteClosed = true
-    this.destroy(err)
   }
 
   protected async sendPacket (packet: Packet, sourceAmount: BigNumber, unfulfillable = false): Promise<Packet | void> {

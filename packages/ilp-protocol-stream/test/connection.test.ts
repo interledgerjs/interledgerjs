@@ -110,6 +110,37 @@ describe('Connection', function () {
     })
   })
 
+  describe('destroy', function () {
+    it('should close the other side of the connection', function (done) {
+      this.clientConn.on('close', done)
+      this.serverConn.destroy()
+    })
+
+    it('should accept an error that will be emitted on the other side of the connection', function (done) {
+      const spy = sinon.spy()
+      this.clientConn.on('error', (err: Error) => {
+        assert.equal(err.message, 'Remote connection error. Code: InternalError, message: i had enough of this')
+        done()
+      })
+
+      this.serverConn.destroy(new Error('i had enough of this'))
+    })
+
+    it('should close all outgoing streams even if there is data and money still to send', function (done) {
+      const stream: DataAndMoneyStream = this.clientConn.createStream()
+      stream.on('close', () => {
+        assert.equal(stream.totalSent, '0')
+        assert.equal(stream.writableLength, 1000)
+        assert.equal(stream.isOpen(), false)
+        done()
+      })
+      stream.setSendMax(100)
+      stream.write(Buffer.alloc(1000))
+
+      this.clientConn.destroy()
+    })
+  })
+
   describe('"stream" event', function () {
     it('should accept the money even if there is an error thrown in the event handler', async function () {
       this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
