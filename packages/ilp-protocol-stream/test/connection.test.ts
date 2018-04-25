@@ -60,11 +60,14 @@ describe('Connection', function () {
 
   describe('end', function () {
     it('should close the other side of the connection', async function () {
-      const spy = sinon.spy()
-      this.clientConn.on('end', spy)
+      const endSpy = sinon.spy()
+      const closeSpy = sinon.spy()
+      this.clientConn.on('end', endSpy)
+      this.clientConn.on('close', closeSpy)
 
       await this.serverConn.end()
-      assert.callCount(spy, 1)
+      assert.calledOnce(endSpy)
+      assert.calledOnce(closeSpy)
     })
 
     it('should close all outgoing streams', async function () {
@@ -127,8 +130,11 @@ describe('Connection', function () {
     })
 
     it('should close all outgoing streams even if there is data and money still to send', function (done) {
+      const spy = sinon.spy()
       const stream: DataAndMoneyStream = this.clientConn.createStream()
       stream.on('close', () => {
+        spy()
+        assert.calledOnce(spy)
         assert.equal(stream.totalSent, '0')
         assert.equal(stream.writableLength, 1000)
         assert.equal(stream.isOpen(), false)

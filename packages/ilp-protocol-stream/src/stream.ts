@@ -366,7 +366,6 @@ export class DataAndMoneyStream extends Duplex {
         // Node streams only emit the 'end' event if data was actually read
         this.safeEmit('end')
       }
-      this.safeEmit('close')
       callback(err)
     }
 
@@ -399,7 +398,6 @@ export class DataAndMoneyStream extends Duplex {
       // Node streams only emit the 'end' event if data was actually read
       this.safeEmit('end')
     }
-    this.safeEmit('close')
     callback(error)
   }
 
