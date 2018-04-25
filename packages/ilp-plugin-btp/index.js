@@ -12,6 +12,14 @@ const BtpPacket = require('btp-packet')
 const { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } =
   require('./protocol-data-converter')
 
+const READY_STATES = {
+  'initial': 0,
+  'connecting': 1,
+  'connected': 2,
+  'disconnected': 3,
+  'ready_to_emit': 4
+}
+
 const DEFAULT_TIMEOUT = 35000
 const namesToCodes = {
   'UnreachableError': 'T00',
@@ -74,16 +82,18 @@ class AbstractBtpPlugin extends EventEmitter {
     this._reconnectInterval = reconnectInterval // optional
     this._dataHandler = null
     this._moneyHandler = null
-    this._connected = false
+    this._readyState = READY_STATES.initial
 
     this._listener = listener
     this._server = server
   }
 
   async connect () {
-    if (this._connected) {
+    if (this._readyState > READY_STATES.initial) {
       return
     }
+
+    this._readyState = READY_STATES.connecting
 
     if (this._listener) {
       const wss = this._wss = new WebSocket.Server({ port: this._listener.port })
@@ -96,10 +106,12 @@ class AbstractBtpPlugin extends EventEmitter {
 
         ws.on('close', code => {
           debug('incoming websocket closed. code=' + code)
+          this._emitDisconnect()
         })
 
         ws.on('error', err => {
           debug('incoming websocket error. error=', err)
+          this._emitDisconnect()
         })
 
         ws.once('message', async (binaryAuthMessage) => {
@@ -118,7 +130,7 @@ class AbstractBtpPlugin extends EventEmitter {
                 }
 
                 if (this._incomingWs) {
-                  this._closeIncomingSocket(this._incomingWs)
+                  this._closeIncomingSocket(this._incomingWs, authPacket)
                 }
 
                 this._incomingWs = ws
@@ -144,7 +156,7 @@ class AbstractBtpPlugin extends EventEmitter {
 
           debug('connection authenticated')
           ws.on('message', this._handleIncomingWsMessage.bind(this, ws))
-          this.emit('_connect')
+          this._emitConnect()
         })
       })
       debug(`listening for BTP connections on ${this._listener.port}`)
@@ -182,9 +194,10 @@ class AbstractBtpPlugin extends EventEmitter {
           requestId: await _requestId(),
           data: { protocolData }
         })
-        this.emit('_connect')
+        this._emitConnect()
       })
 
+      this._ws.on('close', () => this._emitDisconnect())
       this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
 
       // CAUTION: Do not delete the following two lines, they have the side-effect
@@ -197,7 +210,7 @@ class AbstractBtpPlugin extends EventEmitter {
     }
 
     await new Promise((resolve, reject) => {
-      this.once('_connect', resolve)
+      this.once('_first_time_connect', resolve)
       this.once('disconnect', () =>
         void reject(new Error('connection aborted')))
     })
@@ -206,15 +219,15 @@ class AbstractBtpPlugin extends EventEmitter {
       await this._connect()
     }
 
-    this._connected = true
-    this.emit('connect')
+    this._readyState = READY_STATES.ready_to_emit
+    this._emitConnect()
   }
 
-  async _closeIncomingSocket (socket) {
+  async _closeIncomingSocket (socket, authPacket) {
     socket.removeAllListeners()
     socket.once('message', () => {
       try {
-        ws.send(BtpPacket.serializeError({
+        socket.send(BtpPacket.serializeError({
           code: 'F00',
           name: 'NotAcceptedError',
           data: 'This connection has been ended because the user has opened a new connection',
@@ -228,7 +241,8 @@ class AbstractBtpPlugin extends EventEmitter {
   }
 
   async disconnect () {
-    this.emit('disconnect')
+    this._emitDisconnect()
+
     if (this._disconnect) {
       await this._disconnect()
     }
@@ -242,7 +256,7 @@ class AbstractBtpPlugin extends EventEmitter {
   }
 
   isConnected () {
-    return this._connected
+    return this._readyState === READY_STATES.connected
   }
 
   async _handleIncomingWsMessage (ws, binaryMessage) {
@@ -385,7 +399,7 @@ class AbstractBtpPlugin extends EventEmitter {
   }
 
   async _handleData (from, {requestId, data}) {
-    const { ilp, protocolMap } = protocolDataToIlpAndCustom(data)
+    const { ilp } = protocolDataToIlpAndCustom(data)
 
     if (!this._dataHandler) {
       throw new Error('no request handler registered')
@@ -449,6 +463,24 @@ class AbstractBtpPlugin extends EventEmitter {
 
   ilpAndCustomToProtocolData (obj) {
     return ilpAndCustomToProtocolData(obj)
+  }
+
+  _emitDisconnect () {
+    if (this._readyState !== READY_STATES.disconnected) {
+      this._readyState = READY_STATES.disconnected
+      this._connected = false
+      this.emit('disconnect')
+    }
+  }
+
+  _emitConnect () {
+    if (this._readyState < READY_STATES.connected) {
+      this.emit('_first_time_connect')
+    } else if (this._readyState === READY_STATES.disconnected) {
+      this._readyState = READY_STATES.connected
+      this._connected = true
+      this.emit('connect')
+    }
   }
 }
 

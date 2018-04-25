@@ -1,7 +1,6 @@
 'use strict'
 
 const Btp = require('btp-packet')
-const base64url = require('base64url')
 
 function protocolDataToIlpAndCustom ({ protocolData }) {
   const protocolMap = {}

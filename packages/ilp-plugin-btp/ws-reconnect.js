@@ -6,7 +6,7 @@ const DEFAULT_RECONNECT_INTERVAL = 5000
 class WebSocketReconnector extends EventEmitter2 {
   constructor ({ interval }) {
     super()
-    this._interval = interval || 5000
+    this._interval = interval || DEFAULT_RECONNECT_INTERVAL
   }
 
   open (url) {
@@ -30,10 +30,12 @@ class WebSocketReconnector extends EventEmitter2 {
     setTimeout(() => {
       this.open(this._url)
     }, this._interval)
+    this.emit('close')
   }
 
   close () {
     this._instance.removeAllListeners()
+    this.emit('close')
     return this._instance.close()
   }
 }
