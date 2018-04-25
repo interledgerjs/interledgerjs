@@ -474,9 +474,9 @@ class AbstractBtpPlugin extends EventEmitter {
   }
 
   _emitConnect () {
-    if (this._readyState < READY_STATES.connected) {
+    if (this._readyState === READY_STATES.connecting) {
       this.emit('_first_time_connect')
-    } else if (this._readyState === READY_STATES.disconnected) {
+    } else if (this._readyState === READY_STATES.ready_to_emit || this._readyState === READY_STATES.disconnected) {
       this._readyState = READY_STATES.connected
       this._connected = true
       this.emit('connect')
