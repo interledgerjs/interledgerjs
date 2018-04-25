@@ -11,7 +11,7 @@ const assert = Object.assign(Chai.assert, sinon.assert)
 require('source-map-support').install()
 
 describe('Server', function () {
-  beforeEach(async function () {
+  beforeEach(function () {
     this.clientPlugin = new MockPlugin(0.5)
     this.serverPlugin = this.clientPlugin.mirror
   })
@@ -122,5 +122,22 @@ describe('Server', function () {
         plugin: this.clientPlugin
       })
     })
+  })
+})
+
+describe('createServer', function () {
+  beforeEach(function () {
+    this.clientPlugin = new MockPlugin(0.5)
+    this.serverPlugin = this.clientPlugin.mirror
+  })
+
+  it('should return a server that is listening', async function () {
+    const spy = sinon.spy(this.serverPlugin, 'connect')
+    const server = await index.createServer({
+      serverSecret: Buffer.alloc(32),
+      plugin: this.serverPlugin
+    })
+    assert.instanceOf(server, index.Server)
+    assert.called(spy)
   })
 })

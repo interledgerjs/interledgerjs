@@ -11,7 +11,10 @@ export interface StreamOpts {
 }
 
 /**
- * Stream for sending money over an ILP STREAM connection.
+ * Class used to send money and data over a Connection.
+ *
+ * This exposes the Node Duplex Stream interface for sending data,
+ * as well as additional functions for sending money.
  */
 export class DataAndMoneyStream extends Duplex {
   readonly id: number
@@ -144,8 +147,15 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
+   * Event fired when money is received
+   * @event money
+   * @type {string} Amount of money received, encoded as a string to avoid loss of precision
+   */
+
+  /**
    * Set the total amount this stream will receive, denominated in the connection plugin's units.
    * Note that this is absolute, not relative so calling `setReceiveMax(100)` twice will only let the stream receive 100 units.
+   * @fires money
    */
   setReceiveMax (limit: BigNumber.Value): void {
     if (this.closed) {

@@ -16,7 +16,7 @@ export enum IlpPacketType {
 }
 
 /**
- * ILP STREAM packet
+ * ILP/STREAM packet
  */
 export class Packet {
   sequence: BigNumber
