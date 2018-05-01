@@ -567,7 +567,6 @@ describe('Connection', function () {
 
   describe('Flow Control', function () {
     it('should respect the remote connection-level flow control', async function () {
-      this.serverConn.removeAllListeners('stream')
       const streams = [
         this.clientConn.createStream(),
         this.clientConn.createStream(),
@@ -589,7 +588,29 @@ describe('Connection', function () {
       assert.equal(bytesLeftToSend, 5 * 16384 - 2 * 32767 + 20)
     })
 
-    it.skip('should close the connection if the remote sends too much data')
+    it('should close the connection if the remote sends too much data', async function () {
+      const spy = sinon.spy()
+      this.clientConn.on('error', spy)
+
+      const streams = [
+        this.clientConn.createStream(),
+        this.clientConn.createStream(),
+        this.clientConn.createStream(),
+        this.clientConn.createStream(),
+        this.clientConn.createStream()
+      ]
+      const data = Buffer.alloc(16384)
+      for (let stream of streams) {
+        stream.write(data)
+      }
+      await new Promise(setImmediate)
+      this.clientConn['remoteMaxOffset'] = 999999999
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+
+      assert.calledOnce(spy)
+      assert.equal(spy.args[0][0].message, 'Remote connection error. Code: FlowControlError, message: Exceeded flow control limits. Max connection byte offset: 65534, received: 81920')
+    })
 
     it.skip('should close the connection if the remote does not respect stream-level flow control')
   })

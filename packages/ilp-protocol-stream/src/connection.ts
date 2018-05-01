@@ -270,7 +270,7 @@ export class Connection extends EventEmitter {
     let responseFrames: Frame[] = []
 
     // Tell peer how much data connection can receive
-    responseFrames.push(new ConnectionMaxDataFrame(this.getMaxIncomingOffset()))
+    responseFrames.push(new ConnectionMaxDataFrame(this.getIncomingOffsets().maxAcceptable))
 
     const throwFinalApplicationError = () => {
       responseFrames = responseFrames.concat(this.queuedFrames)
@@ -284,6 +284,14 @@ export class Connection extends EventEmitter {
       this.handleFrames(requestPacket.frames)
     } catch (err) {
       this.debug('error handling frames:', err)
+      throwFinalApplicationError()
+    }
+
+    // TODO keep a running total of the offsets so we don't need to recalculate each time
+    const incomingOffsets = this.getIncomingOffsets()
+    if (incomingOffsets.max > incomingOffsets.maxAcceptable) {
+      /* tslint:disable-next-line:no-floating-promises */
+      this.destroy(new ConnectionError(`Exceeded flow control limits. Max connection byte offset: ${incomingOffsets.maxAcceptable}, received: ${incomingOffsets.max}`, ErrorCode.FlowControlError))
       throwFinalApplicationError()
     }
 
@@ -426,7 +434,7 @@ export class Connection extends EventEmitter {
           this.remoteMaxOffset = Math.max(frame.maxOffset.toNumber(), this.remoteMaxOffset)
           break
         case FrameType.ConnectionDataBlocked:
-          this.debug(`remote wants to send more data but we are blocking them. current max incoming offset: ${this.getMaxIncomingOffset()}, remote max offset: ${frame.maxOffset}`)
+          this.debug(`remote wants to send more data but we are blocking them. current max incoming offset: ${this.getIncomingOffsets()}, remote max offset: ${frame.maxOffset}`)
           break
         case FrameType.ConnectionMaxStreamId:
           // TODO make sure the number isn't lowered
@@ -474,6 +482,7 @@ export class Connection extends EventEmitter {
           const oldOffset = stream._remoteMaxOffset
           stream._remoteMaxOffset = frame.maxOffset.toNumber()
           if (stream._remoteMaxOffset > oldOffset) {
+            /* tslint:disable-next-line:no-floating-promises */
             this.startSendLoop()
           }
           break
@@ -1047,7 +1056,7 @@ export class Connection extends EventEmitter {
     }
   }
 
-  protected getMaxIncomingOffset (): number {
+  protected getIncomingOffsets (): { current: number, max: number, maxAcceptable: number } {
     let totalMaxOffset = 0
     let totalReadOffset = 0
     for (let [_, stream] of this.streams) {
@@ -1056,7 +1065,11 @@ export class Connection extends EventEmitter {
       totalReadOffset += readOffset
     }
 
-    return totalReadOffset + this.maxBufferedData
+    return {
+      current: totalReadOffset,
+      max: totalMaxOffset,
+      maxAcceptable: totalReadOffset + this.maxBufferedData
+    }
   }
 }
 
