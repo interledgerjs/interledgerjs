@@ -506,6 +506,20 @@ describe('DataAndMoneyStream', function () {
       }
     })
 
-    it.skip('should apply backpressure to the writableStream')
+    it('should apply backpressure to the writableStream', async function () {
+      const clientStream = this.clientConn.createStream()
+      assert.equal(clientStream.write(Buffer.alloc(16384)), false)
+      assert.equal(clientStream.writableLength, 16384)
+      await new Promise(setImmediate)
+
+      // Now the data has been sent
+      assert.equal(clientStream.writableLength, 0)
+      assert.equal(clientStream.write(Buffer.alloc(16384)), false)
+      assert.equal(clientStream.writableLength, 16384)
+      await new Promise(setImmediate)
+
+      // The other side isn't accepting data so it's still in the buffer on our side
+      assert.equal(clientStream.writableLength, 16384)
+    })
   })
 })
