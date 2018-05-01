@@ -18,7 +18,9 @@ import {
   ConnectionStreamIdBlockedFrame,
   ConnectionMaxStreamIdFrame,
   StreamMaxDataFrame,
-  StreamDataBlockedFrame
+  StreamDataBlockedFrame,
+  ConnectionMaxDataFrame,
+  ConnectionDataBlockedFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './util/plugin-interface'
@@ -79,6 +81,7 @@ export class Connection extends EventEmitter {
   protected slippage: BigNumber
   protected allowableReceiveExtra: BigNumber
   protected enablePadding: boolean
+  protected maxBufferedData: number
 
   protected nextPacketSequence: number
   protected streams: Map<number, DataAndMoneyStream>
@@ -99,6 +102,9 @@ export class Connection extends EventEmitter {
   protected remoteMaxStreamId: number
   protected remoteKnowsOurAccount: boolean
 
+  // TODO use bignumbers for byte offsets
+  protected remoteMaxOffset: number
+
   constructor (opts: FullConnectionOpts) {
     super()
     this.plugin = opts.plugin
@@ -111,6 +117,7 @@ export class Connection extends EventEmitter {
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
     this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
+    this.maxBufferedData = MAX_DATA_SIZE * 2
 
     this.nextPacketSequence = 1
     this.streams = new Map()
@@ -128,7 +135,7 @@ export class Connection extends EventEmitter {
     this.remoteKnowsOurAccount = this.isServer
     this.remoteMaxStreamId = DEFAULT_MAX_REMOTE_STREAMS
 
-    // TODO limit total amount buffered for all streams?
+    this.remoteMaxOffset = MAX_DATA_SIZE * 2 // 64kb
   }
 
   /**
@@ -262,6 +269,9 @@ export class Connection extends EventEmitter {
 
     let responseFrames: Frame[] = []
 
+    // Tell peer how much data connection can receive
+    responseFrames.push(new ConnectionMaxDataFrame(this.getMaxIncomingOffset()))
+
     const throwFinalApplicationError = () => {
       responseFrames = responseFrames.concat(this.queuedFrames)
       this.queuedFrames = []
@@ -291,7 +301,6 @@ export class Connection extends EventEmitter {
     }
 
     // Determine amount to receive on each frame
-    // TODO don't use a sparse array
     const amountsToReceive: { stream: DataAndMoneyStream, amount: BigNumber }[] = []
     const totalMoneyShares = requestPacket.frames.reduce((sum: BigNumber, frame: Frame) => {
       if (frame instanceof StreamMoneyFrame) {
@@ -361,7 +370,7 @@ export class Connection extends EventEmitter {
           responseFrames.push(new StreamMaxMoneyFrame(stream.id, stream.receiveMax, stream.totalReceived))
 
           // TODO only send these frames when we need to
-          responseFrames.push(new StreamMaxDataFrame(stream.id, stream._getMaxOffset()))
+          responseFrames.push(new StreamMaxDataFrame(stream.id, stream._getMaxAcceptableIncomingOffset()))
         }
       }
     }
@@ -410,6 +419,14 @@ export class Connection extends EventEmitter {
             /* tslint:disable-next-line:no-floating-promises */
             this.destroy(new Error(`Remote connection error. Code: ${frame.errorCode}, message: ${frame.errorMessage}`))
           }
+          break
+        case FrameType.ConnectionMaxData:
+          const outgoingOffsets = this.getOutgoingOffsets()
+          this.debug(`remote connection max byte offset is: ${frame.maxOffset}, we've sent: ${outgoingOffsets.currentOffset}, we want to send up to: ${outgoingOffsets.maxOffset}`)
+          this.remoteMaxOffset = Math.max(frame.maxOffset.toNumber(), this.remoteMaxOffset)
+          break
+        case FrameType.ConnectionDataBlocked:
+          this.debug(`remote wants to send more data but we are blocking them. current max incoming offset: ${this.getMaxIncomingOffset()}, remote max offset: ${frame.maxOffset}`)
           break
         case FrameType.ConnectionMaxStreamId:
           // TODO make sure the number isn't lowered
@@ -463,7 +480,7 @@ export class Connection extends EventEmitter {
         case FrameType.StreamDataBlocked:
           this.handleNewStream(frame.streamId.toNumber())
           stream = this.streams.get(frame.streamId.toNumber())!
-          this.debug(`peer told us that stream ${frame.streamId} is blocked. they want to send up to offset: ${frame.maxOffset}, but we are only allowing up to: ${stream._getMaxOffset()}`)
+          this.debug(`peer told us that stream ${frame.streamId} is blocked. they want to send up to offset: ${frame.maxOffset}, but we are only allowing up to: ${stream._getMaxAcceptableIncomingOffset()}`)
           break
         default:
           continue
@@ -692,8 +709,17 @@ export class Connection extends EventEmitter {
     // Send data
     let sendingData = false
     let bytesLeftInPacket = MAX_DATA_SIZE - requestPacket.byteLength()
+
+    // Respect connection-level flow control
+    const maxBytesRemoteConnectionCanReceive = this.remoteMaxOffset - this.getOutgoingOffsets().currentOffset
+    if (bytesLeftInPacket > maxBytesRemoteConnectionCanReceive) {
+      const outgoingMaxOffset = this.getOutgoingOffsets().maxOffset
+      this.debug(`peer is blocking us from sending more data. they will only accept up to offset: ${this.remoteMaxOffset}, but we want to send up to: ${outgoingMaxOffset}`)
+      requestPacket.frames.push(new ConnectionDataBlockedFrame(outgoingMaxOffset))
+      bytesLeftInPacket = maxBytesRemoteConnectionCanReceive
+    }
+
     for (let [_, stream] of this.streams) {
-      // TODO send only up to the max packet data
       // TODO use a sensible estimate for the StreamDataFrame overhead
       const { data, offset } = stream._getAvailableDataToSend(bytesLeftInPacket - 20)
       if (data && data.length > 0) {
@@ -716,7 +742,7 @@ export class Connection extends EventEmitter {
     // Stop sending if there's no more to send
     // TODO don't stop if there's still data to send
     if (amountToSend.isEqualTo(0) && !sendingData) {
-      this.debug(`packet value is 0 so we'll send this packet and then stop`)
+      this.debug(`packet value is 0 and there is no data to send so we'll send this packet and then stop`)
       this.sending = false
       // TODO figure out if there are control frames we need to send and stop sending if not
     }
@@ -1004,6 +1030,33 @@ export class Connection extends EventEmitter {
     } catch (err) {
       this.debug(`error in ${event} handler:`, err)
     }
+  }
+
+  protected getOutgoingOffsets (): { currentOffset: number, maxOffset: number } {
+    let currentOffset = 0
+    let maxOffset = 0
+
+    for (let [_, stream] of this.streams) {
+      const streamOffsets = stream._getOutgoingOffsets()
+      currentOffset += streamOffsets.currentOffset
+      maxOffset += streamOffsets.maxOffset
+    }
+    return {
+      currentOffset,
+      maxOffset
+    }
+  }
+
+  protected getMaxIncomingOffset (): number {
+    let totalMaxOffset = 0
+    let totalReadOffset = 0
+    for (let [_, stream] of this.streams) {
+      const { maxOffset, readOffset } = stream._getMaxAndReadIncomingOffsets()
+      totalMaxOffset += maxOffset
+      totalReadOffset += readOffset
+    }
+
+    return totalReadOffset + this.maxBufferedData
   }
 }
 

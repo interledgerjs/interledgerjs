@@ -37,9 +37,11 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [x] Test connection.destroy
 - [x] Stream-level flow control
 - [x] Blocked frames (when more is available to send)
-- [ ] Connection-level flow control
+- [x] Connection-level flow control
+- [ ] Allow stream- and connection-level highWaterMark to be configured
 - [ ] connection.end should only close it when the streams are finished sending
 - [ ] Only send data in prepares
+- [ ] Resend certain types of frames when packets are rejected
 - [ ] Clean up closed streams (and throw error if packet is received for a closed stream)
 - [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
 - [ ] When waiting to receive money, occasionally resend the max receive amount in case the sender hasn't gotten it (and also send it if they send too much)
@@ -49,7 +51,6 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Use `ilp-plugin` to get plugin from environment
 - [ ] Drop connection when it has sent a certain number of packets
 - [ ] Randomize expiry time
-- [ ] Merge sending test and normal packets? Or at least handle frames in the same way
 - [ ] Make it work even if one side can only receive 0 amount packets
 - [ ] Add timeouts for lack of activity
 - [ ] Handle plugin disconnecting

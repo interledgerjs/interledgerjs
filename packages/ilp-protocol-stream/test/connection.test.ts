@@ -19,8 +19,7 @@ describe('Connection', function () {
 
     this.server = new Server({
       plugin: this.serverPlugin,
-      serverSecret: Buffer.alloc(32),
-      maxRemoteStreams: 3
+      serverSecret: Buffer.alloc(32)
     })
     await this.server.listen()
 
@@ -467,6 +466,7 @@ describe('Connection', function () {
       const spy = sinon.spy()
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       this.server.on('connection', (serverConn: Connection) => {
+        serverConn['maxStreamId'] = 6
         serverConn.on('stream', (stream: DataAndMoneyStream) => {
           stream.on('error', (err: Error) => {})
         })
@@ -563,5 +563,34 @@ describe('Connection', function () {
 
       assert.doesNotThrow(() => serverConn.createStream())
     })
+  })
+
+  describe('Flow Control', function () {
+    it('should respect the remote connection-level flow control', async function () {
+      this.serverConn.removeAllListeners('stream')
+      const streams = [
+        this.clientConn.createStream(),
+        this.clientConn.createStream(),
+        this.clientConn.createStream(),
+        this.clientConn.createStream(),
+        this.clientConn.createStream()
+      ]
+      const data = Buffer.alloc(16384)
+      for (let stream of streams) {
+        stream.write(data)
+      }
+
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+
+      const bytesLeftToSend = streams.reduce((sum, stream) => sum += stream.writableLength, 0)
+      // total amount of data written - default connection max buffer size + estimated frame overhead
+      assert.equal(bytesLeftToSend, 5 * 16384 - 2 * 32767 + 20)
+    })
+
+    it.skip('should close the connection if the remote sends too much data')
+
+    it.skip('should close the connection if the remote does not respect stream-level flow control')
   })
 })

@@ -152,19 +152,19 @@ export abstract class BaseFrame {
 }
 
 export type Frame =
-  ConnectionNewAddressFrame
-  | ConnectionCloseFrame
-//  | ConnectionMaxDataFrame
-//  | ConnectionDataBlockedFrame
- | ConnectionMaxStreamIdFrame
- | ConnectionStreamIdBlockedFrame
- | StreamMoneyFrame
- | StreamMaxMoneyFrame
-//  | StreamMoneyBlockedFrame
- | StreamCloseFrame
- | StreamDataFrame
- | StreamMaxDataFrame
- | StreamDataBlockedFrame
+  ConnectionCloseFrame
+  | ConnectionNewAddressFrame
+  | ConnectionMaxDataFrame
+  | ConnectionDataBlockedFrame
+  | ConnectionMaxStreamIdFrame
+  | ConnectionStreamIdBlockedFrame
+  | StreamMoneyFrame
+  | StreamMaxMoneyFrame
+  //  | StreamMoneyBlockedFrame
+  | StreamCloseFrame
+  | StreamDataFrame
+  | StreamMaxDataFrame
+  | StreamDataBlockedFrame
 
 function assertType (reader: Reader, frameType: keyof typeof FrameType): void {
   const type = reader.readUInt8BigNum().toNumber()
@@ -222,6 +222,56 @@ export class ConnectionCloseFrame extends BaseFrame {
     const contents = new Writer()
     contents.writeUInt8(ErrorCode[this.errorCode])
     contents.writeVarOctetString(Buffer.from(this.errorMessage))
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export class ConnectionMaxDataFrame extends BaseFrame {
+  type: FrameType.ConnectionMaxData
+  maxOffset: BigNumber
+
+  constructor (maxOffset: BigNumber.Value) {
+    super('ConnectionMaxData')
+    this.maxOffset = new BigNumber(maxOffset)
+  }
+
+  static fromBuffer (reader: Reader): ConnectionMaxDataFrame {
+    const type = assertType(reader, 'ConnectionMaxData')
+    const contents = Reader.from(reader.readVarOctetString())
+    const maxOffset = contents.readVarUIntBigNum()
+    return new ConnectionMaxDataFrame(maxOffset)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.maxOffset)
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export class ConnectionDataBlockedFrame extends BaseFrame {
+  type: FrameType.ConnectionDataBlocked
+  maxOffset: BigNumber
+
+  constructor (maxOffset: BigNumber.Value) {
+    super('ConnectionDataBlocked')
+    this.maxOffset = new BigNumber(maxOffset)
+  }
+
+  static fromBuffer (reader: Reader): ConnectionDataBlockedFrame {
+    const type = assertType(reader, 'ConnectionDataBlocked')
+    const contents = Reader.from(reader.readVarOctetString())
+    const maxOffset = contents.readVarUIntBigNum()
+    return new ConnectionDataBlockedFrame(maxOffset)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.maxOffset)
     writer.writeVarOctetString(contents.getBuffer())
     return writer
   }
@@ -417,6 +467,7 @@ export class StreamDataFrame extends BaseFrame {
   toJSON (): Object {
     return {
       type: this.type,
+      name: this.name,
       streamId: this.streamId,
       offset: this.offset,
       dataLength: this.data.length
@@ -490,6 +541,10 @@ function parseFrame (reader: Reader): Frame | undefined {
       return ConnectionCloseFrame.fromBuffer(reader)
     case FrameType.ConnectionNewAddress:
       return ConnectionNewAddressFrame.fromBuffer(reader)
+    case FrameType.ConnectionMaxData:
+      return ConnectionMaxDataFrame.fromBuffer(reader)
+    case FrameType.ConnectionDataBlocked:
+      return ConnectionDataBlockedFrame.fromBuffer(reader)
     case FrameType.ConnectionMaxStreamId:
       return ConnectionMaxStreamIdFrame.fromBuffer(reader)
     case FrameType.ConnectionStreamIdBlocked:

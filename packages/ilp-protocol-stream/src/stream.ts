@@ -416,6 +416,7 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
+    this.debug(`${chunk.length} bytes written to the outgoing data queue`)
     this._outgoingData.push(chunk)
     this.emit('_maybe_start_send_loop')
     callback()
@@ -465,8 +466,9 @@ export class DataAndMoneyStream extends Duplex {
     const maxBytes = Math.min(size, this._remoteMaxOffset - this.outgoingOffset)
     const offset = this.outgoingOffset
     const data = this._outgoingData.read(maxBytes)
-    if (data) {
+    if (data && data.length > 0) {
       this.outgoingOffset = this.outgoingOffset += data.length
+      this.debug(`${data.length} bytes taken from the outgoing data queue`)
     }
     return { data, offset }
   }
@@ -485,7 +487,29 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _getMaxOffset (): number {
+  _getOutgoingOffsets (): { currentOffset: number, maxOffset: number } {
+    return {
+      currentOffset: this.outgoingOffset,
+      maxOffset: this.outgoingOffset + this._outgoingData.byteLength()
+    }
+  }
+
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
+  _getMaxAndReadIncomingOffsets (): { maxOffset: number, readOffset: number} {
+    return {
+      maxOffset: this._incomingData.maxOffset,
+      readOffset: this._incomingData.readOffset - this.readableLength
+    }
+  }
+
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
+  _getMaxAcceptableIncomingOffset (): number {
     return this._incomingData.maxOffset + this.readableHighWaterMark - this.readableLength
   }
 
