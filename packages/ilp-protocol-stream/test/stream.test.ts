@@ -485,7 +485,7 @@ describe('DataAndMoneyStream', function () {
         // Peer sends first chunk
         await new Promise(setImmediate)
         assert.equal(stream.readableLength, 16384)
-        assert.equal(stream._getMaxAcceptableIncomingOffset(), 16384)
+        assert.equal(stream._getIncomingOffsets().maxAcceptable, 16384)
 
         // We consume some
         stream.read(3450)
@@ -495,7 +495,7 @@ describe('DataAndMoneyStream', function () {
 
         // Now they've sent the next chunk
         assert.equal(stream.readableLength, 16384)
-        assert.equal(stream._getMaxAcceptableIncomingOffset(), 16384 + 3450)
+        assert.equal(stream._getIncomingOffsets().maxAcceptable, 16384 + 3450)
         done()
       })
 

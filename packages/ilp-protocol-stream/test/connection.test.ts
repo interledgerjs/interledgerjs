@@ -574,9 +574,11 @@ describe('Connection', function () {
         this.clientConn.createStream(),
         this.clientConn.createStream()
       ]
-      const data = Buffer.alloc(16384)
+      const data = Buffer.alloc(1000)
       for (let stream of streams) {
-        stream.write(data)
+        for (let i = 0; i < 20; i++) {
+          stream.write(data)
+        }
       }
 
       await new Promise(setImmediate)
@@ -585,7 +587,7 @@ describe('Connection', function () {
 
       const bytesLeftToSend = streams.reduce((sum, stream) => sum += stream.writableLength, 0)
       // total amount of data written - default connection max buffer size + estimated frame overhead
-      assert.equal(bytesLeftToSend, 5 * 16384 - 2 * 32767 + 20)
+      assert.equal(bytesLeftToSend, (5 * 20000) - (2 * 32767) + 20)
     })
 
     it('should close the connection if the remote sends too much data', async function () {
@@ -612,6 +614,21 @@ describe('Connection', function () {
       assert.equal(spy.args[0][0].message, 'Remote connection error. Code: FlowControlError, message: Exceeded flow control limits. Max connection byte offset: 65534, received: 81920')
     })
 
-    it.skip('should close the connection if the remote does not respect stream-level flow control')
+    it('should close the connection if the remote does not respect stream-level flow control', async function () {
+      const spy = sinon.spy()
+      this.clientConn.on('error', spy)
+
+      const clientStream = this.clientConn.createStream()
+      const data = Buffer.alloc(1000)
+      for (let i = 0; i < 20; i++) {
+        clientStream.write(data)
+      }
+
+      clientStream._remoteMaxOffset = 999999
+      await new Promise(setImmediate)
+
+      assert.calledOnce(spy)
+      assert.equal(spy.args[0][0].message, 'Remote connection error. Code: InternalError, message: Exceeded flow control limits. Stream 1 can accept up to offset: 16384 but got bytes up to offset: 20000')
+    })
   })
 })

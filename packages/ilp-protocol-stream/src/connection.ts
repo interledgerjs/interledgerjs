@@ -378,7 +378,7 @@ export class Connection extends EventEmitter {
           responseFrames.push(new StreamMaxMoneyFrame(stream.id, stream.receiveMax, stream.totalReceived))
 
           // TODO only send these frames when we need to
-          responseFrames.push(new StreamMaxDataFrame(stream.id, stream._getMaxAcceptableIncomingOffset()))
+          responseFrames.push(new StreamMaxDataFrame(stream.id, stream._getIncomingOffsets().maxAcceptable))
         }
       }
     }
@@ -472,8 +472,14 @@ export class Connection extends EventEmitter {
           this.debug(`got data for stream ${frame.streamId}`)
 
           stream = this.streams.get(frame.streamId.toNumber())!
-          // TODO handle if it's too much
           stream._pushIncomingData(frame.data, frame.offset.toNumber())
+
+          // Make sure the peer hasn't exceeded the flow control limits
+          const incomingOffsets = stream._getIncomingOffsets()
+          if (incomingOffsets.max > incomingOffsets.maxAcceptable) {
+            /* tslint:disable-next-line:no-floating-promises */
+            this.destroy(new ConnectionError(`Exceeded flow control limits. Stream ${stream.id} can accept up to offset: ${incomingOffsets.maxAcceptable} but got bytes up to offset: ${incomingOffsets.max}`))
+          }
           break
         case FrameType.StreamMaxData:
           this.handleNewStream(frame.streamId.toNumber())
@@ -489,7 +495,7 @@ export class Connection extends EventEmitter {
         case FrameType.StreamDataBlocked:
           this.handleNewStream(frame.streamId.toNumber())
           stream = this.streams.get(frame.streamId.toNumber())!
-          this.debug(`peer told us that stream ${frame.streamId} is blocked. they want to send up to offset: ${frame.maxOffset}, but we are only allowing up to: ${stream._getMaxAcceptableIncomingOffset()}`)
+          this.debug(`peer told us that stream ${frame.streamId} is blocked. they want to send up to offset: ${frame.maxOffset}, but we are only allowing up to: ${stream._getIncomingOffsets().maxAcceptable}`)
           break
         default:
           continue
@@ -1047,8 +1053,8 @@ export class Connection extends EventEmitter {
 
     for (let [_, stream] of this.streams) {
       const streamOffsets = stream._getOutgoingOffsets()
-      currentOffset += streamOffsets.currentOffset
-      maxOffset += streamOffsets.maxOffset
+      currentOffset += streamOffsets.current
+      maxOffset += streamOffsets.max
     }
     return {
       currentOffset,
@@ -1060,9 +1066,9 @@ export class Connection extends EventEmitter {
     let totalMaxOffset = 0
     let totalReadOffset = 0
     for (let [_, stream] of this.streams) {
-      const { maxOffset, readOffset } = stream._getMaxAndReadIncomingOffsets()
-      totalMaxOffset += maxOffset
-      totalReadOffset += readOffset
+      const { max, current } = stream._getIncomingOffsets()
+      totalMaxOffset += max
+      totalReadOffset += current
     }
 
     return {

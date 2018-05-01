@@ -237,7 +237,7 @@ export class ConnectionMaxDataFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): ConnectionMaxDataFrame {
-    const type = assertType(reader, 'ConnectionMaxData')
+    assertType(reader, 'ConnectionMaxData')
     const contents = Reader.from(reader.readVarOctetString())
     const maxOffset = contents.readVarUIntBigNum()
     return new ConnectionMaxDataFrame(maxOffset)
@@ -262,7 +262,7 @@ export class ConnectionDataBlockedFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): ConnectionDataBlockedFrame {
-    const type = assertType(reader, 'ConnectionDataBlocked')
+    assertType(reader, 'ConnectionDataBlocked')
     const contents = Reader.from(reader.readVarOctetString())
     const maxOffset = contents.readVarUIntBigNum()
     return new ConnectionDataBlockedFrame(maxOffset)
@@ -445,7 +445,7 @@ export class StreamDataFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): StreamDataFrame {
-    const type = assertType(reader, 'StreamData')
+    assertType(reader, 'StreamData')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const offset = contents.readVarUIntBigNum()
@@ -487,7 +487,7 @@ export class StreamMaxDataFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): StreamMaxDataFrame {
-    const type = assertType(reader, 'StreamMaxData')
+    assertType(reader, 'StreamMaxData')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const maxOffset = contents.readVarUIntBigNum()
@@ -516,7 +516,7 @@ export class StreamDataBlockedFrame extends BaseFrame {
   }
 
   static fromBuffer (reader: Reader): StreamDataBlockedFrame {
-    const type = assertType(reader, 'StreamDataBlocked')
+    assertType(reader, 'StreamDataBlocked')
     const contents = Reader.from(reader.readVarOctetString())
     const streamId = contents.readVarUIntBigNum()
     const maxOffset = contents.readVarUIntBigNum()

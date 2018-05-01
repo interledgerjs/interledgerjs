@@ -487,10 +487,10 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _getOutgoingOffsets (): { currentOffset: number, maxOffset: number } {
+  _getOutgoingOffsets (): { current: number, max: number } {
     return {
-      currentOffset: this.outgoingOffset,
-      maxOffset: this.outgoingOffset + this._outgoingData.byteLength()
+      current: this.outgoingOffset,
+      max: this.outgoingOffset + this._outgoingData.byteLength()
     }
   }
 
@@ -498,19 +498,12 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _getMaxAndReadIncomingOffsets (): { maxOffset: number, readOffset: number} {
+  _getIncomingOffsets (): { max: number, current: number, maxAcceptable: number } {
     return {
-      maxOffset: this._incomingData.maxOffset,
-      readOffset: this._incomingData.readOffset - this.readableLength
+      max: this._incomingData.maxOffset,
+      current: this._incomingData.readOffset - this.readableLength,
+      maxAcceptable: this._incomingData.maxOffset + this.readableHighWaterMark - this.readableLength
     }
-  }
-
-  /**
-   * (Used by the Connection class but not meant to be part of the public API)
-   * @private
-   */
-  _getMaxAcceptableIncomingOffset (): number {
-    return this._incomingData.maxOffset + this.readableHighWaterMark - this.readableLength
   }
 
   /**
