@@ -35,15 +35,16 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [x] Separate connection "end" and "destroy", where the former flushes everything first
 - [x] Use stream.destroy instead of end to close immediately -- end should flush data and money and emit finish or whatever when it's done, destroy closes it right away
 - [x] Test connection.destroy
+- [x] Stream-level flow control
+- [x] Blocked frames (when more is available to send)
+- [ ] Connection-level flow control
 - [ ] connection.end should only close it when the streams are finished sending
-- [ ] Backpressure for data
-- [ ] Add ACKs for data or only send data in prepares
+- [ ] Only send data in prepares
 - [ ] Clean up closed streams (and throw error if packet is received for a closed stream)
 - [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
 - [ ] When waiting to receive money, occasionally resend the max receive amount in case the sender hasn't gotten it (and also send it if they send too much)
 - [ ] Multiple packets in flight at the same time
 - [ ] Don't send extra packet at the end if it isn't necessary
-- [ ] Blocked frames (when more is available to send)
 - [ ] Refactor handleData and sendPacket functions to make them easier to understand and reason about
 - [ ] Use `ilp-plugin` to get plugin from environment
 - [ ] Drop connection when it has sent a certain number of packets

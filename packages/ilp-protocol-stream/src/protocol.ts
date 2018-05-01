@@ -163,8 +163,8 @@ export type Frame =
 //  | StreamMoneyBlockedFrame
  | StreamCloseFrame
  | StreamDataFrame
-//  | StreamMaxDataFrame
-//  | StreamDataBlockedFrame
+ | StreamMaxDataFrame
+ | StreamDataBlockedFrame
 
 function assertType (reader: Reader, frameType: keyof typeof FrameType): void {
   const type = reader.readUInt8BigNum().toNumber()
@@ -387,7 +387,7 @@ export class StreamDataFrame extends BaseFrame {
   offset: BigNumber
   data: Buffer
 
-  constructor (streamId: BigNumber.Value, offset: BigNumber.Value, data: Buffer, isEnd = false) {
+  constructor (streamId: BigNumber.Value, offset: BigNumber.Value, data: Buffer) {
     super('StreamData')
     this.streamId = new BigNumber(streamId)
     this.offset = new BigNumber(offset)
@@ -424,6 +424,64 @@ export class StreamDataFrame extends BaseFrame {
   }
 }
 
+export class StreamMaxDataFrame extends BaseFrame {
+  type: FrameType.StreamMaxData
+  streamId: BigNumber
+  maxOffset: BigNumber
+
+  constructor (streamId: BigNumber.Value, maxOffset: BigNumber.Value) {
+    super('StreamMaxData')
+    this.streamId = new BigNumber(streamId)
+    this.maxOffset = new BigNumber(maxOffset)
+  }
+
+  static fromBuffer (reader: Reader): StreamMaxDataFrame {
+    const type = assertType(reader, 'StreamMaxData')
+    const contents = Reader.from(reader.readVarOctetString())
+    const streamId = contents.readVarUIntBigNum()
+    const maxOffset = contents.readVarUIntBigNum()
+    return new StreamMaxDataFrame(streamId, maxOffset)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.streamId)
+    contents.writeVarUInt(this.maxOffset)
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
+export class StreamDataBlockedFrame extends BaseFrame {
+  type: FrameType.StreamDataBlocked
+  streamId: BigNumber
+  maxOffset: BigNumber
+
+  constructor (streamId: BigNumber.Value, maxOffset: BigNumber.Value) {
+    super('StreamDataBlocked')
+    this.streamId = new BigNumber(streamId)
+    this.maxOffset = new BigNumber(maxOffset)
+  }
+
+  static fromBuffer (reader: Reader): StreamDataBlockedFrame {
+    const type = assertType(reader, 'StreamDataBlocked')
+    const contents = Reader.from(reader.readVarOctetString())
+    const streamId = contents.readVarUIntBigNum()
+    const maxOffset = contents.readVarUIntBigNum()
+    return new StreamDataBlockedFrame(streamId, maxOffset)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.streamId)
+    contents.writeVarUInt(this.maxOffset)
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
 function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.peekUInt8BigNum().toNumber()
 
@@ -444,6 +502,10 @@ function parseFrame (reader: Reader): Frame | undefined {
       return StreamMaxMoneyFrame.fromBuffer(reader)
     case FrameType.StreamData:
       return StreamDataFrame.fromBuffer(reader)
+    case FrameType.StreamMaxData:
+      return StreamMaxDataFrame.fromBuffer(reader)
+    case FrameType.StreamDataBlocked:
+      return StreamDataBlockedFrame.fromBuffer(reader)
     default:
       reader.skipUInt8()
       reader.skipVarOctetString()

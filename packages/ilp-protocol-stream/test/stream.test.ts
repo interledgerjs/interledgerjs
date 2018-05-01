@@ -464,7 +464,6 @@ describe('DataAndMoneyStream', function () {
     })
 
     it('should not send more than 32767 bytes in the packet', function (done) {
-      const dataToSend = Buffer.alloc(40000, 'af39', 'hex')
       const spy = sinon.spy(this.clientPlugin, 'sendData')
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('data', () => {})
@@ -474,8 +473,39 @@ describe('DataAndMoneyStream', function () {
         })
       })
       const clientStream = this.clientConn.createStream()
-      clientStream.write(dataToSend)
+      const dataToSend = Buffer.alloc(1000, 'af39', 'hex')
+      for (let i = 0; i < 40; i++) {
+        clientStream.write(dataToSend)
+      }
       clientStream.end()
     })
+
+    it('should respect the backpressure from the other side', function (done) {
+      this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
+        // Peer sends first chunk
+        await new Promise(setImmediate)
+        assert.equal(stream.readableLength, 16384)
+        assert.equal(stream._getMaxOffset(), 16384)
+
+        // We consume some
+        stream.read(3450)
+        await new Promise(setImmediate)
+        assert.equal(stream.readableLength, 16384 - 3450)
+        await new Promise(setImmediate)
+
+        // Now they've sent the next chunk
+        assert.equal(stream.readableLength, 16384)
+        assert.equal(stream._getMaxOffset(), 16384 + 3450)
+        done()
+      })
+
+      const clientStream = this.clientConn.createStream()
+      const dataToSend = Buffer.alloc(1000, 'af39', 'hex')
+      for (let i = 0; i < 40; i++) {
+        clientStream.write(dataToSend)
+      }
+    })
+
+    it.skip('should apply backpressure to the writableStream')
   })
 })

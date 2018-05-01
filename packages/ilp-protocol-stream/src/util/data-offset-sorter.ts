@@ -17,9 +17,11 @@ export class OffsetSorter {
   head?: OffsetDataEntry
   readOffset: number
   endOffset: number
+  maxOffset: number
   constructor () {
     this.readOffset = 0
     this.endOffset = -1
+    this.maxOffset = 0
   }
 
   setEndOffset (offset: number) {
@@ -32,6 +34,8 @@ export class OffsetSorter {
 
   push (data: Buffer, offset: number) {
     const entry = new OffsetDataEntry(data, offset)
+
+    this.maxOffset = Math.max(offset + data.length, this.maxOffset)
 
     if (!this.head) {
       this.head = entry

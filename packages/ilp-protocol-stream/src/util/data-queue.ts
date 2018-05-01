@@ -50,14 +50,23 @@ export class DataQueue {
       return undefined
     }
 
-    let ret = this.head.data
-    if (ret.length > n) {
-      this.head.data = ret.slice(n)
-      ret = ret.slice(0, n)
-      return ret
+    let bytesLeft = n
+    const chunks: Buffer[] = []
+    while (bytesLeft > 0 && this.length > 0) {
+      let chunk = this.head.data
+      if (chunk.length > bytesLeft) {
+        this.head.data = chunk.slice(bytesLeft)
+        chunk = chunk.slice(0, bytesLeft)
+        chunks.push(chunk)
+        bytesLeft -= chunk.length
+      } else {
+        this.shift()
+        chunks.push(chunk) // ret.length <= n
+        bytesLeft -= chunk.length
+      }
     }
-    this.shift()
-    return ret // ret.length <= n
+
+    return Buffer.concat(chunks)
   }
 
   isEmpty (): boolean {

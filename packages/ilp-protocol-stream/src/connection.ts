@@ -16,7 +16,9 @@ import {
   ErrorCode,
   ConnectionCloseFrame,
   ConnectionStreamIdBlockedFrame,
-  ConnectionMaxStreamIdFrame
+  ConnectionMaxStreamIdFrame,
+  StreamMaxDataFrame,
+  StreamDataBlockedFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './util/plugin-interface'
@@ -357,6 +359,9 @@ export class Connection extends EventEmitter {
         } else {
           this.debug(`telling other side that stream ${stream.id} can receive ${stream.receiveMax}`)
           responseFrames.push(new StreamMaxMoneyFrame(stream.id, stream.receiveMax, stream.totalReceived))
+
+          // TODO only send these frames when we need to
+          responseFrames.push(new StreamMaxDataFrame(stream.id, stream._getMaxOffset()))
         }
       }
     }
@@ -380,6 +385,7 @@ export class Connection extends EventEmitter {
    */
   protected handleFrames (frames: Frame[]): void {
     for (let frame of frames) {
+      let stream
       switch (frame.type) {
         case FrameType.ConnectionNewAddress:
           this.debug(`peer notified us of their account: ${frame.sourceAccount}`)
@@ -414,16 +420,16 @@ export class Connection extends EventEmitter {
           this.debug(`remote wants to open more streams but we are blocking them`)
           break
         case FrameType.StreamClose:
-          this.handleNewStream(frame)
+          this.handleNewStream(frame.streamId.toNumber())
           this.handleStreamClose(frame)
           break
         case FrameType.StreamMoney:
-          this.handleNewStream(frame)
+          this.handleNewStream(frame.streamId.toNumber())
           break
         case FrameType.StreamMaxMoney:
-          this.handleNewStream(frame)
+          this.handleNewStream(frame.streamId.toNumber())
           this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
-          const stream = this.streams.get(frame.streamId.toNumber())!
+          stream = this.streams.get(frame.streamId.toNumber())!
           stream._remoteReceived = BigNumber.maximum(stream._remoteReceived, frame.totalReceived)
           if (stream._remoteReceiveMax.isFinite()) {
             stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax, frame.receiveMax)
@@ -437,11 +443,27 @@ export class Connection extends EventEmitter {
           }
           break
         case FrameType.StreamData:
-          this.handleNewStream(frame)
+          this.handleNewStream(frame.streamId.toNumber())
           this.debug(`got data for stream ${frame.streamId}`)
 
+          stream = this.streams.get(frame.streamId.toNumber())!
           // TODO handle if it's too much
-          this.streams.get(frame.streamId.toNumber())!._pushIncomingData(frame.data, frame.offset.toNumber())
+          stream._pushIncomingData(frame.data, frame.offset.toNumber())
+          break
+        case FrameType.StreamMaxData:
+          this.handleNewStream(frame.streamId.toNumber())
+          this.debug(`peer told us that stream ${frame.streamId} can receive up to byte offset: ${frame.maxOffset}`)
+          stream = this.streams.get(frame.streamId.toNumber())!
+          const oldOffset = stream._remoteMaxOffset
+          stream._remoteMaxOffset = frame.maxOffset.toNumber()
+          if (stream._remoteMaxOffset > oldOffset) {
+            this.startSendLoop()
+          }
+          break
+        case FrameType.StreamDataBlocked:
+          this.handleNewStream(frame.streamId.toNumber())
+          stream = this.streams.get(frame.streamId.toNumber())!
+          this.debug(`peer told us that stream ${frame.streamId} is blocked. they want to send up to offset: ${frame.maxOffset}, but we are only allowing up to: ${stream._getMaxOffset()}`)
           break
         default:
           continue
@@ -465,8 +487,7 @@ export class Connection extends EventEmitter {
    * Ensure that the new stream is valid and does not exceed our limits
    * and if it looks good, emit the 'stream' event
    */
-  protected handleNewStream (frame: StreamMoneyFrame | StreamMaxMoneyFrame | StreamCloseFrame | StreamDataFrame): void {
-    const streamId = frame.streamId.toNumber()
+  protected handleNewStream (streamId: number): void {
     if (this.streams.has(streamId)) {
       return
     }
@@ -552,7 +573,6 @@ export class Connection extends EventEmitter {
    */
   protected async startSendLoop () {
     if (this.sending) {
-      this.debug('already sending, not starting another loop')
       return
     }
     if (this.remoteClosed) {
@@ -677,11 +697,19 @@ export class Connection extends EventEmitter {
       // TODO use a sensible estimate for the StreamDataFrame overhead
       const { data, offset } = stream._getAvailableDataToSend(bytesLeftInPacket - 20)
       if (data && data.length > 0) {
-        const streamDataFrame = new StreamDataFrame(stream.id, offset, data || Buffer.alloc(0))
+        const streamDataFrame = new StreamDataFrame(stream.id, offset, data)
+        this.debug(`sending ${data.length} bytes from stream ${stream.id}`)
         bytesLeftInPacket -= streamDataFrame.byteLength()
         requestPacket.frames.push(streamDataFrame)
         // TODO actually figure out if there's more data to send
         sendingData = true
+      }
+
+      // Inform remote which streams are blocked
+      const maxOutgoingOffset = stream._isDataBlocked()
+      if (maxOutgoingOffset) {
+        this.debug(`telling remote that stream ${stream.id} is blocked and has more data to send`)
+        requestPacket.frames.push(new StreamDataBlockedFrame(stream.id, maxOutgoingOffset))
       }
     }
 

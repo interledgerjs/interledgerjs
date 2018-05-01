@@ -28,6 +28,8 @@ export class DataAndMoneyStream extends Duplex {
   /** @private */
   _remoteReceived: BigNumber
   /** @private */
+  _remoteMaxOffset: number
+  /** @private */
   _sentEnd: boolean
   /** @private */
   _remoteSentEnd: boolean
@@ -75,6 +77,8 @@ export class DataAndMoneyStream extends Duplex {
     this._remoteClosed = false
     this._remoteReceived = new BigNumber(0)
     this._remoteReceiveMax = new BigNumber(Infinity)
+    // TODO should we have a different default?
+    this._remoteMaxOffset = 16384 // 16kb
   }
 
   /**
@@ -446,12 +450,25 @@ export class DataAndMoneyStream extends Duplex {
 
   /** @private */
   _getAvailableDataToSend (size: number): { data: Buffer | undefined, offset: number } {
-    const data = this._outgoingData.read(size)
+    const maxBytes = Math.min(size, this._remoteMaxOffset - this.outgoingOffset)
     const offset = this.outgoingOffset
+    const data = this._outgoingData.read(maxBytes)
     if (data) {
       this.outgoingOffset = this.outgoingOffset += data.length
     }
     return { data, offset }
+  }
+
+  /** @private */
+  _isDataBlocked (): number | undefined {
+    if (this._remoteMaxOffset < this.outgoingOffset + this._outgoingData.byteLength()) {
+      return this.outgoingOffset + this._outgoingData.byteLength()
+    }
+  }
+
+  /** @private */
+  _getMaxOffset (): number {
+    return this._incomingData.maxOffset + this.readableHighWaterMark - this.readableLength
   }
 
   /** @private */
