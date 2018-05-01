@@ -270,6 +270,7 @@ export class DataAndMoneyStream extends Duplex {
 
   /**
    * (Internal) Determine how much more the stream can receive
+   * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
   _getAmountStreamCanReceive (): BigNumber {
@@ -278,6 +279,7 @@ export class DataAndMoneyStream extends Duplex {
 
   /**
    * (Internal) Add money to the stream (from an external source)
+   * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
   _addToIncoming (amount: BigNumber): void {
@@ -288,6 +290,7 @@ export class DataAndMoneyStream extends Duplex {
 
   /**
    * (Internal) Check how much is available to send
+   * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
   _getAmountAvailableToSend (): BigNumber {
@@ -300,6 +303,7 @@ export class DataAndMoneyStream extends Duplex {
 
   /**
    * (Internal) Hold outgoing balance
+   * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
   _holdOutgoing (holdId: string, maxAmount?: BigNumber): BigNumber {
@@ -315,6 +319,7 @@ export class DataAndMoneyStream extends Duplex {
 
   /**
    * (Internal) Execute hold when money has been successfully transferred
+   * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
   _executeHold (holdId: string): void {
@@ -336,6 +341,7 @@ export class DataAndMoneyStream extends Duplex {
 
   /**
    * (Internal) Cancel hold if sending money failed
+   * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
   _cancelHold (holdId: string): void {
@@ -349,7 +355,7 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
-   * Called internally by the Node Stream when the stream ends
+   * (Called internally by the Node Stream when the stream ends)
    * @private
    */
   _final (callback: (...args: any[]) => void): void {
@@ -389,7 +395,7 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
-   * Called internally by the Node Stream when stream.destroy is called
+   * (Called internally by the Node Stream when stream.destroy is called)
    * @private
    */
   _destroy (error: Error | undefined | null, callback: (...args: any[]) => void): void {
@@ -406,7 +412,7 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
-   * Called internally by the Node Stream when stream.write is called
+   * (Called internally by the Node Stream when stream.write is called)
    * @private
    */
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
@@ -416,7 +422,7 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
-   * Called internally by the Node Stream when stream.write is called
+   * (Called internally by the Node Stream when stream.write is called)
    * @private
    */
   _writev (chunks: { chunk: Buffer, encoding: string }[], callback: (...args: any[]) => void): void {
@@ -428,7 +434,7 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
-   * Called internally by the Node Stream when stream.read is called
+   * (Called internally by the Node Stream when stream.read is called)
    * @private
    */
   _read (size: number): void {
@@ -443,12 +449,18 @@ export class DataAndMoneyStream extends Duplex {
     }
   }
 
-  /** @private */
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
   _hasDataToSend (): boolean {
     return !this._outgoingData.isEmpty()
   }
 
-  /** @private */
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
   _getAvailableDataToSend (size: number): { data: Buffer | undefined, offset: number } {
     const maxBytes = Math.min(size, this._remoteMaxOffset - this.outgoingOffset)
     const offset = this.outgoingOffset
@@ -459,26 +471,38 @@ export class DataAndMoneyStream extends Duplex {
     return { data, offset }
   }
 
-  /** @private */
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
   _isDataBlocked (): number | undefined {
     if (this._remoteMaxOffset < this.outgoingOffset + this._outgoingData.byteLength()) {
       return this.outgoingOffset + this._outgoingData.byteLength()
     }
   }
 
-  /** @private */
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
   _getMaxOffset (): number {
     return this._incomingData.maxOffset + this.readableHighWaterMark - this.readableLength
   }
 
-  /** @private */
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
   _pushIncomingData (data: Buffer, offset: number) {
     this._incomingData.push(data, offset)
 
     this._read(this.readableHighWaterMark - this.readableLength)
   }
 
-  /** @private */
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
   _remoteEnded (err?: Error): void {
     this.debug('remote closed stream')
     this._remoteSentEnd = true
