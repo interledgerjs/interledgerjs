@@ -38,7 +38,7 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [x] Stream-level flow control
 - [x] Blocked frames (when more is available to send)
 - [x] Connection-level flow control
-- [ ] Allow stream- and connection-level highWaterMark to be configured
+- [x] Allow stream- and connection-level highWaterMark to be configured
 - [ ] connection.end should only close it when the streams are finished sending
 - [ ] Only send data in prepares
 - [ ] Resend certain types of frames when packets are rejected

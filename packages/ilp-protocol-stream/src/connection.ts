@@ -46,7 +46,9 @@ export interface ConnectionOpts {
   /** User-specified connection identifier that was passed into [`generateAddressAndSecret`]{@link Server#generateAddressAndSecret} */
   connectionTag?: string,
   /** Maximum number of streams the other entity can have open at once. Defaults to 10 */
-  maxRemoteStreams?: number
+  maxRemoteStreams?: number,
+  /** Number of bytes each connection can have in the buffer. Defaults to 65534 */
+  connectionBufferSize?: number
 }
 
 export interface FullConnectionOpts extends ConnectionOpts {
@@ -117,7 +119,7 @@ export class Connection extends EventEmitter {
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
     this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
-    this.maxBufferedData = MAX_DATA_SIZE * 2
+    this.maxBufferedData = opts.connectionBufferSize || MAX_DATA_SIZE * 2
 
     this.nextPacketSequence = 1
     this.streams = new Map()
@@ -431,7 +433,12 @@ export class Connection extends EventEmitter {
         case FrameType.ConnectionMaxData:
           const outgoingOffsets = this.getOutgoingOffsets()
           this.debug(`remote connection max byte offset is: ${frame.maxOffset}, we've sent: ${outgoingOffsets.currentOffset}, we want to send up to: ${outgoingOffsets.maxOffset}`)
-          this.remoteMaxOffset = Math.max(frame.maxOffset.toNumber(), this.remoteMaxOffset)
+          if (frame.maxOffset.isGreaterThan(MAX_DATA_SIZE * 2)) {
+            this.remoteMaxOffset = Math.max(frame.maxOffset.toNumber(), this.remoteMaxOffset)
+          } else {
+            // We assumed their size was 64kb but it turned out to be less
+            this.remoteMaxOffset = frame.maxOffset.toNumber()
+          }
           break
         case FrameType.ConnectionDataBlocked:
           this.debug(`remote wants to send more data but we are blocking them. current max incoming offset: ${this.getIncomingOffsets()}, remote max offset: ${frame.maxOffset}`)
