@@ -160,7 +160,7 @@ export type Frame =
   | ConnectionStreamIdBlockedFrame
   | StreamMoneyFrame
   | StreamMaxMoneyFrame
-  //  | StreamMoneyBlockedFrame
+  | StreamMoneyBlockedFrame
   | StreamCloseFrame
   | StreamDataFrame
   | StreamMaxDataFrame
@@ -398,6 +398,42 @@ export class StreamMaxMoneyFrame extends BaseFrame {
   }
 }
 
+export class StreamMoneyBlockedFrame extends BaseFrame {
+  type: FrameType.StreamMoneyBlocked
+  streamId: BigNumber
+  sendMax: BigNumber
+  totalSent: BigNumber
+
+  constructor (streamId: BigNumber.Value, sendMax: BigNumber.Value, totalSent: BigNumber.Value) {
+    super('StreamMoneyBlocked')
+    this.streamId = new BigNumber(streamId)
+    this.sendMax = new BigNumber(sendMax)
+    this.totalSent = new BigNumber(totalSent)
+
+    assert(this.sendMax.isInteger() && this.sendMax.isPositive(), `sendMax must be a positive integer. got: ${sendMax}`)
+    assert(this.totalSent.isInteger() && this.totalSent.isPositive(), `totalSent must be a positive integer. got: ${totalSent}`)
+  }
+
+  static fromBuffer (reader: Reader): StreamMoneyBlockedFrame {
+    assertType(reader, 'StreamMoneyBlocked')
+    const contents = Reader.from(reader.readVarOctetString())
+    const streamId = contents.readVarUIntBigNum()
+    const sendMax = contents.readVarUIntBigNum()
+    const totalSent = contents.readVarUIntBigNum()
+    return new StreamMoneyBlockedFrame(streamId, sendMax, totalSent)
+  }
+
+  writeTo (writer: Writer): Writer {
+    writer.writeUInt8(this.type)
+    const contents = new Writer()
+    contents.writeVarUInt(this.streamId)
+    contents.writeVarUInt(this.sendMax)
+    contents.writeVarUInt(this.totalSent)
+    writer.writeVarOctetString(contents.getBuffer())
+    return writer
+  }
+}
+
 export class StreamCloseFrame extends BaseFrame {
   type: FrameType.StreamClose
   streamId: BigNumber
@@ -555,6 +591,8 @@ function parseFrame (reader: Reader): Frame | undefined {
       return StreamMoneyFrame.fromBuffer(reader)
     case FrameType.StreamMaxMoney:
       return StreamMaxMoneyFrame.fromBuffer(reader)
+    case FrameType.StreamMoneyBlocked:
+      return StreamMoneyBlockedFrame.fromBuffer(reader)
     case FrameType.StreamData:
       return StreamDataFrame.fromBuffer(reader)
     case FrameType.StreamMaxData:

@@ -20,7 +20,8 @@ import {
   StreamMaxDataFrame,
   StreamDataBlockedFrame,
   ConnectionMaxDataFrame,
-  ConnectionDataBlockedFrame
+  ConnectionDataBlockedFrame,
+  StreamMoneyBlockedFrame
 } from './protocol'
 import { Reader } from 'oer-utils'
 import { Plugin } from './util/plugin-interface'
@@ -474,6 +475,9 @@ export class Connection extends EventEmitter {
             this.startSendLoop()
           }
           break
+        case FrameType.StreamMoneyBlocked:
+          this.debug(`peer told us that they want to send more money on stream ${frame.streamId} but we are blocking them. they have sent: ${frame.totalSent} so far and want to send: ${frame.sendMax}`)
+          break
         case FrameType.StreamData:
           this.handleNewStream(frame.streamId.toNumber())
           this.debug(`got data for stream ${frame.streamId}`)
@@ -720,6 +724,12 @@ export class Connection extends EventEmitter {
         amountToSend = amountToSend.plus(amountToSendFromStream)
         maxAmountFromNextStream = maxAmountFromNextStream.minus(amountToSendFromStream)
         streamsSentFrom.push(stream)
+      }
+
+      // Tell peer if they're blocking us from sending money
+      const amountLeftStreamWantsToSend = new BigNumber(stream.sendMax).minus(stream.totalSent).minus(amountToSendFromStream)
+      if (amountLeftStreamWantsToSend.times(this.exchangeRate!).isGreaterThan(stream._remoteReceiveMax.minus(stream._remoteReceived))) {
+        requestPacket.frames.push(new StreamMoneyBlockedFrame(stream.id, stream.sendMax, stream.totalSent))
       }
 
       if (maxAmountFromNextStream.isEqualTo(0)) {
