@@ -54,6 +54,9 @@ See [`example.js`](./example.js) or the TSDoc for the usage.
 - [ ] Make it work even if one side can only receive 0 amount packets
 - [ ] Add timeouts for lack of activity
 - [ ] Handle plugin disconnecting
+- [ ] Make it possible to create outgoing connections using the same plugin a server is using (not possible because plugins can only have one incoming listener)
+- [ ] Enable money and data to be sent in the first packet (instead of using a dummy test packet to determine the exchange rate)
+- [ ] Apply backoff if packets are being constantly rejected
 
 ## Credits
 

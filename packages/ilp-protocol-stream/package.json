@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "types": "src/index.d.ts",
   "files": [
-    "src/*.js*",
+    "src/*.js",
+    "src/*.js.map",
     "src/*.d.ts"
   ],
   "scripts": {
@@ -13,7 +14,9 @@
     "prepare": "tsc",
     "lint": "tslint --project .",
     "test": "nyc mocha",
-    "doc": "typedoc --options typedoc.js src/index.ts src/connection.ts src/stream.ts"
+    "doc": "typedoc --options typedoc.js src/index.ts src/connection.ts src/stream.ts",
+    "publish-docs": "npm run doc && node scripts/publish-docs.js",
+    "codecov": "codecov"
   },
   "keywords": [
     "interledger",
@@ -25,10 +28,16 @@
   ],
   "author": "Evan Schwartz <evan@ripple.com>",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interledgerjs/ilp-protocol-stream.git"
+  },
   "dependencies": {
     "@types/node": "^9.6.1",
     "bignumber.js": "^6.0.0",
+    "codecov": "^3.0.1",
     "debug": "^3.1.0",
+    "gh-pages": "^1.1.0",
     "ilp-packet": "^2.2.0",
     "ilp-protocol-ildcp": "^1.0.0",
     "oer-utils": "^2.0.1",
