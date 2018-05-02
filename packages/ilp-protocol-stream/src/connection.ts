@@ -213,7 +213,9 @@ export class Connection extends EventEmitter {
   // TODO should this be sync or async?
   async destroy (err?: Error): Promise<void> {
     this.debug('destroying connection with error:', err)
-    this.safeEmit('error', err)
+    if (err) {
+      this.safeEmit('error', err)
+    }
     for (let [_, stream] of this.streams) {
       // TODO should we pass the error to each stream?
       stream.destroy()
@@ -476,6 +478,7 @@ export class Connection extends EventEmitter {
           }
           break
         case FrameType.StreamMoneyBlocked:
+          this.handleNewStream(frame.streamId.toNumber())
           this.debug(`peer told us that they want to send more money on stream ${frame.streamId} but we are blocking them. they have sent: ${frame.totalSent} so far and want to send: ${frame.sendMax}`)
           break
         case FrameType.StreamData:
@@ -494,8 +497,8 @@ export class Connection extends EventEmitter {
           break
         case FrameType.StreamMaxData:
           this.handleNewStream(frame.streamId.toNumber())
-          this.debug(`peer told us that stream ${frame.streamId} can receive up to byte offset: ${frame.maxOffset}`)
           stream = this.streams.get(frame.streamId.toNumber())!
+          this.debug(`peer told us that stream ${frame.streamId} can receive up to byte offset: ${frame.maxOffset} (we've sent up to offset: ${stream._getOutgoingOffsets().current})`)
           const oldOffset = stream._remoteMaxOffset
           stream._remoteMaxOffset = frame.maxOffset.toNumber()
           if (stream._remoteMaxOffset > oldOffset) {
@@ -728,6 +731,7 @@ export class Connection extends EventEmitter {
 
       // Tell peer if they're blocking us from sending money
       const amountLeftStreamWantsToSend = new BigNumber(stream.sendMax).minus(stream.totalSent).minus(amountToSendFromStream)
+      /* tslint:disable-next-line:no-unnecessary-type-assertion */
       if (amountLeftStreamWantsToSend.times(this.exchangeRate!).isGreaterThan(stream._remoteReceiveMax.minus(stream._remoteReceived))) {
         requestPacket.frames.push(new StreamMoneyBlockedFrame(stream.id, stream.sendMax, stream.totalSent))
       }

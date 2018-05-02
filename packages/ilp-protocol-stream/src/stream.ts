@@ -111,15 +111,26 @@ export class DataAndMoneyStream extends Duplex {
     return this._receiveMax.toString()
   }
 
+  /**
+   * Number of bytes buffered and waiting to be read
+   *
+   * This property exists on streams after Node 9.4 so it is added here for backwards compatibility
+   */
   get readableLength (): number {
-    return super.readableLength + this._incomingData.byteLength()
+    // stream.readableLength was only added in Node v9.4.0
+    const readableLength = super.readableLength || (this['_readableState'] && this['_readableState'].length) || 0
+    return readableLength + this._incomingData.byteLength()
   }
 
   /**
    * Number of bytes buffered and waiting to be sent
+   *
+   * This property exists on streams after Node 9.4 so it is added here for backwards compatibility
    */
   get writableLength (): number {
-    return super.writableLength + this._outgoingData.byteLength()
+    // stream.readableLength was only added in Node v9.4.0
+    const writableLength = super.writableLength || (this['_writableState'] && this['_writableState'].length) || 0
+    return writableLength + this._outgoingData.byteLength()
   }
 
   /**
@@ -376,6 +387,7 @@ export class DataAndMoneyStream extends Duplex {
         // Node streams only emit the 'end' event if data was actually read
         this.safeEmit('end')
       }
+      this.safeEmit('close')
       callback(err)
     }
 
@@ -399,6 +411,10 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _destroy (error: Error | undefined | null, callback: (...args: any[]) => void): void {
+    let emittedClose = false
+    this.once('close', () => {
+      emittedClose = true
+    })
     this.debug('destroying stream because of error:', error)
     this.closed = true
     if (error) {
@@ -408,6 +424,12 @@ export class DataAndMoneyStream extends Duplex {
       // Node streams only emit the 'end' event if data was actually read
       this.safeEmit('end')
     }
+    // Only emit the 'close' event if the stream doesn't automatically
+    setImmediate(() => {
+      if (!emittedClose) {
+        this.safeEmit('close')
+      }
+    })
     callback(error)
   }
 
@@ -418,18 +440,6 @@ export class DataAndMoneyStream extends Duplex {
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
     this.debug(`${chunk.length} bytes written to the outgoing data queue`)
     this._outgoingData.push(chunk)
-    this.emit('_maybe_start_send_loop')
-    callback()
-  }
-
-  /**
-   * (Called internally by the Node Stream when stream.write is called)
-   * @private
-   */
-  _writev (chunks: { chunk: Buffer, encoding: string }[], callback: (...args: any[]) => void): void {
-    for (let chunk of chunks) {
-      this._outgoingData.push(chunk.chunk)
-    }
     this.emit('_maybe_start_send_loop')
     callback()
   }

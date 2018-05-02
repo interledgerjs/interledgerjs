@@ -134,12 +134,13 @@ describe('Connection', function () {
         spy()
         assert.calledOnce(spy)
         assert.equal(stream.totalSent, '0')
-        assert.equal(stream.writableLength, 1000)
+        // Don't use an assert.equal here because the behavior changed between Node 8 and 10
+        assert.isAtLeast(stream.writableLength, 1)
         assert.equal(stream.isOpen(), false)
         done()
       })
       stream.setSendMax(100)
-      stream.write(Buffer.alloc(1000))
+      stream.write(Buffer.alloc(20000))
 
       this.clientConn.destroy()
     })
