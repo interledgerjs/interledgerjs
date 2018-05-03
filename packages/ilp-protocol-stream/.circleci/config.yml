@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/node:8
+      - image: circleci/node:10
 
     working_directory: ~/repo
 
@@ -31,6 +31,33 @@ jobs:
 
       # upload coverage to codecov.io
       - run: npm run codecov
+
+  # Make sure the tests work on Node v8 as well
+  build_node_v8:
+    docker:
+      - image: circleci/node:8
+
+    working_directory: ~/repo_v8
+
+    steps:
+      - checkout
+
+      # Download and cache dependencies
+      - restore_cache:
+          keys:
+          - v8-dependencies-{{ checksum "package.json" }}
+          # fallback to using the latest cache if no exact match is found
+          - v8-dependencies-
+
+      - run: npm install
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: v8-dependencies-{{ checksum "package.json" }}
+
+      # run tests!
+      - run: npm test
 
   publish_docs:
     docker:
@@ -80,6 +107,11 @@ workflows:
   build_and_publish:
     jobs:
       - build:
+          filters:
+            branches:
+              ignore:
+                - gh-pages
+      - build_node_v8:
           filters:
             branches:
               ignore:
