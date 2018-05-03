@@ -4,6 +4,7 @@ node_modules
 **/*.d.ts
 !example.js
 !typedoc.js
+!scripts/*
 coverage
 .nyc_output
 doc
