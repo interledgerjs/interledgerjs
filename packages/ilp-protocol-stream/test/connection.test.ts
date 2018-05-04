@@ -193,7 +193,143 @@ describe('Connection', function () {
   })
 
   describe('Exchange Rate Handling', function () {
+    it('should reject and retry packets if the exchange rate is worse than the minimum acceptable rate', async function () {
+      this.clientPlugin.maxAmount = 400
+      const exchangeRates = [0.5, 0.75, 0.25, 0.1, 0.49, 0.5, 1.25]
+      const realSendData = this.clientPlugin.sendData
+      let callCount = 0
+      const args: Buffer[] = []
+      let rejected: Array<IlpPacket.IlpRejection> = []
+      this.clientPlugin.sendData = async (data: Buffer) => {
+        callCount++
+        args[callCount - 1] = data
+        if (callCount <= exchangeRates.length) {
+          this.clientPlugin.exchangeRate = exchangeRates[callCount - 1]
+        }
+        const response = await realSendData.call(this.clientPlugin, data)
+        if(response[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
+          rejected.push(IlpPacket.deserializeIlpReject(response))
+        }
+        return response
+      }
 
+      const clientStream = this.clientConn.createStream()
+      await clientStream.sendTotal(2000)
+
+      // F99X Are Application Errors due to the exchange rate dropping below the minimum acceptable amount
+      assert.equal(rejected[0].message, 'Packet amount too large')
+      assert.equal(rejected[1].code.includes('F99'), true)
+      assert.equal(rejected[2].code.includes('F99'), true)
+      assert.equal(rejected[3].code.includes('F99'), true)
+    })
+
+    it('should reject and retry packets if the exchange rate is worse than the minimum acceptable amount - slippage', async function() {
+      this.clientPlugin.deregisterDataHandler()
+      this.serverPlugin.deregisterDataHandler()
+
+      this.server = await createServer({
+        plugin: this.serverPlugin,
+        serverSecret: Buffer.alloc(32)
+      })
+      await this.server.listen()
+
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      this.destinationAccount = destinationAccount
+      this.sharedSecret = sharedSecret
+
+      const connectionPromise = this.server.acceptConnection()
+
+      this.clientConn = await createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret,
+        slippage: 0.05
+      })
+      this.serverConn = await connectionPromise
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(10000)
+      })
+
+      this.clientPlugin.maxAmount = 400
+      const exchangeRates = [0.5, 0.49, 0.48, 0.47, 0.5, 0.46, 0.7]
+      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
+      let callCount = 0
+      const args: Buffer[] = []
+      let rejected: Array<IlpPacket.IlpRejection> = []
+      this.clientPlugin.sendData = async (data: Buffer) => {
+        callCount++
+        args[callCount - 1] = data
+        if (callCount <= exchangeRates.length) {
+          this.clientPlugin.exchangeRate = exchangeRates[callCount - 1]
+        }
+        const response = await realSendData.call(this.clientPlugin, data)
+        if (response[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
+          rejected.push(IlpPacket.deserializeIlpReject(response))
+        }
+        return response
+      }
+
+      const clientStream = this.clientConn.createStream()
+      await clientStream.sendTotal(2000)
+
+      // F99X Are Application Errors due to the exchange rate dropping below the minimum acceptable amount + slippage
+      assert.equal(rejected[0].message, 'Packet amount too large')
+      assert.equal(rejected[1].code.includes('F99'), true)
+      assert.equal(rejected[2].code.includes('F99'), true)
+    })
+
+    it('should properly calcuate the total received, sent, and delivered for the client and the server', async function () {
+      this.clientPlugin.deregisterDataHandler()
+      this.serverPlugin.deregisterDataHandler()
+
+      this.server = await createServer({
+        plugin: this.serverPlugin,
+        serverSecret: Buffer.alloc(32),
+        slippage: 0.01
+      })
+      await this.server.listen()
+
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      this.destinationAccount = destinationAccount
+      this.sharedSecret = sharedSecret
+
+      const connectionPromise = this.server.acceptConnection()
+      this.clientPlugin.maxAmount = 400
+
+      this.clientConn = await createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret,
+        slippage: 0.05
+      })
+      this.serverConn = await connectionPromise
+      this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(10000)
+        await stream.sendTotal(111)
+      })
+
+      const clientStream = this.clientConn.createStream()
+      clientStream.setReceiveMax(10000)
+      await clientStream.sendTotal(2000)
+
+      // Server Sends 111
+      assert.equal(this.clientConn.totalReceived, 222)
+      assert.equal(this.serverConn.totalDelivered, 222)
+      assert.equal(this.serverConn.totalSent, 111)
+
+      // Client Sends 2000
+      assert.equal(this.serverConn.totalReceived, 1000)
+      assert.equal(this.clientConn.totalDelivered, 1000)
+      assert.equal(this.clientConn.totalSent, 2000)
+
+      // Check Minimum Exchange Rates
+      assert.equal(this.serverConn.minimumAcceptableExchangeRate, 1.98)
+      assert.equal(this.clientConn.minimumAcceptableExchangeRate, 0.475)
+
+      // Check Last Packet Exchange Rate
+      assert.equal(this.serverConn.lastPacketExchangeRate, 2)
+      assert.equal(this.clientConn.lastPacketExchangeRate, 0.5)
+    })
   })
 
   describe('Maximum Packet Amount Handling', function () {

@@ -107,6 +107,10 @@ export class Connection extends EventEmitter {
 
   // TODO use bignumbers for byte offsets
   protected remoteMaxOffset: number
+  protected _totalReceived: BigNumber
+  protected _totalSent: BigNumber
+  protected _totalDelivered: BigNumber
+  protected _lastPacketExchangeRate: BigNumber
 
   constructor (opts: FullConnectionOpts) {
     super()
@@ -139,6 +143,11 @@ export class Connection extends EventEmitter {
     this.remoteMaxStreamId = DEFAULT_MAX_REMOTE_STREAMS
 
     this.remoteMaxOffset = MAX_DATA_SIZE * 2 // 64kb
+
+    this._totalReceived = new BigNumber(0)
+    this._totalSent = new BigNumber(0)
+    this._totalDelivered = new BigNumber(0)
+    this._lastPacketExchangeRate = new BigNumber(0)
   }
 
   /**
@@ -248,6 +257,46 @@ export class Connection extends EventEmitter {
     // TODO notify when the stream is closed
 
     return stream
+  }
+
+  /**
+   * Connections minimum exchange rate with slippage included, if not set '0' is returned.
+   */
+  get minimumAcceptableExchangeRate (): string {
+    if (this.exchangeRate) {
+      const minimumExchangeWithSlippage = this.exchangeRate
+         .times(new BigNumber(1).minus(this.slippage))
+      return minimumExchangeWithSlippage.toString()
+    }
+    return '0'
+  }
+
+ /**
+  * Calculates the last exchange rate based on last packet successfully sent.
+  */
+  get lastPacketExchangeRate (): string {
+    return this._lastPacketExchangeRate.toString()
+  }
+
+  /**
+   * Total delivered so far, denominated in the connection plugin's units.
+   */
+  get totalDelivered (): string {
+    return this._totalDelivered.toString()
+  }
+
+  /**
+   * Total sent so far, denominated in the connection plugin's units.
+   */
+  get totalSent (): string {
+    return this._totalSent.toString()
+  }
+
+  /**
+   * Total received so far by the local side, denominated in the connection plugin's units.
+   */
+  get totalReceived (): string {
+    return this._totalReceived.toString()
   }
 
   /**
@@ -394,6 +443,7 @@ export class Connection extends EventEmitter {
 
     // Return fulfillment and response packet
     const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Fulfill, prepare.amount, responseFrames)
+    this._totalReceived = this._totalReceived.plus(prepare.amount)
     this.debug(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
     return {
       fulfillment,
@@ -836,6 +886,10 @@ export class Connection extends EventEmitter {
 
     if (responsePacket) {
       this.handleFrames(responsePacket.frames)
+      if (responsePacket.prepareAmount.isGreaterThan(0)
+        && amountToSend.isGreaterThan(0)) {
+        this._lastPacketExchangeRate = responsePacket.prepareAmount.dividedBy(amountToSend)
+      }
     }
 
     if (!responsePacket || responsePacket.ilpPacketType === IlpPacketType.Reject) {
@@ -850,6 +904,8 @@ export class Connection extends EventEmitter {
       for (let stream of streamsSentFrom) {
         stream._executeHold(requestPacket.sequence.toString())
       }
+      this._totalDelivered = this._totalDelivered.plus(responsePacket.prepareAmount)
+      this._totalSent = this._totalSent.plus(amountToSend)
 
       // If we're trying to pinpoint the Maximum Packet Amount, raise
       // the limit because we know that the testMaximumPacketAmount works
