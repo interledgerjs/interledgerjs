@@ -51,7 +51,15 @@ export class Packet {
     const ilpPacketType = reader.readUInt8BigNum().toNumber()
     const sequence = reader.readVarUIntBigNum()
     const packetAmount = reader.readVarUIntBigNum()
-    const frames = parseFrames(reader)
+    const numFrames = reader.readVarUIntBigNum().toNumber()
+    const frames: Frame[] = []
+
+    for (let i = 0; i < numFrames; i++) {
+      const frame = parseFrame(reader)
+      if (frame) {
+        frames.push(frame)
+      }
+    }
     return new Packet(sequence, ilpPacketType, packetAmount, frames)
   }
 
@@ -84,6 +92,8 @@ export class Packet {
     writer.writeUInt8(this.ilpPacketType)
     writer.writeVarUInt(this.sequence)
     writer.writeVarUInt(this.prepareAmount)
+    // Write the number of frames (excluding padding)
+    writer.writeVarUInt(this.frames.length)
     for (let frame of this.frames) {
       frame.writeTo(writer)
     }
@@ -604,18 +614,4 @@ function parseFrame (reader: Reader): Frame | undefined {
       reader.skipVarOctetString()
       return undefined
   }
-}
-
-function parseFrames (reader: Reader): Frame[] {
-  const frames: Frame[] = []
-
-  // Keep reading frames until the end or until we hit the padding (which must come at the end)
-  while (reader.cursor < reader.buffer.length
-    && !reader.peekUInt8BigNum().isEqualTo(FrameType.Padding)) {
-    const frame = parseFrame(reader)
-    if (frame) {
-      frames.push(frame)
-    }
-  }
-  return frames
 }

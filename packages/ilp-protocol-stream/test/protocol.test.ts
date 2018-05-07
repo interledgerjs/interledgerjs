@@ -32,6 +32,7 @@ describe('Packet Format', function () {
       ])
 
       const serialized = packet._serialize()
+      serialized[7] = 5
       const serializedWithExtraFrames = Buffer.concat([
         serialized,
         unknownFrame,
@@ -42,6 +43,22 @@ describe('Packet Format', function () {
 
       assert.equal(deserializedPacket.frames.length, 3)
       assert.equal((deserializedPacket.frames[2] as StreamMoneyFrame).streamId.toNumber(), 3)
+    })
+
+    it('should stop reading after the number of frames specified', function () {
+      const packet = new Packet(0, 14, 5, [
+        new StreamMoneyFrame(1, 1),
+        new StreamMoneyFrame(2, 2)
+      ])
+      const serialized = packet._serialize()
+      const lastFrame = new StreamMoneyFrame(3, 3).writeTo(new Writer()).getBuffer()
+      const serializedWithExtraFrames = Buffer.concat([
+        serialized,
+        lastFrame
+      ])
+
+      const deserializedPacket = Packet._deserializeUnencrypted(serializedWithExtraFrames)
+      assert.equal(deserializedPacket.frames.length, 2)
     })
   })
 })
