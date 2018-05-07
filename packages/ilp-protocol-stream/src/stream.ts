@@ -48,6 +48,7 @@ export class DataAndMoneyStream extends Duplex {
 
   protected _incomingData: OffsetSorter
   protected _outgoingData: DataQueue
+  protected _outgoingDataToRetry: { data: Buffer, offset: number }[]
   protected outgoingOffset: number
   protected bytesRead: number
 
@@ -71,6 +72,8 @@ export class DataAndMoneyStream extends Duplex {
 
     this._incomingData = new OffsetSorter()
     this._outgoingData = new DataQueue()
+    // TODO we might want to merge this with the _outgoingData queue data structure
+    this._outgoingDataToRetry = []
     this.outgoingOffset = 0
     this.bytesRead = 0
 
@@ -473,6 +476,21 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _getAvailableDataToSend (size: number): { data: Buffer | undefined, offset: number } {
+    // See if we have data that needs to be resent
+    if (this._outgoingDataToRetry.length > 0) {
+      const toSend = this._outgoingDataToRetry[0]
+      if (toSend.data.length > size) {
+        const data = toSend.data.slice(0, size)
+        const offset = toSend.offset
+        toSend.data = toSend.data.slice(size)
+        toSend.offset = toSend.offset + size
+        return { data, offset }
+      } else {
+        return this._outgoingDataToRetry.shift()!
+      }
+    }
+
+    // Send new data if the remote can receive more data
     const maxBytes = Math.min(size, this._remoteMaxOffset - this.outgoingOffset)
     const offset = this.outgoingOffset
     const data = this._outgoingData.read(maxBytes)
@@ -481,6 +499,15 @@ export class DataAndMoneyStream extends Duplex {
       this.debug(`${data.length} bytes taken from the outgoing data queue`)
     }
     return { data, offset }
+  }
+
+  /**
+   * (Used by the Connection class but not meant to be part of the public API)
+   * @private
+   */
+  _resendOutgoingData (data: Buffer, offset: number) {
+    this.debug(`re-queuing ${data.length} bytes of data starting at offset ${offset}`)
+    this._outgoingDataToRetry.push({ data, offset })
   }
 
   /**

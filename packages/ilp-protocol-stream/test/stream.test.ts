@@ -6,7 +6,6 @@ import { DataAndMoneyStream } from '../src/stream'
 import { Duplex } from 'stream'
 import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
-import * as lolex from 'lolex'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
@@ -520,6 +519,76 @@ describe('DataAndMoneyStream', function () {
 
       // The other side isn't accepting data so it's still in the buffer on our side
       assert.equal(clientStream.writableLength, 16384)
+    })
+
+    it('should retry data sent in packets that are rejected by connectors', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('data', (chunk: Buffer) => {
+          assert.lengthOf(chunk, 1000)
+          done()
+        })
+      })
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'T00',
+          message: 'uh oh',
+          triggeredBy: 'test.connector',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+      const clientStream = this.clientConn.createStream()
+      clientStream.write(Buffer.alloc(1000))
+    })
+
+    it('should retry sending data from packets rejected by the receiver', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('data', (chunk: Buffer) => {
+          assert.lengthOf(chunk, 1000)
+          done()
+        })
+      })
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'F99',
+          message: 'uh oh',
+          triggeredBy: 'test.receiver',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+      const clientStream = this.clientConn.createStream()
+      clientStream.write(Buffer.alloc(1000))
+    })
+
+    it('should order data correctly if packets are rejected and data must be resent', function (done) {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        const chunks: Buffer[] = []
+        stream.on('data', (chunk: Buffer) => {
+          chunks.push(chunk)
+        })
+        stream.on('end', () => {
+          const data = Buffer.concat(chunks)
+          for (let i = 0; i < 40; i++) {
+            assert.equal(data[i * 1000], i)
+          }
+          done()
+        })
+      })
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'F99',
+          message: 'uh oh',
+          triggeredBy: 'test.receiver',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+      const clientStream = this.clientConn.createStream()
+      for (let i = 0; i < 40; i++) {
+        clientStream.write(Buffer.alloc(1000, i))
+      }
+      clientStream.end()
     })
   })
 })

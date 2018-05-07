@@ -31,7 +31,7 @@ require('source-map-support').install()
 const TEST_PACKET_AMOUNT = new BigNumber(1000)
 const RETRY_DELAY_START = 100
 const MAX_DATA_SIZE = 32767
-export const DEFAULT_MAX_REMOTE_STREAMS = 10
+const DEFAULT_MAX_REMOTE_STREAMS = 10
 
 export interface ConnectionOpts {
   /** Ledger plugin (V2) */
@@ -886,39 +886,33 @@ export class Connection extends EventEmitter {
 
     if (responsePacket) {
       this.handleFrames(responsePacket.frames)
-      if (responsePacket.prepareAmount.isGreaterThan(0)
-        && amountToSend.isGreaterThan(0)) {
-        this._lastPacketExchangeRate = responsePacket.prepareAmount.dividedBy(amountToSend)
-      }
-    }
 
-    if (!responsePacket || responsePacket.ilpPacketType === IlpPacketType.Reject) {
-      // Handle reject
-      this.debug(`packet ${requestPacket.sequence} was rejected`)
+      if (responsePacket.ilpPacketType === IlpPacketType.Fulfill) {
+        for (let stream of streamsSentFrom) {
+          stream._executeHold(requestPacket.sequence.toString())
+        }
 
-      // Put money back into MoneyStreams
-      for (let stream of streamsSentFrom) {
-        stream._cancelHold(requestPacket.sequence.toString())
-      }
-    } else {
-      for (let stream of streamsSentFrom) {
-        stream._executeHold(requestPacket.sequence.toString())
-      }
-      this._totalDelivered = this._totalDelivered.plus(responsePacket.prepareAmount)
-      this._totalSent = this._totalSent.plus(amountToSend)
+        // Update stats based on amount sent
+        if (responsePacket.prepareAmount.isGreaterThan(0)
+          && amountToSend.isGreaterThan(0)) {
+          this._lastPacketExchangeRate = responsePacket.prepareAmount.dividedBy(amountToSend)
+          this._totalDelivered = this._totalDelivered.plus(responsePacket.prepareAmount)
+          this._totalSent = this._totalSent.plus(amountToSend)
+        }
 
-      // If we're trying to pinpoint the Maximum Packet Amount, raise
-      // the limit because we know that the testMaximumPacketAmount works
-      if (this.maximumPacketAmount.isFinite()
-        && amountToSend.isEqualTo(this.testMaximumPacketAmount)
-        && this.testMaximumPacketAmount.isLessThan(this.maximumPacketAmount)) {
-        const newTestMax = this.maximumPacketAmount.plus(this.testMaximumPacketAmount).dividedToIntegerBy(2)
-        this.debug(`maximum packet amount is between ${this.testMaximumPacketAmount} and ${this.maximumPacketAmount}, trying: ${newTestMax}`)
-        this.testMaximumPacketAmount = newTestMax
-      }
+        // If we're trying to pinpoint the Maximum Packet Amount, raise
+        // the limit because we know that the testMaximumPacketAmount works
+        if (this.maximumPacketAmount.isFinite()
+          && amountToSend.isEqualTo(this.testMaximumPacketAmount)
+          && this.testMaximumPacketAmount.isLessThan(this.maximumPacketAmount)) {
+          const newTestMax = this.maximumPacketAmount.plus(this.testMaximumPacketAmount).dividedToIntegerBy(2)
+          this.debug(`maximum packet amount is between ${this.testMaximumPacketAmount} and ${this.maximumPacketAmount}, trying: ${newTestMax}`)
+          this.testMaximumPacketAmount = newTestMax
+        }
 
-      // Reset the retry delay
-      this.retryDelay = RETRY_DELAY_START
+        // Reset the retry delay
+        this.retryDelay = RETRY_DELAY_START
+      }
     }
   }
 
@@ -1042,8 +1036,19 @@ export class Connection extends EventEmitter {
         this.debug(`got invalid fulfillment for packet ${packet.sequence}: ${response.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
         throw new Error(`Got invalid fulfillment for packet ${packet.sequence}. Actual: ${response.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
       }
-    } else if ((response as IlpPacket.IlpRejection).code !== 'F99') {
-      return this.handleConnectorError((response as IlpPacket.IlpRejection), sourceAmount)
+    } else {
+      response = response as IlpPacket.IlpRejection
+
+      this.undoRejectedPacket(packet)
+
+      if (response.code !== 'F99') {
+        return this.handleConnectorError(response, sourceAmount)
+      }
+    }
+
+    // TODO correctly handle fulfills that come back without data attached (this will be treated like a reject)
+    if (response.data.length === 0) {
+      return undefined
     }
 
     // Parse response data from receiver
@@ -1069,6 +1074,28 @@ export class Connection extends EventEmitter {
     this.debug(`got response to packet: ${packet.sequence}: ${JSON.stringify(responsePacket)}`)
 
     return responsePacket
+  }
+
+  /**
+   * Roll back the effects of an outgoing packet that was rejected
+   * @private
+   */
+  protected undoRejectedPacket (requestPacket: Packet) {
+    this.debug(`packet ${requestPacket.sequence} was rejected`)
+
+    // TODO resend control frames
+    for (let frame of requestPacket.frames) {
+      switch (frame.type) {
+        case FrameType.StreamMoney:
+          this.streams.get(frame.streamId.toNumber())!._cancelHold(requestPacket.sequence.toString())
+          break
+        case FrameType.StreamData:
+          this.streams.get(frame.streamId.toNumber())!._resendOutgoingData(frame.data, frame.offset.toNumber())
+          break
+        default:
+          continue
+      }
+    }
   }
 
   /**
