@@ -73,8 +73,11 @@ export class ConnectionError extends Error {
 }
 
 /**
- * Class representing the connection between a Client and a Server.
- * A single connection can be used to send or receive on multiple streams.
+ * Class representing the connection between a [`Client`]{@link createConnection} and a [`Server`]{@link Server}.
+ * A single connection can be used to send or receive on [Streams]{@link DataAndMoneyStream}.
+ *
+ * Streams are created using the [`createStream`]{@link createStream} method.
+ * The `'stream'` event will be emitted whenever a new incoming stream is opened by the other party.
  */
 export class Connection extends EventEmitter {
   /** Application identifier for a certain connection */
@@ -199,6 +202,9 @@ export class Connection extends EventEmitter {
     this.closed = false
   }
 
+  /**
+   * Close the connection when all streams have finished sending their money and data
+   */
   // TODO should this be sync or async?
   async end (): Promise<void> {
     this.debug('closing connection')
@@ -223,6 +229,9 @@ export class Connection extends EventEmitter {
     this.safeEmit('close')
   }
 
+  /**
+   * Immediately close the connection and all streams
+   */
   // TODO should this be sync or async?
   async destroy (err?: Error): Promise<void> {
     this.debug('destroying connection with error:', err)
@@ -238,7 +247,7 @@ export class Connection extends EventEmitter {
   }
 
   /**
-   * Returns a new bidirectional money and data stream
+   * Returns a new bidirectional [`DataAndMoneyStream`]{@link DataAndMoneyStream}
    */
   createStream (): DataAndMoneyStream {
     // Make sure we don't open more streams than the remote will allow

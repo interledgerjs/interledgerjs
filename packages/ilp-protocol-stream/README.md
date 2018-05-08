@@ -1,63 +1,103 @@
-# ILP/STREAM: Multiplexed Money and Data Streams
-> Interledger transport protocol for multiplexing streams of money and data over an ILP connection.
+# ILP/STREAM
+> Interledger Transport Protocol for sending multiple streams of money and data over ILP.
 
-Implementation of [ILP/STREAM](https://github.com/interledger/rfcs/pull/417). This module handles sending multiple streams of money and data over a single ILP connection between a client and server. It automatically handles flow control, backpressure, exchange rates, multiple classes of errors, data encryption and authentication, and condition and fulfillment generation.
+[![NPM Package](https://img.shields.io/npm/v/ilp-protocol-stream.svg?style=flat)](https://npmjs.org/package/ilp-protocol-stream)
+[![CircleCI](https://circleci.com/gh/interledgerjs/ilp-protocol-stream.svg?style=shield)](https://circleci.com/gh/interledgerjs/ilp-protocol-stream)
+[![codecov](https://codecov.io/gh/interledgerjs/ilp-protocol-stream/branch/master/graph/badge.svg)](https://codecov.io/gh/interledgerjs/ilp-protocol-stream)
+[![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
+[![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream)
 
-## Getting Started
+STREAM is the recommended Transport Protocol to use for most Interledger applications.
+
+The protocol allows a "client" and "server" to establish a bidirectional connection through Interledger that can be used to send money and data. This module handles authentication, encryption, flow control (making sure one party doesn't send more than the other can handle at once), and congestion control (avoiding sending more packets than the network can handle).
+
+## Install
+
+Requires Node >= v8.10.
 
 ```sh
 npm install --save ilp-protocol-stream
 ```
 
-See [`example.js`](./example.js) or the TSDoc for the usage.
+## Usage
 
-## TODOs
+See [example.js](./example.js) for a runnable example.
 
-- [x] Quoting
-- [x] Minimum destination amount and amount arrived
-- [x] Track exchange rate and apply slippage
-- [x] Prevent replay attacks and ensure response is correctly on fulfill or reject
-- [x] Determine Max Packet Amount
-- [x] Events to know when money has been fully sent
-- [x] Retry temporary errors
-- [x] Combine always needed frames into one (and make it appear first?)
-- [x] Length-prefix frames for extensibility?
-- [x] Backpressure
-- [x] Helper functions for sending / receiving and waiting until it's finished
-- [x] Handle stream closing
-- [x] Protocol error frame
-- [x] Padding frame
-- [x] Data stream
-- [x] Should money and data streams use different sets of numbers for stream ids?
-- [x] Connection closing
-- [x] Max number of streams
-- [x] stream.end should accept data like node stream
-- [x] Separate connection "end" and "destroy", where the former flushes everything first
-- [x] Use stream.destroy instead of end to close immediately -- end should flush data and money and emit finish or whatever when it's done, destroy closes it right away
-- [x] Test connection.destroy
-- [x] Stream-level flow control
-- [x] Blocked frames (when more is available to send)
-- [x] Connection-level flow control
-- [x] Allow stream- and connection-level highWaterMark to be configured
-- [ ] connection.end should only close it when the streams are finished sending
-- [ ] Only send data in prepares
-- [ ] Resend certain types of frames when packets are rejected
-- [ ] Clean up closed streams (and throw error if packet is received for a closed stream)
-- [ ] Should we keep "shares" as the way to express how much money goes to each stream or switch to Michiel's idea of expressing ax + b to allow for relative and absolute amounts?
-- [ ] When waiting to receive money, occasionally resend the max receive amount in case the sender hasn't gotten it (and also send it if they send too much)
-- [ ] Multiple packets in flight at the same time
-- [ ] Don't send extra packet at the end if it isn't necessary
-- [ ] Refactor handleData and sendPacket functions to make them easier to understand and reason about
-- [ ] Use `ilp-plugin` to get plugin from environment
-- [ ] Drop connection when it has sent a certain number of packets
-- [ ] Randomize expiry time
-- [ ] Make it work even if one side can only receive 0 amount packets
-- [ ] Add timeouts for lack of activity
-- [ ] Handle plugin disconnecting
-- [ ] Make it possible to create outgoing connections using the same plugin a server is using (not possible because plugins can only have one incoming listener)
-- [ ] Enable money and data to be sent in the first packet (instead of using a dummy test packet to determine the exchange rate)
-- [ ] Apply backoff if packets are being constantly rejected
+These snippets assume you are running a local [`moneyd`](https://github.com/interledgerjs/moneyd-xrp).
 
-## Credits
+**Client:**
 
-Thanks to @sharafian for coming up with the acronym for STREAM.
+Clients connect with the `destinationAccount` and `sharedSecret` generated by a Server.
+
+```js
+const { createConnection } = require('ilp-protocol-stream')
+
+const { destinationAccount, sharedSecret } = getThisFromTheServerSomehow()
+
+;(async function () {
+
+  const connection = await createConnection({
+    destinationAccount,
+    sharedSecret
+  })
+
+  const stream = connection.createStream()
+  stream.write('hello\n')
+  stream.write('here is some more data')
+  await stream.sendTotal(100)
+  await stream.sendTotal(200)
+  stream.end()
+
+})().catch((err) => console.log(err))
+```
+
+**Server:**
+
+```js
+const { createServer } = require('ilp-protocol-stream')
+
+;(async function () {
+
+  const server = await createServer()
+
+  // These need to be passed to the client through an authenticated communication channel
+  const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
+
+  server.on('connection', (connection) => {
+    connection.on('stream', (stream) => {
+      stream.on('money', (amount) => {
+        console.log(`got money: ${amount}`)
+      })
+
+      stream.on('data', (chunk) => {
+        console.log('got data:', chunk.toString('utf8'))
+      })
+
+      stream.on('end', () => {
+        console.log('stream closed')
+      })
+    })
+  })
+
+})().catch((err) => console.log(err))
+```
+
+## API
+
+See the full API docs at: https://interledgerjs.github.io/ilp-protocol-stream
+
+The most important functions and classes to look at are:
+- [`createConnection`](https://interledgerjs.github.io/ilp-protocol-stream/modules/_index_.html#createconnection) - open a Connection to a Server
+- [`Server`](https://interledgerjs.github.io/ilp-protocol-stream/classes/_index_.server.html) - class used to listen for incoming Connections
+- [`Connection`](https://interledgerjs.github.io/ilp-protocol-stream/classes/_connection_.connection.html) - class that manages the communication between a Client and a Server
+- [`DataAndMoneyStream`](https://interledgerjs.github.io/ilp-protocol-stream/classes/_stream_.dataandmoneystream.html) - stream class that can be used to send/receive data and money
+
+## Contribute
+
+PRs, new ideas, and questions are very welcome!
+
+Please feel free to [open issues](https://github.com/interledgerjs/ilp-protocol-stream/issues/new) to discuss any problems you run into or suggestions you have.
+
+## License
+
+Apache-2.0

@@ -11,9 +11,9 @@ export interface StreamOpts {
 }
 
 /**
- * Class used to send money and data over a Connection.
+ * Class used to send money and data over a [Connection]{@link Connection}.
  *
- * This exposes the Node Duplex Stream interface for sending data,
+ * This exposes the Node [Duplex Stream](https://nodejs.org/dist/latest-v10.x/docs/api/stream.html#stream_class_stream_duplex) interface for sending data,
  * as well as additional functions for sending money.
  */
 export class DataAndMoneyStream extends Duplex {
