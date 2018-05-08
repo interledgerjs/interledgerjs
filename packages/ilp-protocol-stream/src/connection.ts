@@ -22,7 +22,7 @@ import {
   ConnectionMaxDataFrame,
   ConnectionDataBlockedFrame,
   StreamMoneyBlockedFrame
-} from './protocol'
+} from './packet'
 import { Reader } from 'oer-utils'
 import { Plugin } from './util/plugin-interface'
 import BigNumber from 'bignumber.js'
@@ -403,7 +403,7 @@ export class Connection extends EventEmitter {
       // Reject the packet if any of the streams is already closed
       if (!stream.isOpen()) {
         this.debug(`peer sent money for stream that was already closed: ${streamId}`)
-        responseFrames.push(new StreamCloseFrame(streamId, 'StreamStateError', 'Stream is already closed'))
+        responseFrames.push(new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed'))
 
         throwFinalApplicationError()
       }
@@ -421,9 +421,9 @@ export class Connection extends EventEmitter {
         if (streamIsClosed && !stream._remoteClosed) {
           this.debug(`telling other side that stream ${stream.id} is closed`)
           if (stream._errorMessage) {
-            responseFrames.push(new StreamCloseFrame(stream.id, 'ApplicationError', stream._errorMessage))
+            responseFrames.push(new StreamCloseFrame(stream.id, ErrorCode.ApplicationError, stream._errorMessage))
           } else {
-            responseFrames.push(new StreamCloseFrame(stream.id, 'NoError', ''))
+            responseFrames.push(new StreamCloseFrame(stream.id, ErrorCode.NoError, ''))
           }
           // TODO confirm that they get this
           stream._remoteClosed = true
@@ -473,14 +473,14 @@ export class Connection extends EventEmitter {
           this.sending = false
           this.closed = true
           this.remoteClosed = true
-          if (frame.errorCode === 'NoError') {
+          if (frame.errorCode === ErrorCode.NoError) {
             this.debug(`remote closed connection`)
             /* tslint:disable-next-line:no-floating-promises */
             this.end()
           } else {
-            this.debug(`remote connection error. code: ${frame.errorCode}, message: ${frame.errorMessage}`)
+            this.debug(`remote connection error. code: ${ErrorCode[frame.errorCode]}, message: ${frame.errorMessage}`)
             /* tslint:disable-next-line:no-floating-promises */
-            this.destroy(new Error(`Remote connection error. Code: ${frame.errorCode}, message: ${frame.errorMessage}`))
+            this.destroy(new Error(`Remote connection error. Code: ${ErrorCode[frame.errorCode]}, message: ${frame.errorMessage}`))
           }
           break
         case FrameType.ConnectionMaxData:
@@ -591,14 +591,14 @@ export class Connection extends EventEmitter {
     // Validate stream ID
     if (this.isServer && streamId % 2 === 0) {
       this.debug(`got invalid stream ID ${streamId} from peer (should be odd)`)
-      this.queuedFrames.push(new ConnectionCloseFrame('ProtocolViolation', `Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`))
+      this.queuedFrames.push(new ConnectionCloseFrame(ErrorCode.ProtocolViolation, `Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`))
       // TODO this should probably call this.destroy
       const err = new Error(`Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`)
       this.safeEmit('error', err)
       throw err
     } else if (!this.isServer && streamId % 2 === 1) {
       this.debug(`got invalid stream ID ${streamId} from peer (should be even)`)
-      this.queuedFrames.push(new ConnectionCloseFrame('ProtocolViolation', `Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`))
+      this.queuedFrames.push(new ConnectionCloseFrame(ErrorCode.ProtocolViolation, `Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`))
       const err = new Error(`Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`)
       this.safeEmit('error', err)
       throw err
@@ -607,7 +607,7 @@ export class Connection extends EventEmitter {
     // Make sure there aren't too many open streams
     if (streamId > this.maxStreamId) {
       this.debug(`peer opened too many streams. got stream: ${streamId}, but max stream id is: ${this.maxStreamId}. closing connection`)
-      this.queuedFrames.push(new ConnectionCloseFrame('StreamIdError', `Maximum number of open streams exceeded. Got stream: ${streamId}, current max stream ID: ${this.maxStreamId}`))
+      this.queuedFrames.push(new ConnectionCloseFrame(ErrorCode.StreamIdError, `Maximum number of open streams exceeded. Got stream: ${streamId}, current max stream ID: ${this.maxStreamId}`))
       const err = new Error(`Maximum number of open streams exceeded. Got stream: ${streamId}, current max stream ID: ${this.maxStreamId}`)
       this.safeEmit('error', err)
       throw err
@@ -646,13 +646,13 @@ export class Connection extends EventEmitter {
 
     // TODO delete stream record and make sure the other side can't reopen it
 
-    this.debug(`peer closed stream ${stream.id} with error code: ${frame.errorCode} and message: ${frame.errorMessage}`)
+    this.debug(`peer closed stream ${stream.id} with error code: ${ErrorCode[frame.errorCode]} and message: ${frame.errorMessage}`)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
     let err
     if (frame.errorMessage) {
       err = new Error(frame.errorMessage)
-      err.name = frame.errorCode
+      err.name = ErrorCode[frame.errorCode]
     }
     stream._remoteEnded(err)
     // TODO should we emit an error on the stream?
@@ -742,7 +742,7 @@ export class Connection extends EventEmitter {
     if (this.closed && !this.remoteClosed) {
       // TODO how do we know if there was an error?
       this.debug('sending connection close frame')
-      requestPacket.frames.push(new ConnectionCloseFrame('NoError', ''))
+      requestPacket.frames.push(new ConnectionCloseFrame(ErrorCode.NoError, ''))
       // TODO don't put any more frames because the connection is closed
       // TODO only mark this as closed once we confirm that with the receiver
       this.remoteClosed = true
@@ -848,8 +848,8 @@ export class Connection extends EventEmitter {
           continue
         }
         const streamEndFrame = (stream._errorMessage
-          ? new StreamCloseFrame(stream.id, 'ApplicationError', stream._errorMessage)
-          : new StreamCloseFrame(stream.id, 'NoError', ''))
+          ? new StreamCloseFrame(stream.id, ErrorCode.ApplicationError, stream._errorMessage)
+          : new StreamCloseFrame(stream.id, ErrorCode.NoError, ''))
 
         // Make sure the packet has space left
         if (streamEndFrame.byteLength() > bytesLeftInPacket) {
@@ -965,16 +965,16 @@ export class Connection extends EventEmitter {
       return
     }
 
-    let errorCode: ErrorCode | keyof typeof ErrorCode
+    let errorCode: ErrorCode
     let errorMessage
     if (err && err instanceof ConnectionError) {
       errorCode = err.streamErrorCode
       errorMessage = err.message
     } else if (err) {
-      errorCode = 'InternalError'
+      errorCode = ErrorCode.InternalError
       errorMessage = err.message
     } else {
-      errorCode = 'NoError'
+      errorCode = ErrorCode.NoError
       errorMessage = ''
     }
 

@@ -1,6 +1,6 @@
 import 'mocha'
 import { assert } from 'chai'
-import { Packet, StreamMoneyFrame, BaseFrame } from '../src/protocol'
+import { Packet, StreamMoneyFrame, Frame } from '../src/packet'
 import { Reader, Writer } from 'oer-utils'
 require('source-map-support').install()
 
