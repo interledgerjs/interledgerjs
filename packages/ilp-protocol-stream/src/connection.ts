@@ -142,7 +142,7 @@ export class Connection extends EventEmitter {
     this.remoteKnowsOurAccount = this.isServer
     this.remoteMaxStreamId = DEFAULT_MAX_REMOTE_STREAMS
 
-    this.remoteMaxOffset = MAX_DATA_SIZE * 2 // 64kb
+    this.remoteMaxOffset = this.maxBufferedData
 
     this._totalReceived = new BigNumber(0)
     this._totalSent = new BigNumber(0)
@@ -1170,16 +1170,18 @@ export class Connection extends EventEmitter {
   protected getIncomingOffsets (): { current: number, max: number, maxAcceptable: number } {
     let totalMaxOffset = 0
     let totalReadOffset = 0
+    let totalBufferedData = 0
     for (let [_, stream] of this.streams) {
       const { max, current } = stream._getIncomingOffsets()
       totalMaxOffset += max
       totalReadOffset += current
+      totalBufferedData += stream.readableLength
     }
 
     return {
       current: totalReadOffset,
       max: totalMaxOffset,
-      maxAcceptable: totalReadOffset + this.maxBufferedData
+      maxAcceptable: totalReadOffset - totalBufferedData + this.maxBufferedData
     }
   }
 }

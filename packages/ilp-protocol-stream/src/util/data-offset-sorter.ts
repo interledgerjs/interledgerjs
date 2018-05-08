@@ -2,7 +2,7 @@
 
 /** @private */
 export class OffsetDataEntry {
-  data?: Buffer
+  data: Buffer
   offset: number
   next?: OffsetDataEntry
   constructor (data: Buffer, offset: number, next?: OffsetDataEntry) {
@@ -16,20 +16,10 @@ export class OffsetDataEntry {
 export class OffsetSorter {
   head?: OffsetDataEntry
   readOffset: number
-  endOffset: number
   maxOffset: number
   constructor () {
     this.readOffset = 0
-    this.endOffset = -1
     this.maxOffset = 0
-  }
-
-  setEndOffset (offset: number) {
-    this.endOffset = offset
-  }
-
-  isEnd (): boolean {
-    return this.readOffset === this.endOffset
   }
 
   push (data: Buffer, offset: number) {
@@ -73,8 +63,10 @@ export class OffsetSorter {
   byteLength (): number {
     let length = 0
     let entry = this.head
-    while (entry) {
-      length += entry.data ? entry.data.length : 0
+    let offset = this.readOffset
+    while (entry && entry.offset === offset) {
+      length += entry.data.length
+      offset += entry.data.length
       entry = entry.next
     }
     return length

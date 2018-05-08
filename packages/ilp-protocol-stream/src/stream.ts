@@ -538,8 +538,8 @@ export class DataAndMoneyStream extends Duplex {
   _getIncomingOffsets (): { max: number, current: number, maxAcceptable: number } {
     return {
       max: this._incomingData.maxOffset,
-      current: this._incomingData.readOffset - this.readableLength,
-      maxAcceptable: this._incomingData.maxOffset + this.readableHighWaterMark - this.readableLength
+      current: this._incomingData.readOffset,
+      maxAcceptable: this._incomingData.readOffset + this.readableHighWaterMark - this.readableLength
     }
   }
 

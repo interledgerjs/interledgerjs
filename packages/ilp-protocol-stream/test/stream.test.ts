@@ -590,5 +590,40 @@ describe('DataAndMoneyStream', function () {
       }
       clientStream.end()
     })
+
+    it('should correctly order data received out of order', async function () {
+      const spy = sinon.spy()
+      const clientStream = this.clientConn.createStream()
+      clientStream.on('data', spy)
+
+      clientStream._pushIncomingData(Buffer.alloc(200, 2), 100)
+      clientStream._pushIncomingData(Buffer.alloc(5, 5), 601) // this one won't be emitted
+      clientStream._pushIncomingData(Buffer.alloc(300, 3), 300)
+      assert.notCalled(spy)
+
+      assert.equal(clientStream.readableLength, 0)
+      assert.deepEqual(clientStream._getIncomingOffsets(), {
+        max: 606,
+        current: 0,
+        maxAcceptable: 16384
+      })
+
+      clientStream._pushIncomingData(Buffer.alloc(100, 1), 0)
+
+      assert.equal(clientStream.readableLength, 600)
+
+      await new Promise(setImmediate)
+
+      assert.callCount(spy, 3)
+      assert.calledWith(spy.firstCall, Buffer.alloc(100, 1))
+      assert.calledWith(spy.secondCall, Buffer.alloc(200, 2))
+      assert.calledWith(spy.thirdCall, Buffer.alloc(300, 3))
+
+      assert.deepEqual(clientStream._getIncomingOffsets(), {
+        max: 606,
+        current: 600,
+        maxAcceptable: 16384 + 600
+      })
+    })
   })
 })

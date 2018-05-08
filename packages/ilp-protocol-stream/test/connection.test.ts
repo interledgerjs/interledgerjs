@@ -702,6 +702,8 @@ describe('Connection', function () {
 
   describe('Flow Control', function () {
     it('should respect the remote connection-level flow control', async function () {
+      const serverStreams: DataAndMoneyStream[] = []
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => serverStreams.push(stream))
       const streams = [
         this.clientConn.createStream(),
         this.clientConn.createStream(),
@@ -720,9 +722,9 @@ describe('Connection', function () {
       await new Promise(setImmediate)
       await new Promise(setImmediate)
 
-      const bytesLeftToSend = streams.reduce((sum, stream) => sum += stream.writableLength, 0)
-      // total amount of data written - default connection max buffer size + estimated frame overhead
-      assert.equal(bytesLeftToSend, (5 * 20000) - (2 * 32767) + 20)
+      const bytesBuffered = serverStreams.reduce((sum, stream) => sum + stream.readableLength, 0)
+      // Max data - estimated overhead for StreamDataFrame
+      assert.equal(bytesBuffered, 2 * 32767 - 20)
     })
 
     it('should close the connection if the remote sends too much data', async function () {
