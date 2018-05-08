@@ -887,18 +887,19 @@ export class Connection extends EventEmitter {
     if (responsePacket) {
       this.handleFrames(responsePacket.frames)
 
+      // Track the exchange rate for the last packet (whether it was fulfilled or rejected)
+      if (amountToSend.isGreaterThan(0)) {
+        this._lastPacketExchangeRate = responsePacket.prepareAmount.dividedBy(amountToSend)
+      }
+
       if (responsePacket.ilpPacketType === IlpPacketType.Fulfill) {
         for (let stream of streamsSentFrom) {
           stream._executeHold(requestPacket.sequence.toString())
         }
 
         // Update stats based on amount sent
-        if (responsePacket.prepareAmount.isGreaterThan(0)
-          && amountToSend.isGreaterThan(0)) {
-          this._lastPacketExchangeRate = responsePacket.prepareAmount.dividedBy(amountToSend)
-          this._totalDelivered = this._totalDelivered.plus(responsePacket.prepareAmount)
-          this._totalSent = this._totalSent.plus(amountToSend)
-        }
+        this._totalDelivered = this._totalDelivered.plus(responsePacket.prepareAmount)
+        this._totalSent = this._totalSent.plus(amountToSend)
 
         // If we're trying to pinpoint the Maximum Packet Amount, raise
         // the limit because we know that the testMaximumPacketAmount works

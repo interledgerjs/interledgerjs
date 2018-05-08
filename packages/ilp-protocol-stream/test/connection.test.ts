@@ -766,29 +766,29 @@ describe('Connection', function () {
       assert.calledOnce(spy)
       assert.equal(spy.args[0][0].message, 'Remote connection error. Code: InternalError, message: Exceeded flow control limits. Stream 1 can accept up to offset: 16384 but got bytes up to offset: 20000')
     })
-  })
 
-  it('should allow the per-connection buffer size to be configured', async function () {
-    this.serverPlugin.deregisterDataHandler()
-    this.clientPlugin.deregisterDataHandler()
+    it('should allow the per-connection buffer size to be configured', async function () {
+      this.serverPlugin.deregisterDataHandler()
+      this.clientPlugin.deregisterDataHandler()
 
-    const server = await createServer({
-      plugin: this.serverPlugin,
-      serverSecret: Buffer.alloc(32),
-      connectionBufferSize: 2000
+      const server = await createServer({
+        plugin: this.serverPlugin,
+        serverSecret: Buffer.alloc(32),
+        connectionBufferSize: 2000
+      })
+
+      const serverConnPromise = server.acceptConnection()
+
+      const clientConn = await createConnection({
+        ...server.generateAddressAndSecret(),
+        plugin: this.clientPlugin,
+        connectionBufferSize: 2500
+      })
+
+      const serverConn = await serverConnPromise
+
+      assert.equal(serverConn['maxBufferedData'], 2000)
+      assert.equal(clientConn['maxBufferedData'], 2500)
     })
-
-    const serverConnPromise = server.acceptConnection()
-
-    const clientConn = await createConnection({
-      ...server.generateAddressAndSecret(),
-      plugin: this.clientPlugin,
-      connectionBufferSize: 2500
-    })
-
-    const serverConn = await serverConnPromise
-
-    assert.equal(serverConn['maxBufferedData'], 2000)
-    assert.equal(clientConn['maxBufferedData'], 2500)
   })
 })
