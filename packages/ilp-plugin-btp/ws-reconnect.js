@@ -1,3 +1,5 @@
+'use strict'
+
 const WebSocket = require('ws')
 const debug = require('debug')('ilp-ws-reconnect')
 const EventEmitter2 = require('eventemitter2')
@@ -16,6 +18,7 @@ class WebSocketReconnector extends EventEmitter2 {
     this._instance.on('close', (err) => this._reconnect(err))
     this._instance.on('error', (err) => this._reconnect(err))
     this._instance.on('message', (data, flags) => void this.emit('message', data, flags))
+    return new Promise((resolve) => void this.once('open', resolve))
   }
 
   // uses callback to match normal ws api
@@ -36,7 +39,7 @@ class WebSocketReconnector extends EventEmitter2 {
   close () {
     this._instance.removeAllListeners()
     this.emit('close')
-    return this._instance.close()
+    this._instance.close()
   }
 }
 

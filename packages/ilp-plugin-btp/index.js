@@ -198,9 +198,6 @@ class AbstractBtpPlugin extends EventEmitter {
         this._emitConnect()
       })
 
-      this._ws.on('close', () => this._emitDisconnect())
-      this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
-
       // CAUTION: Do not delete the following two lines, they have the side-effect
       // of removing the 'user@pass:' part from parsedBtpUri.toString()!
       parsedBtpUri.account = ''
@@ -208,6 +205,9 @@ class AbstractBtpPlugin extends EventEmitter {
       const wsUri = parsedBtpUri.toString().substring('btp+'.length)
 
       await this._ws.open(wsUri)
+
+      this._ws.on('close', () => this._emitDisconnect())
+      this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
     }
 
     await new Promise((resolve, reject) => {

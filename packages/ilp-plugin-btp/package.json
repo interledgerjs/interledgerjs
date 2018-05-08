@@ -4,7 +4,7 @@
   "description": "Generic BTP plugin for ILP",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=ilp* node test/scripts/test.js",
+    "test": "mocha ./test/indexSpec.js",
     "lint": "eslint ."
   },
   "author": "",
@@ -23,6 +23,6 @@
     "eslint-plugin-node": "^5.2.1",
     "eslint-plugin-promise": "^3.6.0",
     "eslint-plugin-standard": "^3.0.1",
-    "ilp-packet": "^2.1.2"
+    "mocha": "^5.1.1"
   }
 }
