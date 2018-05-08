@@ -3,8 +3,10 @@ import * as ILDCP from 'ilp-protocol-ildcp'
 import * as IlpPacket from 'ilp-packet'
 import * as Debug from 'debug'
 import * as cryptoHelper from './crypto'
+import { randomBytes } from 'crypto'
 import { Connection, ConnectionOpts } from './connection'
 import { Plugin } from './util/plugin-interface'
+const getPluginFromEnvironment = require('ilp-plugin')
 require('source-map-support').install()
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9_-]+$/
@@ -20,15 +22,17 @@ export interface CreateConnectionOpts extends ConnectionOpts {
  * Create a connection to a server using the address and secret provided.
  */
 export async function createConnection (opts: CreateConnectionOpts): Promise<Connection> {
-  await opts.plugin.connect()
+  const plugin = opts.plugin || getPluginFromEnvironment() as Plugin
+  await plugin.connect()
   const debug = Debug('ilp-protocol-stream:Client')
-  const sourceAccount = (await ILDCP.fetch(opts.plugin.sendData.bind(opts.plugin))).clientAddress
+  const sourceAccount = (await ILDCP.fetch(plugin.sendData.bind(plugin))).clientAddress
   const connection = new Connection({
     ...opts,
     sourceAccount,
-    isServer: false
+    isServer: false,
+    plugin
   })
-  opts.plugin.registerDataHandler(async (data: Buffer): Promise<Buffer> => {
+  plugin.registerDataHandler(async (data: Buffer): Promise<Buffer> => {
     let prepare: IlpPacket.IlpPrepare
     try {
       prepare = IlpPacket.deserializeIlpPrepare(data)
@@ -59,8 +63,8 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
     }
   })
   connection.once('close', () => {
-    opts.plugin.deregisterDataHandler()
-    opts.plugin.disconnect()
+    plugin.deregisterDataHandler()
+    plugin.disconnect()
       .then(() => debug('plugin disconnected'))
       .catch((err: Error) => debug('error disconnecting plugin:', err))
   })
@@ -70,7 +74,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
 }
 
 export interface ServerOpts extends ConnectionOpts {
-  serverSecret: Buffer
+  serverSecret?: Buffer
 }
 
 /**
@@ -90,10 +94,13 @@ export class Server extends EventEmitter {
   protected connected: boolean
   protected connectionOpts: ConnectionOpts
 
-  constructor (opts: ServerOpts) {
+  constructor (opts?: ServerOpts) {
     super()
-    this.serverSecret = opts.serverSecret
-    this.plugin = opts.plugin
+    if (!opts) {
+      opts = {}
+    }
+    this.serverSecret = opts.serverSecret || randomBytes(32)
+    this.plugin = opts.plugin || getPluginFromEnvironment() as Plugin
     this.debug = Debug('ilp-protocol-stream:Server')
     this.connections = {}
     this.connectionOpts = Object.assign({}, opts, {
@@ -199,7 +206,8 @@ export class Server extends EventEmitter {
           sourceAccount: this.sourceAccount,
           sharedSecret,
           isServer: true,
-          connectionTag
+          connectionTag,
+          plugin: this.plugin
         })
         this.connections[connectionId] = connection
         this.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)

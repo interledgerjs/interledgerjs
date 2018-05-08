@@ -1,10 +1,11 @@
 import 'mocha'
 import { Connection } from '../src/connection'
 import { DataAndMoneyStream } from '../src/stream'
-import * as index from '../src/index'
+import { createConnection, Server, createServer } from '../src/index'
 import MockPlugin from './mocks/plugin'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
+const IlpPluginBtp = require('ilp-plugin-btp')
 import * as chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
 const assert = Object.assign(Chai.assert, sinon.assert)
@@ -16,16 +17,39 @@ describe('Server', function () {
     this.serverPlugin = this.clientPlugin.mirror
   })
 
+  describe('constructor', function () {
+    it('should get a plugin from the environment (and default to using ilp-plugin-btp) if none is supplied', function () {
+      const server = new Server({
+        serverSecret: Buffer.alloc(32)
+      })
+      assert.instanceOf(server['plugin'], IlpPluginBtp)
+    })
+
+    it('should generate a random serverSecret if one is not supplied', function () {
+      const server = new Server({
+        plugin: this.serverPlugin
+      })
+      assert(Buffer.isBuffer(server['serverSecret']))
+      assert.lengthOf(server['serverSecret'], 32)
+    })
+
+    it('should work if no options are passed in', function () {
+      const server = new Server()
+      assert.instanceOf(server['plugin'], IlpPluginBtp)
+      assert(Buffer.isBuffer(server['serverSecret']))
+    })
+  })
+
   describe('generateAddressAndSecret', function () {
     beforeEach(async function () {
-      this.server = new index.Server({
+      this.server = new Server({
         serverSecret: Buffer.alloc(32),
         plugin: this.serverPlugin
       })
     })
 
     it('should throw an error if the server is not connected', function () {
-      const server = new index.Server({
+      const server = new Server({
         serverSecret: Buffer.alloc(32),
         plugin: this.serverPlugin
       })
@@ -47,7 +71,7 @@ describe('Server', function () {
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       const connectionPromise = this.server.acceptConnection()
 
-      const clientConn = await index.createConnection({
+      const clientConn = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret
@@ -62,7 +86,7 @@ describe('Server', function () {
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionTag)
       const connectionPromise = this.server.acceptConnection()
 
-      const clientConn = await index.createConnection({
+      const clientConn = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret
@@ -88,7 +112,7 @@ describe('Server', function () {
         return response
       }
 
-      await assert.isRejected(index.createConnection({
+      await assert.isRejected(createConnection({
         plugin: this.clientPlugin,
         destinationAccount: destinationAccount + '456',
         sharedSecret
@@ -105,7 +129,7 @@ describe('Server', function () {
 
   describe('"connection" event', function () {
     beforeEach(async function () {
-      this.server = new index.Server({
+      this.server = new Server({
         serverSecret: Buffer.alloc(32),
         plugin: this.serverPlugin
       })
@@ -117,7 +141,7 @@ describe('Server', function () {
         throw new Error('blah')
       })
 
-      await index.createConnection({
+      await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
@@ -133,11 +157,11 @@ describe('createServer', function () {
 
   it('should return a server that is listening', async function () {
     const spy = sinon.spy(this.serverPlugin, 'connect')
-    const server = await index.createServer({
+    const server = await createServer({
       serverSecret: Buffer.alloc(32),
       plugin: this.serverPlugin
     })
-    assert.instanceOf(server, index.Server)
+    assert.instanceOf(server, Server)
     assert.called(spy)
   })
 })

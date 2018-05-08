@@ -37,6 +37,7 @@
     "bignumber.js": "^6.0.0",
     "debug": "^3.1.0",
     "ilp-packet": "^2.2.0",
+    "ilp-plugin": "^3.1.0",
     "ilp-protocol-ildcp": "^1.0.0",
     "oer-utils": "^2.0.1",
     "source-map-support": "^0.5.4"
