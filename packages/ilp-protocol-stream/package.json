@@ -5,9 +5,9 @@
   "main": "src/index.js",
   "types": "src/index.d.ts",
   "files": [
-    "src/*.js",
-    "src/*.js.map",
-    "src/*.d.ts"
+    "src/**/*.js",
+    "src/**/*.js.map",
+    "src/**/*.d.ts"
   ],
   "scripts": {
     "build": "tsc",
