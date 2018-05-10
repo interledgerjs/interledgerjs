@@ -540,7 +540,7 @@ describe('Connection', function () {
       assert.equal(rejected[2].code.includes('F99'), true)
     })
 
-    it('should properly calcuate the total received, sent, and delivered for the client and the server', async function () {
+    it('should properly calculate the total received, sent, and delivered for the client and the server', async function () {
       this.clientPlugin.deregisterDataHandler()
       this.serverPlugin.deregisterDataHandler()
 

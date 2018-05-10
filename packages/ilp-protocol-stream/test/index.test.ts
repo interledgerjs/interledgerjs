@@ -147,6 +147,44 @@ describe('Server', function () {
       })
     })
   })
+
+  describe('Closed Connections', function () {
+    beforeEach(async function () {
+      this.server = new Server({
+        serverSecret: Buffer.alloc(32),
+        plugin: this.serverPlugin
+      })
+      await this.server.listen()
+
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      this.destinationAccount = destinationAccount
+      this.sharedSecret = sharedSecret
+
+      const serverConnPromise = this.server.acceptConnection()
+      this.clientConn = await createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret
+      })
+      this.serverConn = await serverConnPromise
+    })
+
+    it('should reject packets for connections that have already been closed', async function () {
+      await this.serverConn.destroy()
+
+      await assert.isRejected(createConnection({
+        plugin: this.clientPlugin,
+        sharedSecret: this.sharedSecret,
+        destinationAccount: this.destinationAccount
+      }), 'Error connecting: Unexpected error while sending packet. Code: F02, message:')
+    })
+
+    it('should remove the record of closed connections', async function () {
+      assert.equal(Object.keys(this.server['connections']).length, 1)
+      await this.serverConn.destroy()
+      assert.equal(Object.keys(this.server['connections']).length, 0)
+    })
+  })
 })
 
 describe('createServer', function () {

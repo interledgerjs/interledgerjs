@@ -91,6 +91,7 @@ export class Server extends EventEmitter {
   protected plugin: Plugin
   protected sourceAccount: string
   protected connections: { [key: string]: Connection }
+  protected closedConnections: { [key: string]: boolean }
   protected debug: Debug.IDebugger
   protected enablePadding?: boolean
   protected connected: boolean
@@ -105,6 +106,7 @@ export class Server extends EventEmitter {
     this.plugin = opts.plugin || getPluginFromEnvironment() as Plugin
     this.debug = Debug('ilp-protocol-stream:Server')
     this.connections = {}
+    this.closedConnections = {}
     this.connectionOpts = Object.assign({}, opts, {
       serverSecret: undefined
     }) as ConnectionOpts
@@ -199,6 +201,11 @@ export class Server extends EventEmitter {
       }
       const connectionId = localAddressParts[0]
 
+      if (this.closedConnections[connectionId]) {
+        this.debug(`got packet for connection that was already closed: ${connectionId}`)
+        throw new IlpPacket.Errors.UnreachableError('')
+      }
+
       if (!this.connections[connectionId]) {
         let sharedSecret
         try {
@@ -227,6 +234,11 @@ export class Server extends EventEmitter {
         } catch (err) {
           this.debug('error in connection event handler:', err)
         }
+
+        connection.once('close', () => {
+          delete this.connections[connectionId]
+          this.closedConnections[connectionId] = true
+        })
 
         // Wait for the next tick of the event loop before handling the prepare
         await new Promise((resolve, reject) => setImmediate(resolve))
