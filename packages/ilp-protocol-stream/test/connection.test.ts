@@ -198,6 +198,7 @@ describe('Connection', function () {
       await new Promise(setImmediate)
       await this.serverConn.end()
       await new Promise(setImmediate)
+      await new Promise(setImmediate)
       assert.calledOnce(clientSpy.stream1.finish)
       assert.calledOnce(clientSpy.stream1.end)
       assert.calledOnce(clientSpy.stream1.close)
@@ -215,8 +216,24 @@ describe('Connection', function () {
       assert.calledTwice(serverStreamSpy.close)
     })
 
-    it.skip('should remove the stream record once one side calls end', async function () {
-      // TODO figure out how to check the stream record was removed..
+    it('should remove the stream record once one side calls end', async function () {
+      this.clientConn.createStream().write('hello')
+      this.clientConn.createStream().write('hello')
+
+      await new Promise(setImmediate)
+
+      assert.isTrue(this.serverConn['streams'].has(1))
+      assert.isTrue(this.serverConn['streams'].has(3))
+
+      await this.serverConn.end()
+
+      assert.isFalse(this.serverConn['streams'].has(1))
+      assert.isFalse(this.serverConn['streams'].has(3))
+
+      await new Promise(setImmediate)
+
+      assert.isFalse(this.clientConn['streams'].has(1))
+      assert.isFalse(this.clientConn['streams'].has(3))
     })
 
     it('should complete sending all data from server when end is called on server side of the connection', async function() {
@@ -857,8 +874,6 @@ describe('Connection', function () {
       })
     })
 
-    it.skip('should remove the connection on the server side if the client violates the protocol')
-
     it('should close the connection if the peer opens too many streams', async function () {
       const spy = sinon.spy()
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
@@ -955,8 +970,9 @@ describe('Connection', function () {
       assert.throws(() => serverConn.createStream())
 
       streams[0].end()
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
 
       assert.doesNotThrow(() => serverConn.createStream())
     })
@@ -1053,6 +1069,20 @@ describe('Connection', function () {
 
       assert.equal(serverConn['maxBufferedData'], 2000)
       assert.equal(clientConn['maxBufferedData'], 2500)
+    })
+  })
+
+  describe('Closing Streams', function () {
+    it('should remove the stream record when it is closed', async function () {
+      const clientStream = this.clientConn.createStream()
+      clientStream.end('hello')
+
+      await new Promise(setImmediate)
+      assert.isTrue(this.serverConn['streams'].has(1))
+      await new Promise(setImmediate)
+
+      assert.isFalse(this.clientConn['streams'].has(1))
+      assert.isFalse(this.serverConn['streams'].has(1))
     })
   })
 })

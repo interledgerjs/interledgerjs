@@ -50,7 +50,9 @@ export class DataAndMoneyStream extends Duplex {
   protected _outgoingData: DataQueue
   protected _outgoingDataToRetry: { data: Buffer, offset: number }[]
   protected outgoingOffset: number
-  protected bytesRead: number
+
+  protected emittedEnd: boolean
+  protected emittedClose: boolean
 
   constructor (opts: StreamOpts) {
     // Half-opened streams are not supported, support may be added in the future.
@@ -76,13 +78,21 @@ export class DataAndMoneyStream extends Duplex {
     // TODO we might want to merge this with the _outgoingData queue data structure
     this._outgoingDataToRetry = []
     this.outgoingOffset = 0
-    this.bytesRead = 0
 
     this._remoteClosed = false
     this._remoteReceived = new BigNumber(0)
     this._remoteReceiveMax = new BigNumber(Infinity)
     // TODO should we have a different default?
     this._remoteMaxOffset = 16384 // 16kb
+
+    this.emittedEnd = false
+    this.emittedClose = false
+    this.once('end', () => {
+      this.emittedEnd = true
+    })
+    this.once('close', () => {
+      this.emittedClose = true
+    })
   }
 
   /**
@@ -134,7 +144,7 @@ export class DataAndMoneyStream extends Duplex {
   get writableLength (): number {
     // stream.readableLength was only added in Node v9.4.0
     const writableLength = super.writableLength || (this['_writableState'] && this['_writableState'].length) || 0
-    return writableLength + this._outgoingData.byteLength()
+    return writableLength
   }
 
   /**
@@ -211,7 +221,8 @@ export class DataAndMoneyStream extends Duplex {
         }
       }
       function endHandler () {
-        cleanup()
+        // Clean up on next tick in case an error was also emitted
+        setImmediate(cleanup)
         if ((self._totalSent.isGreaterThanOrEqualTo(limit))) {
           resolve()
         } else {
@@ -221,6 +232,9 @@ export class DataAndMoneyStream extends Duplex {
       }
       function errorHandler (err: Error) {
         self.debug('error waiting for stream to stabilize:', err)
+        if (self._remoteSentEnd) {
+          return endHandler()
+        }
         cleanup()
         reject(err)
       }
@@ -231,8 +245,8 @@ export class DataAndMoneyStream extends Duplex {
       }
 
       this.on('outgoing_money', outgoingHandler)
-      this.once('error', errorHandler)
-      this.once('end', endHandler)
+      this.on('error', errorHandler)
+      this.on('end', endHandler)
     })
   }
 
@@ -258,7 +272,8 @@ export class DataAndMoneyStream extends Duplex {
         }
       }
       function endHandler () {
-        cleanup()
+        // Clean up on next tick in case an error was also emitted
+        setImmediate(cleanup)
         if (self._totalReceived.isGreaterThanOrEqualTo(limit)) {
           resolve()
         } else {
@@ -278,8 +293,8 @@ export class DataAndMoneyStream extends Duplex {
       }
 
       this.on('money', moneyHandler)
-      this.once('error', errorHandler)
-      this.once('end', endHandler)
+      this.on('error', errorHandler)
+      this.on('end', endHandler)
     })
   }
 
@@ -387,16 +402,17 @@ export class DataAndMoneyStream extends Duplex {
       }
       this.debug('stream ended')
       this.closed = true
-      if (this.bytesRead === 0) {
-        // Node streams only emit the 'end' event if data was actually read
-        this.safeEmit('end')
-      } else {
-        // The 'end' event from the stream will not emit unless
-        // we use push null onto it. Only do this if the bytes read
-        // is not 0 since in that case when we push it will emit 'end'
-        this.push(null)
-      }
-      this.safeEmit('close')
+      // Only emit the 'close' & 'end' events if the stream doesn't automatically
+      setImmediate(() => {
+        if (!this.emittedEnd) {
+          this.emittedEnd = true
+          this.safeEmit('end')
+        }
+        if (!this.emittedClose) {
+          this.emittedClose = true
+          this.safeEmit('close')
+        }
+      })
       callback(err)
     }
 
@@ -420,15 +436,6 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _destroy (error: Error | undefined | null, callback: (...args: any[]) => void): void {
-    let emittedClose = false
-    let emittedEnd = false
-    this.once('close', () => {
-      emittedClose = true
-    })
-    this.once('end', () => {
-      emittedEnd = true
-    })
-
     this.debug('destroying stream because of error:', error)
     this.closed = true
     if (error) {
@@ -436,10 +443,12 @@ export class DataAndMoneyStream extends Duplex {
     }
     // Only emit the 'close' & 'end' events if the stream doesn't automatically
     setImmediate(() => {
-      if (!emittedEnd) {
+      if (!this.emittedEnd) {
+        this.emittedEnd = true
         this.safeEmit('end')
       }
-      if (!emittedClose) {
+      if (!this.emittedClose) {
+        this.emittedClose = true
         this.safeEmit('close')
       }
     })
@@ -452,9 +461,26 @@ export class DataAndMoneyStream extends Duplex {
    */
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
     this.debug(`${chunk.length} bytes written to the outgoing data queue`)
-    this._outgoingData.push(chunk)
+    this._outgoingData.push(chunk, callback)
     this.emit('_maybe_start_send_loop')
-    callback()
+  }
+
+  /**
+   * (Called internally by the Node Stream when stream.write is called)
+   * @private
+   */
+  _writev (chunks: { chunk: Buffer, encoding: string }[], callback: (...args: any[]) => void): void {
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      this.debug(`${chunk.chunk.length} bytes written to the outgoing data queue`)
+      // Only call the callback when the last chunk has been sent out
+      if (i === chunks.length - 1) {
+        this._outgoingData.push(chunk.chunk, callback)
+      } else {
+        this._outgoingData.push(chunk.chunk)
+      }
+    }
+    this.emit('_maybe_start_send_loop')
   }
 
   /**
@@ -466,7 +492,6 @@ export class DataAndMoneyStream extends Duplex {
     if (!data) {
       return
     }
-    this.bytesRead += data.length
     this.push(data)
     if (data.length < size) {
       this._read(size - data.length)
@@ -478,7 +503,7 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _hasDataToSend (): boolean {
-    return !this._outgoingData.isEmpty()
+    return !this._outgoingData.isEmpty() || this._outgoingDataToRetry.length > 0
   }
 
   /**

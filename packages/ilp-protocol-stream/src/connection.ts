@@ -95,6 +95,7 @@ export class Connection extends EventEmitter {
 
   protected nextPacketSequence: number
   protected streams: Map<number, DataAndMoneyStream>
+  protected closedStreams: { [id: number]: boolean }
   protected nextStreamId: number
   protected maxStreamId: number
   protected debug: Debug.IDebugger
@@ -134,7 +135,9 @@ export class Connection extends EventEmitter {
     this.maxBufferedData = opts.connectionBufferSize || MAX_DATA_SIZE * 2
 
     this.nextPacketSequence = 1
+    // TODO should streams be a Map or just an object?
     this.streams = new Map()
+    this.closedStreams = {}
     this.nextStreamId = (this.isServer ? 2 : 1)
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
@@ -284,7 +287,7 @@ export class Connection extends EventEmitter {
     this.nextStreamId += 2
 
     stream.on('_maybe_start_send_loop', this.startSendLoop.bind(this))
-    // TODO notify when the stream is closed
+    stream.once('close', () => this.removeStreamRecord(stream))
 
     return stream
   }
@@ -364,10 +367,42 @@ export class Connection extends EventEmitter {
       throw new IlpPacket.Errors.FinalApplicationError('', responsePacket.serializeAndEncrypt(this.sharedSecret, (this.enablePadding ? MAX_DATA_SIZE : undefined)))
     }
 
+    // Handle new streams
+    for (let frame of requestPacket.frames) {
+      if (frame.type === FrameType.StreamMoney
+        || frame.type === FrameType.StreamData
+        // TODO should frames that set the max values open the stream?
+        || frame.type === FrameType.StreamMaxMoney
+        || frame.type === FrameType.StreamMaxData) {
+        const streamId = frame.streamId.toNumber()
+
+        // Check if the stream was already closed
+        if (this.closedStreams[streamId]) {
+          this.debug(`got packet with frame for stream ${streamId}, which was already closed`)
+          // Respond with a StreamClose frame (unless there is already one queued)
+          const framesToSend = responseFrames.concat(this.queuedFrames)
+          const includesStreamClose = framesToSend.find((frame) => frame.type === FrameType.StreamClose && frame.streamId.isEqualTo(streamId))
+          if (!includesStreamClose) {
+            responseFrames.push(new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed'))
+          }
+          throwFinalApplicationError()
+        }
+
+        try {
+          // Note this will throw if the stream was already closed
+          this.handleNewStream(frame.streamId.toNumber())
+        } catch (err) {
+          this.debug(`error handling new stream ${frame.streamId}:`, err && err.message)
+          throwFinalApplicationError()
+        }
+      }
+    }
+
+    // TODO don't throw errors in expected cases -- they are slower than just returning a value
     try {
-      this.handleFrames(requestPacket.frames)
+      this.handleControlFrames(requestPacket.frames)
     } catch (err) {
-      this.debug('error handling frames:', err)
+      this.debug('error handling frames:', err && err.message)
       throwFinalApplicationError()
     }
 
@@ -485,7 +520,7 @@ export class Connection extends EventEmitter {
    * Parse the frames from the incoming packet and apply all effects
    * except for passing money to the streams
    */
-  protected handleFrames (frames: Frame[]): void {
+  protected handleControlFrames (frames: Frame[]): void {
     for (let frame of frames) {
       let stream
       switch (frame.type) {
@@ -535,16 +570,14 @@ export class Connection extends EventEmitter {
           this.debug(`remote wants to open more streams but we are blocking them`)
           break
         case FrameType.StreamClose:
-          this.handleNewStream(frame.streamId.toNumber())
           this.handleStreamClose(frame)
           break
-        case FrameType.StreamMoney:
-          this.handleNewStream(frame.streamId.toNumber())
-          break
         case FrameType.StreamMaxMoney:
-          this.handleNewStream(frame.streamId.toNumber())
           this.debug(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
-          stream = this.streams.get(frame.streamId.toNumber())!
+          stream = this.streams.get(frame.streamId.toNumber())
+          if (!stream) {
+            break
+          }
           stream._remoteReceived = BigNumber.maximum(stream._remoteReceived, frame.totalReceived)
           if (stream._remoteReceiveMax.isFinite()) {
             stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax, frame.receiveMax)
@@ -558,14 +591,15 @@ export class Connection extends EventEmitter {
           }
           break
         case FrameType.StreamMoneyBlocked:
-          this.handleNewStream(frame.streamId.toNumber())
           this.debug(`peer told us that they want to send more money on stream ${frame.streamId} but we are blocking them. they have sent: ${frame.totalSent} so far and want to send: ${frame.sendMax}`)
           break
         case FrameType.StreamData:
-          this.handleNewStream(frame.streamId.toNumber())
           this.debug(`got data for stream ${frame.streamId}`)
 
-          stream = this.streams.get(frame.streamId.toNumber())!
+          stream = this.streams.get(frame.streamId.toNumber())
+          if (!stream) {
+            break
+          }
           stream._pushIncomingData(frame.data, frame.offset.toNumber())
 
           // Make sure the peer hasn't exceeded the flow control limits
@@ -576,8 +610,10 @@ export class Connection extends EventEmitter {
           }
           break
         case FrameType.StreamMaxData:
-          this.handleNewStream(frame.streamId.toNumber())
-          stream = this.streams.get(frame.streamId.toNumber())!
+          stream = this.streams.get(frame.streamId.toNumber())
+          if (!stream) {
+            break
+          }
           this.debug(`peer told us that stream ${frame.streamId} can receive up to byte offset: ${frame.maxOffset} (we've sent up to offset: ${stream._getOutgoingOffsets().current})`)
           const oldOffset = stream._remoteMaxOffset
           stream._remoteMaxOffset = frame.maxOffset.toNumber()
@@ -587,8 +623,10 @@ export class Connection extends EventEmitter {
           }
           break
         case FrameType.StreamDataBlocked:
-          this.handleNewStream(frame.streamId.toNumber())
-          stream = this.streams.get(frame.streamId.toNumber())!
+          stream = this.streams.get(frame.streamId.toNumber())
+          if (!stream) {
+            break
+          }
           this.debug(`peer told us that stream ${frame.streamId} is blocked. they want to send up to offset: ${frame.maxOffset}, but we are only allowing up to: ${stream._getIncomingOffsets().maxAcceptable}`)
           break
         default:
@@ -614,7 +652,7 @@ export class Connection extends EventEmitter {
    * and if it looks good, emit the 'stream' event
    */
   protected handleNewStream (streamId: number): void {
-    if (this.streams.has(streamId)) {
+    if (this.streams.has(streamId) || this.closedStreams[streamId]) {
       return
     }
 
@@ -655,7 +693,10 @@ export class Connection extends EventEmitter {
       isServer: this.isServer
     })
     this.streams.set(streamId, stream)
+
     stream.on('_maybe_start_send_loop', () => this.startSendLoop())
+    stream.once('close', () => this.removeStreamRecord(stream))
+
     this.safeEmit('stream', stream)
   }
 
@@ -691,6 +732,9 @@ export class Connection extends EventEmitter {
     this.maxStreamId += 2
     this.debug(`raising maxStreamId to ${this.maxStreamId}`)
     this.queuedFrames.push(new ConnectionMaxStreamIdFrame(this.maxStreamId))
+    // Start send loop to make sure this frame is sent
+    /* tslint:disable-next-line:no-floating-promises */
+    this.startSendLoop()
   }
 
   /**
@@ -765,7 +809,7 @@ export class Connection extends EventEmitter {
     // Send control frames
     // TODO only send the max amount when it changes
     for (let [_, stream] of this.streams) {
-      if (stream && stream.isOpen()) {
+      if (stream.isOpen()) {
         requestPacket.frames.push(new StreamMaxMoneyFrame(stream.id, stream.receiveMax, stream.totalReceived))
       }
     }
@@ -863,6 +907,7 @@ export class Connection extends EventEmitter {
       // TODO figure out if there are control frames we need to send and stop sending if not
     }
 
+    // TODO is this needed now that stream close frames are sent out when the stream.close event is emitted?
     // Tell other side which streams are closed
     if (!this.closed) {
       for (let [_, stream] of this.streams) {
@@ -888,7 +933,6 @@ export class Connection extends EventEmitter {
           break
         }
         this.debug(`sending end frame for stream ${stream.id}`)
-        // TODO should this be a Stream{Money,Data} frame with isEnd set instead?
         requestPacket.frames.push(streamEndFrame)
         bytesLeftInPacket -= streamEndFrame.byteLength()
         // TODO only set this to true if the packet gets through to the receiver
@@ -915,7 +959,7 @@ export class Connection extends EventEmitter {
     const responsePacket = await this.sendPacket(requestPacket, amountToSend, false)
 
     if (responsePacket) {
-      this.handleFrames(responsePacket.frames)
+      this.handleControlFrames(responsePacket.frames)
 
       // Track the exchange rate for the last packet (whether it was fulfilled or rejected)
       if (amountToSend.isGreaterThan(0)) {
@@ -983,7 +1027,7 @@ export class Connection extends EventEmitter {
       throw new Error('Exchange rate is 0. We will not be able to send anything through this path')
     }
 
-    this.handleFrames(responsePacket.frames)
+    this.handleControlFrames(responsePacket.frames)
   }
 
   /**
@@ -1212,6 +1256,19 @@ export class Connection extends EventEmitter {
       current: totalReadOffset,
       max: totalMaxOffset,
       maxAcceptable: totalReadOffset - totalBufferedData + this.maxBufferedData
+    }
+  }
+
+  protected removeStreamRecord (stream: DataAndMoneyStream) {
+    this.debug(`removing record of stream ${stream.id}`)
+    this.streams.delete(stream.id)
+    this.closedStreams[stream.id] = true
+    if (!stream._sentEnd) {
+      stream._sentEnd = true
+      const streamEndFrame = (stream._errorMessage
+        ? new StreamCloseFrame(stream.id, ErrorCode.ApplicationError, stream._errorMessage)
+        : new StreamCloseFrame(stream.id, ErrorCode.NoError, ''))
+      this.queuedFrames.push(streamEndFrame)
     }
   }
 }
