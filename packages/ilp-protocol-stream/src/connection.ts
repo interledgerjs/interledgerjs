@@ -208,12 +208,15 @@ export class Connection extends EventEmitter {
   // TODO should this be sync or async?
   async end (): Promise<void> {
     this.debug('closing connection')
-    this.closed = true
-
+    // Create Promises on each stream that resolve on the 'end' event so
+    // we can wait for them all to be completed before closing the connection
+    let streamEndPromises: Promise<any>[] = []
     for (let [_, stream] of this.streams) {
       if (stream.isOpen()) {
+        streamEndPromises.push(new Promise((resolve, reject) => {
+          stream.on('end', resolve)
+        }))
         stream.end()
-        // TODO should this mark the remoteStreams as closed?
       }
     }
 
@@ -224,6 +227,12 @@ export class Connection extends EventEmitter {
       /* tslint:disable-next-line:no-floating-promises */
       this.startSendLoop()
     })
+    // Wait for the send loop to finish & all the streams to end
+    // before marking the connection as closed so the streams
+    // can finish sending data or money.
+    await Promise.all(streamEndPromises)
+
+    this.closed = true
     await this.sendConnectionClose()
     this.safeEmit('end')
     this.safeEmit('close')
@@ -238,11 +247,19 @@ export class Connection extends EventEmitter {
     if (err) {
       this.safeEmit('error', err)
     }
+    // Create Promises on each stream that resolve on the 'close' event so
+    // we can wait for them all to be completed before closing the connection
+    let streamClosePromises: Promise<any>[] = []
     for (let [_, stream] of this.streams) {
+      streamClosePromises.push(new Promise((resolve, reject) => {
+        stream.on('close', resolve)
+      }))
       // TODO should we pass the error to each stream?
       stream.destroy()
     }
     await this.sendConnectionClose(err)
+    // wait for all the streams to be closed before emitting the connection 'close'
+    await Promise.all(streamClosePromises)
     this.safeEmit('close')
   }
 

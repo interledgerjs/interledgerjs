@@ -329,6 +329,22 @@ describe('DataAndMoneyStream', function () {
       })
     })
 
+    it('should not close the stream until all the data has been sent', async function () {
+      let data: Buffer[] = []
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('data', (chunk: Buffer) => {
+          data.push(chunk)
+        })
+      })
+      const clientStream = this.clientConn.createStream()
+      clientStream.write(Buffer.alloc(30000))
+      clientStream.end()
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+      assert.equal(Buffer.concat(data).length, 30000)
+    })
+
     it('should close the stream if it could send more money but the other side is blocking it', function (done) {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
@@ -356,10 +372,32 @@ describe('DataAndMoneyStream', function () {
       })
     })
 
-    it('should not allow more data to be written once the stream is closed', async function () {
+    it('should not allow more data to be written once the stream is closed and throw an error if no error listener', async function () {
       const clientStream = this.clientConn.createStream()
       clientStream.end()
       assert.throws(() => clientStream.write('hello'), 'write after end')
+    })
+
+    it('should not allow more data to be written once the stream is closed and emit an error if error listener present', async function () {
+      const clientStream = this.clientConn.createStream()
+      clientStream.on('error', (err: Error) => {
+        assert.equal(err.message, 'write after end')
+      })
+      clientStream.end()
+      clientStream.write('hello')
+    })
+
+    it('should not allow more money to be sent once the stream is closed and throw an error', async function() {
+      const clientStream = this.clientConn.createStream()
+      await clientStream.end()
+      assert.throws(() => clientStream.setSendMax(400), 'Stream already closed')
+      await assert.isRejected(clientStream.sendTotal(300), 'Stream already closed')
+    })
+
+    it('should not allow more money to be sent once the stream is closed mid sending and throw an error', async function() {
+      const clientStream = this.clientConn.createStream()
+      clientStream.end()
+      await assert.isRejected(clientStream.sendTotal(300), 'Stream was closed before desired amount was sent (target: 300, totalSent: 0)')
     })
   })
 

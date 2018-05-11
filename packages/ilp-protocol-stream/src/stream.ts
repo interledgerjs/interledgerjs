@@ -53,7 +53,9 @@ export class DataAndMoneyStream extends Duplex {
   protected bytesRead: number
 
   constructor (opts: StreamOpts) {
-    super()
+    // Half-opened streams are not supported, initializwe Duplex to reflect.
+    // Half-opened stream support may be added in the future.
+    super({ allowHalfOpen: false })
     this.id = opts.id
     this.isServer = opts.isServer
     this.debug = Debug(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Stream:${this.id}`)
@@ -389,6 +391,11 @@ export class DataAndMoneyStream extends Duplex {
       if (this.bytesRead === 0) {
         // Node streams only emit the 'end' event if data was actually read
         this.safeEmit('end')
+      } else {
+        // The 'end' event from the stream will not emit unless
+        // we use push null onto it. Only do this if the bytes read
+        // is not 0 since in that case when we push it will emit 'end'
+        this.push(null)
       }
       this.safeEmit('close')
       callback(err)
@@ -415,20 +422,24 @@ export class DataAndMoneyStream extends Duplex {
    */
   _destroy (error: Error | undefined | null, callback: (...args: any[]) => void): void {
     let emittedClose = false
+    let emittedEnd = false
     this.once('close', () => {
       emittedClose = true
     })
+    this.once('end', () => {
+      emittedEnd = true
+    })
+
     this.debug('destroying stream because of error:', error)
     this.closed = true
     if (error) {
       this._errorMessage = error.message
     }
-    if (this.bytesRead === 0) {
-      // Node streams only emit the 'end' event if data was actually read
-      this.safeEmit('end')
-    }
-    // Only emit the 'close' event if the stream doesn't automatically
+    // Only emit the 'close' & 'end' events if the stream doesn't automatically
     setImmediate(() => {
+      if (!emittedEnd) {
+        this.safeEmit('end')
+      }
       if (!emittedClose) {
         this.safeEmit('close')
       }
