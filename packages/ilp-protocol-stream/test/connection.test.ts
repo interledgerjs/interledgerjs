@@ -244,10 +244,10 @@ describe('Connection', function () {
         })
       })
       const serverStream = this.serverConn.createStream()
-      serverStream.write(Buffer.alloc(300000))
+      serverStream.write(Buffer.alloc(30000))
       await new Promise(setImmediate)
       await this.serverConn.end()
-      assert.equal(Buffer.concat(data).length, 300000)
+      assert.equal(Buffer.concat(data).length, 30000)
     })
 
     it('should complete sending all data from client when end is called on client side of the connection', async function() {
@@ -258,11 +258,11 @@ describe('Connection', function () {
         })
       })
       const clientStream = this.clientConn.createStream()
-      clientStream.write(Buffer.alloc(300000))
+      clientStream.write(Buffer.alloc(30000))
       await new Promise(setImmediate)
       await this.clientConn.end()
       await this.serverConn.end()
-      assert.equal(Buffer.concat(data).length, 300000)
+      assert.equal(Buffer.concat(data).length, 30000)
     })
 
     it('should complete sending all money from server when end is called on server side of the connection', async function () {
@@ -276,10 +276,10 @@ describe('Connection', function () {
         })
       })
       const serverStream = this.serverConn.createStream()
-      serverStream.setSendMax(6000)
+      serverStream.setSendMax(2000)
       await this.serverConn.end()
-      assert.equal(totalMoney, 12000)
-      assert.callCount(moneySpy, 6)
+      assert.equal(totalMoney, 4000)
+      assert.callCount(moneySpy, 2)
     })
 
     it('should complete sending all money from client when end is called on client side of the connection', async function () {
@@ -292,10 +292,10 @@ describe('Connection', function () {
         })
       })
       const clientStream = this.clientConn.createStream()
-      clientStream.setSendMax(12000)
+      clientStream.setSendMax(2000)
       await this.clientConn.end()
-      assert.equal(totalMoney, 6000)
-      assert.callCount(moneySpy, 12)
+      assert.equal(totalMoney, 1000)
+      assert.callCount(moneySpy, 2)
     })
 
     it('should keep connection open when a stream is ended', async function () {
