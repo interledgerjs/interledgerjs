@@ -53,8 +53,7 @@ export class DataAndMoneyStream extends Duplex {
   protected bytesRead: number
 
   constructor (opts: StreamOpts) {
-    // Half-opened streams are not supported, initializwe Duplex to reflect.
-    // Half-opened stream support may be added in the future.
+    // Half-opened streams are not supported, support may be added in the future.
     super({ allowHalfOpen: false })
     this.id = opts.id
     this.isServer = opts.isServer
