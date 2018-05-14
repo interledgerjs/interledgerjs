@@ -218,16 +218,26 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before desired amount was sent (target: 1000, totalSent: 0)')
+      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before the desired amount was sent (target: 1000, totalSent: 0)')
     })
 
-    it.skip('should reject if there is an error sending before the amount has been sent', async function () {
+    it('should reject if the stream is destroyed before the amount has been sent', async function () {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.destroy(new Error('blah'))
+        stream.on('error', (err: Error) => {
+          assert.equal(err.message, 'blah')
+        })
       })
 
       const clientStream = this.clientConn.createStream()
-      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before desired amount was sent (target: 1000, totalSent: 0)')
+      await assert.isRejected(clientStream.sendTotal(1000), 'Stream encountered an error before the desired amount was sent (target: 1000, totalSent: 0): ApplicationError: blah')
+    })
+
+    it('should reject if there is an error before the amount has been sent', async function () {
+      const clientStream = this.clientConn.createStream()
+      const sendPromise = clientStream.sendTotal(1000)
+      clientStream.emit('error', new Error('oops'))
+      await assert.isRejected(sendPromise, 'Stream encountered an error before the desired amount was sent (target: 1000, totalSent: 0): Error: oops')
     })
   })
 
@@ -284,10 +294,26 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      await assert.isRejected(clientStream.receiveTotal(1000), 'Stream was closed before desired amount was received (target: 1000, totalReceived: 0)')
+      await assert.isRejected(clientStream.receiveTotal(1000), 'Stream was closed before the desired amount was received (target: 1000, totalReceived: 0)')
     })
 
-    it.skip('should reject if there is an error sending before the amount has been received')
+    it('should reject if the stream is destroyed before the amount has been received', async function () {
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.destroy(new Error('blah'))
+        stream.on('error', () => {})
+      })
+
+      const clientStream = this.clientConn.createStream()
+      await assert.isRejected(clientStream.receiveTotal(1000), 'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0): ApplicationError: blah')
+    })
+
+    it('should reject if there is an error before the amount has been received', async function () {
+      const clientStream = this.clientConn.createStream()
+      const receivePromise = clientStream.receiveTotal(1000)
+      clientStream.emit('error', new Error('oops'))
+      clientStream.on('error', () => {})
+      await assert.isRejected(receivePromise, 'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0)')
+    })
   })
 
   describe('end', function () {
@@ -443,7 +469,7 @@ describe('DataAndMoneyStream', function () {
     it('should not allow more money to be sent once the stream is closed mid sending and throw an error', async function() {
       const clientStream = this.clientConn.createStream()
       clientStream.end()
-      await assert.isRejected(clientStream.sendTotal(300), 'Stream was closed before desired amount was sent (target: 300, totalSent: 0)')
+      await assert.isRejected(clientStream.sendTotal(300), 'Stream was closed before the desired amount was sent (target: 300, totalSent: 0)')
     })
   })
 

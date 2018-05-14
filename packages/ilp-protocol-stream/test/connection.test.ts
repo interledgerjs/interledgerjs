@@ -716,7 +716,7 @@ describe('Connection', function () {
         assert.equal(err.message, 'Cannot send. Path has a Maximum Packet Amount of 0')
       })
 
-      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before desired amount was sent (target: 1000, totalSent: 0)')
+      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before the desired amount was sent (target: 1000, totalSent: 0)')
     })
   })
 
@@ -736,8 +736,8 @@ describe('Connection', function () {
       const clientStream2 = this.clientConn.createStream()
 
       await Promise.all([
-        assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before desired amount was sent (target: 117, totalSent: 0)'),
-        assert.isRejected(clientStream2.sendTotal(204), 'Stream was closed before desired amount was sent (target: 204, totalSent: 0)')
+        assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before the desired amount was sent (target: 117, totalSent: 0)'),
+        assert.isRejected(clientStream2.sendTotal(204), 'Stream was closed before the desired amount was sent (target: 204, totalSent: 0)')
       ])
       await new Promise(setImmediate)
       assert.callCount(spy, 1)
@@ -792,7 +792,7 @@ describe('Connection', function () {
 
       const clientStream1 = this.clientConn.createStream()
 
-      await assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before desired amount was sent (target: 117, totalSent: 0)')
+      await assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before the desired amount was sent (target: 117, totalSent: 0)')
       assert.equal(clientStream1.totalSent, '0')
     })
   })

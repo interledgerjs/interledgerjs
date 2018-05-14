@@ -226,17 +226,14 @@ export class DataAndMoneyStream extends Duplex {
         if ((self._totalSent.isGreaterThanOrEqualTo(limit))) {
           resolve()
         } else {
-          self.debug(`Stream was closed before desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`)
-          reject(new Error(`Stream was closed before desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`))
+          self.debug(`Stream was closed before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`)
+          reject(new Error(`Stream was closed before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`))
         }
       }
       function errorHandler (err: Error) {
         self.debug('error waiting for stream to stabilize:', err)
-        if (self._remoteSentEnd) {
-          return endHandler()
-        }
         cleanup()
-        reject(err)
+        reject(new Error(`Stream encountered an error before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent}): ${err}`))
       }
       function cleanup () {
         self.removeListener('outgoing_money', outgoingHandler)
@@ -277,14 +274,14 @@ export class DataAndMoneyStream extends Duplex {
         if (self._totalReceived.isGreaterThanOrEqualTo(limit)) {
           resolve()
         } else {
-          self.debug(`Stream was closed before desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`)
-          reject(new Error(`Stream was closed before desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`))
+          self.debug(`Stream was closed before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`)
+          reject(new Error(`Stream was closed before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`))
         }
       }
       function errorHandler (err: Error) {
         self.debug('error waiting for stream to stabilize:', err)
         cleanup()
-        reject(err)
+        reject(new Error(`Stream encountered an error before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived}): ${err}`))
       }
       function cleanup () {
         self.removeListener('money', moneyHandler)
