@@ -24,14 +24,13 @@ export enum IlpPacketType {
 export enum ErrorCode {
   NoError = 0x01,
   InternalError = 0x02,
-  ServerBusy = 0x03,
+  EndpointBusy = 0x03,
   FlowControlError = 0x04,
   StreamIdError = 0x05,
   StreamStateError = 0x06,
-  FinalOffsetError = 0x07,
-  FrameFormatError = 0x08,
-  ProtocolViolation = 0x09,
-  ApplicationError = 0x0a
+  FrameFormatError = 0x07,
+  ProtocolViolation = 0x08,
+  ApplicationError = 0x09
 }
 
 /**
