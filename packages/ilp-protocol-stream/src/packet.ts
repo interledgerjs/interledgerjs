@@ -37,8 +37,6 @@ export enum ErrorCode {
  * STREAM Protocol Frame Identifiers
  */
 export enum FrameType {
-  Padding = 0x00,
-
   ConnectionClose = 0x01,
   ConnectionNewAddress = 0x02,
   ConnectionMaxData = 0x03,
@@ -65,10 +63,10 @@ export type Frame =
   | ConnectionDataBlockedFrame
   | ConnectionMaxStreamIdFrame
   | ConnectionStreamIdBlockedFrame
+  | StreamCloseFrame
   | StreamMoneyFrame
   | StreamMaxMoneyFrame
   | StreamMoneyBlockedFrame
-  | StreamCloseFrame
   | StreamDataFrame
   | StreamMaxDataFrame
   | StreamDataBlockedFrame
@@ -219,21 +217,6 @@ export abstract class BaseFrame {
   }
 }
 
-export class ConnectionNewAddressFrame extends BaseFrame {
-  type: FrameType.ConnectionNewAddress
-  sourceAccount: string
-
-  constructor (sourceAccount: string) {
-    super('ConnectionNewAddress')
-    this.sourceAccount = sourceAccount
-  }
-
-  static fromContents (reader: Reader): ConnectionNewAddressFrame {
-    const sourceAccount = reader.readVarOctetString().toString('utf8')
-    return new ConnectionNewAddressFrame(sourceAccount)
-  }
-}
-
 export class ConnectionCloseFrame extends BaseFrame {
   type: FrameType.ConnectionClose
   errorCode: ErrorCode
@@ -249,6 +232,21 @@ export class ConnectionCloseFrame extends BaseFrame {
     const errorCode = reader.readUInt8BigNum().toNumber() as ErrorCode
     const errorMessage = reader.readVarOctetString().toString()
     return new ConnectionCloseFrame(errorCode, errorMessage)
+  }
+}
+
+export class ConnectionNewAddressFrame extends BaseFrame {
+  type: FrameType.ConnectionNewAddress
+  sourceAccount: string
+
+  constructor (sourceAccount: string) {
+    super('ConnectionNewAddress')
+    this.sourceAccount = sourceAccount
+  }
+
+  static fromContents (reader: Reader): ConnectionNewAddressFrame {
+    const sourceAccount = reader.readVarOctetString().toString('utf8')
+    return new ConnectionNewAddressFrame(sourceAccount)
   }
 }
 
@@ -309,6 +307,27 @@ export class ConnectionStreamIdBlockedFrame extends BaseFrame {
   static fromContents (reader: Reader): ConnectionStreamIdBlockedFrame {
     const maxStreamId = reader.readVarUIntBigNum()
     return new ConnectionStreamIdBlockedFrame(maxStreamId)
+  }
+}
+
+export class StreamCloseFrame extends BaseFrame {
+  type: FrameType.StreamClose
+  streamId: BigNumber
+  errorCode: ErrorCode
+  errorMessage: string
+
+  constructor (streamId: BigNumber.Value, errorCode: ErrorCode, errorMessage: string) {
+    super('StreamClose')
+    this.streamId = new BigNumber(streamId)
+    this.errorCode = errorCode
+    this.errorMessage = errorMessage
+  }
+
+  static fromContents (reader: Reader): StreamCloseFrame {
+    const streamId = reader.readVarUIntBigNum()
+    const errorCode = reader.readUInt8BigNum().toNumber() as ErrorCode
+    const errorMessage = reader.readVarOctetString().toString('utf8')
+    return new StreamCloseFrame(streamId, errorCode, errorMessage)
   }
 }
 
@@ -381,27 +400,6 @@ export class StreamMoneyBlockedFrame extends BaseFrame {
     const sendMax = reader.readVarUIntBigNum()
     const totalSent = reader.readVarUIntBigNum()
     return new StreamMoneyBlockedFrame(streamId, sendMax, totalSent)
-  }
-}
-
-export class StreamCloseFrame extends BaseFrame {
-  type: FrameType.StreamClose
-  streamId: BigNumber
-  errorCode: ErrorCode
-  errorMessage: string
-
-  constructor (streamId: BigNumber.Value, errorCode: ErrorCode, errorMessage: string) {
-    super('StreamClose')
-    this.streamId = new BigNumber(streamId)
-    this.errorCode = errorCode
-    this.errorMessage = errorMessage
-  }
-
-  static fromContents (reader: Reader): StreamCloseFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const errorCode = reader.readUInt8BigNum().toNumber() as ErrorCode
-    const errorMessage = reader.readVarOctetString().toString('utf8')
-    return new StreamCloseFrame(streamId, errorCode, errorMessage)
   }
 }
 
