@@ -10,8 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "base64url": "^2.0.0",
-    "btp-packet": "^1.2.0",
+    "btp-packet": "^1.2.1",
     "debug": "^3.1.0",
     "eventemitter2": "^5.0.0",
     "ws": "^3.3.3"

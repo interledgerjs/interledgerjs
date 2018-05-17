@@ -4,7 +4,6 @@ const crypto = require('crypto')
 const uuid = require('uuid4')
 const ilpPacket = require('ilp-packet')
 const btpPacket = require('btp-packet')
-const base64url = require('base64url')
 
 const sinon = require('sinon')
 const chai = require('chai')
@@ -95,7 +94,7 @@ describe('Send', () => {
         from: this.plugin.getAccount(),
         to: peerAddress,
         ledger: this.plugin.getInfo().prefix,
-        ilp: base64url('some_base64_encoded_data_goes_here'),
+        ilp: btpPacket.base64url('some_base64_encoded_data_goes_here'),
         custom: {
           field: 'some stuff'
         }
@@ -105,7 +104,7 @@ describe('Send', () => {
         from: peerAddress,
         to: this.plugin.getAccount(),
         ledger: this.plugin.getInfo().prefix,
-        ilp: base64url('some_other_base64_encoded_data_goes_here'),
+        ilp: btpPacket.base64url('some_other_base64_encoded_data_goes_here'),
         custom: {
           field: 'some other stuff'
         }
@@ -248,7 +247,7 @@ describe('Send', () => {
         custom: {
           field: 'some stuff'
         },
-        executionCondition: base64url(crypto
+        executionCondition: btpPacket.base64url(crypto
           .createHash('sha256')
           .update(this.fulfillment)
           .digest())
