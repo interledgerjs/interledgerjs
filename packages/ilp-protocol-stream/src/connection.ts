@@ -901,7 +901,7 @@ export class Connection extends EventEmitter {
         this.sending = false
         return
       } else {
-        // Check if any Close, Data, or Money Frames are present in the packet. 
+        // Check if any Close, Data, or Money Frames are present in the packet.
         // If any of those are do not sent sending to false so the send loop
         // has an opportunity to retry if those packets are rejected.
         if (!requestPacket.frames.find(frame =>
