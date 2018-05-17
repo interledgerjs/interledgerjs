@@ -239,6 +239,52 @@ describe('DataAndMoneyStream', function () {
       clientStream.emit('error', new Error('oops'))
       await assert.isRejected(sendPromise, 'Stream encountered an error before the desired amount was sent (target: 1000, totalSent: 0): Error: oops')
     })
+
+    it('should retry sending total if rejected by the receiver', async function() {
+      const moneySpy = sinon.spy()
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(500)
+        stream.on('money', moneySpy)
+      })
+
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'F99',
+          message: 'uh oh',
+          triggeredBy: 'test.receiver',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+
+      const clientStream = this.clientConn.createStream()
+      await clientStream.sendTotal(1000)
+      assert.calledOnce(moneySpy)
+      assert.equal(clientStream.totalSent, '1000')
+    })
+
+    it('should retry sending total if rejected by a connector', async function() {
+      const moneySpy = sinon.spy()
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(500)
+        stream.on('money', moneySpy)
+      })
+
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'T00',
+          message: 'uh oh',
+          triggeredBy: 'test.connector',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+
+      const clientStream = this.clientConn.createStream()
+      await clientStream.sendTotal(1000)
+      assert.calledOnce(moneySpy)
+      assert.equal(clientStream.totalSent, '1000')
+    })
   })
 
   describe('receiveTotal', function () {
@@ -317,6 +363,20 @@ describe('DataAndMoneyStream', function () {
   })
 
   describe('end', function () {
+    it('should end without opening connection on other side if no data sent', function (done) {
+      const clientEnd = sinon.spy()
+      this.serverConn.on('stream', () => {
+        done('client opened connection to server')
+      })
+      const stream = this.clientConn.createStream()
+      stream.on('end', async () => {
+        clientEnd()
+        assert.calledOnce(clientEnd)
+        done()
+      })
+      stream.end()
+    })
+
     it('should accept data', function (done) {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         let data: Buffer
@@ -734,6 +794,96 @@ describe('DataAndMoneyStream', function () {
         current: 600,
         maxAcceptable: 16384 + 600
       })
+    })
+  })
+
+  describe('Control Frames', function() {
+    it('should retry StreamCloseFrame when rejected by connector', function(done) {
+      const serverEndSpy = sinon.spy()
+      const clientEndSpy = sinon.spy()
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('end', () => {
+          serverEndSpy()
+          assert.calledOnce(clientEndSpy)
+          assert.calledOnce(serverEndSpy)
+          done()
+        })
+      })
+      const clientStream = this.clientConn.createStream()
+      clientStream.on('end', clientEndSpy)
+
+      // Allow the write through on first call, reject second to block Close Frame
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onSecondCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'T00',
+          message: 'uh oh',
+          triggeredBy: 'test.connector',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+      clientStream.end('hello')
+    })
+
+    it('should retry StreamCloseFrame when rejected by receiver', function (done) {
+      const serverEndSpy = sinon.spy()
+      const clientEndSpy = sinon.spy()
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('end', () => {
+          serverEndSpy()
+          assert.calledOnce(clientEndSpy)
+          assert.calledOnce(serverEndSpy)
+          done()
+        })
+      })
+      const clientStream = this.clientConn.createStream()
+      clientStream.on('end', clientEndSpy)
+
+      // Allow the write through on first call, reject second to block Close Frame
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onSecondCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'F99',
+          message: 'uh oh',
+          triggeredBy: 'test.receiver',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+      clientStream.end('hello')
+    })
+
+    it('should retry StreamCloseFrame when rejected multiple times by receiver', function(done) {
+      const serverEndSpy = sinon.spy()
+      const clientEndSpy = sinon.spy()
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('end', () => {
+          serverEndSpy()
+          assert.calledOnce(clientEndSpy)
+          assert.calledOnce(serverEndSpy)
+          done()
+        })
+      })
+      const clientStream = this.clientConn.createStream()
+      clientStream.on('end', clientEndSpy)
+
+      // Allow the write through on first call, reject second to block Close Frame
+      sinon.stub(this.clientPlugin, 'sendData')
+        .onSecondCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'F99',
+          message: 'uh oh',
+          triggeredBy: 'test.receiver',
+          data: Buffer.alloc(0)
+        }))
+        .onThirdCall()
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'F99',
+          message: 'second rejection',
+          triggeredBy: 'test.receiver',
+          data: Buffer.alloc(0)
+        }))
+        .callThrough()
+      clientStream.end('hello')
     })
   })
 })

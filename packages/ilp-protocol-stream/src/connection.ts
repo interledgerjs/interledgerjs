@@ -866,8 +866,6 @@ export class Connection extends EventEmitter {
       }
     }
 
-    // Send data
-    let sendingData = false
     let bytesLeftInPacket = MAX_DATA_SIZE - requestPacket.byteLength()
 
     // Respect connection-level flow control
@@ -887,8 +885,6 @@ export class Connection extends EventEmitter {
         this.debug(`sending ${data.length} bytes from stream ${stream.id}`)
         bytesLeftInPacket -= streamDataFrame.byteLength()
         requestPacket.frames.push(streamDataFrame)
-        // TODO actually figure out if there's more data to send
-        sendingData = true
       }
 
       // Inform remote which streams are blocked
@@ -899,44 +895,21 @@ export class Connection extends EventEmitter {
       }
     }
 
-    // Stop sending if there's no more to send
-    // TODO don't stop if there's still data to send
-    if (amountToSend.isEqualTo(0) && !sendingData) {
-      this.debug(`packet value is 0 and there is no data to send so we'll send this packet and then stop`)
-      this.sending = false
-      // TODO figure out if there are control frames we need to send and stop sending if not
-    }
-
-    // TODO is this needed now that stream close frames are sent out when the stream.close event is emitted?
-    // Tell other side which streams are closed
-    if (!this.closed) {
-      for (let [_, stream] of this.streams) {
-        if (stream.isOpen() || stream._sentEnd) {
-          continue
+    // Check if we can stop sending
+    if (amountToSend.isEqualTo(0)) {
+      if (requestPacket.frames.length === 0) {
+        this.sending = false
+        return
+      } else {
+        // Check if any Close, Data, or Money Frames are present in the packet. 
+        // If any of those are do not sent sending to false so the send loop
+        // has an opportunity to retry if those packets are rejected.
+        if (!requestPacket.frames.find(frame =>
+            ((frame.type === FrameType.StreamClose)
+            || (frame.type === FrameType.StreamData)
+            || (frame.type === FrameType.StreamMoney)))) {
+          this.sending = false
         }
-        if (stream._getAmountAvailableToSend().isGreaterThan(0)) {
-          this.debug(`stream ${stream.id} is closed but still has money to send, not sending end frame yet`)
-          continue
-        }
-        if (stream._hasDataToSend()) {
-          this.debug(`stream ${stream.id} is closed but still has data to send, not sending end frame yet`)
-          continue
-        }
-        const streamEndFrame = (stream._errorMessage
-          ? new StreamCloseFrame(stream.id, ErrorCode.ApplicationError, stream._errorMessage)
-          : new StreamCloseFrame(stream.id, ErrorCode.NoError, ''))
-
-        // Make sure the packet has space left
-        if (streamEndFrame.byteLength() > bytesLeftInPacket) {
-          // TODO make sure it will actually make another pass to send these later
-          this.debug('not sending more stream end frames because the packet is full')
-          break
-        }
-        this.debug(`sending end frame for stream ${stream.id}`)
-        requestPacket.frames.push(streamEndFrame)
-        bytesLeftInPacket -= streamEndFrame.byteLength()
-        // TODO only set this to true if the packet gets through to the receiver
-        stream._sentEnd = true
       }
     }
 
@@ -948,12 +921,6 @@ export class Connection extends EventEmitter {
       if (minimumDestinationAmount.isGreaterThan(0)) {
         requestPacket.prepareAmount = minimumDestinationAmount
       }
-    }
-
-    if (amountToSend.isEqualTo(0) && requestPacket.frames.length === 0) {
-      this.debug(`no money or data needs to be send, stopping loop`)
-      this.sending = false
-      return
     }
 
     const responsePacket = await this.sendPacket(requestPacket, amountToSend, false)
@@ -1166,6 +1133,9 @@ export class Connection extends EventEmitter {
           break
         case FrameType.StreamData:
           this.streams.get(frame.streamId.toNumber())!._resendOutgoingData(frame.data, frame.offset.toNumber())
+          break
+        case FrameType.StreamClose:
+          this.queuedFrames.push(frame)
           break
         default:
           continue
