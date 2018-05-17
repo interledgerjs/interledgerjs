@@ -9,6 +9,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ilp-plugin-btp": "^1.1.6"
+    "ilp-plugin-btp": "^1.1.12"
   }
 }

@@ -1,6 +1,11 @@
 # ILP Plugin
 > A generic handle to ILP
 
+[![NPM Package](https://img.shields.io/npm/v/ilp-plugin.svg?style=flat)](https://npmjs.org/package/ilp-plugin)
+[![CircleCI](https://circleci.com/gh/interledgerjs/ilp-plugin.svg?style=shield)](https://circleci.com/gh/interledgerjs/ilp-plugin)
+[![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
+[![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-plugin/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-plugin)
+
 The script below will get ILP credentials with no setup whatsoever.  You can
 use this anywhere that you need an ILP plugin created from details in the
 environment.
