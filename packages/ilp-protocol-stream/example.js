@@ -1,10 +1,14 @@
 const IlpStream = require('.')
-const crypto = require('crypto')
+const createPlugin = require('ilp-plugin')
 
-// Note this requires a local moneyd instance to work: https://github.com/interledgerjs/moneyd-xrp
+// Note this requires a local moneyd instance to work
+// See https://github.com/interledgerjs/moneyd for instructions
 
 async function run () {
-  const server = await IlpStream.createServer()
+  const serverPlugin = createPlugin()
+  const server = await IlpStream.createServer({
+    plugin: serverPlugin
+  })
 
   server.on('connection', (connection) => {
     console.log('server got connection')
@@ -17,12 +21,12 @@ async function run () {
 
       // Handle incoming money
       stream.on('money', (amount) => {
-        console.log(`stream ${stream.id} got incoming payment for: ${amount}`)
+        console.log(`server stream ${stream.id} got incoming payment for: ${amount}`)
       })
 
       // Handle incoming data
       stream.on('data', (chunk) => {
-        console.log(`stream ${stream.id} got data: ${chunk.toString('utf8')}`)
+        console.log(`server stream ${stream.id} got data: ${chunk.toString('utf8')}`)
       })
     })
   })
@@ -30,8 +34,11 @@ async function run () {
   // These would need to be passed from the server to the client using
   // some encrypted communication channel (not provided by STREAM)
   const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
+  console.log(`server generated ILP address (${destinationAccount}) and shared secret (${sharedSecret.toString('hex')}) for client`)
 
+  const clientPlugin = createPlugin()
   const clientConn = await IlpStream.createConnection({
+    plugin: clientPlugin,
     destinationAccount,
     sharedSecret
   })
@@ -51,8 +58,8 @@ async function run () {
   console.log('sent 100 units')
 
   console.log(`sending money to server on stream ${streamB.id}`)
-  await streamB.sendTotal(100)
-  console.log('sent 100 units')
+  await streamB.sendTotal(200)
+  console.log('sent 200 units')
 }
 
 run().catch((err) => console.log(err))

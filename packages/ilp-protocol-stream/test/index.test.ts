@@ -18,25 +18,12 @@ describe('Server', function () {
   })
 
   describe('constructor', function () {
-    it('should get a plugin from the environment (and default to using ilp-plugin-btp) if none is supplied', function () {
-      const server = new Server({
-        serverSecret: Buffer.alloc(32)
-      })
-      assert.instanceOf(server['plugin'], IlpPluginBtp)
-    })
-
     it('should generate a random serverSecret if one is not supplied', function () {
       const server = new Server({
         plugin: this.serverPlugin
       })
       assert(Buffer.isBuffer(server['serverSecret']))
       assert.lengthOf(server['serverSecret'], 32)
-    })
-
-    it('should work if no options are passed in', function () {
-      const server = new Server()
-      assert.instanceOf(server['plugin'], IlpPluginBtp)
-      assert(Buffer.isBuffer(server['serverSecret']))
     })
   })
 

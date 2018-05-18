@@ -6,7 +6,6 @@ import * as cryptoHelper from './crypto'
 import { randomBytes } from 'crypto'
 import { Connection, ConnectionOpts } from './connection'
 import { Plugin } from './util/plugin-interface'
-const getPluginFromEnvironment = require('ilp-plugin')
 require('source-map-support').install()
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9_-]+$/
@@ -22,7 +21,7 @@ export interface CreateConnectionOpts extends ConnectionOpts {
  * Create a [`Connection`]{@link Connection} to a [`Server`]{@link Server} using the `destinationAccount` and `sharedSecret` provided.
  */
 export async function createConnection (opts: CreateConnectionOpts): Promise<Connection> {
-  const plugin = opts.plugin || getPluginFromEnvironment() as Plugin
+  const plugin = opts.plugin
   await plugin.connect()
   const debug = Debug('ilp-protocol-stream:Client')
   const sourceAccount = (await ILDCP.fetch(plugin.sendData.bind(plugin))).clientAddress
@@ -97,13 +96,10 @@ export class Server extends EventEmitter {
   protected connected: boolean
   protected connectionOpts: ConnectionOpts
 
-  constructor (opts?: ServerOpts) {
+  constructor (opts: ServerOpts) {
     super()
-    if (!opts) {
-      opts = {}
-    }
     this.serverSecret = opts.serverSecret || randomBytes(32)
-    this.plugin = opts.plugin || getPluginFromEnvironment() as Plugin
+    this.plugin = opts.plugin
     this.debug = Debug('ilp-protocol-stream:Server')
     this.connections = {}
     this.closedConnections = {}
