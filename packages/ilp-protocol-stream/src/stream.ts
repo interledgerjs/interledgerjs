@@ -5,9 +5,19 @@ import { DataQueue } from './util/data-queue'
 import { OffsetSorter } from './util/data-offset-sorter'
 require('source-map-support').install()
 
+const DEFAULT_TIMEOUT = 60000
+
 export interface StreamOpts {
   id: number,
   isServer: boolean
+}
+
+export interface SendOpts {
+  timeout?: number
+}
+
+export interface ReceiveOpts {
+  timeout?: number
 }
 
 /**
@@ -205,7 +215,8 @@ export class DataAndMoneyStream extends Duplex {
    *
    * This promise will only resolve when the absolute amount specified is reached, so lowering the `sendMax` may cause this not to resolve.
    */
-  async sendTotal (limit: BigNumber.Value, timeout = 60000): Promise<void> {
+  async sendTotal (limit: BigNumber.Value, opts?: SendOpts): Promise<void> {
+    const timeout = (opts && opts.timeout) || DEFAULT_TIMEOUT
     if (this._totalSent.isGreaterThanOrEqualTo(limit)) {
       this.debug(`already sent ${this._totalSent}, not sending any more`)
       return Promise.resolve()
@@ -258,7 +269,8 @@ export class DataAndMoneyStream extends Duplex {
    *
    * This promise will only resolve when the absolute amount specified is reached, so lowering the `receiveMax` may cause this not to resolve.
    */
-  async receiveTotal (limit: BigNumber.Value, timeout = 60000): Promise<void> {
+  async receiveTotal (limit: BigNumber.Value, opts?: ReceiveOpts): Promise<void> {
+    const timeout = (opts && opts.timeout) || DEFAULT_TIMEOUT
     if (this._totalReceived.isGreaterThanOrEqualTo(limit)) {
       this.debug(`already received ${this._totalReceived}, not waiting for more`)
       return Promise.resolve()

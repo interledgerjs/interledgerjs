@@ -60,6 +60,9 @@ async function run () {
   console.log(`sending money to server on stream ${streamB.id}`)
   await streamB.sendTotal(200)
   console.log('sent 200 units')
+
+  await clientConn.end()
+  await server.close()
 }
 
 run().catch((err) => console.log(err))

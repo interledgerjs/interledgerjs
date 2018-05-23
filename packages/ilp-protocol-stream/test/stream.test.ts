@@ -1,11 +1,12 @@
 import 'mocha'
 import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
+import BigNumber from 'bignumber.js'
 import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
 import { Duplex } from 'stream'
 import * as IlpPacket from 'ilp-packet'
-import { Packet, StreamCloseFrame, ErrorCode } from '../src/packet'
+import { Packet, StreamCloseFrame, ErrorCode, StreamMoneyFrame, StreamDataFrame } from '../src/packet'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
@@ -289,7 +290,7 @@ describe('DataAndMoneyStream', function () {
     it('should reject after the specified timeout has been reached', async function () {
       const clock = sinon.useFakeTimers()
       const clientStream = this.clientConn.createStream()
-      const sendTotalPromise = clientStream.sendTotal(1000, 1000)
+      const sendTotalPromise = clientStream.sendTotal(1000, { timeout: 1000 })
       clock.tick(1000)
       await assert.isRejected(sendTotalPromise, 'Timed out before the desired amount was sent (target: 1000, totalSent: 0)')
       clock.restore()
@@ -382,7 +383,7 @@ describe('DataAndMoneyStream', function () {
     it('should reject after the specified timeout has been reached', async function () {
       const clock = sinon.useFakeTimers()
       const clientStream = this.clientConn.createStream()
-      const receiveTotalPromise = clientStream.receiveTotal(1000, 1000)
+      const receiveTotalPromise = clientStream.receiveTotal(1000, { timeout: 1000 })
       clock.tick(1000)
       await assert.isRejected(receiveTotalPromise, 'Timed out before the desired amount was received (target: 1000, totalReceived: 0)')
       clock.restore()
@@ -481,6 +482,7 @@ describe('DataAndMoneyStream', function () {
     it('should reject packets that include money for streams that are already closed', async function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(1000)
         stream.end()
       })
 
@@ -490,23 +492,10 @@ describe('DataAndMoneyStream', function () {
       clientStream.setSendMax(100)
       await new Promise(setImmediate)
 
-      let responses: Buffer[] = []
-      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      this.clientPlugin.sendData = async (data: Buffer) => {
-        const response = await realSendData(data)
-        responses.push(response)
-        return response
-      }
-      clientStream.setSendMax(100)
-
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-
-      const deserialized = IlpPacket.deserializeIlpReject(responses[0])
-      assert.equal(deserialized.code, 'F99')
-      const decrypted = Packet.decryptAndDeserialize(this.sharedSecret, deserialized.data)
-      assert.deepInclude(decrypted.frames, new StreamCloseFrame(1, ErrorCode.NoError, ''))
+      const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
+        new StreamMoneyFrame(clientStream.id, 1)
+      ]), new BigNumber(100))
+      assert.deepInclude(response.frames, new StreamCloseFrame(clientStream.id, ErrorCode.NoError, ''))
     })
 
     it('should reject packets that include data for streams that are already closed', async function () {
@@ -520,24 +509,10 @@ describe('DataAndMoneyStream', function () {
       clientStream.write('hello')
       await new Promise(setImmediate)
 
-      let responses: Buffer[] = []
-      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      this.clientPlugin.sendData = async (data: Buffer) => {
-        const response = await realSendData(data)
-        responses.push(response)
-        return response
-      }
-      clientStream.write('more data')
-      clientStream.on('error', () => {})
-
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-
-      const deserialized = IlpPacket.deserializeIlpReject(responses[0])
-      assert.equal(deserialized.code, 'F99')
-      const decrypted = Packet.decryptAndDeserialize(this.sharedSecret, deserialized.data)
-      assert.deepInclude(decrypted.frames, new StreamCloseFrame(1, ErrorCode.NoError, ''))
+      const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
+        new StreamDataFrame(clientStream.id, 5, Buffer.from('blah'))
+      ]), new BigNumber(0))
+      assert.deepInclude(response.frames, new StreamCloseFrame(clientStream.id, ErrorCode.NoError, ''))
     })
 
     it('should not allow more data to be written once the stream is closed and throw an error if there is no error listener', async function () {

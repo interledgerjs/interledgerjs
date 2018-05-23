@@ -114,6 +114,42 @@ describe('Server', function () {
     })
   })
 
+  describe('close', function () {
+    beforeEach(async function () {
+      this.server = new Server({
+        serverSecret: Buffer.alloc(32),
+        plugin: this.serverPlugin
+      })
+      await this.server.listen()
+    })
+
+    it('should close all connections', async function () {
+      const spy = sinon.spy()
+      this.server.on('connection', (serverConn: Connection) => {
+        serverConn.on('stream', (stream: DataAndMoneyStream) => {
+          stream.setReceiveMax(100)
+        })
+        serverConn.on('end', spy)
+      })
+
+      const clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
+
+      await clientConn.createStream().sendTotal(100)
+
+      await this.server.close()
+      assert.calledOnce(spy)
+    })
+
+    it('should disconnect the plugin', async function () {
+      const spy = sinon.spy(this.serverPlugin, 'disconnect')
+      await this.server.close()
+      assert.calledOnce(spy)
+    })
+  })
+
   describe('"connection" event', function () {
     beforeEach(async function () {
       this.server = new Server({

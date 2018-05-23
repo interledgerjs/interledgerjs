@@ -375,6 +375,12 @@ export class Connection extends EventEmitter {
         // Check if the stream was already closed
         if (this.closedStreams[streamId]) {
           this.debug(`got packet with frame for stream ${streamId}, which was already closed`)
+
+          // Don't bother sending an error frame back unless they've actually sent money or data
+          if (frame.type !== FrameType.StreamMoney && frame.type !== FrameType.StreamData) {
+            continue
+          }
+
           // Respond with a StreamClose frame (unless there is already one queued)
           const framesToSend = responseFrames.concat(this.queuedFrames)
           const includesStreamClose = framesToSend.find((frame) => frame.type === FrameType.StreamClose && frame.streamId.isEqualTo(streamId))
@@ -711,8 +717,6 @@ export class Connection extends EventEmitter {
       return
     }
 
-    // TODO delete stream record and make sure the other side can't reopen it
-
     this.debug(`peer closed stream ${stream.id} with error code: ${ErrorCode[frame.errorCode]} and message: ${frame.errorMessage}`)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
@@ -722,7 +726,6 @@ export class Connection extends EventEmitter {
       err.name = ErrorCode[frame.errorCode]
     }
     stream._remoteEnded(err)
-    // TODO should we emit an error on the stream?
 
     // TODO make sure we don't send more than one of these frames per packet
     this.maxStreamId += 2

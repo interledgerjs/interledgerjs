@@ -133,6 +133,19 @@ export class Server extends EventEmitter {
   }
 
   /**
+   * End all connections and disconnect the plugin
+   */
+  async close (): Promise<void> {
+    await Promise.all(Object.keys(this.connections).map((id: string) => {
+      return this.connections[id].end()
+    }))
+
+    this.plugin.deregisterDataHandler()
+    await this.plugin.disconnect()
+    this.connected = false
+  }
+
+  /**
    * Resolves when the next connection is accepted.
    *
    * To handle subsequent connections, the user must call `acceptConnection` again.
