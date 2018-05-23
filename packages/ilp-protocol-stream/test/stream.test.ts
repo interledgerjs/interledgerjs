@@ -285,6 +285,24 @@ describe('DataAndMoneyStream', function () {
       assert.calledOnce(moneySpy)
       assert.equal(clientStream.totalSent, '1000')
     })
+
+    it('should reject after the specified timeout has been reached', async function () {
+      const clock = sinon.useFakeTimers()
+      const clientStream = this.clientConn.createStream()
+      const sendTotalPromise = clientStream.sendTotal(1000, 1000)
+      clock.tick(1000)
+      await assert.isRejected(sendTotalPromise, 'Timed out before the desired amount was sent (target: 1000, totalSent: 0)')
+      clock.restore()
+    })
+
+    it('should default to a 60 second timeout', async function () {
+      const clock = sinon.useFakeTimers()
+      const clientStream = this.clientConn.createStream()
+      const sendTotalPromise = clientStream.sendTotal(1000)
+      clock.tick(60000)
+      await assert.isRejected(sendTotalPromise, 'Timed out before the desired amount was sent (target: 1000, totalSent: 0)')
+      clock.restore()
+    })
   })
 
   describe('receiveTotal', function () {
@@ -359,6 +377,24 @@ describe('DataAndMoneyStream', function () {
       clientStream.emit('error', new Error('oops'))
       clientStream.on('error', () => {})
       await assert.isRejected(receivePromise, 'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0)')
+    })
+
+    it('should reject after the specified timeout has been reached', async function () {
+      const clock = sinon.useFakeTimers()
+      const clientStream = this.clientConn.createStream()
+      const receiveTotalPromise = clientStream.receiveTotal(1000, 1000)
+      clock.tick(1000)
+      await assert.isRejected(receiveTotalPromise, 'Timed out before the desired amount was received (target: 1000, totalReceived: 0)')
+      clock.restore()
+    })
+
+    it('should default to a 60 second timeout', async function () {
+      const clock = sinon.useFakeTimers()
+      const clientStream = this.clientConn.createStream()
+      const receiveTotalPromise = clientStream.receiveTotal(1000)
+      clock.tick(60000)
+      await assert.isRejected(receiveTotalPromise, 'Timed out before the desired amount was received (target: 1000, totalReceived: 0)')
+      clock.restore()
     })
   })
 

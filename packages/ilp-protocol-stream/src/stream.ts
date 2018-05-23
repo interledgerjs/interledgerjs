@@ -205,7 +205,7 @@ export class DataAndMoneyStream extends Duplex {
    *
    * This promise will only resolve when the absolute amount specified is reached, so lowering the `sendMax` may cause this not to resolve.
    */
-  async sendTotal (limit: BigNumber.Value): Promise<void> {
+  async sendTotal (limit: BigNumber.Value, timeout = 60000): Promise<void> {
     if (this._totalSent.isGreaterThanOrEqualTo(limit)) {
       this.debug(`already sent ${this._totalSent}, not sending any more`)
       return Promise.resolve()
@@ -235,7 +235,12 @@ export class DataAndMoneyStream extends Duplex {
         cleanup()
         reject(new Error(`Stream encountered an error before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent}): ${err}`))
       }
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error(`Timed out before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`))
+      }, timeout)
       function cleanup () {
+        clearTimeout(timer)
         self.removeListener('outgoing_money', outgoingHandler)
         self.removeListener('error', errorHandler)
         self.removeListener('end', endHandler)
@@ -253,7 +258,7 @@ export class DataAndMoneyStream extends Duplex {
    *
    * This promise will only resolve when the absolute amount specified is reached, so lowering the `receiveMax` may cause this not to resolve.
    */
-  async receiveTotal (limit: BigNumber.Value): Promise<void> {
+  async receiveTotal (limit: BigNumber.Value, timeout = 60000): Promise<void> {
     if (this._totalReceived.isGreaterThanOrEqualTo(limit)) {
       this.debug(`already received ${this._totalReceived}, not waiting for more`)
       return Promise.resolve()
@@ -283,7 +288,12 @@ export class DataAndMoneyStream extends Duplex {
         cleanup()
         reject(new Error(`Stream encountered an error before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived}): ${err}`))
       }
+      const timer = setTimeout(() => {
+        cleanup()
+        reject(new Error(`Timed out before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`))
+      }, timeout)
       function cleanup () {
+        clearTimeout(timer)
         self.removeListener('money', moneyHandler)
         self.removeListener('error', errorHandler)
         self.removeListener('end', endHandler)
