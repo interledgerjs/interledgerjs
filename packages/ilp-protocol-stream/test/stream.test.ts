@@ -618,6 +618,21 @@ describe('DataAndMoneyStream', function () {
       assert.equal(clientStream.writableLength, 5)
     })
 
+    it('should accurately report the readableHighWaterMark and writableHighWaterMark', function (done) {
+      this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
+        await new Promise(setImmediate)
+        assert.equal(stream.readableHighWaterMark, 16384)
+        assert.equal(stream.writableHighWaterMark, 16384)
+        stream.on('data', () => { })
+        done()
+      })
+
+      const clientStream = this.clientConn.createStream()
+      clientStream.write('hello')
+      assert.equal(clientStream.readableHighWaterMark, 16384)
+      assert.equal(clientStream.writableHighWaterMark, 16384)
+    })
+
     it('should split data across multiple packets if necessary', function (done) {
       const dataToSend = Buffer.alloc(40000, 'af39', 'hex')
       const spy = sinon.spy()

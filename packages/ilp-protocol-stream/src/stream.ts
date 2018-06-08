@@ -158,6 +158,34 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
+   * Returns the value of readableHighWaterMark passed when constructing this stream
+   *
+   * This property exists on streams after Node 8.10 so it is added here for backwards compatibility
+   */
+  get readableHighWaterMark (): number {
+    /* tslint:disable-next-line:strict-type-predicates */
+    if (typeof super.readableHighWaterMark === 'number') {
+      return super.readableHighWaterMark
+    } else {
+      return this['_readableState'].highWaterMark
+    }
+  }
+
+  /**
+   * Returns the value of writableHighWaterMark passed when constructing this stream
+   *
+   * This property exists on streams after Node 8.10 so it is added here for backwards compatibility
+   */
+  get writableHighWaterMark (): number {
+    /* tslint:disable-next-line:strict-type-predicates */
+    if (typeof super.writableHighWaterMark === 'number') {
+      return super.writableHighWaterMark
+    } else {
+      return this['_writableState'].highWaterMark
+    }
+  }
+
+  /**
    * Returns true if the stream is open for sending and/or receiving.
    */
   isOpen (): boolean {
