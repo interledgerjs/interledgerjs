@@ -5,7 +5,6 @@ import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
 import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
-import * as lolex from 'lolex'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
@@ -780,15 +779,10 @@ describe('Connection', function () {
     })
 
     it('should retry on temporary errors', async function () {
-      let clock: any
-      const interval = setInterval(() => {
-        if (clock) {
-          clock.tick(100)
-        }
-      }, 1)
-      clock = lolex.install({
-        toFake: ['setTimeout']
+      const clock = sinon.useFakeTimers({
+        toFake: ['setTimeout'],
       })
+      const interval = setInterval(() => clock.tick(100), 1)
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
         .onFirstCall().resolves(IlpPacket.serializeIlpReject({
           code: 'T00',
@@ -814,7 +808,7 @@ describe('Connection', function () {
       await clientStream.sendTotal(100)
       assert.callCount(sendDataStub, 4)
       clearInterval(interval)
-      clock.uninstall()
+      clock.restore()
     })
 
     it('should return the balance to the money streams if sending fails', async function () {
