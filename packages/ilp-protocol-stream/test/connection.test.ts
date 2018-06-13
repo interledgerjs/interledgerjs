@@ -743,6 +743,42 @@ describe('Connection', function () {
       assert.callCount(spy, 1)
     })
 
+    it('should reduce the packet amount on T04: Insufficient Liquidity errors', async function () {
+      const clock = sinon.useFakeTimers({
+        toFake: ['setTimeout'],
+      })
+      const interval = setInterval(() => clock.tick(100), 1)
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .onSecondCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .onThirdCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .callThrough()
+
+      const clientStream = this.clientConn.createStream()
+      await clientStream.sendTotal(90)
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[0][0]).amount, '90')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[1][0]).amount, '45')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[2][0]).amount, '22')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[3][0]).amount, '11')
+      clearInterval(interval)
+      clock.restore()
+    })
+
     it('should retry on temporary errors', async function () {
       let clock: any
       const interval = setInterval(() => {
@@ -761,8 +797,8 @@ describe('Connection', function () {
           triggeredBy: 'test.connector'
         }))
         .onSecondCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
+          code: 'T03',
+          message: 'Connector Busy',
           data: Buffer.alloc(0),
           triggeredBy: 'test.connector'
         }))
