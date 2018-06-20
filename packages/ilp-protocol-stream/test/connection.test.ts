@@ -778,6 +778,78 @@ describe('Connection', function () {
       clock.restore()
     })
 
+    it('should set the packet amount to a minimum of 2 when it gets T04 errors', async function () {
+      const clock = sinon.useFakeTimers({
+        toFake: ['setTimeout'],
+      })
+      const interval = setInterval(() => clock.tick(100), 1)
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .onSecondCall().resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .callThrough()
+
+      const clientStream = this.clientConn.createStream()
+      await clientStream.sendTotal(2)
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[0][0]).amount, '2')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[1][0]).amount, '2')
+      clearInterval(interval)
+      clock.restore()
+
+    })
+
+
+    it('should reduce packet amount then increase it if T04 errors and then successfully sent packets', async function () {
+      const rejectPacket = IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+      })
+
+      // Reject the packet 10 times with T04 error using send total of 1000
+      // to recreate stuck in loop and hung issue
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall().resolves(rejectPacket)
+        .onSecondCall().resolves(rejectPacket)
+        .onCall(3).resolves(rejectPacket)
+        .onCall(4).resolves(rejectPacket)
+        .onCall(5).resolves(rejectPacket)
+        .onCall(8).resolves(rejectPacket)
+        .onCall(9).resolves(rejectPacket)
+        .onCall(14).resolves(rejectPacket)
+        .onCall(15).resolves(rejectPacket)
+        .callThrough()
+
+      const sendTotal = 1000
+
+      let totalSent = 0
+
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.on('close', () => {
+          assert.equal(sendTotal, totalSent)
+          assert.equal(500, Number(stream.totalReceived))
+        })
+      })
+
+      const clientStream = this.clientConn.createStream()
+      clientStream.on('close', () => {
+        totalSent =+ Number(clientStream.totalSent)
+      })
+
+      await clientStream.sendTotal(sendTotal)
+      clientStream.end()
+    })
+
     it('should retry on temporary errors', async function () {
       const clock = sinon.useFakeTimers({
         toFake: ['setTimeout'],
