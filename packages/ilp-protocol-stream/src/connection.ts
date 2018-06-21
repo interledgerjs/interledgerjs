@@ -953,7 +953,7 @@ export class Connection extends EventEmitter {
             newTestMax = this.maximumPacketAmount.plus(this.testMaximumPacketAmount).dividedToIntegerBy(2)
             this.debug(`maximum packet amount is between ${this.testMaximumPacketAmount} and ${this.maximumPacketAmount}, trying: ${newTestMax}`)
           } else {
-            // Increase by 2 in this case since the amount to send and text max are equal which indicates the last packet was successful
+            // Increase by 2 times in this case since the amount to send and test max are equal which indicates the last packet was successful
             newTestMax = this.testMaximumPacketAmount.times(2)
             this.debug(`last packet amount was successful, raising test max packet amount from: ${this.testMaximumPacketAmount} to: ${newTestMax}`)
           }
@@ -1184,20 +1184,19 @@ export class Connection extends EventEmitter {
         this.debug(`cannot send anything through this path. the maximum packet amount is 0`)
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
-    } else if (reject.code === 'T04') {
-      // TODO add more sophisticated logic for handling bandwidth-related connector errors
-      // we should really be keeping track of the amount sent within a given window of time
-      // and figuring out the max amount per window. this logic is just a stand in to fix
-      // infinite retries when it runs into this type of error
-      const newTestAmount = BigNumber.minimum(amountSent, this.testMaximumPacketAmount).dividedToIntegerBy(2)
-      this.testMaximumPacketAmount = BigNumber.maximum(2, newTestAmount) // don't let it go to zero, set to 2 so that the other side gets at least 1 after the exchange rate is taken into account
-      // TODO: Should we use something like 100 here so the exchange rate can always be correctly calculated?
-      const delay = 100
-      this.debug(`got T04: Insufficient Liquidity error. reducing the packet amount to ${this.testMaximumPacketAmount} and waiting ${delay}ms before sending another packet`)
-      await new Promise((resolve, reject) => setTimeout(resolve, delay))
     } else if (reject.code[0] === 'T') {
+      if (reject.code === 'T04') {
+        // TODO add more sophisticated logic for handling bandwidth-related connector errors
+        // we should really be keeping track of the amount sent within a given window of time
+        // and figuring out the max amount per window. this logic is just a stand in to fix
+        // infinite retries when it runs into this type of error
+        const newTestAmount = BigNumber.minimum(amountSent, this.testMaximumPacketAmount).dividedToIntegerBy(2)
+        this.testMaximumPacketAmount = BigNumber.maximum(2, newTestAmount) // don't let it go to zero, set to 2 so that the other side gets at least 1 after the exchange rate is taken into account
+        this.debug(`got T04: Insufficient Liquidity error. reducing the packet amount to ${this.testMaximumPacketAmount}`)
+      }
+
       // TODO should we reduce the packet amount on other TXX errors too?
-      this.debug(`got temporary error. waiting ${this.retryDelay}ms before trying again`)
+      this.debug(`got ${reject.code} temporary error. waiting ${this.retryDelay}ms before trying again`)
       const delay = this.retryDelay
       this.retryDelay = Math.min(this.retryDelay * 2, RETRY_DELAY_MAX)
       await new Promise((resolve, reject) => setTimeout(resolve, delay))

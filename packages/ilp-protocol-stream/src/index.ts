@@ -206,12 +206,20 @@ export class Server extends EventEmitter {
       const localAddressParts = prepare.destination.replace(this.sourceAccount + '.', '').split('.')
       if (localAddressParts.length === 0 || !localAddressParts[0]) {
         this.debug(`destination in ILP Prepare packet does not have a Connection ID: ${prepare.destination}`)
+        /* Why no error message here?
+        We return an empty message here because we want to minimize the amount of information sent unencrypted
+        that identifies this protocol and specific implementation for the rest of the network. For example,
+        if every implementation returns a slightly different message here, you could determine what type of
+        endpoint is listening on a particular ILP address just by changing the last character of the destination
+        in a packet and seeing what error message you get back.
+        Apologies if this caused additional debugging time for you! */
         throw new IlpPacket.Errors.UnreachableError('')
       }
       const connectionId = localAddressParts[0]
 
       if (this.closedConnections[connectionId]) {
         this.debug(`got packet for connection that was already closed: ${connectionId}`)
+        // See "Why no error message here?" note above
         throw new IlpPacket.Errors.UnreachableError('')
       }
 
@@ -223,6 +231,7 @@ export class Server extends EventEmitter {
           cryptoHelper.decrypt(sharedSecret, prepare.data)
         } catch (err) {
           this.debug(`got prepare for an address and token that we did not generate: ${prepare.destination}`)
+          // See "Why no error message here?" note above
           throw new IlpPacket.Errors.UnreachableError('')
         }
 

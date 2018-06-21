@@ -807,7 +807,6 @@ describe('Connection', function () {
 
     })
 
-
     it('should reduce packet amount then increase it if T04 errors and then successfully sent packets', async function () {
       const rejectPacket = IlpPacket.serializeIlpReject({
           code: 'T04',
@@ -832,22 +831,17 @@ describe('Connection', function () {
 
       const sendTotal = 1000
 
-      let totalSent = 0
-
-      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.on('close', () => {
-          assert.equal(sendTotal, totalSent)
-          assert.equal(500, Number(stream.totalReceived))
-        })
-      })
-
+      const spy = sinon.spy()
       const clientStream = this.clientConn.createStream()
       clientStream.on('close', () => {
-        totalSent =+ Number(clientStream.totalSent)
+        spy()
+        assert.equal(clientStream.totalSent, sendTotal)
       })
 
       await clientStream.sendTotal(sendTotal)
-      clientStream.end()
+      await clientStream.end()
+      await new Promise(setImmediate)
+      assert.calledOnce(spy)
     })
 
     it('should retry on temporary errors', async function () {
