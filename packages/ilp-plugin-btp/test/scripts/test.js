@@ -1,4 +1,4 @@
-const BtpPlugin = require('../..')
+const BtpPlugin = require('../../src').default
 const IlpPacket = require('ilp-packet')
 const server = new BtpPlugin({
   listener: {

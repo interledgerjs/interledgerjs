@@ -15,6 +15,8 @@ The main use of this plugin, however, is as a building block for plugins that
 do have an underlying ledger. In this way, it's the successor of
 [`ilp-plugin-payment-channel-framework`](https://github.com/interledgerjs/ilp-plugin-payment-channel-framework)
 
+Plugins that sub-class the `AbstractBtpPlugin` should override `sendMoney` and `_handleMoney` at least.
+
 ## Use as a Data Channel for ILP
 
 ```js
@@ -46,9 +48,9 @@ await client.sendData(IlpPacket.serializeIlpPrepare({
 Two functions must be defined in order for the plugin to handle money.
 
 * `sendMoney (amount: string) -> Promise<null>`: sends `amount` of units to the peer. This should be done via a BTP `TRANSFER` call.
-* `handleMoney (from: null, { requestId: number, data: { amount: string, protocolData: Array<ProtocolData> } }) -> Array<ProtocolData>`: This function is called on an incoming BTP `TRANSFER`.
+* `_handleMoney (from: string, btpPacket: BtpPacket) -> Promise<Array<BtpSubProtocol>>`: This function is called on an incoming BTP `TRANSFER`.
 
-ProtocolData is made up of:
+BtpSubProtocol is made up of:
 
 * `protocolName: string`: The name of this side protocol. ILP-level information must be named `ilp`.
 * `contentType: number`: The content type. 0 is `application/octet-stream`, 1 is `text/plain-utf8`, and 2 is `application/json`. Mainly used for logging and smart deserializing.

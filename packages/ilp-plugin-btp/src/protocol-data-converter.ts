@@ -1,9 +1,9 @@
-'use strict'
-
+import { BtpSubProtocol } from '.'
 const Btp = require('btp-packet')
 
-function protocolDataToIlpAndCustom ({ protocolData }) {
+export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubProtocol> }) {
   const protocolMap = {}
+  const { protocolData } = data
 
   for (const protocol of protocolData) {
     const name = protocol.protocolName
@@ -19,20 +19,22 @@ function protocolDataToIlpAndCustom ({ protocolData }) {
 
   return {
     protocolMap,
-    ilp: protocolMap.ilp,
-    custom: protocolMap.custom
+    ilp: protocolMap['ilp'],
+    custom: protocolMap['custom']
   }
 }
 
-function ilpAndCustomToProtocolData ({ ilp, custom, protocolMap }) {
+export function ilpAndCustomToProtocolData (data: { ilp?: Buffer, custom?: Object , protocolMap?: Map<string, Buffer | string | Object> }): Array<BtpSubProtocol> {
   const protocolData = []
+  const { ilp, custom, protocolMap } = data
 
   // ILP is always the primary protocol when it's specified
   if (ilp) {
     protocolData.push({
       protocolName: 'ilp',
       contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-      data: Buffer.from(ilp, 'base64')
+      // TODO JS originally had a Buffer.from(ilp, 'base64')?
+      data: ilp
     })
   }
 
@@ -73,9 +75,4 @@ function ilpAndCustomToProtocolData ({ ilp, custom, protocolMap }) {
   }
 
   return protocolData
-}
-
-module.exports = {
-  protocolDataToIlpAndCustom,
-  ilpAndCustomToProtocolData
 }
