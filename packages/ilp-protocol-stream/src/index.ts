@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import * as IlpPacket from 'ilp-packet'
-import * as Debug from 'debug'
+import createLogger = require('ilp-logger')
 import * as cryptoHelper from './crypto'
 import { randomBytes } from 'crypto'
 import { Connection, ConnectionOpts } from './connection'
@@ -23,7 +23,7 @@ export interface CreateConnectionOpts extends ConnectionOpts {
 export async function createConnection (opts: CreateConnectionOpts): Promise<Connection> {
   const plugin = opts.plugin
   await plugin.connect()
-  const debug = Debug('ilp-protocol-stream:Client')
+  const log = createLogger('ilp-protocol-stream:Client')
   const sourceAccount = (await ILDCP.fetch(plugin.sendData.bind(plugin))).clientAddress
   const connection = new Connection({
     ...opts,
@@ -36,7 +36,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
     try {
       prepare = IlpPacket.deserializeIlpPrepare(data)
     } catch (err) {
-      debug(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
+      log.error(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
       return IlpPacket.serializeIlpReject({
         code: 'F00',
         message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
@@ -50,7 +50,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
       return IlpPacket.serializeIlpFulfill(fulfill)
     } catch (err) {
       if (!err.ilpErrorCode) {
-        debug('error handling prepare:', err)
+        log.error('error handling prepare:', err)
       }
       // TODO should the default be F00 or T00?
       return IlpPacket.serializeIlpReject({
@@ -64,8 +64,8 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
   connection.once('close', () => {
     plugin.deregisterDataHandler()
     plugin.disconnect()
-      .then(() => debug('plugin disconnected'))
-      .catch((err: Error) => debug('error disconnecting plugin:', err))
+      .then(() => log.info('plugin disconnected'))
+      .catch((err: Error) => log.error('error disconnecting plugin:', err))
   })
   await connection.connect()
   // TODO resolve only when it is connected
@@ -91,7 +91,7 @@ export class Server extends EventEmitter {
   protected sourceAccount: string
   protected connections: { [key: string]: Connection }
   protected closedConnections: { [key: string]: boolean }
-  protected debug: Debug.IDebugger
+  protected log: any
   protected enablePadding?: boolean
   protected connected: boolean
   protected connectionOpts: ConnectionOpts
@@ -100,7 +100,7 @@ export class Server extends EventEmitter {
     super()
     this.serverSecret = opts.serverSecret || randomBytes(32)
     this.plugin = opts.plugin
-    this.debug = Debug('ilp-protocol-stream:Server')
+    this.log = createLogger('ilp-protocol-stream:Server')
     this.connections = {}
     this.closedConnections = {}
     this.connectionOpts = Object.assign({}, opts, {
@@ -194,7 +194,7 @@ export class Server extends EventEmitter {
       try {
         prepare = IlpPacket.deserializeIlpPrepare(data)
       } catch (err) {
-        this.debug(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
+        this.log.error(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
         return IlpPacket.serializeIlpReject({
           code: 'F00',
           message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
@@ -205,7 +205,7 @@ export class Server extends EventEmitter {
 
       const localAddressParts = prepare.destination.replace(this.sourceAccount + '.', '').split('.')
       if (localAddressParts.length === 0 || !localAddressParts[0]) {
-        this.debug(`destination in ILP Prepare packet does not have a Connection ID: ${prepare.destination}`)
+        this.log.error(`destination in ILP Prepare packet does not have a Connection ID: ${prepare.destination}`)
         /* Why no error message here?
         We return an empty message here because we want to minimize the amount of information sent unencrypted
         that identifies this protocol and specific implementation for the rest of the network. For example,
@@ -218,7 +218,7 @@ export class Server extends EventEmitter {
       const connectionId = localAddressParts[0]
 
       if (this.closedConnections[connectionId]) {
-        this.debug(`got packet for connection that was already closed: ${connectionId}`)
+        this.log.debug(`got packet for connection that was already closed: ${connectionId}`)
         // See "Why no error message here?" note above
         throw new IlpPacket.Errors.UnreachableError('')
       }
@@ -230,7 +230,7 @@ export class Server extends EventEmitter {
           sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
           cryptoHelper.decrypt(sharedSecret, prepare.data)
         } catch (err) {
-          this.debug(`got prepare for an address and token that we did not generate: ${prepare.destination}`)
+          this.log.error(`got prepare for an address and token that we did not generate: ${prepare.destination}`)
           // See "Why no error message here?" note above
           throw new IlpPacket.Errors.UnreachableError('')
         }
@@ -246,11 +246,11 @@ export class Server extends EventEmitter {
           plugin: this.plugin
         })
         this.connections[connectionId] = connection
-        this.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
+        this.log.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
         try {
           this.emit('connection', connection)
         } catch (err) {
-          this.debug('error in connection event handler:', err)
+          this.log.error('error in connection event handler:', err)
         }
 
         connection.once('close', () => {
@@ -267,7 +267,7 @@ export class Server extends EventEmitter {
 
     } catch (err) {
       if (!err.ilpErrorCode) {
-        this.debug('error handling prepare:', err)
+        this.log.error('error handling prepare:', err)
       }
       // TODO should the default be F00 or T00?
       return IlpPacket.serializeIlpReject({
