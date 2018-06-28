@@ -72,7 +72,7 @@ export default class MockPlugin extends EventEmitter {
       }
       const newPacket = IlpPacket.serializeIlpPrepare({
         ...parsed,
-        amount: amount.times(this.exchangeRate).toString(10)
+        amount: amount.times(this.exchangeRate).decimalPlaces(0, BigNumber.ROUND_DOWN).toString(10)
       })
       return this.mirror.dataHandler(newPacket)
     } else {

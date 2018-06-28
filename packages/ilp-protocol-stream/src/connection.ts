@@ -28,7 +28,6 @@ import { Plugin } from './util/plugin-interface'
 import BigNumber from 'bignumber.js'
 require('source-map-support').install()
 
-const TEST_PACKET_AMOUNT = new BigNumber(1000)
 const RETRY_DELAY_START = 100
 const RETRY_DELAY_MAX = 43200000 // 12 hours should be long enough
 const MAX_DATA_SIZE = 32767
@@ -764,7 +763,7 @@ export class Connection extends EventEmitter {
         // Send a test packet first to determine the exchange rate
         if (!this.exchangeRate) {
           this.log.trace('determining exchange rate')
-          await this.sendTestPacket()
+          await this.determineExchangeRate()
 
           if (this.exchangeRate) {
             this.safeEmit('connect')
@@ -967,14 +966,104 @@ export class Connection extends EventEmitter {
   }
 
   /**
+   * (Internal) Probe using test packets to find the exchange rate.
+   * @private
+   */
+  protected async determineExchangeRate (): Promise<void> {
+    // TODO handle T04 errors
+    this.log.trace('determineExchangeRate')
+    if (!this.destinationAccount) {
+      throw new Error('Cannot determine exchange rate. Destination account is unknown')
+    }
+
+    const testPacketAmounts = [1, 1000, 1000000, 1000000000]
+    const results = await Promise.all(testPacketAmounts.map(async (amount) => {
+      try {
+        const timeout = setTimeout(() => { throw new Error('Timed out') }, 30000)
+        const packet = await this.sendTestPacket(new BigNumber(amount))
+        clearTimeout(timeout)
+        return packet
+      } catch (err) {
+        return null
+      }
+    }))
+
+    // Check if we got F08 errors (which will help determine the path maximum packet amount)
+    const maximumPacketAmounts = testPacketAmounts.map((sourceAmount, index) => {
+      if (results[index] && (results[index] as IlpPacket.IlpRejection).code === 'F08') {
+        try {
+          const reader = Reader.from((results[index] as IlpPacket.IlpRejection).data)
+          const receivedAmount = reader.readUInt64BigNum()
+          const maximumAmount = reader.readUInt64BigNum()
+          const maximumPacketAmount = new BigNumber(sourceAmount)
+            .times(maximumAmount)
+            .dividedToIntegerBy(receivedAmount)
+          this.log.debug(`sending test packet of ${testPacketAmounts[index]} resulted in F08 error that told us maximum packet amount is ${maximumPacketAmount}`)
+          return maximumPacketAmount
+        } catch (err) {
+          return new BigNumber(Infinity)
+        }
+      }
+      return new BigNumber(Infinity)
+    })
+    this.maximumPacketAmount = BigNumber.minimum(...maximumPacketAmounts.concat(this.maximumPacketAmount))
+    this.testMaximumPacketAmount = this.maximumPacketAmount
+    if (this.maximumPacketAmount.isEqualTo(0)) {
+      this.log.error(`cannot send anything through this path. the maximum packet amount is 0`)
+      throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
+    }
+
+    // Figure out which test packet discovered the exchange rate with the most precision
+    const { maxDigits, exchangeRate } = results.reduce(({ maxDigits, exchangeRate }, result, index) => {
+      if (result && (result as Packet).prepareAmount) {
+        const prepareAmount = (result as Packet).prepareAmount
+        const exchangeRate = prepareAmount.dividedBy(testPacketAmounts[index])
+        this.log.debug(`sending test packet of ${testPacketAmounts[index]} delivered ${prepareAmount} (exchange rate: ${exchangeRate})`)
+        if (prepareAmount.precision(true) >= maxDigits) {
+          return {
+            maxDigits: prepareAmount.precision(true),
+            exchangeRate
+          }
+        }
+      }
+      return { maxDigits, exchangeRate }
+    }, { maxDigits: 0, exchangeRate: new BigNumber(0) })
+
+    // TODO make the level of precision configurable
+    if (maxDigits >= 3) {
+      this.log.debug(`determined exchange rate to be ${exchangeRate}`)
+      this.exchangeRate = exchangeRate
+      return
+    }
+
+    // Try sending another packet if we don't have enough precision but ran into an F08 error
+    if (this.maximumPacketAmount.isFinite() && testPacketAmounts.indexOf(this.maximumPacketAmount.toNumber()) === -1) {
+      this.log.debug(`trying another packet with the maximum packet amount: ${this.maximumPacketAmount}`)
+      const result = await this.sendTestPacket(this.maximumPacketAmount)
+      // TODO what if this gets an F08 error?
+      if ((result as Packet).prepareAmount) {
+        this.exchangeRate = (result as Packet).prepareAmount.dividedBy(this.maximumPacketAmount)
+        this.log.debug(`sent the path maximum packet amount of ${this.maximumPacketAmount} and determined exchange rate to be ${this.exchangeRate}`)
+        return
+      }
+    }
+
+    // A lower precision exchange rate is better than nothing
+    if (exchangeRate.isGreaterThan(0)) {
+      this.log.debug(`determined exchange rate to be ${exchangeRate}`)
+      this.exchangeRate = exchangeRate
+      return
+    }
+
+    throw new Error(`Unable to determine path exchange rate`)
+  }
+
+  /**
    * (Internal) Send an unfulfillable test packet. Primarily used for determining the path exchange rate.
    * @private
    */
-  protected async sendTestPacket (amount?: BigNumber): Promise<void> {
-    this.log.trace('sendTestPacket')
-    if (!this.destinationAccount) {
-      throw new Error('Cannot send test packet. Destination account is unknown')
-    }
+  protected async sendTestPacket (amount: BigNumber): Promise<Packet | IlpPacket.IlpRejection> {
+    this.log.trace(`sending test packet for amount: ${amount}`)
 
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
@@ -985,24 +1074,41 @@ export class Connection extends EventEmitter {
       requestPacket.frames.push(new ConnectionNewAddressFrame(this.sourceAccount))
     }
 
-    const sourceAmount = amount || BigNumber.minimum(TEST_PACKET_AMOUNT, this.testMaximumPacketAmount)
-
-    const responsePacket = await this.sendPacket(requestPacket, sourceAmount, true)
-    if (!responsePacket) {
-      return
+    const prepare = {
+      destination: this.destinationAccount!,
+      amount: amount.toString(),
+      data: requestPacket.serializeAndEncrypt(this.sharedSecret),
+      executionCondition: cryptoHelper.generateRandomCondition(),
+      expiresAt: new Date(Date.now() + 30000)
     }
 
-    this.remoteKnowsOurAccount = true
+    const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
 
-    // Determine exchange rate from amount that arrived
-    this.exchangeRate = responsePacket.prepareAmount.dividedBy(sourceAmount)
-    this.log.debug(`determined exchange rate to be: ${this.exchangeRate}`)
-    if (this.exchangeRate.isEqualTo(0)) {
-      // TODO this could also happen if the exchange rate is less than 1 / TEST_PACKET_AMOUNT
-      throw new Error('Exchange rate is 0. We will not be able to send anything through this path')
+    const ilpReject = IlpPacket.deserializeIlpReject(responseData)
+
+    // Return the receiver's response if there was one
+    let responsePacket
+    if (ilpReject.code === 'F99' && ilpReject.data.length > 0) {
+      responsePacket = Packet.decryptAndDeserialize(this.sharedSecret, ilpReject.data)
+
+      // Ensure the response corresponds to the request
+      if (!responsePacket.sequence.isEqualTo(requestPacket.sequence)) {
+        this.log.error(`response packet sequence does not match the request packet. expected sequence: ${requestPacket.sequence}, got response packet:`, JSON.stringify(responsePacket))
+        throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${requestPacket.sequence}`)
+      }
+      if (responsePacket.ilpPacketType !== responseData[0]) {
+        this.log.error(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
+        throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
+      }
     }
 
-    this.handleControlFrames(responsePacket.frames)
+    if (responsePacket) {
+      this.remoteKnowsOurAccount = true
+      this.handleControlFrames(responsePacket.frames)
+      return responsePacket
+    } else {
+      return ilpReject
+    }
   }
 
   /**

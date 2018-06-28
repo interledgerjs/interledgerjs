@@ -103,7 +103,7 @@ describe('Server', function () {
         plugin: this.clientPlugin,
         destinationAccount: destinationAccount + '456',
         sharedSecret
-      }), 'Error connecting: Unexpected error while sending packet. Code: F02, message: ')
+      }), 'Error connecting: Unable to determine path exchange rate')
 
       assert.notCalled(spy)
     })
@@ -199,7 +199,7 @@ describe('Server', function () {
         plugin: this.clientPlugin,
         sharedSecret: this.sharedSecret,
         destinationAccount: this.destinationAccount
-      }), 'Error connecting: Unexpected error while sending packet. Code: F02, message:')
+      }), 'Error connecting: Unable to determine path exchange rate')
     })
 
     it('should remove the record of closed connections', async function () {
