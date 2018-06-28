@@ -1063,10 +1063,10 @@ export class Connection extends EventEmitter {
    * @private
    */
   protected async sendTestPacket (amount: BigNumber): Promise<Packet | IlpPacket.IlpRejection> {
-    this.log.trace(`sending test packet for amount: ${amount}`)
-
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
+
+    this.log.trace(`sending test packet ${requestPacket.sequence} for amount: ${amount}`)
 
     if (!this.remoteKnowsOurAccount) {
       this.log.trace('sending source address to peer')
@@ -1100,6 +1100,8 @@ export class Connection extends EventEmitter {
         this.log.error(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
         throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
       }
+    } else {
+      this.log.debug(`test packet ${requestPacket.sequence} was rejected with a ${ilpReject.code} error${ilpReject.message ? ' with the message: "' + ilpReject.message + '"' : ''}`)
     }
 
     if (responsePacket) {
