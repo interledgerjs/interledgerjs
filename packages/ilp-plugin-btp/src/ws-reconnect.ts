@@ -1,7 +1,7 @@
 import * as WebSocket from 'ws'
-import * as Debug from 'debug'
+const createLogger = require('ilp-logger')
 import { EventEmitter2 } from 'eventemitter2'
-const debug = Debug('ilp-ws-reconnect')
+const debug = createLogger('ilp-ws-reconnect')
 
 const DEFAULT_RECONNECT_INTERVAL = 5000
 
@@ -49,7 +49,7 @@ export class WebSocketReconnector extends EventEmitter2 {
   }
 
   private _reconnect (codeOrError: number | Error) {
-    debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._interval}`)
+    debug.debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._interval}`)
     this._connected = false
     this._instance.removeAllListeners()
     setTimeout(() => {

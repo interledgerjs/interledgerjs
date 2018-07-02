@@ -10,7 +10,7 @@ import { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } from './protoc
 
 const BtpPacket = require('btp-packet')
 
-const debug = Debug('ilp-plugin-btp')
+const debug = require('ilp-logger')('ilp-plugin-btp')
 
 enum ReadyState {
   INITIAL = 0,
@@ -81,9 +81,7 @@ export interface WebSocketServerConstructor {
 }
 
 export interface IlpPluginBtpConstructorModules {
-  log?: {
-    debug: (formatter: any, ...args: any[]) => void
-  }
+  log?: any
   WebSocket?: WebSocketConstructor
   WebSocketServer?: WebSocketServerConstructor
 }
@@ -133,7 +131,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   private _dataHandler?: DataHandler
   private _moneyHandler?: MoneyHandler
   private _readyState: ReadyState = ReadyState.INITIAL
-  private _debug: (formatter: any, ...args: any[]) => void
+  private _log: any
   private WebSocket: WebSocketConstructor
   private WebSocketServer: WebSocketServerConstructor
 
@@ -158,7 +156,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     this._server = options.server
 
     modules = modules || {}
-    this._debug = (modules.log && modules.log.debug) || debug
+    this._log = modules.log || debug
+    this._log.trace = this._log.trace || Debug(this._log.debug.namespace + ':trace')
     this.WebSocket = modules.WebSocket || WebSocket
     this.WebSocketServer = modules.WebSocketServer || WebSocket.Server
   }
@@ -175,23 +174,23 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       this._incomingWs = undefined
 
       wss.on('connection', (socket: WebSocket) => {
-        this._debug('got connection')
+        this._log.info('got connection')
         let authPacket: BtpPacket
 
         socket.on('close', (code: number) => {
-          this._debug('incoming websocket closed. code=' + code)
+          this._log.info('incoming websocket closed. code=' + code)
           this._emitDisconnect()
         })
 
         socket.on('error', (err: Error) => {
-          this._debug('incoming websocket error. error=', err)
+          this._log.debug('incoming websocket error. error=', err)
           this._emitDisconnect()
         })
 
         socket.once('message', async (binaryAuthMessage: WebSocket.Data) => {
           try {
             authPacket = BtpPacket.deserialize(binaryAuthMessage)
-            this._debug('got auth packet. packet=%j', authPacket)
+            this._log.trace('got auth packet. packet=%j', authPacket)
             this._validateAuthPacket(authPacket)
             if (this._incomingWs) {
               this._closeIncomingSocket(this._incomingWs, authPacket)
@@ -213,12 +212,12 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
             return
           }
 
-          this._debug('connection authenticated')
+          this._log.trace('connection authenticated')
           socket.on('message', this._handleIncomingWsMessage.bind(this, socket))
           this._emitConnect()
         })
       })
-      this._debug(`listening for BTP connections on ${this._listener.port}`)
+      this._log.info(`listening for BTP connections on ${this._listener.port}`)
     }
 
     if (this._server) {
@@ -250,7 +249,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       }]
 
       this._ws.on('open', async () => {
-        this._debug('connected to server')
+        this._log.trace('connected to server')
         await this._call('', {
           type: BtpPacket.TYPE_MESSAGE,
           requestId: await _requestId(),
@@ -296,7 +295,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
           triggeredAt: new Date().toISOString()
         }, authPacket.requestId, []))
       } catch (e) {
-        this._debug('error responding on closed socket', e)
+        this._log.error('error responding on closed socket', e)
       }
       socket.close()
     })
@@ -326,16 +325,16 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     try {
       btpPacket = BtpPacket.deserialize(binaryMessage)
     } catch (err) {
-      this._debug('deserialization error:', err)
+      this._log.error('deserialization error:', err)
       ws.close()
       return
     }
 
-    this._debug(`processing btp packet ${JSON.stringify(btpPacket)}`)
+    this._log.trace(`processing btp packet ${JSON.stringify(btpPacket)}`)
     try {
       await this._handleIncomingBtpPacket('', btpPacket)
     } catch (err) {
-      this._debug(`Error processing BTP packet of type ${btpPacket.type}: `, err)
+      this._log.debug(`Error processing BTP packet of type ${btpPacket.type}: `, err)
       const error = jsErrorToBtpError(err)
       const requestId = btpPacket.requestId
       const { code, name, triggeredAt, data } = error
@@ -385,7 +384,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       this.emit.apply(this, arguments)
     } catch (err) {
       const errInfo = (typeof err === 'object' && err.stack) ? err.stack : String(err)
-      this._debug('error in handler for event', arguments, errInfo)
+      this._log.error('error in handler for event', arguments, errInfo)
     }
   }
 
@@ -398,7 +397,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       throw new Error('requestHandler must be a function')
     }
 
-    this._debug('registering data handler')
+    this._log.trace('registering data handler')
     this._dataHandler = handler
   }
 
@@ -415,7 +414,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       throw new Error('requestHandler must be a function')
     }
 
-    this._debug('registering money handler')
+    this._log.trace('registering money handler')
     this._moneyHandler = handler
   }
 
@@ -475,7 +474,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     const { type, requestId, data } = btpPacket
     const typeString = BtpPacket.typeToString(type)
 
-    this._debug(`received BTP packet (${typeString}, RequestId: ${requestId}): ${JSON.stringify(data)}`)
+    this._log.trace(`received BTP packet (${typeString}, RequestId: ${requestId}): ${JSON.stringify(data)}`)
     let result: Array<BtpSubProtocol>
     switch (type) {
       case BtpPacket.TYPE_RESPONSE:
@@ -499,7 +498,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
         throw new Error('Unknown BTP packet type')
     }
 
-    this._debug(`replying to request ${requestId} with ${JSON.stringify(result)}`)
+    this._log.trace(`replying to request ${requestId} with ${JSON.stringify(result)}`)
     await this._handleOutgoingBtpPacket(from, {
       type: BtpPacket.TYPE_RESPONSE,
       requestId,
@@ -529,7 +528,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     try {
       await new Promise((resolve) => ws!.send(BtpPacket.serialize(btpPacket), resolve))
     } catch (e) {
-      this._debug('unable to send btp message to client: ' + e.message, 'btp packet:', JSON.stringify(btpPacket))
+      this._log.error('unable to send btp message to client: ' + e.message, 'btp packet:', JSON.stringify(btpPacket))
     }
   }
 
@@ -559,7 +558,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     assert(tokenProto, 'auth_token subprotocol is required')
     const token = tokenProto!.data.toString()
     if (token !== this._listener!.secret) {
-      this._debug('received token %s, but expected %s', JSON.stringify(token), JSON.stringify(this._listener!.secret))
+      this._log.debug('received token %s, but expected %s', JSON.stringify(token), JSON.stringify(this._listener!.secret))
       throw new Error('invalid auth_token')
     }
   }

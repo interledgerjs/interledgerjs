@@ -29,6 +29,7 @@
     "debug": "^3.1.0",
     "eventemitter2": "^5.0.0",
     "ilp-compat-plugin": "^2.0.3",
+    "ilp-logger": "^1.0.1",
     "ws": "^3.3.3"
   },
   "devDependencies": {
