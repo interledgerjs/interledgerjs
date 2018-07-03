@@ -30,6 +30,7 @@ require('source-map-support').install()
 
 const RETRY_DELAY_START = 100
 const RETRY_DELAY_MAX = 43200000 // 12 hours should be long enough
+const RETRY_DELAY_INCREASE_FACTOR = 1.5
 const MAX_DATA_SIZE = 32767
 const DEFAULT_MAX_REMOTE_STREAMS = 10
 
@@ -979,11 +980,9 @@ export class Connection extends EventEmitter {
     const testPacketAmounts = [1, 1000, 1000000, 1000000000]
     const results = await Promise.all(testPacketAmounts.map(async (amount) => {
       try {
-        const timeout = setTimeout(() => { throw new Error('Timed out') }, 30000)
-        const packet = await this.sendTestPacket(new BigNumber(amount))
-        clearTimeout(timeout)
-        return packet
+        return this.sendTestPacket(new BigNumber(amount))
       } catch (err) {
+        this.log.error(`Error sending test packet for amount ${amount}:`, err)
         return null
       }
     }))
@@ -1062,14 +1061,15 @@ export class Connection extends EventEmitter {
    * (Internal) Send an unfulfillable test packet. Primarily used for determining the path exchange rate.
    * @private
    */
-  protected async sendTestPacket (amount: BigNumber): Promise<Packet | IlpPacket.IlpRejection> {
+  protected async sendTestPacket (amount: BigNumber, retryDelay = 100, timeout = 30000): Promise<Packet | IlpPacket.IlpRejection | null> {
+    const startTime = Date.now()
+
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
 
-    this.log.trace(`sending test packet ${requestPacket.sequence} for amount: ${amount}`)
+    this.log.trace(`sending test packet ${requestPacket.sequence} for amount: ${amount}. retry delay: ${retryDelay}, timeout: ${timeout}`)
 
     if (!this.remoteKnowsOurAccount) {
-      this.log.trace('sending source address to peer')
       // TODO attach a token to the account?
       requestPacket.frames.push(new ConnectionNewAddressFrame(this.sourceAccount))
     }
@@ -1079,10 +1079,23 @@ export class Connection extends EventEmitter {
       amount: amount.toString(),
       data: requestPacket.serializeAndEncrypt(this.sharedSecret),
       executionCondition: cryptoHelper.generateRandomCondition(),
-      expiresAt: new Date(Date.now() + 30000)
+      expiresAt: new Date(Date.now() + timeout)
     }
 
-    const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
+    /* tslint:disable-next-line:no-unnecessary-type-assertion */
+    const responseData = await (new Promise(async (resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.log.error(`test packet ${requestPacket.sequence} timed out before we got a response`)
+        resolve(null)
+      }, timeout)
+      const result = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
+      clearTimeout(timer)
+      resolve(result)
+    }) as Promise<Buffer | null>)
+
+    if (!responseData) {
+      return null
+    }
 
     const ilpReject = IlpPacket.deserializeIlpReject(responseData)
 
@@ -1102,6 +1115,17 @@ export class Connection extends EventEmitter {
       }
     } else {
       this.log.debug(`test packet ${requestPacket.sequence} was rejected with a ${ilpReject.code} error${ilpReject.message ? ' with the message: "' + ilpReject.message + '"' : ''}`)
+    }
+
+    if (ilpReject.code[0] === 'T') {
+      const timeLeft = timeout - retryDelay - (Date.now() - startTime)
+      if (timeLeft > 0) {
+        this.log.debug(`got ${ilpReject.code} error, waiting ${retryDelay}ms before sending another test packet`)
+        await new Promise((resolve, reject) => setTimeout(resolve, retryDelay))
+        return this.sendTestPacket(amount, Math.floor(retryDelay * RETRY_DELAY_INCREASE_FACTOR), timeLeft)
+      } else {
+        this.log.debug(`got ${ilpReject.code} error but not trying again`)
+      }
     }
 
     if (responsePacket) {
@@ -1139,9 +1163,16 @@ export class Connection extends EventEmitter {
       new ConnectionCloseFrame(errorCode, errorMessage)
     ])
     try {
-      await this.sendPacket(packet, new BigNumber(0), true)
+      const prepare = {
+        destination: this.destinationAccount!,
+        amount: '0',
+        data: packet.serializeAndEncrypt(this.sharedSecret),
+        executionCondition: cryptoHelper.generateRandomCondition(),
+        expiresAt: new Date(Date.now() + 30000)
+      }
+      await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
     } catch (err) {
-      this.log.debug(`error while trying to inform peer that connection is closing, but closing anyway`, err)
+      this.log.error(`error while trying to inform peer that connection is closing, but closing anyway`, err)
     }
     this.remoteClosed = true
   }

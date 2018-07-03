@@ -478,6 +478,13 @@ describe('Connection', function () {
         plugin: this.serverPlugin,
         serverSecret: Buffer.alloc(32)
       })
+      this.server.on('error', (_err: Error) => {
+        // noop
+      })
+    })
+
+    afterEach(async function () {
+      await this.server.close()
     })
 
     it('should determine the exchange rate even if it is small', async function () {
@@ -513,6 +520,71 @@ describe('Connection', function () {
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       }), 'Error connecting: Unable to determine path exchange rate')
+    })
+
+    it('should determine the exchange rate even if it gets temporary errors', async function () {
+      const clock = sinon.useFakeTimers({
+        toFake: ['setTimeout'],
+      })
+      const interval = setInterval(() => clock.tick(1000), 1)
+
+      this.clientPlugin.exchangeRate = 0.000001
+      this.clientPlugin.maxAmount = 1000000
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .onCall(1).resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .onCall(2).resolves(IlpPacket.serializeIlpReject({
+          code: 'T01',
+          message: 'Some Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .onCall(3).resolves(IlpPacket.serializeIlpReject({
+          code: 'T99',
+          message: 'AHHHHHH',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+        .callThrough()
+
+      await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
+
+      clearInterval(interval)
+      clock.restore()
+    })
+
+    it('should stop trying to connect if it keeps getting temporary errors', async function () {
+      const clock = sinon.useFakeTimers({
+        toFake: ['setTimeout']
+      })
+      const interval = setInterval(() => clock.tick(1000), 1)
+
+      this.clientPlugin.exchangeRate = 0.000001
+      this.clientPlugin.maxAmount = 1000000
+      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .onFirstCall().callsFake(realSendData)
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+
+      await assert.isRejected(createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      }), 'Error connecting: Unable to determine path exchange rate')
+
+      clearInterval(interval)
+      clock.restore()
     })
   })
 
