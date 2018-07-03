@@ -31,6 +31,7 @@ require('source-map-support').install()
 const RETRY_DELAY_START = 100
 const RETRY_DELAY_MAX = 43200000 // 12 hours should be long enough
 const RETRY_DELAY_INCREASE_FACTOR = 1.5
+const DEFAULT_PACKET_TIMEOUT = 30000
 const MAX_DATA_SIZE = 32767
 const DEFAULT_MAX_REMOTE_STREAMS = 10
 
@@ -971,7 +972,6 @@ export class Connection extends EventEmitter {
    * @private
    */
   protected async determineExchangeRate (): Promise<void> {
-    // TODO handle T04 errors
     this.log.trace('determineExchangeRate')
     if (!this.destinationAccount) {
       throw new Error('Cannot determine exchange rate. Destination account is unknown')
@@ -1061,7 +1061,7 @@ export class Connection extends EventEmitter {
    * (Internal) Send an unfulfillable test packet. Primarily used for determining the path exchange rate.
    * @private
    */
-  protected async sendTestPacket (amount: BigNumber, retryDelay = 100, timeout = 30000): Promise<Packet | IlpPacket.IlpRejection | null> {
+  protected async sendTestPacket (amount: BigNumber, retryDelay = RETRY_DELAY_START, timeout = DEFAULT_PACKET_TIMEOUT): Promise<Packet | IlpPacket.IlpRejection | null> {
     const startTime = Date.now()
 
     // Set packet number to correlate response with request
@@ -1162,13 +1162,14 @@ export class Connection extends EventEmitter {
     const packet = new Packet(this.nextPacketSequence, IlpPacketType.Prepare, 0, [
       new ConnectionCloseFrame(errorCode, errorMessage)
     ])
+
     try {
       const prepare = {
         destination: this.destinationAccount!,
         amount: '0',
         data: packet.serializeAndEncrypt(this.sharedSecret),
         executionCondition: cryptoHelper.generateRandomCondition(),
-        expiresAt: new Date(Date.now() + 30000)
+        expiresAt: new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
       }
       await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
     } catch (err) {
@@ -1200,7 +1201,7 @@ export class Connection extends EventEmitter {
       amount: (sourceAmount).toString(),
       data,
       executionCondition,
-      expiresAt: new Date(Date.now() + 30000)
+      expiresAt: new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
     }
 
     const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
