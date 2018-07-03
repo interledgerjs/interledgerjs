@@ -10,24 +10,24 @@ class Logger {
     this.tracer = debug(namespace + ':trace')
   }
 
-  info (msg) {
-    this.debugInfo(msg)
+  info (...msg) {
+    this.debugInfo(...msg)
   }
 
-  warn (msg) {
-    this.debugWarn(msg)
+  warn (...msg) {
+    this.debugWarn(...msg)
   }
 
-  error (msg) {
-    this.debugError(msg)
+  error (...msg) {
+    this.debugError(...msg)
   }
 
-  debug (msg) {
-    this.debugger(msg)
+  debug (...msg) {
+    this.debugger(...msg)
   }
 
-  trace (msg) {
-    this.tracer(msg)
+  trace (...msg) {
+    this.tracer(...msg)
   }
 }
 
