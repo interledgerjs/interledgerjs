@@ -86,10 +86,6 @@ export interface IlpPluginBtpConstructorModules {
   WebSocketServer?: WebSocketServerConstructor
 }
 
-export interface ConnectDisconnectHandler {
-  (): Promise<void>
-}
-
 /** Abstract base class for building BTP-based ledger plugins.
  *
  * This class takes care of most of the work translating between BTP and the
@@ -122,14 +118,11 @@ export interface ConnectDisconnectHandler {
 export default class AbstractBtpPlugin extends EventEmitter2 {
   public static version = 2
 
-  protected _connect: ConnectDisconnectHandler
-  protected _disconnect: ConnectDisconnectHandler
-
   private _reconnectInterval?: number
   private _responseTimeout: number
 
-  private _dataHandler?: DataHandler
-  private _moneyHandler?: MoneyHandler
+  protected _dataHandler?: DataHandler
+  protected _moneyHandler?: MoneyHandler
   private _readyState: ReadyState = ReadyState.INITIAL
   private _log: any
   private WebSocket: WebSocketConstructor
@@ -140,7 +133,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     port: number,
     secret: string
   }
-  private _wss: WebSocket.Server
+  protected _wss: WebSocket.Server | null = null
   private _incomingWs?: WebSocket
 
   // Client
@@ -161,6 +154,11 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     this.WebSocket = modules.WebSocket || WebSocket
     this.WebSocketServer = modules.WebSocketServer || WebSocket.Server
   }
+
+  /* tslint:disable-next-line:no-empty */
+  protected async _connect (): Promise<void> {}
+  /* tslint:disable-next-line:no-empty */
+  protected async _disconnect (): Promise<void> {}
 
   async connect () {
     if (this._readyState > ReadyState.INITIAL) {
@@ -276,9 +274,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
         void reject(new Error('connection aborted')))
     })
 
-    if (this._connect) {
-      await this._connect()
-    }
+    await this._connect()
 
     this._readyState = ReadyState.READY_TO_EMIT
     this._emitConnect()
@@ -304,9 +300,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   async disconnect () {
     this._emitDisconnect()
 
-    if (this._disconnect) {
-      await this._disconnect()
-    }
+    await this._disconnect()
 
     if (this._ws) this._ws.close()
     if (this._incomingWs) {
@@ -572,5 +566,3 @@ function _requestId (): Promise<number> {
     })
   })
 }
-
-module.exports = AbstractBtpPlugin

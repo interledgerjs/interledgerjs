@@ -2,7 +2,8 @@
   "name": "ilp-plugin-btp",
   "version": "1.1.13",
   "description": "Generic BTP plugin for ILP",
-  "main": "src/index.js",
+  "main": "index.js",
+  "types": "src/index.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "mocha ./test/index.test.js",
