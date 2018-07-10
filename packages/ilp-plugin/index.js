@@ -1,6 +1,6 @@
 const fs = require('fs')
 const path = require('path')
-const debug = require('debug')('ilp-plugin')
+const log = require('ilp-logger')('ilp-plugin')
 const crypto = require('crypto')
 
 function pluginFromEnvironment (opts) {
@@ -11,8 +11,8 @@ function pluginFromEnvironment (opts) {
     ? JSON.parse(process.env.ILP_CREDENTIALS)
     : { server: `btp+ws://${name}:${secret}@localhost:7768` }
 
-  debug('creating plugin with module', module)
-  debug('creating plugin with credentials', credentials)
+  log.debug('creating plugin with module', module)
+  log.debug('creating plugin with credentials', credentials)
   const Plugin = require(module)
   return new Plugin(credentials)
 }
