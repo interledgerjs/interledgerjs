@@ -45,6 +45,31 @@ function jsErrorToBtpError (e: Error) {
   }
 }
 
+const ILP_PACKET_TYPES = {
+  12: 'ilp-prepare',
+  13: 'ilp-fulfill',
+  14: 'ilp-reject'
+}
+function generatePacketDataTracer (packetData: BtpPacketData) {
+  return {
+    toString: () => {
+      try {
+        return packetData.protocolData.map(data => {
+          switch (data.protocolName) {
+            case 'ilp':
+              return ILP_PACKET_TYPES[data.data[0]] || ('ilp-' + data.data[0])
+              break
+            default:
+              return `${data.protocolName}=${data.data.toString('base64')}`
+          }
+        }).join(';')
+      } catch (err) {
+        return 'serialization error. err=' + err.stack
+      }
+    }
+  }
+}
+
 export interface BtpPacket {
   requestId: number
   type: number
@@ -324,7 +349,6 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       return
     }
 
-    this._log.trace(`processing btp packet ${JSON.stringify(btpPacket)}`)
     try {
       await this._handleIncomingBtpPacket('', btpPacket)
     } catch (err) {
@@ -468,7 +492,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     const { type, requestId, data } = btpPacket
     const typeString = BtpPacket.typeToString(type)
 
-    this._log.trace(`received BTP packet (${typeString}, RequestId: ${requestId}): ${JSON.stringify(data)}`)
+    this._log.trace('received btp packet. type=%s requestId=%s info=%s', typeString, requestId, generatePacketDataTracer(data))
     let result: Array<BtpSubProtocol>
     switch (type) {
       case BtpPacket.TYPE_RESPONSE:
@@ -518,6 +542,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
   protected async _handleOutgoingBtpPacket (to: string, btpPacket: BtpPacket) {
     const ws = this._ws || this._incomingWs
+
+    const { type, requestId, data } = btpPacket
+    const typeString = BtpPacket.typeToString(type)
+    this._log.trace('sending btp packet. type=%s requestId=%s info=%s', typeString, requestId, generatePacketDataTracer(data))
 
     try {
       await new Promise((resolve) => ws!.send(BtpPacket.serialize(btpPacket), resolve))
