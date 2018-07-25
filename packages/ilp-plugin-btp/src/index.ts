@@ -50,6 +50,23 @@ const ILP_PACKET_TYPES = {
   13: 'ilp-fulfill',
   14: 'ilp-reject'
 }
+
+function subProtocolToString (data: BtpSubProtocol): string {
+  let stringData
+
+  switch (data.contentType) {
+    case BtpPacket.MIME_APPLICATION_OCTET_STREAM:
+      stringData = data.data.toString('base64')
+      break
+    case BtpPacket.MIME_APPLICATION_JSON:
+    case BtpPacket.MIME_TEXT_PLAIN_UTF8:
+      stringData = data.data.toString('utf8')
+      break
+  }
+
+  return `${data.protocolName}=${stringData}`
+}
+
 function generatePacketDataTracer (packetData: BtpPacketData) {
   return {
     toString: () => {
@@ -60,7 +77,7 @@ function generatePacketDataTracer (packetData: BtpPacketData) {
               return ILP_PACKET_TYPES[data.data[0]] || ('ilp-' + data.data[0])
               break
             default:
-              return `${data.protocolName}=${data.data.toString('base64')}`
+              return subProtocolToString(data)
           }
         }).join(';')
       } catch (err) {
@@ -492,7 +509,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     const { type, requestId, data } = btpPacket
     const typeString = BtpPacket.typeToString(type)
 
-    this._log.trace('received btp packet. type=%s requestId=%s info=%s', typeString, requestId, generatePacketDataTracer(data))
+    this._log.trace(`received btp packet. type=${typeString} requestId=${requestId} info=${generatePacketDataTracer(data)}`)
     let result: Array<BtpSubProtocol>
     switch (type) {
       case BtpPacket.TYPE_RESPONSE:
@@ -516,7 +533,6 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
         throw new Error('Unknown BTP packet type')
     }
 
-    this._log.trace(`replying to request ${requestId} with ${JSON.stringify(result)}`)
     await this._handleOutgoingBtpPacket(from, {
       type: BtpPacket.TYPE_RESPONSE,
       requestId,
@@ -545,7 +561,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
     const { type, requestId, data } = btpPacket
     const typeString = BtpPacket.typeToString(type)
-    this._log.trace('sending btp packet. type=%s requestId=%s info=%s', typeString, requestId, generatePacketDataTracer(data))
+    this._log.trace(`sending btp packet. type=${typeString} requestId=${requestId} info=${generatePacketDataTracer(data)}`)
 
     try {
       await new Promise((resolve) => ws!.send(BtpPacket.serialize(btpPacket), resolve))
