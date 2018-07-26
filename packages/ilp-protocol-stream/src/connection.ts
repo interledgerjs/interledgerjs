@@ -1114,7 +1114,7 @@ export class Connection extends EventEmitter {
         throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
       }
     } else {
-      this.log.debug(`test packet ${requestPacket.sequence} was rejected with a ${ilpReject.code} error${ilpReject.message ? ' with the message: "' + ilpReject.message + '"' : ''}`)
+      this.log.debug(`test packet ${requestPacket.sequence} was rejected with a ${ilpReject.code} triggered by ${ilpReject.triggeredBy} error${ilpReject.message ? ' with the message: "' + ilpReject.message + '"' : ''}`)
     }
 
     if (ilpReject.code[0] === 'T') {
