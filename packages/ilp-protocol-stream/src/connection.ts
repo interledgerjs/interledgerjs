@@ -1296,7 +1296,7 @@ export class Connection extends EventEmitter {
    * @private
    */
   protected async handleConnectorError (reject: IlpPacket.IlpRejection, amountSent: BigNumber) {
-    this.log.debug(`handling reject:`, JSON.stringify(reject))
+    this.log.debug(`handling reject triggered by: ${reject.triggeredBy} error: ${reject.code} message: ${reject.message} data: ${reject.data}`)
     if (reject.code === 'F08') {
       let receivedAmount
       let maximumAmount
