@@ -4,7 +4,7 @@
 ## Usage
 
 ```
-const logger = require('ilp-loggger')('DEBUG_NAMESPACE')
+const logger = require('ilp-logger')('DEBUG_NAMESPACE')
 
 logger.info('Informational output.')
 logger.warn('Something you want to warn for.')
