@@ -17,6 +17,4 @@ function pluginFromEnvironment (opts) {
   return new Plugin(credentials)
 }
 
-module.exports = function (opts) {
-  return pluginFromEnvironment(opts)
-}
+module.exports = pluginFromEnvironment
