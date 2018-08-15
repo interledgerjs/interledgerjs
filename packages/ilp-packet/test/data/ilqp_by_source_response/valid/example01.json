@@ -1,8 +1,0 @@
-{
-  "name": "example 1",
-  "binary": "050d0000000218711a0000000bb800",
-  "json": {
-    "destinationAmount": "9000000000",
-    "sourceHoldDuration": 3000
-  }
-}
