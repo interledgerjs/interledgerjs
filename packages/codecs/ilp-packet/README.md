@@ -19,174 +19,40 @@
 npm install ilp-packet
 ```
 
-### Deserialize ILP Packet
+### Deserialize any ILP packet
 
 ```js
-const packet = require('ilp-packet')
+const IlpPacket = require('ilp-packet')
 
-const binaryPacket = Buffer.from('011c000000000754d4c00e672e75732e6e657875732e626f620304104100', 'hex')
-const jsonPacket = packet.deserializeIlpPacket(binaryPacket)
+const binaryPacket = Buffer.from('0c68000000000000006b323031373132323330313231343035343974e1136dc71c9e5f283bec83461cbf1261c4014f72d48f8dd65453a0b84e7de10d6578616d706c652e616c696365205db343fdc41898f6df4202329139dc242dd0f558a811b46b28918fdab37c6cb0', 'hex')
+const jsonPacket = IlpPacket.deserializeIlpPacket(binaryPacket)
 console.log(jsonPacket)
-// prints {
-//   type: 1,
-//   typeString: 'ilp_payment',
+// {
+//   type: 12,
+//   typeString: 'ilp_prepare',
 //   data: {
-//     amount: '123000000',       // Unsigned 64-bit integer as a string
-//     account: 'g.us.nexus.bob', // ILP Address
-//     data: <Buffer 04 10 41>
+//     amount: '107',
+//     executionCondition: Buffer.from('dOETbcccnl8oO+yDRhy/EmHEAU9y1I+N1lRToLhOfeE=', 'base64')
+//     expiresAt: new Date('2017-12-23T01:21:40.549Z'),
+//     destination: 'example.alice',
+//     data: Buffer.from('XbND/cQYmPbfQgIykTncJC3Q9VioEbRrKJGP2rN8bLA=', 'base64')
 //   }
 // }
 ```
 
-### Serialize/deserialize ILP Payment Packet
+### Serialize PREPARE, FULFILL, REJECT
 
 ```js
-const packet = require('ilp-packet')
-
-const binaryPacket = packet.serializeIlpPayment({
-  amount: '123000000',       // Unsigned 64-bit integer as a string
-  account: 'g.us.nexus.bob', // ILP Address
-  data: Buffer.from('BBBB', 'base64')
-}) // returns a Buffer
-
-console.log(binaryPacket.toString('hex'))
-// prints '011c000000000754d4c00e672e75732e6e657875732e626f620304104100'
-
-const jsonPacket = packet.deserializeIlpPayment(binaryPacket)
-```
-
-### Serialize/deserialize ILQP Quote Requests/Responses
-
-#### IlqpLiquidityRequest
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlqpLiquidityRequest({
-  destinationAccount: 'example.nexus.bob',
-  destinationHoldDuration: 3000
-})
-
-const json = packet.deserializeIlqpLiquidityRequest(binary)
-```
-
-#### IlqpLiquidityResponse
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlqpLiquidityResponse({
-  liquidityCurve: Buffer.alloc(16), // Must be a buffer of size (n * 16) bytes
-                                    // where n is the number of points in the
-                                    // curve.
-  appliesToPrefix: 'example.nexus.',
-  sourceHoldDuration: 15000,
-  expiresAt: new Date()
-})
-
-const json = packet.deserializeIlqpLiquidityResponse(binary)
-```
-
-### IlqpBySourceRequest
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlqpBySourceRequest({
-  destinationAccount: 'example.nexus.bob',
-  sourceAmount: '9000000000',
-  destinationHoldDuration: 3000
-})
-
-const json = packet.deserializeIlqpBySourceRequest(binary)
-```
-
-### IlqpBySourceResponse
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlqpBySourceResponse({
-  destinationAmount: '9000000000',
-  sourceHoldDuration: 3000
-})
-
-const json = packet.deserializeIlqpBySourceResponse(binary)
-```
-
-### IlqpByDestinationRequest
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlqpByDestinationRequest({
-  destinationAccount: 'example.nexus.bob',
-  destinationAmount: '9000000000',
-  destinationHoldDuration: 3000
-})
-
-const json = packet.deserializeIlqpByDestinationRequest(binary)
-```
-
-### IlqpByDestinationResponse
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlqpByDestinationResponse({
-  sourceAmount: '9000000000',
-  sourceHoldDuration: 3000
-})
-
-const json = packet.deserializeIlqpByDestinationResponse(binary)
-```
-### IlpError
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlpError({
-  code: 'F01',
-  name: 'Invalid Packet',
-  triggeredBy: 'example.us.ledger3.bob',
-  forwardedBy: [
-    'example.us.ledger2.connie',
-    'example.us.ledger1.conrad'
-  ],
-  triggeredAt: new Date(),
-  data: JSON.stringify({
-    foo: 'bar'
-  })
-})
-
-const json = packet.deserializeIlpError(binary)
-
-const additionalErrorData = JSON.parse(json.data)
-```
-
-### IlpFulfillment
-
-```js
-const packet = require('ilp-packet')
-
-const binary = packet.serializeIlpFulfillment({
-  data: 'BBBB'               // Base64url-encoded attached data
-})
-
-const json = packet.deserializeIlpFulfillment(binary)
-```
-
-### IlpPrepare, IlpFulfill, IlpReject
-
-```js
-const packet = require('ilp-packet')
+const IlpPacket = require('ilp-packet')
 const crypto = require('crypto')
-function sha256 (preimage) { return crypto.createHash('sha256').update(preimage).digest() }
+function sha256 (preimage) {
+  return crypto.createHash('sha256').update(preimage).digest()
+}
 
 const fulfillment = crypto.randomBytes(32)
 const condition = sha256(fulfillment)
 
-const binaryPrepare = packet.serializeIlpPrepare({
+const binaryPrepare = IlpPacket.serializeIlpPrepare({
   amount: '10',
   executionCondition: condition,
   destination: 'g.us.nexus.bob', // this field was called 'account' in older packet types
@@ -194,13 +60,12 @@ const binaryPrepare = packet.serializeIlpPrepare({
   expiresAt: new Date(new Date().getTime() + 10000)
 })
 
-const binaryFulfill = packet.serializeIlpFulfill({
+const binaryFulfill = IlpPacket.serializeIlpFulfill({
   fulfillment,
   data: Buffer.from('thank you')
 })
 
-// not to be confused with IlpRejection:
-const binaryReject = packet.serializeIlpReject({
+const binaryReject = IlpPacket.serializeIlpReject({
   code: 'F00',
   triggeredBy: 'g.us.nexus.gateway',
   message: 'more details, human-readable',

@@ -1,8 +1,0 @@
-{
-  "name": "example 2",
-  "binary": "0a110b6578616d706c652e626f620365965900",
-  "json": {
-    "account": "example.bob",
-    "data": "ZZZZ"
-  }
-}
