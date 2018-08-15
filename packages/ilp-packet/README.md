@@ -33,7 +33,7 @@ console.log(jsonPacket)
 //   data: {
 //     amount: '123000000',       // Unsigned 64-bit integer as a string
 //     account: 'g.us.nexus.bob', // ILP Address
-//     data: 'BBBB'               // Base64url-encoded attached data
+//     data: <Buffer 04 10 41>
 //   }
 // }
 ```
@@ -46,7 +46,7 @@ const packet = require('ilp-packet')
 const binaryPacket = packet.serializeIlpPayment({
   amount: '123000000',       // Unsigned 64-bit integer as a string
   account: 'g.us.nexus.bob', // ILP Address
-  data: 'BBBB'               // Base64url-encoded attached data
+  data: Buffer.from('BBBB', 'base64')
 }) // returns a Buffer
 
 console.log(binaryPacket.toString('hex'))
@@ -190,7 +190,7 @@ const binaryPrepare = packet.serializeIlpPrepare({
   amount: '10',
   executionCondition: condition,
   destination: 'g.us.nexus.bob', // this field was called 'account' in older packet types
-  data: Buffer.from(['hello world']),
+  data: Buffer.from('hello world'),
   expiresAt: new Date(new Date().getTime() + 10000)
 })
 
