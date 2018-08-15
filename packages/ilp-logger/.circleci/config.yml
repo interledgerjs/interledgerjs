@@ -16,7 +16,19 @@ jobs:
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
 
+      - run:
+          name: Install Greenkeeper-Lockfile
+          command: sudo npm install -g greenkeeper-lockfile
+
+      - run:
+          name: Update Lockfile (Greenkeeper)
+          command: greenkeeper-lockfile-update
+
       - run: npm install
+
+      - run:
+          name: Upload Lockfile (Greenkeeper)
+          command: greenkeeper-lockfile-upload
 
       - save_cache:
           paths:
