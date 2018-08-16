@@ -4,7 +4,7 @@ const HIGH_WORD_MULTIPLIER = 0x100000000
 
 export const twoNumbersToString = (num: number[]) => {
   const [ hi, lo ] = num
-  const uint64 = new BigNumber(hi).times(HIGH_WORD_MULTIPLIER).add(lo)
+  const uint64 = new BigNumber(hi).times(HIGH_WORD_MULTIPLIER).plus(lo)
   return uint64.toString(10)
 }
 

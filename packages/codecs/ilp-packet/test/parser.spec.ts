@@ -31,7 +31,7 @@ describe('Parser', function () {
 
       for (let test of validTests) {
         it(test.name, function () {
-          const binary = new Buffer(test.binary, 'hex')
+          const binary = Buffer.from(test.binary, 'hex')
 
           const parsed = Parser.deserializeIlpPrepare(binary)
 
@@ -70,7 +70,7 @@ describe('Parser', function () {
 
       for (let test of validTests) {
         it(test.name, function () {
-          const binary = new Buffer(test.binary, 'hex')
+          const binary = Buffer.from(test.binary, 'hex')
 
           const parsed = Parser.deserializeIlpFulfill(binary)
 
@@ -107,7 +107,7 @@ describe('Parser', function () {
 
       for (let test of validTests) {
         it(test.name, function () {
-          const binary = new Buffer(test.binary, 'hex')
+          const binary = Buffer.from(test.binary, 'hex')
 
           const parsed = Parser.deserializeIlpReject(binary)
 
@@ -129,7 +129,7 @@ describe('Parser', function () {
         const validTests = loadTests({ type: typeString })
         for (let test of validTests) {
           it('parses ' + typeString + ': ' + test.name, function () {
-            const binary = new Buffer(test.binary, 'hex')
+            const binary = Buffer.from(test.binary, 'hex')
             const parsed = Parser.deserializeIlpPacket(binary)
             if (typeString === 'ilp_prepare' || typeString === 'ilp_fulfill' || typeString === 'ilp_reject') {
               parsed.data.data = parsed.data.data.toString('base64')

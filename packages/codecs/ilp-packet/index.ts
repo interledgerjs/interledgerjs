@@ -83,14 +83,14 @@ export const serializeIlpPrepare = (json: IlpPrepare) => {
 export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
   const { type, contents } = deserializeEnvelope(binary)
 
-  if (type !== Type.TYPE_ILP_PREPARE) {
+  if (+type !== Type.TYPE_ILP_PREPARE) {
     throw new Error('Packet has incorrect type')
   }
 
   const reader = Reader.from(contents)
   const highBits = reader.readUInt32()
   const lowBits = reader.readUInt32()
-  const amount = Long.fromBits(lowBits, highBits, true).toString()
+  const amount = Long.fromBits(+lowBits, +highBits, true).toString()
   const expiresAt = interledgerTimeToDate(reader.read(INTERLEDGER_TIME_LENGTH).toString('ascii'))
   const executionCondition = reader.read(32)
   const destination = reader.readVarOctetString().toString('ascii')
@@ -125,7 +125,7 @@ export const serializeIlpFulfill = (json: IlpFulfill) => {
 export const deserializeIlpFulfill = (binary: Buffer): IlpFulfill => {
   const { type, contents } = deserializeEnvelope(binary)
 
-  if (type !== Type.TYPE_ILP_FULFILL) {
+  if (+type !== Type.TYPE_ILP_FULFILL) {
     throw new Error('Packet has incorrect type')
   }
 
@@ -173,7 +173,7 @@ export const serializeIlpReject = (json: IlpReject) => {
 export const deserializeIlpReject = (binary: Buffer): IlpReject => {
   const { type, contents } = deserializeEnvelope(binary)
 
-  if (type !== Type.TYPE_ILP_REJECT) {
+  if (+type !== Type.TYPE_ILP_REJECT) {
     throw new Error('Packet has incorrect type')
   }
 

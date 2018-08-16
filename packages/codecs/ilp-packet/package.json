@@ -36,24 +36,23 @@
   },
   "homepage": "https://github.com/interledgerjs/ilp-packet#readme",
   "devDependencies": {
-    "@types/bignumber.js": "^4.0.2",
     "@types/chai": "^4.0.1",
-    "@types/long": "^3.0.31",
-    "@types/mocha": "^2.2.41",
-    "@types/node": "^8.0.12",
+    "@types/long": "^4.0.0",
+    "@types/mocha": "^5.2.5",
+    "@types/node": "^10.7.0",
     "chai": "^4.1.0",
     "codecov": "^3.0.0",
-    "mocha": "^4.0.1",
-    "nyc": "^11.0.3",
-    "ts-node": "^3.2.0",
+    "mocha": "^5.2.0",
+    "nyc": "^12.0.2",
+    "ts-node": "^7.0.1",
     "tslint": "^5.5.0",
     "tslint-config-standard": "^7.0.0",
-    "typescript": "^2.4.1"
+    "typescript": "^3.0.1"
   },
   "dependencies": {
-    "bignumber.js": "^5.0.0",
+    "bignumber.js": "^7.2.1",
     "extensible-error": "^1.0.2",
-    "long": "^3.2.0",
-    "oer-utils": "^1.3.2"
+    "long": "^4.0.0",
+    "oer-utils": "^2.0.1"
   }
 }
