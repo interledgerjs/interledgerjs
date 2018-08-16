@@ -5,6 +5,10 @@ jobs:
       - image: circleci/node:8
     working_directory: ~/repo
     steps:
+      - run:
+          name: Setup NPM for global installs to home directory
+          command: npm set prefix=$HOME/npm
+          
       - checkout
       # Download and cache dependencies
       - restore_cache:
@@ -12,13 +16,29 @@ jobs:
           - v1-dependencies-{{ checksum "package.json" }}
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
+          
+      - run:
+          name: Install Greenkeeper-Lockfile
+          command: npm install -g greenkeeper-lockfile
+
+      - run:
+          name: Update Lockfile (Greenkeeper)
+          command: $HOME/npm/bin/greenkeeper-lockfile-update
+          
       - run: npm install
+      
       - save_cache:
           paths:
             - node_modules
           key: v1-dependencies-{{ checksum "package.json" }}
+          
       - run: npm run lint
       - run: npm test
+      
+      - run:
+          name: Upload Lockfile (Greenkeeper)
+          command: $HOME/npm/bin/greenkeeper-lockfile-upload
+      
       - persist_to_workspace:
           root: .
           paths:
@@ -43,3 +63,4 @@ workflows:
           filters:
             branches:
               only: master
+              

@@ -45,19 +45,19 @@
   },
   "homepage": "https://github.com/interledgerjs/oer-utils",
   "dependencies": {
-    "bignumber.js": "^6.0.0"
+    "bignumber.js": "^7.2.1"
   },
   "devDependencies": {
     "@types/chai": "^4.0.1",
-    "@types/mocha": "^2.2.41",
-    "@types/node": "^8.0.12",
+    "@types/mocha": "^5.2.5",
+    "@types/node": "^10.7.0",
     "chai": "^4.1.0",
-    "codecov": "^2.2.0",
-    "mocha": "^3.4.2",
-    "nyc": "^11.0.3",
-    "ts-node": "^3.2.0",
+    "codecov": "^3.0.4",
+    "mocha": "^5.2.0",
+    "nyc": "^12.0.2",
+    "ts-node": "^7.0.1",
     "tslint": "^5.5.0",
-    "tslint-config-standard": "^6.0.1",
-    "typescript": "^2.4.1"
+    "tslint-config-standard": "^7.1.0",
+    "typescript": "^3.0.1"
   }
 }
