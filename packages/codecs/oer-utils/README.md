@@ -1,5 +1,7 @@
 # OER Utils
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/interledgerjs/oer-utils.svg)](https://greenkeeper.io/)
+
 [![npm][npm-image]][npm-url] [![circle][circle-image]][circle-url] [![codecov][codecov-image]][codecov-url]
 
 [npm-image]: https://img.shields.io/npm/v/oer-utils.svg?style=flat
