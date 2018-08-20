@@ -1,6 +1,6 @@
 {
   "name": "oer-utils",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Tools for OER parsing and serialization",
   "main": "dist/src/index.js",
   "typings": "dist/src/index",
