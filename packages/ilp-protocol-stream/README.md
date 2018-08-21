@@ -5,7 +5,7 @@
 [![CircleCI](https://circleci.com/gh/interledgerjs/ilp-protocol-stream.svg?style=shield)](https://circleci.com/gh/interledgerjs/ilp-protocol-stream)
 [![codecov](https://codecov.io/gh/interledgerjs/ilp-protocol-stream/branch/master/graph/badge.svg)](https://codecov.io/gh/interledgerjs/ilp-protocol-stream)
 [![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
-[![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream)
+[![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream) [![Greenkeeper badge](https://badges.greenkeeper.io/interledgerjs/ilp-protocol-stream.svg)](https://greenkeeper.io/)
 
 STREAM is the recommended Transport Protocol to use for most Interledger applications.
 
