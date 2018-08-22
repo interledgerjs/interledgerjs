@@ -53,6 +53,6 @@
     "bignumber.js": "^7.2.1",
     "extensible-error": "^1.0.2",
     "long": "^4.0.0",
-    "oer-utils": "^2.0.2"
+    "oer-utils": "^3.0.1"
   }
 }
