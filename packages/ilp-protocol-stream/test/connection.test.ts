@@ -68,7 +68,7 @@ describe('Connection', function () {
       assert.calledOnce(closeSpy)
     })
 
-    it('should close all outgoing streams', async function() {
+    it('should close all outgoing streams', async function () {
       const clientSpy = {
         stream1: {
           finish: sinon.spy(),
@@ -101,7 +101,7 @@ describe('Connection', function () {
         stream.on('finish', serverStreamSpy.finish)
         stream.on('end', serverStreamSpy.end)
         stream.on('close', serverStreamSpy.close)
-        stream.on('data', () => {})
+        stream.on('data', () => { })
       })
       this.serverConn.on('end', connSpy.server.end)
       this.serverConn.on('close', connSpy.server.close)
@@ -142,7 +142,7 @@ describe('Connection', function () {
       assert.calledTwice(serverStreamSpy.close)
     })
 
-    it('should close all incoming streams', async function() {
+    it('should close all incoming streams', async function () {
       const clientSpy = {
         stream1: {
           finish: sinon.spy(),
@@ -175,7 +175,7 @@ describe('Connection', function () {
         stream.on('finish', serverStreamSpy.finish)
         stream.on('end', serverStreamSpy.end)
         stream.on('close', serverStreamSpy.close)
-        stream.on('data', () => {})
+        stream.on('data', () => { })
       })
       this.serverConn.on('end', connSpy.server.end)
       this.serverConn.on('close', connSpy.server.close)
@@ -236,7 +236,7 @@ describe('Connection', function () {
       assert.isFalse(this.clientConn['streams'].has(3))
     })
 
-    it('should complete sending all data from server when end is called on server side of the connection', async function() {
+    it('should complete sending all data from server when end is called on server side of the connection', async function () {
       let data: Buffer[] = []
       this.clientConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('data', (chunk: Buffer) => {
@@ -250,7 +250,7 @@ describe('Connection', function () {
       assert.equal(Buffer.concat(data).length, 30000)
     })
 
-    it('should complete sending all data from client when end is called on client side of the connection', async function() {
+    it('should complete sending all data from client when end is called on client side of the connection', async function () {
       let data: Buffer[] = []
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('data', (chunk: Buffer) => {
@@ -622,7 +622,7 @@ describe('Connection', function () {
         toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(1000), 1)
-       this.clientPlugin.exchangeRate = 1
+      this.clientPlugin.exchangeRate = 1
       this.clientPlugin.maxAmount = 1000000
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
         .onCall(2).resolves(IlpPacket.serializeIlpReject({
@@ -644,12 +644,12 @@ describe('Connection', function () {
           triggeredBy: 'test.connector'
         }))
         .callThrough()
-       await createConnection({
+      await createConnection({
         ...this.server.generateAddressAndSecret(),
         minExchangeRatePrecision: 1,
         plugin: this.clientPlugin
       })
-       clearInterval(interval)
+      clearInterval(interval)
       clock.restore()
     })
 
@@ -688,7 +688,7 @@ describe('Connection', function () {
       const realSendData = this.clientPlugin.sendData
       let callCount = 0
       const args: Buffer[] = []
-      let rejected: Array<IlpPacket.IlpRejection> = []
+      let rejected: Array<IlpPacket.IlpReject> = []
       this.clientPlugin.sendData = async (data: Buffer) => {
         callCount++
         args[callCount - 1] = data
@@ -696,7 +696,7 @@ describe('Connection', function () {
           this.clientPlugin.exchangeRate = exchangeRates[callCount - 1]
         }
         const response = await realSendData.call(this.clientPlugin, data)
-        if(response[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
+        if (response[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
           rejected.push(IlpPacket.deserializeIlpReject(response))
         }
         return response
@@ -744,7 +744,7 @@ describe('Connection', function () {
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
       let callCount = 0
       const args: Buffer[] = []
-      let rejected: Array<IlpPacket.IlpRejection> = []
+      let rejected: Array<IlpPacket.IlpReject> = []
       this.clientPlugin.sendData = async (data: Buffer) => {
         callCount++
         args[callCount - 1] = data
@@ -1026,10 +1026,10 @@ describe('Connection', function () {
 
     it('should reduce packet amount then increase it if T04 errors and then successfully sent packets', async function () {
       const rejectPacket = IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
+        code: 'T04',
+        message: 'Insufficient Liquidity Error',
+        data: Buffer.alloc(0),
+        triggeredBy: 'test.connector'
       })
 
       // Reject the packet 10 times with T04 error using send total of 1000
@@ -1164,7 +1164,7 @@ describe('Connection', function () {
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       const clientPlugin = this.clientPlugin
       class BadConnection extends Connection {
-        constructor () {
+        constructor() {
           super({
             plugin: clientPlugin,
             destinationAccount,
@@ -1193,15 +1193,15 @@ describe('Connection', function () {
       this.server.on('connection', (serverConn: Connection) => {
         serverConn['maxStreamId'] = 6
         serverConn.on('stream', (stream: DataAndMoneyStream) => {
-          stream.on('error', (err: Error) => {})
+          stream.on('error', (err: Error) => { })
         })
-        serverConn.on('error', (err: Error) => {})
+        serverConn.on('error', (err: Error) => { })
       })
       const clientPlugin = this.clientPlugin
       class BadConnection extends Connection {
         remoteMaxStreamId: number
 
-        constructor () {
+        constructor() {
           super({
             plugin: clientPlugin,
             destinationAccount,

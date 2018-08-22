@@ -37,9 +37,9 @@
     "bignumber.js": "^7.2.1",
     "debug": "^3.1.0",
     "ilp-logger": "^1.0.1",
-    "ilp-packet": "^2.2.0",
+    "ilp-packet": "^2.2.1",
     "ilp-protocol-ildcp": "^1.0.0",
-    "oer-utils": "^2.0.1",
+    "oer-utils": "^2.0.2",
     "source-map-support": "^0.5.6"
   },
   "devDependencies": {
