@@ -819,6 +819,7 @@ export class Connection extends EventEmitter {
     for (let [_, stream] of this.streams) {
       if (stream.isOpen()) {
         requestPacket.frames.push(new StreamMaxMoneyFrame(stream.id, stream.receiveMax, stream.totalReceived))
+        requestPacket.frames.push(new StreamMaxDataFrame(stream.id, stream._getIncomingOffsets().maxAcceptable))
       }
     }
     if (this.closed && !this.remoteClosed) {
@@ -887,6 +888,10 @@ export class Connection extends EventEmitter {
 
     for (let [_, stream] of this.streams) {
       // TODO use a sensible estimate for the StreamDataFrame overhead
+      if (bytesLeftInPacket - 20 <= 0) {
+        // Never pass a negative offset to _getAmountAvailableToSend.
+        break
+      }
       const { data, offset } = stream._getAvailableDataToSend(bytesLeftInPacket - 20)
       if (data && data.length > 0) {
         const streamDataFrame = new StreamDataFrame(stream.id, offset, data)

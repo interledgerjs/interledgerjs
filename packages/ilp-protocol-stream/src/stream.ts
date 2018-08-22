@@ -152,7 +152,7 @@ export class DataAndMoneyStream extends Duplex {
    * This property exists on streams after Node 9.4 so it is added here for backwards compatibility
    */
   get writableLength (): number {
-    // stream.readableLength was only added in Node v9.4.0
+    // stream.writableLength was only added in Node v9.4.0
     const writableLength = super.writableLength || (this['_writableState'] && this['_writableState'].length) || 0
     return writableLength
   }
@@ -537,6 +537,12 @@ export class DataAndMoneyStream extends Duplex {
   _read (size: number): void {
     const data = this._incomingData.read()
     if (!data) {
+      // Let the peer know that this stream can receive more data.
+      // Don't call immediately since looping before the read() has finished
+      // would report incorrect offsets.
+      if (this['readableFlowing'] !== true) {
+        process.nextTick(() => this.emit('_maybe_start_send_loop'))
+      }
       return
     }
     this.push(data)

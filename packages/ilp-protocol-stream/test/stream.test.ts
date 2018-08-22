@@ -701,6 +701,32 @@ describe('DataAndMoneyStream', function () {
       }
     })
 
+    it('should respect the backpressure from the other side (paused idle stream)', function (done) {
+      this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
+        // Peer sends first chunk
+        // Wait to allow both sides loops to finish.
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        assert.equal(stream.readableLength, 16384)
+        assert.equal(stream._getIncomingOffsets().maxAcceptable, 16384)
+
+        // We consume some
+        stream.read(3450)
+        await new Promise(setImmediate)
+        assert.equal(stream.readableLength, 16384 - 3450)
+        //await new Promise(setImmediate)
+
+        // Wait to allow both sides loops to finish.
+        await new Promise((resolve) => setTimeout(resolve, 10))
+        // Now they've sent the next chunk
+        assert.equal(stream.readableLength, 16384)
+        assert.equal(stream._getIncomingOffsets().maxAcceptable, 16384 + 3450)
+        done()
+      })
+
+      const clientStream = this.clientConn.createStream()
+      clientStream.write(Buffer.alloc(400 * 1000, 'af39', 'hex'))
+    })
+
     it('should apply backpressure to the writableStream', async function () {
       const clientStream = this.clientConn.createStream()
       assert.equal(clientStream.write(Buffer.alloc(16384)), false)
