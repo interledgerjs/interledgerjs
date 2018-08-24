@@ -11,7 +11,7 @@
     "pretest": "npm run build",
     "lint": "tslint --project .",
     "codecov": "codecov",
-    "doc": "typedoc --options typedoc.js src"
+    "doc": "typedoc --mode modules --out docs src"
   },
   "files": [
     "src/*.js",
