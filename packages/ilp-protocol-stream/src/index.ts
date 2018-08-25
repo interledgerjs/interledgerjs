@@ -10,6 +10,9 @@ require('source-map-support').install()
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9_-]+$/
 
+export { Connection } from './connection'
+export { DataAndMoneyStream } from './stream'
+
 export interface CreateConnectionOpts extends ConnectionOpts {
   /** ILP Address of the server */
   destinationAccount: string,
