@@ -85,8 +85,8 @@ export class Connection extends EventEmitter {
   readonly connectionTag?: string
 
   protected plugin: Plugin
-  protected sourceAccount: string
-  protected destinationAccount?: string
+  protected _sourceAccount: string
+  protected _destinationAccount?: string
   protected sharedSecret: Buffer
   protected isServer: boolean
   protected slippage: BigNumber
@@ -125,8 +125,8 @@ export class Connection extends EventEmitter {
   constructor (opts: FullConnectionOpts) {
     super()
     this.plugin = opts.plugin
-    this.sourceAccount = opts.sourceAccount
-    this.destinationAccount = opts.destinationAccount
+    this._sourceAccount = opts.sourceAccount
+    this._destinationAccount = opts.destinationAccount
     this.sharedSecret = opts.sharedSecret
     this.isServer = opts.isServer
     this.slippage = new BigNumber(opts.slippage || 0)
@@ -293,6 +293,20 @@ export class Connection extends EventEmitter {
     stream.once('close', () => this.removeStreamRecord(stream))
 
     return stream
+  }
+
+  /**
+   * ILP Address of the remote party to this connection.
+   */
+  get destinationAccount (): string | undefined {
+    return this._destinationAccount
+  }
+
+  /**
+   * ILP Address of the plugin passed to this connection.
+   */
+  get sourceAccount (): string {
+    return this._sourceAccount
   }
 
   /**
@@ -535,8 +549,8 @@ export class Connection extends EventEmitter {
       switch (frame.type) {
         case FrameType.ConnectionNewAddress:
           this.log.trace(`peer notified us of their account: ${frame.sourceAccount}`)
-          const firstConnection = this.destinationAccount === undefined
-          this.destinationAccount = frame.sourceAccount
+          const firstConnection = this._destinationAccount === undefined
+          this._destinationAccount = frame.sourceAccount
           if (firstConnection) {
             this.handleConnect()
           }
@@ -756,7 +770,7 @@ export class Connection extends EventEmitter {
       this.safeEmit('_send_loop_finished')
       return
     }
-    if (!this.destinationAccount) {
+    if (!this._destinationAccount) {
       this.log.debug('not sending because we do not know the client\'s address')
       this.sending = false
       return
@@ -1033,7 +1047,7 @@ export class Connection extends EventEmitter {
    */
   protected async determineExchangeRate (): Promise<void> {
     this.log.trace('determineExchangeRate')
-    if (!this.destinationAccount) {
+    if (!this._destinationAccount) {
       throw new Error('Cannot determine exchange rate. Destination account is unknown')
     }
 
@@ -1083,11 +1097,11 @@ export class Connection extends EventEmitter {
 
     if (!this.remoteKnowsOurAccount) {
       // TODO attach a token to the account?
-      requestPacket.frames.push(new ConnectionNewAddressFrame(this.sourceAccount))
+      requestPacket.frames.push(new ConnectionNewAddressFrame(this._sourceAccount))
     }
 
     const prepare = {
-      destination: this.destinationAccount!,
+      destination: this._destinationAccount!,
       amount: amount.toString(),
       data: requestPacket.serializeAndEncrypt(this.sharedSecret),
       executionCondition: cryptoHelper.generateRandomCondition(),
@@ -1177,7 +1191,7 @@ export class Connection extends EventEmitter {
 
     try {
       const prepare = {
-        destination: this.destinationAccount!,
+        destination: this._destinationAccount!,
         amount: '0',
         data: packet.serializeAndEncrypt(this.sharedSecret),
         executionCondition: cryptoHelper.generateRandomCondition(),
@@ -1209,7 +1223,7 @@ export class Connection extends EventEmitter {
       executionCondition = cryptoHelper.hash(fulfillment)
     }
     const prepare = {
-      destination: this.destinationAccount!,
+      destination: this._destinationAccount!,
       amount: (sourceAmount).toString(),
       data,
       executionCondition,

@@ -40,6 +40,40 @@ describe('Connection', function () {
     })
   })
 
+  describe('Exported Properties', function () {
+    it('should expose the sourceAccount and destinationAccount', async function () {
+      assert.typeOf(this.clientConn.sourceAccount, 'string')
+      assert.typeOf(this.clientConn.sourceAccount, 'string')
+      assert.typeOf(this.serverConn.destinationAccount, 'string')
+      assert.typeOf(this.serverConn.destinationAccount, 'string')
+    })
+
+    it('should expose the minimumAcceptableExchangeRate', function () {
+      assert.equal(this.clientConn.minimumAcceptableExchangeRate, '0.5')
+      assert.equal(this.serverConn.minimumAcceptableExchangeRate, '0')
+    })
+
+    it('should expose the lastPacketExchangeRate', function () {
+      assert.equal(this.clientConn.lastPacketExchangeRate, '0')
+      assert.equal(this.serverConn.lastPacketExchangeRate, '0')
+    })
+
+    it('should expose the totalSent', function () {
+      assert.equal(this.clientConn.totalSent, '0')
+      assert.equal(this.serverConn.totalSent, '0')
+    })
+
+    it('should expose the totalReceived', function () {
+      assert.equal(this.clientConn.totalReceived, '0')
+      assert.equal(this.serverConn.totalReceived, '0')
+    })
+
+    it('should expose the totalDelivered', function () {
+      assert.equal(this.clientConn.totalDelivered, '0')
+      assert.equal(this.serverConn.totalDelivered, '0')
+    })
+  })
+
   describe('createStream', function () {
     it('should allow the client side to create streams', function (done) {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {

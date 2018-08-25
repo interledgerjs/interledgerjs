@@ -5,4 +5,3 @@ module.exports = {
   excludeExternals: true,
   mode: 'modules'
 }
-
