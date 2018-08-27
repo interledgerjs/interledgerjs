@@ -69,6 +69,10 @@ async function run () {
 
   server.on('connection', (connection) => {
     connection.on('stream', (stream) => {
+
+      // Set the maximum amount of money this stream can receive
+      stream.setReceiveMax(10000)
+
       stream.on('money', (amount) => {
         console.log(`got money: ${amount} on stream ${stream.id}`)
       })
