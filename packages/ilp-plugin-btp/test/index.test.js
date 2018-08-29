@@ -83,6 +83,55 @@ describe('BtpPlugin', function () {
     })
   })
 
+  describe('alternate client account/token config', function () {
+    beforeEach(async function () {
+      this.server = new Plugin(this.serverOpts)
+    })
+
+    afterEach(async function () {
+      await this.server.disconnect()
+    })
+
+    it('should forbid uri account/token and constructor account/token together', function () {
+      assert.throws(() => {
+        this.client = new Plugin({
+          server: 'btp+ws://bob:secret@localhost:9000',
+          btpAccount: 'bob',
+          btpToken: 'secret',
+          reconnectInterval: 100,
+          responseTimeout: 100
+        })
+      }, /account\/token must be passed in via constructor or uri, but not both/)
+    })
+
+    it('connects the client and server', async function () {
+      this.client = new Plugin({
+        server: 'btp+ws://localhost:9000',
+        btpAccount: 'bob',
+        btpToken: 'secret',
+        reconnectInterval: 100,
+        responseTimeout: 100
+      })
+
+      await Promise.all([
+        this.server.connect(),
+        this.client.connect()
+      ])
+      assert.strictEqual(this.server.isConnected(), true)
+      assert.strictEqual(this.client.isConnected(), true)
+
+      this.server.registerDataHandler((ilp) => {
+        assert.deepEqual(ilp, Buffer.from('foo'))
+        return Buffer.from('bar')
+      })
+
+      const response = await this.client.sendData(Buffer.from('foo'))
+      assert.deepEqual(response, Buffer.from('bar'))
+
+      await this.client.disconnect()
+    })
+  })
+
   describe('connect (server)', function () {
     beforeEach(async function () {
       this.ws = new mockSocket.IncomingSocket()

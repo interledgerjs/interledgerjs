@@ -132,6 +132,8 @@ export interface IlpPluginBtpConstructorOptions {
   },
   reconnectInterval?: number
   responseTimeout?: number
+  btpAccount?: string
+  btpToken?: string
 }
 
 export interface WebSocketServerConstructor {
@@ -206,6 +208,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * Specify for a BTP instance that is acting as a client.
    */
   private _server?: string
+  private _btpToken?: string
+  private _btpAccount?: string
 
   /** 
    * Refer to `ws-reconnect` module. 
@@ -219,6 +223,23 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     this._responseTimeout = options.responseTimeout || DEFAULT_TIMEOUT
     this._listener = options.listener
     this._server = options.server
+
+    if (this._server) {
+      const parsedBtpUri = new URL(this._server)
+      const parsedAccount = parsedBtpUri.username
+      const parsedToken = parsedBtpUri.password
+
+      if (!parsedBtpUri.protocol.startsWith('btp+')) {
+        throw new Error('server must start with "btp+". server=' + this._server)
+      }
+
+      if ((parsedAccount || parsedToken) && (options.btpAccount || options.btpToken)) {
+        throw new Error('account/token must be passed in via constructor or uri, but not both')
+      }
+
+      this._btpToken = parsedToken || options.btpToken || ''
+      this._btpAccount = parsedAccount || options.btpAccount || ''
+    }
 
     modules = modules || {}
     this._log = modules.log || debug
@@ -341,12 +362,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     /* Client logic. */ 
     if (this._server) {
       const parsedBtpUri = new URL(this._server)
-      const account = parsedBtpUri.username
-      const token = parsedBtpUri.password
-
-      if (!parsedBtpUri.protocol.startsWith('btp+')) {
-        throw new Error('server must start with "btp+". server=' + this._server)
-      }
+      const account = this._btpAccount || ''
+      const token = this._btpToken || ''
 
       this._ws = new WebSocketReconnector({
         WebSocket: this.WebSocket,
