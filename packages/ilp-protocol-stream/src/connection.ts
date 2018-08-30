@@ -32,6 +32,7 @@ const RETRY_DELAY_START = 100
 const RETRY_DELAY_MAX = 43200000 // 12 hours should be long enough
 const RETRY_DELAY_INCREASE_FACTOR = 1.5
 const DEFAULT_PACKET_TIMEOUT = 30000
+const DEFAULT_IDLE_TIMEOUT = 60000 // 1 minute
 const MAX_DATA_SIZE = 32767
 const DEFAULT_MAX_REMOTE_STREAMS = 10
 const DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION = 3
@@ -55,6 +56,8 @@ export interface ConnectionOpts {
   connectionBufferSize?: number
   /** Minimum Precision to use when determining the exchange rate */
   minExchangeRatePrecision?: number
+  /** Inactivity timeout (milliseconds) */
+  idleTimeout?: number
 }
 
 export interface FullConnectionOpts extends ConnectionOpts {
@@ -93,6 +96,10 @@ export class Connection extends EventEmitter {
   protected allowableReceiveExtra: BigNumber
   protected enablePadding: boolean
   protected maxBufferedData: number
+
+  protected idleTimeout: number
+  protected lastActive: Date
+  protected idleTimer: NodeJS.Timer
 
   protected nextPacketSequence: number
   protected streams: Map<number, DataAndMoneyStream>
@@ -136,6 +143,7 @@ export class Connection extends EventEmitter {
     this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
     this.maxBufferedData = opts.connectionBufferSize || MAX_DATA_SIZE * 2
     this.minExchangeRatePrecision = opts.minExchangeRatePrecision || DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION
+    this.idleTimeout = opts.idleTimeout || DEFAULT_IDLE_TIMEOUT
 
     this.nextPacketSequence = 1
     // TODO should streams be a Map or just an object?
@@ -153,7 +161,7 @@ export class Connection extends EventEmitter {
 
     this.remoteClosed = false
     this.remoteKnowsOurAccount = this.isServer
-    this.remoteMaxStreamId = DEFAULT_MAX_REMOTE_STREAMS
+    this.remoteMaxStreamId = DEFAULT_MAX_REMOTE_STREAMS * 2
 
     this.remoteMaxOffset = this.maxBufferedData
 
@@ -192,6 +200,7 @@ export class Connection extends EventEmitter {
         cleanup()
         reject(new Error(`Error connecting${error ? ': ' + error.message : ''}`))
       }
+      this.startIdleTimer()
       this.once('connect', connectHandler)
       this.once('error', errorHandler)
       this.once('close', closeHandler)
@@ -199,6 +208,7 @@ export class Connection extends EventEmitter {
 
       const self = this
       function cleanup () {
+        clearTimeout(self.idleTimer)
         self.removeListener('connect', connectHandler)
         self.removeListener('error', errorHandler)
         self.removeListener('close', closeHandler)
@@ -370,6 +380,7 @@ export class Connection extends EventEmitter {
       this.log.error(`prepare packet contains a frame that says it should be something other than a prepare: ${requestPacket.ilpPacketType}`)
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
     }
+    this.bumpIdle()
 
     let responseFrames: Frame[] = []
 
@@ -1122,6 +1133,7 @@ export class Connection extends EventEmitter {
     if (!responseData) {
       return null
     }
+    this.bumpIdle()
 
     const ilpReject = IlpPacket.deserializeIlpReject(responseData)
 
@@ -1426,6 +1438,24 @@ export class Connection extends EventEmitter {
       this.queuedFrames.push(streamEndFrame)
     }
   }
+
+  private startIdleTimer (): void {
+    if (this.idleTimeout === 0) return
+    this.idleTimer = setTimeout(() => this.testIdle(), this.idleTimeout)
+    this.idleTimer.unref()
+  }
+
+  private testIdle (): void {
+    const idle = Date.now() - this.lastActive.getTime()
+    if (idle > this.idleTimeout) {
+      /* tslint:disable-next-line:no-floating-promises */
+      this.destroy(new Error('Connection timed out due to inactivity'))
+    } else {
+      this.startIdleTimer()
+    }
+  }
+
+  private bumpIdle (): void { this.lastActive = new Date() }
 }
 
 function isFulfill (packet: IlpPacket.IlpFulfill | IlpPacket.IlpReject): packet is IlpPacket.IlpFulfill {
