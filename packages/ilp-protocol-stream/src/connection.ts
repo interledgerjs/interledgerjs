@@ -200,7 +200,6 @@ export class Connection extends EventEmitter {
         cleanup()
         reject(new Error(`Error connecting${error ? ': ' + error.message : ''}`))
       }
-      this.startIdleTimer()
       this.once('connect', connectHandler)
       this.once('error', errorHandler)
       this.once('close', closeHandler)
@@ -216,6 +215,7 @@ export class Connection extends EventEmitter {
       }
     })
     this.closed = false
+    this.startIdleTimer()
   }
 
   /**
@@ -1443,11 +1443,13 @@ export class Connection extends EventEmitter {
     if (this.idleTimeout === 0) return
     this.idleTimer = setTimeout(() => this.testIdle(), this.idleTimeout)
     this.idleTimer.unref()
+    this.log.trace(`(re)starting idle timeout for ${this.idleTimeout}ms from now`)
   }
 
   private testIdle (): void {
     const idle = Date.now() - this.lastActive.getTime()
-    if (idle > this.idleTimeout) {
+    if (idle >= this.idleTimeout) {
+      this.log.error('Connection timed out due to inactivity, destroying connection')
       /* tslint:disable-next-line:no-floating-promises */
       this.destroy(new Error('Connection timed out due to inactivity'))
     } else {

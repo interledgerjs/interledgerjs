@@ -459,6 +459,25 @@ describe('Connection', function () {
     })
   })
 
+  describe('Connection Timeout', function () {
+    it('should destroy the connection if it is idle for too long', async function () {
+      const clock = sinon.useFakeTimers({
+        toFake: ['setTimeout', 'Date']
+      })
+      const clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
+      const errPromise = new Promise((resolve, reject) => {
+        clientConn.on('error', resolve)
+      })
+      clock.tick(60000)
+      const err = await errPromise as Error
+      assert.equal(err.message, 'Connection timed out due to inactivity')
+      clock.restore()
+    })
+  })
+
   describe('"stream" event', function () {
     it('should accept the money even if there is an error thrown in the event handler', async function () {
       this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
