@@ -144,6 +144,7 @@ export class Connection extends EventEmitter {
     this.maxBufferedData = opts.connectionBufferSize || MAX_DATA_SIZE * 2
     this.minExchangeRatePrecision = opts.minExchangeRatePrecision || DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION
     this.idleTimeout = opts.idleTimeout || DEFAULT_IDLE_TIMEOUT
+    this.lastActive = new Date()
 
     this.nextPacketSequence = 1
     // TODO should streams be a Map or just an object?
@@ -1441,8 +1442,13 @@ export class Connection extends EventEmitter {
 
   private startIdleTimer (): void {
     if (this.idleTimeout === 0) return
-    this.idleTimer = setTimeout(() => this.testIdle(), this.idleTimeout)
-    this.idleTimer.unref()
+    const idle = Date.now() - this.lastActive.getTime()
+    this.idleTimer = setTimeout(() => this.testIdle(), this.idleTimeout - idle)
+    // browser timers don't support unref
+    /* tslint:disable-next-line:strict-type-predicates */
+    if (typeof this.idleTimer.unref === 'function') {
+      this.idleTimer.unref()
+    }
     this.log.trace(`(re)starting idle timeout for ${this.idleTimeout}ms from now`)
   }
 
