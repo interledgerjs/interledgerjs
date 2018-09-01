@@ -1244,6 +1244,7 @@ export class Connection extends EventEmitter {
     }
 
     const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
+    this.bumpIdle()
 
     let response: IlpPacket.IlpFulfill | IlpPacket.IlpReject
     try {
