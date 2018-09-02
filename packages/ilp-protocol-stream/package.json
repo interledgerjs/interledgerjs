@@ -38,7 +38,7 @@
     "debug": "^3.1.0",
     "ilp-logger": "^1.0.1",
     "ilp-packet": "^3.0.0",
-    "ilp-protocol-ildcp": "^1.0.0",
+    "ilp-protocol-ildcp": "^2.0.0",
     "oer-utils": "^3.0.1",
     "source-map-support": "^0.5.6"
   },
