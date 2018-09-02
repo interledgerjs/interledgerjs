@@ -56,7 +56,7 @@ const deserializeIldcpResponse = (response: Buffer): IldcpResponse => {
 
   const clientAddress = reader.readVarOctetString().toString('ascii')
 
-  const assetScale = reader.readUInt8()
+  const assetScale = reader.readUInt8BigNum().toNumber()
   const assetCode = reader.readVarOctetString().toString('utf8')
 
   return { clientAddress, assetScale, assetCode }
@@ -100,7 +100,7 @@ const fetch = async (sendData: (data: Buffer) => Promise<Buffer>): Promise<Ildcp
 
 export interface ServeSettings {
   requestPacket: Buffer,
-  handler: (request: IldcpRequest) => IldcpResponse,
+  handler: (request: IldcpRequest) => Promise<IldcpResponse>,
   serverAddress: string
 }
 
