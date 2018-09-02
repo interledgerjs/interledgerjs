@@ -3,7 +3,7 @@ const Btp = require('btp-packet')
 
 /**
  * Convert BTP protocol array to a protocol map of all the protocols inside the
- * BTP sub protocol array. Also specifically extract the `ilp` and `custom` protocols 
+ * BTP sub protocol array. Also specifically extract the `ilp` and `custom` protocols
  * from the map.
  */
 export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubProtocol> }) {
@@ -33,7 +33,7 @@ export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubPr
  * an array of BTP sub protocols. Order of precedence in the BTP sub protocol
  * array is: `ilp`, any explicitly defined sub protocols (the ones in the
  * protocol map), and finally `custom`.
- */ 
+ */
 export function ilpAndCustomToProtocolData (data: { ilp?: Buffer, custom?: Object , protocolMap?: Map<string, Buffer | string | Object> }): Array<BtpSubProtocol> {
   const protocolData = []
   const { ilp, custom, protocolMap } = data

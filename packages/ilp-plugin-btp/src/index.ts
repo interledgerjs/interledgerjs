@@ -3,7 +3,6 @@ import * as crypto from 'crypto'
 import * as Debug from 'debug'
 import * as WebSocket from 'ws'
 import { WebSocketReconnector, WebSocketConstructor } from './ws-reconnect'
-import { DataHandler, MoneyHandler } from 'ilp-compat-plugin'
 import { EventEmitter2, Listener } from 'eventemitter2'
 import { URL } from 'url'
 import { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } from './protocol-data-converter'
@@ -11,6 +10,9 @@ import { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } from './protoc
 const BtpPacket = require('btp-packet')
 
 const debug = require('ilp-logger')('ilp-plugin-btp')
+
+type DataHandler = (data: Buffer) => Promise<Buffer>
+type MoneyHandler = (amount: string) => Promise<void>
 
 enum ReadyState {
   INITIAL = 0,
@@ -33,8 +35,8 @@ const namesToCodes = {
   'InsufficientBalanceError': 'F07'
 }
 
-/** 
- * Returns BTP error code as defined by the BTP ASN.1 spec. 
+/**
+ * Returns BTP error code as defined by the BTP ASN.1 spec.
  */
 function jsErrorToBtpError (e: Error) {
   const name: string = e.name || 'NotAcceptedError'
@@ -73,9 +75,9 @@ function subProtocolToString (data: BtpSubProtocol): string {
   return `${data.protocolName}=${stringData}`
 }
 
-/** 
+/**
  * Goes through all the sub protocols in the packet data of a BTP packet and
- * returns a protocol map of each sub protocol with the key as the protocol 
+ * returns a protocol map of each sub protocol with the key as the protocol
  * name and value as a string-form protocol object. Calls
  * `subProtocolToString(data)` to convert the value to a string.
  */
@@ -119,10 +121,10 @@ export interface BtpSubProtocol {
   data: Buffer
 }
 
-/** 
+/**
  * Constructor options for a BTP plugin. The 'Instance Management' section of
  * the RFC-24 indicates that every ledger plugin accepts an opts object, and
- * an optional api denoted as 'PluginServices.' This is the opts object. 
+ * an optional api denoted as 'PluginServices.' This is the opts object.
  */
 export interface IlpPluginBtpConstructorOptions {
   server?: string,
@@ -143,7 +145,7 @@ export interface WebSocketServerConstructor {
 /**
  * This is the optional api, or 'PluginServices' interface, that is passed
  * into the ledger plugin constructor as defined in RFC-24. In this case
- * the api exposes 3 modules. 
+ * the api exposes 3 modules.
  */
 export interface IlpPluginBtpConstructorModules {
   log?: any
@@ -151,7 +153,7 @@ export interface IlpPluginBtpConstructorModules {
   WebSocketServer?: WebSocketServerConstructor
 }
 
-/** 
+/**
  * Abstract base class for building BTP-based ledger plugins.
  *
  * This class takes care of most of the work translating between BTP and the
@@ -204,17 +206,17 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   protected _wss: WebSocket.Server | null = null
   private _incomingWs?: WebSocket
 
-  /** 
+  /**
    * Specify for a BTP instance that is acting as a client.
    */
   private _server?: string
   private _btpToken?: string
   private _btpAccount?: string
 
-  /** 
-   * Refer to `ws-reconnect` module. 
+  /**
+   * Refer to `ws-reconnect` module.
    */
-  private _ws?: WebSocketReconnector 
+  private _ws?: WebSocketReconnector
 
   constructor (options: IlpPluginBtpConstructorOptions, modules?: IlpPluginBtpConstructorModules) {
     super()
@@ -253,22 +255,22 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   /* tslint:disable-next-line:no-empty */
   protected async _disconnect (): Promise<void> {}
 
-  /** 
+  /**
    * Connect to another BTP-based ledger plugin if the instance is not already
-   * connected/connecting to another plugin. 
+   * connected/connecting to another plugin.
    *
-   * **If the BTP instance is acting as a server:** 
+   * **If the BTP instance is acting as a server:**
    *
-   * It creates a new server on the specified `port` from `this.listener`. 
-   * It creates an event listener for `connection`. When a connection 
-   * is established, listeners for `close`, `error`, and `message` are 
-   * added. The listeners for close and error call `emitDisconnect()`. 
+   * It creates a new server on the specified `port` from `this.listener`.
+   * It creates an event listener for `connection`. When a connection
+   * is established, listeners for `close`, `error`, and `message` are
+   * added. The listeners for close and error call `emitDisconnect()`.
    *
    * There are two listeners for `message` events. First:
    * Uses socket.once to add a one time listener for the event. The
    * listener is only invoked the first time and then removed. This is
    * because the auth message only needs to occur once. We do not want
-   * this event to be triggered on subsequent messages. 
+   * this event to be triggered on subsequent messages.
    *
    * Call `validateAuthPacket()`, and close any other incoming
    * websocket connections (if present) by calling `closeIncomingSocket`. Return a
@@ -279,10 +281,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    *
    * Finally, add a listener to accept subsequent incoming websocket
    * messages and handle them accordingly. Calls
-   * `handleIncomingWsMessage(socket)`. 
-   *  
+   * `handleIncomingWsMessage(socket)`.
+   *
    * **If the BTP instance is acting as a client:**
-   * 
+   *
    * Generate the BTP URL with username, token, and the server uri.
    * Register listener for opening connection, first time connect, and
    * incoming messages. Need to register the on open listener before actually
@@ -294,12 +296,12 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    *
    * Open the connection, and register listeners for `close`, `message`. If the
    * connection is successfully established, resolve. Otherwise if
-   * closed/disconnected error. 
+   * closed/disconnected error.
    *
    * **Important:** now call `this._connect()` which will be overriden in
    * subsequent plugins to add ledger functionality after the connection has
    * been established.
-   */ 
+   */
   async connect () {
     if (this._readyState > ReadyState.INITIAL) {
       return
@@ -307,7 +309,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
     this._readyState = ReadyState.CONNECTING
 
-    /* Server logic. */ 
+    /* Server logic. */
     if (this._listener) {
       const wss = this._wss = new (this.WebSocketServer)({ port: this._listener.port })
       this._incomingWs = undefined
@@ -359,7 +361,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       this._log.info(`listening for BTP connections on ${this._listener.port}`)
     }
 
-    /* Client logic. */ 
+    /* Client logic. */
     if (this._server) {
       const parsedBtpUri = new URL(this._server)
       const account = this._btpAccount || ''
@@ -419,7 +421,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     this._emitConnect()
   }
 
-  /** 
+  /**
    * For when there is an existing websocket connection and a new
    * connection is opened. Removes all listeners from previous connection and
    * sends an error to the user on the old socket (with the new request ID).
@@ -442,11 +444,11 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   }
 
   /**
-   * Close client/server and emit disconnect. 
+   * Close client/server and emit disconnect.
    *
    * **Important**: calls `this_disconnect` which is meant to be overriden by
    * plugins that extend BTP to add additional (e.g. ledger) functionality on
-   * disconnect. 
+   * disconnect.
    */
   async disconnect () {
     this._emitDisconnect()
@@ -466,7 +468,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     return this._readyState === ReadyState.CONNECTED
   }
 
-  /** 
+  /**
    * Deserialize incoming websocket message and call `handleIncomingBtpPacket`.
    * If error in handling btp packet, call `handleOutgoingBtpPacket` and send
    * the error through the socket.
@@ -503,9 +505,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     }
   }
 
-  /** 
+  /**
    * Send Btp data to counterparty. Uses `_call` which sets the proper timer for
-   * expiry on response packets.  
+   * expiry on response packets.
    */
   async sendData (buffer: Buffer): Promise<Buffer> {
     const response = await this._call('', {
@@ -526,11 +528,12 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       : Buffer.alloc(0)
   }
 
-
-  /** 
+  /**
    * With no underlying ledger, sendMoney is a no-op.
    */
-  async sendMoney (amount: string): Promise<void> {}
+  async sendMoney (amount: string): Promise<void> {
+    /* NO OP */
+  }
 
   /**
    * Don't throw errors even if the event handler throws
@@ -551,6 +554,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       throw new Error('requestHandler is already registered')
     }
 
+    // TODO Is this check required? TypeScript's linter suggests not
+    // tslint:disable-next-line:strict-type-predicates
     if (typeof handler !== 'function') {
       throw new Error('requestHandler must be a function')
     }
@@ -568,6 +573,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       throw new Error('requestHandler is already registered')
     }
 
+    // TODO Is this check required? TypeScript's linter suggests not
+    // tslint:disable-next-line:strict-type-predicates
     if (typeof handler !== 'function') {
       throw new Error('requestHandler must be a function')
     }
@@ -592,14 +599,14 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     return ilpAndCustomToProtocolData(obj)
   }
 
-  /** 
+  /**
    * Function to send Btp requests with proper timeout for response or error.
    *
    * Create a listener for for an incoming Btp response/error. Resolves on
    * btp response, rejects on btp error. Send an outgoing btp packet (request),
    * and set a timer. If the timer expires before a response/error is received, time
    * out. If a response/error is received, `_handleIncomingBtpPacket` emits
-   * `__callback__`, which triggers the aforementioned listener. 
+   * `__callback__`, which triggers the aforementioned listener.
    */
   protected async _call (to: string, btpPacket: BtpPacket): Promise<BtpPacketData> {
     const requestId = btpPacket.requestId
@@ -641,15 +648,15 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     ])
   }
 
-  /** 
+  /**
    * If a response or error packet is received, trigger the callback function
    * defined in _call (i.e. response/error returned before timing out)
    * function. Throw error on PREPARE, FULFILL or REJECT packets, because they
-   * are not BTP packets. If TRANSFER or MESSAGE packets are received, invoke 
+   * are not BTP packets. If TRANSFER or MESSAGE packets are received, invoke
    * money handler or data handler respectively. Otherwise prepare a response and handle the outgoing BTP
    * packet. The reason this function does not handle sending back an ERROR
    * packet in the websocket is because that is defined in the
-   * _handleIncomingWsMessage function. 
+   * _handleIncomingWsMessage function.
    */
   protected async _handleIncomingBtpPacket (from: string, btpPacket: BtpPacket) {
     const { type, requestId, data } = btpPacket
@@ -686,10 +693,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     })
   }
 
-  /** 
+  /**
    * Called after receiving btp packet of type message. First convert it to ILP
    * format, then handle the ILP data with the regsistered data handler, and then convert it back to BTP
-   * structure and send a response. E.g. for prepare, fulfill, and reject packets. 
+   * structure and send a response. E.g. for prepare, fulfill, and reject packets.
    */
   protected async _handleData (from: string, btpPacket: BtpPacket): Promise<Array<BtpSubProtocol>> {
     const { data } = btpPacket
@@ -703,18 +710,18 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     return ilpAndCustomToProtocolData({ ilp: response })
   }
 
-  /** 
-   * Need to fully define on you own. 
+  /**
+   * Need to fully define on you own.
    */
   protected async _handleMoney (from: string, btpPacket: BtpPacket): Promise<Array<BtpSubProtocol>> {
     throw new Error('No sendMoney functionality is included in this module')
   }
 
-  /** 
+  /**
    * Send a BTP packet to a user and wait for the promise to resolve without
    * error.
    */
-   protected async _handleOutgoingBtpPacket (to: string, btpPacket: BtpPacket) {
+  protected async _handleOutgoingBtpPacket (to: string, btpPacket: BtpPacket) {
     const ws = this._ws || this._incomingWs
 
     const { type, requestId, data } = btpPacket
@@ -728,9 +735,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     }
   }
 
-  /** 
+  /**
    * If the instance is not already disconnected, change the ReadyState and
-   * emit a disconnect event. 
+   * emit a disconnect event.
    */
   private _emitDisconnect () {
     if (this._readyState !== ReadyState.DISCONNECTED) {
@@ -739,12 +746,12 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     }
   }
 
-  /** 
+  /**
    * If the ReadyState is CONNECTING it implies a first time connect, so
    * accordingly emit that message. Otherwise if the instance has already
    * registered listeners (i.e. connected before) and is in the appropriate
-   * ready state then emit a normal 'connect' event. 
-   */ 
+   * ready state then emit a normal 'connect' event.
+   */
   private _emitConnect () {
     if (this._readyState === ReadyState.CONNECTING) {
       this.emit('_first_time_connect')
@@ -754,16 +761,16 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     }
   }
 
-  /** 
+  /**
    * Make sure the auth packet is structured correctly with both an 'auth'
    * subprotocol and an 'auth token' subprotocol. The auth token needs to match the
    * secret defined by the server (which should have been given to the client
    * beforehand.) If the auth token does not pass any of these checks, error.
    */
   private _validateAuthPacket (authPacket: BtpPacket): void {
-    assert.equal(authPacket.type, BtpPacket.TYPE_MESSAGE, 'First message sent over BTP connection must be auth packet')
+    assert.strictEqual(authPacket.type, BtpPacket.TYPE_MESSAGE, 'First message sent over BTP connection must be auth packet')
     assert(authPacket.data.protocolData.length >= 2, 'Auth packet must have auth and auth_token subprotocols')
-    assert.equal(authPacket.data.protocolData[0].protocolName, 'auth', 'First subprotocol must be auth')
+    assert.strictEqual(authPacket.data.protocolData[0].protocolName, 'auth', 'First subprotocol must be auth')
 
     const tokenProto = authPacket.data.protocolData.find(
       (subProtocol) => subProtocol.protocolName === 'auth_token')
@@ -776,8 +783,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   }
 }
 
-/** 
- * Generate a new request id. 
+/**
+ * Generate a new request id.
  */
 function _requestId (): Promise<number> {
   return new Promise<number>((resolve, reject) => {

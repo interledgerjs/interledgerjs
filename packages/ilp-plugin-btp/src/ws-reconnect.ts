@@ -5,14 +5,14 @@ const debug = createLogger('ilp-ws-reconnect')
 
 const DEFAULT_RECONNECT_INTERVAL = 5000
 
-/** 
- * Accepts URL string pointing to connection endpoint. 
+/**
+ * Accepts URL string pointing to connection endpoint.
  */
 export interface WebSocketConstructor {
   new (url: string): WebSocket
 }
 
-/** 
+/**
  * Reconnect interval specifies how long to wait before trying to connect to the
  * websocket endpoint if a connection is not established successfully.
  */
@@ -22,7 +22,7 @@ export interface WebSocketReconnectorConstructorOptions {
 }
 
 /**
- * Websocket clients with reconnect capability. 
+ * Websocket clients with reconnect capability.
  */
 export class WebSocketReconnector extends EventEmitter2 {
   /**
@@ -30,8 +30,8 @@ export class WebSocketReconnector extends EventEmitter2 {
    */
   private _interval: number
 
-  /** 
-   * URL endpoint of websocket server.  
+  /**
+   * URL endpoint of websocket server.
    */
   private _url: string
 
@@ -49,17 +49,17 @@ export class WebSocketReconnector extends EventEmitter2 {
    * Websocket constructor.
    */
   private WebSocket: WebSocketConstructor
-  
+
   constructor (options: WebSocketReconnectorConstructorOptions) {
     super()
     this._interval = options.interval || DEFAULT_RECONNECT_INTERVAL
     this.WebSocket = options.WebSocket
   }
-  
+
   /**
    * Define a number of listeners. On open: emit an open event. On close or
-   * error: try to reconnect. On message, emit a message event with the data. 
-   * Return a promise which resolves when the connection is successfully 
+   * error: try to reconnect. On message, emit a message event with the data.
+   * Return a promise which resolves when the connection is successfully
    * established (successfully established connection emits `open` event).
    */
   open (url: string) {
@@ -94,7 +94,7 @@ export class WebSocketReconnector extends EventEmitter2 {
    * Triggered on `close` or `error` event from `open ()`. If triggered, all
    * listeners are removed, reconnect happens. The process continues to try to
    * reconnect on the interval by calling the `open()' function and cycling
-   * between reconnect to clean up old listeners. 
+   * between reconnect to clean up old listeners.
    */
   private _reconnect (codeOrError: number | Error) {
     debug.debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._interval}`)
