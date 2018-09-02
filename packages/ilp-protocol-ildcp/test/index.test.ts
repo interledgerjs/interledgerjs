@@ -127,7 +127,7 @@ describe('ILDCP', function () {
         .withArgs(sinon.match.instanceOf(Buffer))
         .resolves(rejection)
 
-      await assert.isRejected(
+      assert.isRejected(
         ILDCP.fetch(sendData),
         'IL-DCP failed: something went wrong.'
       )
@@ -138,7 +138,7 @@ describe('ILDCP', function () {
         .withArgs(sinon.match.instanceOf(Buffer))
         .resolves(Buffer.from('89', 'hex'))
 
-      await assert.isRejected(
+      assert.isRejected(
         ILDCP.fetch(sendData),
         'IL-DCP error, unable to retrieve client configuration.'
       )
