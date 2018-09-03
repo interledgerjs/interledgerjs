@@ -50,7 +50,7 @@ export function encrypt (sharedSecret: Buffer, ...buffers: Buffer[]): Buffer {
   const iv = crypto.randomBytes(IV_LENGTH)
   // TODO only generate the key once per connection
   const pskEncryptionKey = hmac(sharedSecret, ENCRYPTION_KEY_STRING)
-  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, iv) as crypto.CipherGCM
+  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, iv)
 
   const ciphertext = []
   for (let buffer of buffers) {
@@ -69,7 +69,7 @@ export function decrypt (sharedSecret: Buffer, data: Buffer): Buffer {
   const nonce = data.slice(0, IV_LENGTH)
   const tag = data.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
   const encrypted = data.slice(IV_LENGTH + AUTH_TAG_LENGTH)
-  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, nonce) as crypto.DecipherGCM
+  const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, nonce)
   decipher.setAuthTag(tag)
 
   return Buffer.concat([
