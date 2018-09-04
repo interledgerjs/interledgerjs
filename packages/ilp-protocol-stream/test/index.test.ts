@@ -225,4 +225,13 @@ describe('createServer', function () {
     assert.instanceOf(server, Server)
     assert.called(spy)
   })
+
+  it('should return a server with an assetCode and assetScale', async function () {
+    const server = await createServer({
+      serverSecret: Buffer.alloc(32),
+      plugin: this.serverPlugin
+    })
+    assert.equal(server.assetCode, 'XYZ')
+    assert.equal(server.assetScale, 9)
+  })
 })

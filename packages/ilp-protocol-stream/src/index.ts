@@ -27,10 +27,12 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
   const plugin = opts.plugin
   await plugin.connect()
   const log = createLogger('ilp-protocol-stream:Client')
-  const sourceAccount = (await ILDCP.fetch(plugin.sendData.bind(plugin))).clientAddress
+  const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(plugin.sendData.bind(plugin))
   const connection = new Connection({
     ...opts,
-    sourceAccount,
+    sourceAccount: clientAddress,
+    assetCode,
+    assetScale,
     isServer: false,
     plugin
   })
@@ -44,7 +46,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
         code: 'F00',
         message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
         data: Buffer.alloc(0),
-        triggeredBy: sourceAccount
+        triggeredBy: clientAddress
       })
     }
 
@@ -60,7 +62,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
         code: err.ilpErrorCode || 'F00',
         message: err.ilpErrorMessage || '',
         data: err.ilpErrorData || Buffer.alloc(0),
-        triggeredBy: sourceAccount
+        triggeredBy: clientAddress
       })
     }
   })
@@ -91,7 +93,9 @@ export interface ServerOpts extends ConnectionOpts {
 export class Server extends EventEmitter {
   protected serverSecret: Buffer
   protected plugin: Plugin
-  protected sourceAccount: string
+  protected serverAccount: string
+  protected serverAssetCode: string
+  protected serverAssetScale: number
   protected connections: { [key: string]: Connection }
   protected closedConnections: { [key: string]: boolean }
   protected log: any
@@ -131,7 +135,10 @@ export class Server extends EventEmitter {
     }
     this.plugin.registerDataHandler(this.handleData.bind(this))
     await this.plugin.connect()
-    this.sourceAccount = (await ILDCP.fetch(this.plugin.sendData.bind(this.plugin))).clientAddress
+    const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(this.plugin.sendData.bind(this.plugin))
+    this.serverAccount = clientAddress
+    this.serverAssetCode = assetCode
+    this.serverAssetScale = assetScale
     this.connected = true
   }
 
@@ -183,9 +190,23 @@ export class Server extends EventEmitter {
     const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, Buffer.from(token, 'ascii'))
     return {
       // TODO should this be called serverAccount or serverAddress instead?
-      destinationAccount: `${this.sourceAccount}.${token}`,
+      destinationAccount: `${this.serverAccount}.${token}`,
       sharedSecret
     }
+  }
+
+  get assetCode (): string {
+    if (!this.connected) {
+      throw new Error('Server must be connected to get asset code.')
+    }
+    return this.serverAssetCode
+  }
+
+  get assetScale (): number {
+    if (!this.connected) {
+      throw new Error('Server must be connected to get asset scale.')
+    }
+    return this.serverAssetScale
   }
 
   /**
@@ -202,11 +223,11 @@ export class Server extends EventEmitter {
           code: 'F00',
           message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
           data: Buffer.alloc(0),
-          triggeredBy: this.sourceAccount
+          triggeredBy: this.serverAccount
         })
       }
 
-      const localAddressParts = prepare.destination.replace(this.sourceAccount + '.', '').split('.')
+      const localAddressParts = prepare.destination.replace(this.serverAccount + '.', '').split('.')
       if (localAddressParts.length === 0 || !localAddressParts[0]) {
         this.log.error(`destination in ILP Prepare packet does not have a Connection ID: ${prepare.destination}`)
         /* Why no error message here?
@@ -242,7 +263,9 @@ export class Server extends EventEmitter {
         const connectionTag = (connectionId.indexOf('~') !== -1 ? connectionId.slice(connectionId.indexOf('~') + 1) : undefined)
         const connection = new Connection({
           ...this.connectionOpts,
-          sourceAccount: this.sourceAccount,
+          sourceAccount: this.serverAccount,
+          assetCode: this.serverAssetCode,
+          assetScale: this.serverAssetScale,
           sharedSecret,
           isServer: true,
           connectionTag,
@@ -277,7 +300,7 @@ export class Server extends EventEmitter {
         code: err.ilpErrorCode || 'F00',
         message: err.ilpErrorMessage || '',
         data: err.ilpErrorData || Buffer.alloc(0),
-        triggeredBy: this.sourceAccount || ''
+        triggeredBy: this.serverAccount || ''
       })
     }
   }

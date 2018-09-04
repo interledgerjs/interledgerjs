@@ -43,6 +43,7 @@ export enum FrameType {
   ConnectionDataBlocked = 0x04,
   ConnectionMaxStreamId = 0x05,
   ConnectionStreamIdBlocked = 0x06,
+  ConnectionAssetDetails = 0x07,
 
   StreamClose = 0x10,
   StreamMoney = 0x11,
@@ -59,6 +60,7 @@ export enum FrameType {
 export type Frame =
   ConnectionCloseFrame
   | ConnectionNewAddressFrame
+  | ConnectionAssetDetailsFrame
   | ConnectionMaxDataFrame
   | ConnectionDataBlockedFrame
   | ConnectionMaxStreamIdFrame
@@ -247,6 +249,24 @@ export class ConnectionNewAddressFrame extends BaseFrame {
   static fromContents (reader: Reader): ConnectionNewAddressFrame {
     const sourceAccount = reader.readVarOctetString().toString('utf8')
     return new ConnectionNewAddressFrame(sourceAccount)
+  }
+}
+
+export class ConnectionAssetDetailsFrame extends BaseFrame {
+  type: FrameType.ConnectionAssetDetails
+  sourceAssetCode: string
+  sourceAssetScale: number
+
+  constructor (sourceAssetCode: string, sourceAssetScale: number) {
+    super('ConnectionAssetDetails')
+    this.sourceAssetCode = sourceAssetCode
+    this.sourceAssetScale = sourceAssetScale
+  }
+
+  static fromContents (reader: Reader): ConnectionAssetDetailsFrame {
+    const sourceAssetCode = reader.readVarOctetString().toString('utf8')
+    const sourceAssetScale = reader.readUInt8BigNum().toNumber()
+    return new ConnectionAssetDetailsFrame(sourceAssetCode, sourceAssetScale)
   }
 }
 
@@ -480,6 +500,8 @@ function parseFrame (reader: Reader): Frame | undefined {
       return ConnectionCloseFrame.fromContents(contents)
     case FrameType.ConnectionNewAddress:
       return ConnectionNewAddressFrame.fromContents(contents)
+    case FrameType.ConnectionAssetDetails:
+      return ConnectionAssetDetailsFrame.fromContents(contents)
     case FrameType.ConnectionMaxData:
       return ConnectionMaxDataFrame.fromContents(contents)
     case FrameType.ConnectionDataBlocked:

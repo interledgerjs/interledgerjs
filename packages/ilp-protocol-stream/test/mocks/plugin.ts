@@ -20,6 +20,7 @@ export default class MockPlugin extends EventEmitter {
   public connected: boolean
   public mirror: MockPlugin
   protected identity: string
+  protected assetCode: string
   public maxAmount?: number
 
   constructor (exchangeRate: number, mirror?: MockPlugin) {
@@ -30,6 +31,7 @@ export default class MockPlugin extends EventEmitter {
     this.exchangeRate = exchangeRate
     this.mirror = mirror || new MockPlugin(1 / exchangeRate, this)
     this.identity = (mirror ? 'peerB' : 'peerA')
+    this.assetCode = (mirror ? 'XYZ' : 'ABC')
     this.maxAmount = 1000
   }
 
@@ -55,7 +57,7 @@ export default class MockPlugin extends EventEmitter {
         return ILDCP.serializeIldcpResponse({
           clientAddress: 'test.' + this.identity,
           assetScale: 9,
-          assetCode: 'ABC'
+          assetCode: this.assetCode
         })
       }
       const amount = new BigNumber(parsed.amount)

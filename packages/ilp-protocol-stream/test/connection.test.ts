@@ -43,9 +43,31 @@ describe('Connection', function () {
   describe('Exported Properties', function () {
     it('should expose the sourceAccount and destinationAccount', async function () {
       assert.typeOf(this.clientConn.sourceAccount, 'string')
-      assert.typeOf(this.clientConn.sourceAccount, 'string')
+      assert.typeOf(this.clientConn.destinationAccount, 'string')
+      assert.typeOf(this.serverConn.sourceAccount, 'string')
       assert.typeOf(this.serverConn.destinationAccount, 'string')
-      assert.typeOf(this.serverConn.destinationAccount, 'string')
+    })
+
+    it('should expose the sourceAssetCode and sourceAssetScale', async function () {
+      assert.typeOf(this.clientConn.sourceAssetCode, 'string')
+      assert.typeOf(this.clientConn.sourceAssetScale, 'number')
+      assert.typeOf(this.serverConn.sourceAssetCode, 'string')
+      assert.typeOf(this.serverConn.sourceAssetScale, 'number')
+      assert.equal(this.clientConn.sourceAssetCode, 'ABC')
+      assert.equal(this.clientConn.sourceAssetScale, 9)
+      assert.equal(this.serverConn.sourceAssetCode, 'XYZ')
+      assert.equal(this.serverConn.sourceAssetScale, 9)
+    })
+
+    it('should expose the destinationAssetCode and destinationAssetScale', async function () {
+      assert.typeOf(this.clientConn.destinationAssetCode, 'string')
+      assert.typeOf(this.clientConn.destinationAssetScale, 'number')
+      assert.typeOf(this.serverConn.destinationAssetCode, 'string')
+      assert.typeOf(this.serverConn.destinationAssetScale, 'number')
+      assert.equal(this.clientConn.destinationAssetCode, 'XYZ')
+      assert.equal(this.clientConn.destinationAssetScale, 9)
+      assert.equal(this.serverConn.destinationAssetCode, 'ABC')
+      assert.equal(this.serverConn.destinationAssetScale, 9)
     })
 
     it('should expose the minimumAcceptableExchangeRate', function () {
@@ -1222,6 +1244,8 @@ describe('Connection', function () {
             plugin: clientPlugin,
             destinationAccount,
             sourceAccount: 'test.peerB',
+            assetCode: 'ABC',
+            assetScale: 2,
             sharedSecret,
             isServer: false
           })
@@ -1259,6 +1283,8 @@ describe('Connection', function () {
             plugin: clientPlugin,
             destinationAccount,
             sourceAccount: 'test.peerB',
+            assetCode: 'ABC',
+            assetScale: 2,
             sharedSecret,
             isServer: false
           })
