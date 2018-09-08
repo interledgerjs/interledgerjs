@@ -133,6 +133,8 @@ export interface IlpPluginBtpConstructorOptions {
     secret: string
   },
   reconnectInterval?: number
+  reconnectIntervals?: Array<number>
+  reconnectClearTryTimeout?: number
   responseTimeout?: number
   btpAccount?: string
   btpToken?: string
@@ -187,6 +189,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   public static version = 2
 
   private _reconnectInterval?: number
+  private _reconnectIntervals?: Array<number>
+  private _reconnectClearTryTimeout?: number
   private _responseTimeout: number
 
   protected _dataHandler?: DataHandler
@@ -222,6 +226,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     super()
 
     this._reconnectInterval = options.reconnectInterval // optional
+    this._reconnectIntervals = options.reconnectIntervals // optional
+    this._reconnectClearTryTimeout = options.reconnectClearTryTimeout // optional
     this._responseTimeout = options.responseTimeout || DEFAULT_TIMEOUT
     this._listener = options.listener
     this._server = options.server
@@ -369,7 +375,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
       this._ws = new WebSocketReconnector({
         WebSocket: this.WebSocket,
-        interval: this._reconnectInterval
+        intervals: this._reconnectIntervals,
+        interval: this._reconnectInterval,
+        clearTryTimeout: this._reconnectClearTryTimeout
       })
 
       const protocolData = [{

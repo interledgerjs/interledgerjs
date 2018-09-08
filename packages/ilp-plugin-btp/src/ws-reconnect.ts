@@ -3,7 +3,15 @@ const createLogger = require('ilp-logger')
 import { EventEmitter2 } from 'eventemitter2'
 const debug = createLogger('ilp-ws-reconnect')
 
-const DEFAULT_RECONNECT_INTERVAL = 5000
+const DEFAULT_TRY_CLEAR_TIMEOUT = 10000
+const DEFAULT_RECONNECT_INTERVALS = [
+  0,
+  100,
+  500,
+  1000,
+  2000,
+  5000
+]
 
 /**
  * Accepts URL string pointing to connection endpoint.
@@ -17,7 +25,9 @@ export interface WebSocketConstructor {
  * websocket endpoint if a connection is not established successfully.
  */
 export interface WebSocketReconnectorConstructorOptions {
-  interval?: number
+  intervals?: Array<number>,
+  interval?: number,
+  clearTryTimeout?: number,
   WebSocket: WebSocketConstructor
 }
 
@@ -26,9 +36,14 @@ export interface WebSocketReconnectorConstructorOptions {
  */
 export class WebSocketReconnector extends EventEmitter2 {
   /**
-   * Reconnect interval.
+   * Reconnect information. Intervals is a list of timeouts for
+   * successive reconnect attempts. `clearTryTimeout` ms after
+   * the last reconnect attempt, the number of tries will reset.
    */
-  private _interval: number
+  private _intervals: Array<number>
+  private _clearTryTimeout: number
+  private _clearTryTimer?: NodeJS.Timer
+  private _tries: number
 
   /**
    * URL endpoint of websocket server.
@@ -52,8 +67,15 @@ export class WebSocketReconnector extends EventEmitter2 {
 
   constructor (options: WebSocketReconnectorConstructorOptions) {
     super()
-    this._interval = options.interval || DEFAULT_RECONNECT_INTERVAL
     this.WebSocket = options.WebSocket
+
+    this._clearTryTimeout = options.clearTryTimeout ||
+      DEFAULT_TRY_CLEAR_TIMEOUT
+
+    this._tries = 0
+    this._intervals = options.intervals ||
+      (options.interval && [ options.interval ]) ||
+      DEFAULT_RECONNECT_INTERVALS
   }
 
   /**
@@ -97,12 +119,29 @@ export class WebSocketReconnector extends EventEmitter2 {
    * between reconnect to clean up old listeners.
    */
   private _reconnect (codeOrError: number | Error) {
-    debug.debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._interval}`)
+    debug.debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._intervals[this._tries]}}`)
     this._connected = false
     this._instance.removeAllListeners()
     setTimeout(() => {
       void this.open(this._url)
-    }, this._interval)
+    }, this._intervals[this._tries])
+    this._tries = Math.min(this._tries + 1, this._intervals.length - 1)
+
+    if (this._clearTryTimer) {
+      clearTimeout(this._clearTryTimer)
+    }
+
+    this._clearTryTimer = setTimeout(() => {
+      delete this._clearTryTimer
+      this._tries = 0
+    }, this._clearTryTimeout)
+
+    // browser timers don't support unref
+    /* tslint:disable-next-line:strict-type-predicates */
+    if (typeof this._clearTryTimer.unref === 'function') {
+      this._clearTryTimer.unref()
+    }
+
     this.emit('close')
   }
 }

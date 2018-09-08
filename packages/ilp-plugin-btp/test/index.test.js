@@ -9,7 +9,6 @@ describe('BtpPlugin', function () {
   beforeEach(async function () {
     this.clientOpts = {
       server: 'btp+ws://bob:secret@localhost:9000',
-      reconnectInterval: 100,
       responseTimeout: 100
     }
     this.serverOpts = {
@@ -80,6 +79,44 @@ describe('BtpPlugin', function () {
 
       const response = await this.client.sendData(Buffer.from('foo'))
       assert.deepEqual(response, Buffer.from('bar'))
+    })
+
+    it('reconnects websockets if they close', async function () {
+      await Promise.all([
+        this.server.connect(),
+        this.client.connect()
+      ])
+
+      assert.strictEqual(this.server.isConnected(), true)
+      assert.strictEqual(this.client.isConnected(), true)
+
+      const date0 = Date.now()
+      assert.equal(this.server._ws._tries, 0)
+
+      // first reconnect (0ms)
+      this.server._ws._instance.close()
+      await new Promise(res => this.server._ws.once('open', res))
+      const date1 = Date.now()
+      const timer1 = this.server._ws._clearTryTimer
+      assert.equal(this.server._ws._tries, 1)
+
+      // second reconnect (100ms)
+      this.server._ws._instance.close()
+      await new Promise(res => this.server._ws.once('open', res))
+      const date2 = Date.now()
+      const timer2 = this.server._ws._clearTryTimer
+      assert.equal(this.server._ws._tries, 2)
+
+      // third reconnect (500ms)
+      this.server._ws._instance.close()
+      await new Promise(res => this.server._ws.once('open', res))
+      const date3 = Date.now()
+      assert.equal(this.server._ws._tries, 3)
+
+      assert(timer1 !== timer2, 'should have reset try clear timer between tries')
+      assert(date1 - date0 >= 0, 'first reconnect should take at least 0ms')
+      assert(date2 - date1 >= 100, 'second reconnect should take at least 100ms')
+      assert(date3 - date2 >= 500, 'third reconnect should take at least 500ms')
     })
   })
 
