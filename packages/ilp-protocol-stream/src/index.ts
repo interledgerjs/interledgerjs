@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import * as IlpPacket from 'ilp-packet'
-import createLogger = require('ilp-logger')
+import createLogger from 'ilp-logger'
 import * as cryptoHelper from './crypto'
 import { randomBytes } from 'crypto'
 import { Connection, ConnectionOpts } from './connection'

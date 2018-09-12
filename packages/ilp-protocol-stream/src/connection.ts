@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import createLogger = require('ilp-logger')
+import createLogger from 'ilp-logger'
 import { DataAndMoneyStream } from './stream'
 import * as IlpPacket from 'ilp-packet'
 import * as cryptoHelper from './crypto'

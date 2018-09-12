@@ -1,4 +1,4 @@
-import createLogger = require('ilp-logger')
+import createLogger from 'ilp-logger'
 import BigNumber from 'bignumber.js'
 import { Duplex } from 'stream'
 import { DataQueue } from './util/data-queue'
