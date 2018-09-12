@@ -97,7 +97,7 @@ export class WebSocketReconnector extends EventEmitter2 {
   /**
    * Wrapper for regular websocket send function.
    */
-  send (data: any, cb?: (err: Error) => void): void {
+  send (data: any, cb?: (err?: Error) => void): void {
     return this._instance.send(data, cb)
   }
 
