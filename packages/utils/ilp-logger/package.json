@@ -1,15 +1,62 @@
 {
   "name": "ilp-logger",
   "version": "1.0.2",
-  "description": "Debug logging utility for Interledger modules",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "description": "Logging utility for Interledger modules",
+  "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "postinstall": "npm run build",
+    "build": "tsc --project .",
+    "lint": "tslint --project .",
+    "lint:fix": "tslint --fix --project .",
+    "test": "nyc mocha",
+    "doc": "typedoc --options typedoc.js src/index.ts",
+    "codecov": "codecov"
   },
-  "author": "Nathan Lie",
-  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interledgerjs/ilp-logger.git"
+  },
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
   "dependencies": {
-    "debug": "^3.1.0"
+    "debug": "^4.0.0",
+    "source-map-support": "^0.5.9",
+    "supports-color": "^5.5.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.1.4",
+    "@types/chai-as-promised": "^7.1.0",
+    "@types/debug": "^0.0.30",
+    "@types/mocha": "^5.2.5",
+    "@types/sinon": "^5.0.1",
+    "chai": "^4.1.2",
+    "chai-as-promised": "^7.1.1",
+    "codecov": "^3.0.2",
+    "mocha": "^5.1.1",
+    "mocha-typescript": "^1.1.14",
+    "nyc": "^12.0.2",
+    "sinon": "^6.0.1",
+    "tslint": "^5.11.0",
+    "tslint-config-standard": "^8.0.1",
+    "typedoc": "^0.12.0",
+    "typescript": "^3.0.3"
+  },
+  "nyc": {
+    "check-coverage": true,
+    "lines": 80,
+    "statements": 80,
+    "functions": 80,
+    "branches": 80,
+    "include": [
+      "src/**/*.js"
+    ],
+    "exclude": [
+      "test/**/*.js"
+    ],
+    "reporter": [
+      "lcov",
+      "text-summary"
+    ],
+    "all": true
   }
 }

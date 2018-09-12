@@ -1,30 +1,60 @@
+# Javascript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-javascript/ for more details
+#
 version: 2
+
+defaults: &defaults
+  working_directory: ~/repo
+  docker:
+      # Use active LTS release: https://github.com/nodejs/Release#release-schedule 
+    - image: circleci/node:8.12
+
 jobs:
-  build_node_v10:
-    docker:
-      - image: circleci/node:10
-
-    working_directory: ~/repo
-
+  test:
+    <<: *defaults  
     steps:
+
+      - run:
+          # By default node is installed as root and we are running as circleci
+          # Using sudo causes wierd issues so we just switch to installing globals in our home dir
+          name: Setup NPM to make global installs to home directory
+          command: | 
+            echo "export PATH=$HOME/bin:$PATH" >> $BASH_ENV
+            npm set prefix=$HOME
+
       - checkout
 
-      # Download and cache dependencies
       - restore_cache:
-          keys:
-          - v1-dependencies-{{ checksum "package.json" }}
-          # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
+          keys: 
+            # when lock file changes, use increasingly general patterns to restore cache
+            - "node-v1-{{ .Branch }}-{{ checksum \"package-lock.json\" }}"
+            - "node-v1-{{ .Branch }}-"
+            - "node-v1-"
 
       - run:
           name: Install Greenkeeper-Lockfile
-          command: sudo npm install -g greenkeeper-lockfile
+          command: npm install -g greenkeeper-lockfile
 
       - run:
           name: Update Lockfile (Greenkeeper)
           command: greenkeeper-lockfile-update
-
-      - run: npm install
+          
+      - run:
+          name: Install
+          command: npm install
+     
+      - run:
+          name: Lint
+          command: npm run lint
+     
+      - run:
+          name: Test
+          command: npm test
+     
+      - run: 
+          name: Upload Test Coverage to codecov.io
+          command: npm run codecov
 
       - run:
           name: Upload Lockfile (Greenkeeper)
@@ -33,63 +63,36 @@ jobs:
       - save_cache:
           paths:
             - node_modules
-          key: v1-dependencies-{{ checksum "package.json" }}
+          key: node-v1-{{ .Branch }}-{{ checksum "package-lock.json" }}
 
-  build_node_v8:
-    docker:
-      - image: circleci/node:8
-
-    working_directory: ~/repo
-
+      - persist_to_workspace:
+          root: ~/repo
+          paths: .
+  deploy:
+    <<: *defaults
     steps:
-      - checkout
-
-      # Download and cache dependencies
-      - restore_cache:
-          keys:
-          - v1-dependencies-{{ checksum "package.json" }}
-          # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
-
-      - run: npm install
-
-      - save_cache:
-          paths:
-            - node_modules
-          key: v1-dependencies-{{ checksum "package.json" }}
-
-  publish_to_npm:
-    docker:
-      - image: circleci/node:10
-
-    working_directory: ~/repo
-
-    steps:
-      - checkout
-
-      # Download and cache dependencies
-      - restore_cache:
-          keys:
-          - v1-dependencies-{{ checksum "package.json" }}
-          # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
-
-      - run: mv npmrc-env .npmrc
-
+      - attach_workspace:
+          at: ~/repo
       - run:
-          name: Publish to NPM (only if a new version has been tagged)
-          command: if [ "$(npm show ilp-logger version)" != "$(npm ls --depth=-1 2>/dev/null | head -1 | cut -f 1 -d " " | cut -f 2 -d @)" ] ; then npm publish ; fi
-
+          name: Authenticate with registry
+          command: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/repo/.npmrc
+      - run:
+          name: Publish package
+          command: npm publish
+            
 workflows:
   version: 2
-  build_and_publish:
+  test-deploy:
     jobs:
-      - build_node_v10
-      - build_node_v8
-      - publish_to_npm:
-          requires:
-            - build_node_v10
+      - test:
           filters:
+            tags:
+              only: /^v.*/
+      - deploy:
+          requires:
+            - test
+          filters:
+            tags:
+              only: /^v.*/
             branches:
-              only:
-                - master
+              ignore: /.*/

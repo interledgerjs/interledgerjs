@@ -7,8 +7,14 @@
 
 ## Usage
 
-```
+```js
+// Javascript
 const logger = require('ilp-logger')('DEBUG_NAMESPACE')
+
+//TypeScript
+import createLogger from 'ilp-logger'
+const logger = createLogger('DEBUG_NAMESPACE')
+
 
 logger.info('Informational output.')
 logger.warn('Something you want to warn for.')
