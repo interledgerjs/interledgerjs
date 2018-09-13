@@ -27,12 +27,12 @@ const namesToCodes = {
   'UnreachableError': 'T00',
   'NotAcceptedError': 'F00',
   'InvalidFieldsError': 'F01',
-  'TransferNotFoundError': 'F02',
-  'InvalidFulfillmentError': 'F03',
-  'DuplicateIdError': 'F04',
-  'AlreadyRolledBackError': 'F05',
-  'AlreadyFulfilledError': 'F06',
-  'InsufficientBalanceError': 'F07'
+  'TransferNotFoundError': 'F03',
+  'InvalidFulfillmentError': 'F04',
+  'DuplicateIdError': 'F05',
+  'AlreadyRolledBackError': 'F06',
+  'AlreadyFulfilledError': 'F07',
+  'InsufficientBalanceError': 'F08'
 }
 
 /**
@@ -196,7 +196,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   protected _dataHandler?: DataHandler
   protected _moneyHandler?: MoneyHandler
   private _readyState: ReadyState = ReadyState.INITIAL
-  private _log: any
+  protected _log: any
   private WebSocket: WebSocketConstructor
   private WebSocketServer: WebSocketServerConstructor
 
@@ -256,8 +256,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     this.WebSocketServer = modules.WebSocketServer || WebSocket.Server
   }
 
+  // Required for different _connect signature in mini-accounts and its subclasses
   /* tslint:disable-next-line:no-empty */
-  protected async _connect (): Promise<void> {}
+  protected async _connect (...opts: any[]): Promise<void> {}
   /* tslint:disable-next-line:no-empty */
   protected async _disconnect (): Promise<void> {}
 
