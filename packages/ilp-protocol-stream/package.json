@@ -52,7 +52,7 @@
     "chai": "^4.1.2",
     "chai-as-promised": "^7.1.1",
     "codecov": "^3.0.2",
-    "gh-pages": "^1.2.0",
+    "gh-pages": "^2.0.0",
     "ilp-plugin": "^3.2.1",
     "ilp-plugin-btp": "^1.2.1",
     "mocha": "^5.1.1",
