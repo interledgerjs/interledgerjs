@@ -103,7 +103,7 @@ describe('Server', function () {
         plugin: this.clientPlugin,
         destinationAccount: destinationAccount + '456',
         sharedSecret
-      }), 'Error connecting: Unable to determine path exchange rate')
+      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
 
       assert.notCalled(spy)
     })
@@ -199,7 +199,7 @@ describe('Server', function () {
         plugin: this.clientPlugin,
         sharedSecret: this.sharedSecret,
         destinationAccount: this.destinationAccount
-      }), 'Error connecting: Unable to determine path exchange rate')
+      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
     })
 
     it('should remove the record of closed connections', async function () {

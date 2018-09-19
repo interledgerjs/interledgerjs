@@ -587,7 +587,7 @@ describe('Connection', function () {
       await assert.isRejected(createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
-      }), 'Error connecting: Unable to determine path exchange rate')
+      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
     })
 
     it('should determine the exchange rate if it gets F08 which can be used for a valid exchange rate ', async function () {
@@ -621,7 +621,7 @@ describe('Connection', function () {
       await assert.isRejected(createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
-      }), 'Error connecting: Unable to determine path exchange rate')
+      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
       clearInterval(interval)
       clock.restore()
     })
@@ -651,7 +651,7 @@ describe('Connection', function () {
       await assert.isRejected(createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
-      }), 'Error connecting: Unable to determine path exchange rate')
+      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
 
       clearInterval(interval)
       clock.restore()
@@ -687,7 +687,7 @@ describe('Connection', function () {
       await assert.isRejected(createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
-      }), 'Error connecting: Unable to determine path exchange rate')
+      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
       clearInterval(interval)
       clock.restore()
     })
@@ -728,6 +728,80 @@ describe('Connection', function () {
       clock.restore()
     })
 
+    it('should establish the exchange rate if its less than the max packet amount and T04 errors are found', async function () {
+      const clock = sinon.useFakeTimers({
+        toFake: ['setTimeout']
+      })
+      const interval = setInterval(() => clock.tick(1000), 1)
+      this.clientPlugin.exchangeRate = 0.00099
+      this.clientPlugin.maxAmount = 100000
+
+      const t04RejectPacket = IlpPacket.serializeIlpReject({
+        code: 'T04',
+        message: 'Insufficient Liquidity Error',
+        data: Buffer.alloc(0),
+        triggeredBy: 'test.connector'
+      })
+
+      const mySendData = async (data: Buffer): Promise<Buffer> => {
+        const packetData = IlpPacket.deserializeIlpPrepare(data)
+        const packetAmount = Number(packetData.amount)
+        if (packetAmount === 1000000) {
+          const rejectedPacketData = new Writer()
+          rejectedPacketData.writeUInt64(10)
+          rejectedPacketData.writeUInt64(1)
+
+          return IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount to Large Million',
+            data: rejectedPacketData.getBuffer(),
+            triggeredBy: 'test.connector'
+          })
+        } else if (packetAmount === 1000000000) {
+          const rejectedPacketData = new Writer()
+          rejectedPacketData.writeUInt64(10000)
+          rejectedPacketData.writeUInt64(1)
+
+          return IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount to Large Billion',
+            data: rejectedPacketData.getBuffer(),
+            triggeredBy: 'test.connector'
+          })
+        } else if (packetAmount === 1000000000000) {
+          const rejectedPacketData = new Writer()
+          rejectedPacketData.writeUInt64(10000000)
+          rejectedPacketData.writeUInt64(1)
+
+          return IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount to Large Trillion',
+            data: rejectedPacketData.getBuffer(),
+            triggeredBy: 'test.connector'
+          })
+        }
+
+        // Send T04s unless the amount is less than 30000
+        if (Number(packetData.amount) > 30000) {
+          return t04RejectPacket
+        }
+        return await realSendData.call(this.clientPlugin, data)
+      }
+
+      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .callsFake(mySendData)
+
+      await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        minExchangeRatePrecision: 2,
+        plugin: this.clientPlugin
+      })
+
+      clearInterval(interval)
+      clock.restore()
+    })
+
     it('should stop trying to connect if it keeps getting temporary errors', async function () {
       const clock = sinon.useFakeTimers({
         toFake: ['setTimeout']
@@ -749,7 +823,7 @@ describe('Connection', function () {
       await assert.isRejected(createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
-      }), 'Error connecting: Unable to determine path exchange rate')
+      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
 
       clearInterval(interval)
       clock.restore()
@@ -1064,9 +1138,9 @@ describe('Connection', function () {
       const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(90)
       assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[0][0]).amount, '90')
-      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[1][0]).amount, '45')
-      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[2][0]).amount, '22')
-      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[3][0]).amount, '11')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[1][0]).amount, '60')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[2][0]).amount, '40')
+      assert.equal(IlpPacket.deserializeIlpPrepare(sendDataStub.args[3][0]).amount, '27')
       clearInterval(interval)
       clock.restore()
     })

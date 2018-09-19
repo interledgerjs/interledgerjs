@@ -37,6 +37,7 @@ const DEFAULT_IDLE_TIMEOUT = 60000 // 1 minute
 const MAX_DATA_SIZE = 32767
 const DEFAULT_MAX_REMOTE_STREAMS = 10
 const DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION = 3
+const TEST_PACKET_MAX_ATTEMPTS = 20
 
 export interface ConnectionOpts {
   /** Ledger plugin (V2) */
@@ -1032,12 +1033,14 @@ export class Connection extends EventEmitter {
             && this.testMaximumPacketAmount.isLessThan(this.maximumPacketAmount)) {
           let newTestMax
           if (this.maximumPacketAmount.isFinite()) {
-            newTestMax = this.maximumPacketAmount.plus(this.testMaximumPacketAmount).dividedToIntegerBy(2)
-            this.log.trace(`maximum packet amount is between ${this.testMaximumPacketAmount} and ${this.maximumPacketAmount}, trying: ${newTestMax}`)
+            // Take the max packet amount / 10 and then add it to the last test packet amount for an additive increase
+            const additiveIncrease = this.maximumPacketAmount.dividedToIntegerBy(10)
+            newTestMax = BigNumber.min(this.testMaximumPacketAmount.plus(additiveIncrease), this.maximumPacketAmount)
+            this.log.trace(`last packet amount was successful (max packet amount: ${this.maximumPacketAmount}), raising packet amount from ${this.testMaximumPacketAmount} to: ${newTestMax}`)
           } else {
-            // Increase by 2 times in this case since the amount to send and test max are equal which indicates the last packet was successful
+            // Increase by 2 times in this case since we do not know the max packet amount
             newTestMax = this.testMaximumPacketAmount.times(2)
-            this.log.trace(`last packet amount was successful, raising test max packet amount from: ${this.testMaximumPacketAmount} to: ${newTestMax}`)
+            this.log.trace(`last packet amount was successful, unknown max packet amount, raising packet amount from: ${this.testMaximumPacketAmount} to: ${newTestMax}`)
           }
           this.testMaximumPacketAmount = newTestMax
         }
@@ -1080,8 +1083,11 @@ export class Connection extends EventEmitter {
       return new BigNumber(Infinity)
     })
 
-    // Figure out which test packet discovered the exchange rate with the most precision
-    const { maxDigits, exchangeRate } = results.reduce(({ maxDigits, exchangeRate }, result, index) => {
+    // Figure out which test packet discovered the exchange rate with the most precision and gather packet error codes
+    const { maxDigits, exchangeRate, packetErrors } = results.reduce<any>(({ maxDigits, exchangeRate, packetErrors }, result, index) => {
+      if (result && (result as IlpPacket.IlpReject).code) {
+        packetErrors.push((result as IlpPacket.IlpReject).code)
+      }
       if (result && (result as Packet).prepareAmount) {
         const prepareAmount = (result as Packet).prepareAmount
         const exchangeRate = prepareAmount.dividedBy(testPacketAmounts[index])
@@ -1089,13 +1095,14 @@ export class Connection extends EventEmitter {
         if (prepareAmount.precision(true) >= maxDigits) {
           return {
             maxDigits: prepareAmount.precision(true),
-            exchangeRate
+            exchangeRate,
+            packetErrors
           }
         }
       }
-      return { maxDigits, exchangeRate }
-    }, { maxDigits: 0, exchangeRate: new BigNumber(0) })
-    return { maxDigits, exchangeRate, maxPacketAmounts }
+      return { maxDigits, exchangeRate, packetErrors }
+    }, { maxDigits: 0, exchangeRate: new BigNumber(0), packetErrors: [] })
+    return { maxDigits, exchangeRate, maxPacketAmounts, packetErrors }
   }
 
   /**
@@ -1108,13 +1115,14 @@ export class Connection extends EventEmitter {
       throw new Error('Cannot determine exchange rate. Destination account is unknown')
     }
 
+    let retryDelay = RETRY_DELAY_START
     let testPacketAmounts = [1, 1000, 1000000, 1000000000, 1000000000000] // 1, 10^3, 10^6, 10^9, 10^12
     let attempts = 0
 
-    // set a max attempts in case F08 errors keep occurring
-    while (!this.exchangeRate && testPacketAmounts.length > 0 && attempts < 3) {
+    // set a max attempts in case F08 & TXX errors keep occurring
+    while (!this.exchangeRate && testPacketAmounts.length > 0 && attempts < TEST_PACKET_MAX_ATTEMPTS) {
       attempts++
-      const { maxDigits, exchangeRate, maxPacketAmounts } = await this.sendTestPacketVolley(testPacketAmounts)
+      const { maxDigits, exchangeRate, maxPacketAmounts, packetErrors } = await this.sendTestPacketVolley(testPacketAmounts)
 
       this.maximumPacketAmount = BigNumber.minimum(...maxPacketAmounts.concat(this.maximumPacketAmount))
       this.testMaximumPacketAmount = this.maximumPacketAmount
@@ -1129,28 +1137,37 @@ export class Connection extends EventEmitter {
         return
       }
 
+      // Find the smallest packet amount we tried in case we ran into Txx errors
+      const smallestPacketAmount = testPacketAmounts.reduce((min: any, amount: any) => BigNumber.min(min, new BigNumber(amount)), new BigNumber(Infinity))
       // If we get here the first volley failed, try new volley using all unique packet amounts based on the max packets
       testPacketAmounts = maxPacketAmounts
         .filter((amount: any) => !amount.isEqualTo(new BigNumber(Infinity)))
         .reduce((acc: any, curr: any) => [...new Set([...acc, curr.toString()])], [])
 
+      // Check for any Txx Errors
+      if (packetErrors.some((code: string) => code[0] === 'T')) {
+        const reducedPacketAmount = smallestPacketAmount.minus(smallestPacketAmount.dividedToIntegerBy(3))
+        this.log.debug(`got Txx error(s), waiting ${retryDelay}ms and reducing packet amount to ${reducedPacketAmount} before sending another test packet`)
+        testPacketAmounts = [...testPacketAmounts, reducedPacketAmount]
+        await new Promise((resolve, reject) => setTimeout(resolve, retryDelay))
+        retryDelay *= RETRY_DELAY_INCREASE_FACTOR
+      }
+
       this.log.debug(`retry with packet amounts ${testPacketAmounts}`)
     }
 
-    throw new Error(`Unable to determine path exchange rate`)
+    throw new Error(`Unable to establish connection, no packets meeting the minimum exchange precision of ${this.minExchangeRatePrecision} digits made it through the path.`)
   }
 
   /**
    * (Internal) Send an unfulfillable test packet. Primarily used for determining the path exchange rate.
    * @private
    */
-  protected async sendTestPacket (amount: BigNumber, retryDelay = RETRY_DELAY_START, timeout = DEFAULT_PACKET_TIMEOUT): Promise<Packet | IlpPacket.IlpReject | null> {
-    const startTime = Date.now()
-
+  protected async sendTestPacket (amount: BigNumber, timeout = DEFAULT_PACKET_TIMEOUT): Promise<Packet | IlpPacket.IlpReject | null> {
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
 
-    this.log.trace(`sending test packet ${requestPacket.sequence} for amount: ${amount}. retry delay: ${retryDelay}, timeout: ${timeout}`)
+    this.log.trace(`sending test packet ${requestPacket.sequence} for amount: ${amount}. timeout: ${timeout}`)
 
     if (!this.remoteKnowsOurAccount) {
       // TODO attach a token to the account?
@@ -1200,17 +1217,6 @@ export class Connection extends EventEmitter {
       }
     } else {
       this.log.debug(`test packet ${requestPacket.sequence} was rejected with a ${ilpReject.code} triggered by ${ilpReject.triggeredBy} error${ilpReject.message ? ' with the message: "' + ilpReject.message + '"' : ''}`)
-    }
-
-    if (ilpReject.code[0] === 'T') {
-      const timeLeft = timeout - retryDelay - (Date.now() - startTime)
-      if (timeLeft > 0) {
-        this.log.debug(`got ${ilpReject.code} error, waiting ${retryDelay}ms before sending another test packet`)
-        await new Promise((resolve, reject) => setTimeout(resolve, retryDelay))
-        return this.sendTestPacket(amount, Math.floor(retryDelay * RETRY_DELAY_INCREASE_FACTOR), timeLeft)
-      } else {
-        this.log.debug(`got ${ilpReject.code} error but not trying again`)
-      }
     }
 
     if (responsePacket) {
@@ -1416,19 +1422,20 @@ export class Connection extends EventEmitter {
         // we should really be keeping track of the amount sent within a given window of time
         // and figuring out the max amount per window. this logic is just a stand in to fix
         // infinite retries when it runs into this type of error
-        const newTestAmount = BigNumber.minimum(amountSent, this.testMaximumPacketAmount).dividedToIntegerBy(2)
+        const minPacketAmount = BigNumber.minimum(amountSent, this.testMaximumPacketAmount)
+        const newTestAmount = minPacketAmount.minus(minPacketAmount.dividedToIntegerBy(3))
         this.testMaximumPacketAmount = BigNumber.maximum(2, newTestAmount) // don't let it go to zero, set to 2 so that the other side gets at least 1 after the exchange rate is taken into account
-        this.log.warn(`got T04: Insufficient Liquidity error. reducing the packet amount to ${this.testMaximumPacketAmount}`)
+        this.log.warn(`got T04: Insufficient Liquidity error triggered by: ${reject.triggeredBy}. reducing the packet amount to ${this.testMaximumPacketAmount}`)
       }
 
       // TODO should we reduce the packet amount on other TXX errors too?
-      this.log.warn(`got ${reject.code} temporary error. waiting ${this.retryDelay}ms before trying again`)
+      this.log.warn(`got ${reject.code} temporary error triggered by: ${reject.triggeredBy}. waiting ${this.retryDelay}ms before trying again`)
       const delay = this.retryDelay
       this.retryDelay = Math.min(this.retryDelay * 2, RETRY_DELAY_MAX)
       await new Promise((resolve, reject) => setTimeout(resolve, delay))
     } else {
-      this.log.error(`unexpected error. code: ${reject.code}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
-      throw new Error(`Unexpected error while sending packet. Code: ${reject.code}, message: ${reject.message}`)
+      this.log.error(`unexpected error. code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
+      throw new Error(`Unexpected error while sending packet. Code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}`)
     }
   }
 
