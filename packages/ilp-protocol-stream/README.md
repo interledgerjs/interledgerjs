@@ -6,6 +6,7 @@
 [![codecov](https://codecov.io/gh/interledgerjs/ilp-protocol-stream/branch/master/graph/badge.svg)](https://codecov.io/gh/interledgerjs/ilp-protocol-stream)
 [![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
 [![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream) [![Greenkeeper badge](https://badges.greenkeeper.io/interledgerjs/ilp-protocol-stream.svg)](https://greenkeeper.io/)
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Finterledgerjs%2Filp-protocol-stream.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Finterledgerjs%2Filp-protocol-stream?ref=badge_shield)
 
 STREAM is the recommended Transport Protocol to use for most Interledger applications.
 
@@ -110,3 +111,5 @@ Please feel free to [open issues](https://github.com/interledgerjs/ilp-protocol-
 ## License
 
 Apache-2.0
+
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Finterledgerjs%2Filp-protocol-stream.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Finterledgerjs%2Filp-protocol-stream?ref=badge_large)
