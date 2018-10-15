@@ -230,7 +230,11 @@ export class DataAndMoneyStream extends Duplex {
     }
     if (this._totalReceived.isGreaterThan(limit)) {
       this.log.debug(`cannot set receiveMax to ${limit} because we have already received: ${this._totalReceived}`)
-      throw new Error(`Cannot set receiveMax lower than the totalReceived`)
+      throw new Error('Cannot set receiveMax lower than the totalReceived')
+    }
+    if (this._receiveMax.isGreaterThan(limit)) {
+      this.log.debug(`cannot set receiveMax to ${limit} because the current limit is: ${this._receiveMax}`)
+      throw new Error('Cannot decrease the receiveMax')
     }
     this.log.debug(`setting receiveMax to ${limit}`)
     this._receiveMax = new BigNumber(limit)
@@ -583,7 +587,7 @@ export class DataAndMoneyStream extends Duplex {
     const offset = this.outgoingOffset
     const data = this._outgoingData.read(maxBytes)
     if (data && data.length > 0) {
-      this.outgoingOffset = this.outgoingOffset += data.length
+      this.outgoingOffset += data.length
       this.log.trace(`${data.length} bytes taken from the outgoing data queue`)
     }
     return { data, offset }

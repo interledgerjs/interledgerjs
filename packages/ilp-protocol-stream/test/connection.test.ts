@@ -375,7 +375,6 @@ describe('Connection', function () {
     it('should emit error on attempting to send data on a closed connection if an error listener is present', async function () {
       const serverStreamData = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.setReceiveMax(1000)
         stream.on('data', serverStreamData)
       })
       const clientStream = this.clientConn.createStream()
@@ -410,7 +409,6 @@ describe('Connection', function () {
     })
 
     it('should accept an error that will be emitted on the other side of the connection', function (done) {
-      const spy = sinon.spy()
       this.clientConn.on('error', (err: Error) => {
         assert.equal(err.message, 'Remote connection error. Code: InternalError, message: i had enough of this')
         done()
@@ -420,11 +418,8 @@ describe('Connection', function () {
     })
 
     it('should close all outgoing streams even if there is data and money still to send', function (done) {
-      const spy = sinon.spy()
       const stream: DataAndMoneyStream = this.clientConn.createStream()
       stream.on('close', () => {
-        spy()
-        assert.calledOnce(spy)
         assert.equal(stream.totalSent, '0')
         // Don't use an assert.equal here because the behavior changed between Node 8 and 10
         assert.isAtLeast(stream.writableLength, 1)
@@ -1510,7 +1505,7 @@ describe('Connection', function () {
       await new Promise(setImmediate)
 
       assert.calledOnce(spy)
-      assert.equal(spy.args[0][0].message, 'Remote connection error. Code: InternalError, message: Exceeded flow control limits. Stream 1 can accept up to offset: 16384 but got bytes up to offset: 20000')
+      assert.equal(spy.args[0][0].message, 'Remote connection error. Code: FlowControlError, message: Exceeded flow control limits. Stream 1 can accept up to offset: 16384 but got bytes up to offset: 20000')
     })
 
     it('should allow the per-connection buffer size to be configured', async function () {

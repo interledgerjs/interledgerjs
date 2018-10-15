@@ -27,6 +27,20 @@ describe('Server', function () {
     })
   })
 
+  describe('acceptConnection', function () {
+    beforeEach(async function () {
+      this.server = new Server({
+        serverSecret: Buffer.alloc(32),
+        plugin: this.serverPlugin
+      })
+    })
+
+    it('rejects when the server closes', async function () {
+      process.nextTick(() => { this.server.close() })
+      await assert.isRejected(this.server.acceptConnection())
+    })
+  })
+
   describe('generateAddressAndSecret', function () {
     beforeEach(async function () {
       this.server = new Server({

@@ -163,6 +163,12 @@ describe('DataAndMoneyStream', function () {
       clientStream.setSendMax(2000)
     })
 
+    it('should throw if the specified amount is lower than current ReceiveMax', function () {
+      const clientStream = this.clientConn.createStream()
+      clientStream.setReceiveMax(200)
+      assert.throws(() => clientStream.setReceiveMax(199), 'Cannot decrease the receiveMax')
+    })
+
     it('should allow the limit to be set to Infinity', async function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -495,6 +501,7 @@ describe('DataAndMoneyStream', function () {
       const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
         new StreamMoneyFrame(clientStream.id, 1)
       ]), new BigNumber(100))
+      assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
       assert.deepInclude(response.frames, new StreamCloseFrame(clientStream.id, ErrorCode.NoError, ''))
     })
 
@@ -512,6 +519,7 @@ describe('DataAndMoneyStream', function () {
       const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
         new StreamDataFrame(clientStream.id, 5, Buffer.from('blah'))
       ]), new BigNumber(0))
+      assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
       assert.deepInclude(response.frames, new StreamCloseFrame(clientStream.id, ErrorCode.NoError, ''))
     })
 
