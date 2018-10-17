@@ -263,6 +263,12 @@ class Reader {
    * Read a variable-length unsigned integer at the cursor position and advance the cursor.
    */
   readVarUIntNumber (): number {
+    if (this.buffer[this.cursor] === 0) {
+      throw new ParseError('UInt of length 0 is invalid')
+    }
+
+    // Interledger uses canonical OER (C-OER), so we know that any value that
+    // fits six bytes MUST be encoded with a one-byte length determinant
     if (this.buffer[this.cursor] <= MAX_SAFE_BYTES) {
       return this.readUIntNumber(this.buffer[this.cursor++])
     } else {
@@ -332,6 +338,12 @@ class Reader {
    * Read a variable-length unsigned integer at the cursor position and advance the cursor.
    */
   readVarIntNumber (): number {
+    if (this.buffer[this.cursor] === 0) {
+      throw new ParseError('Int of length 0 is invalid')
+    }
+
+    // Interledger uses canonical OER (C-OER), so we know that any value that
+    // fits six bytes MUST be encoded with a one-byte length determinant
     if (this.buffer[this.cursor] <= MAX_SAFE_BYTES) {
       return this.readIntNumber(this.buffer[this.cursor++])
     } else {

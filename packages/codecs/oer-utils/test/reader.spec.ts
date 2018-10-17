@@ -660,6 +660,14 @@ describe('Reader', function () {
         reader.readVarUIntNumber()
       }, 'Value does not fit a JS number without sacrificing precision')
     })
+
+    it('should throw when parsing a number of length zero', function () {
+      const reader = Reader.from(Buffer.from('00', 'hex'))
+
+      assert.throws(function () {
+        reader.readVarUIntNumber()
+      }, 'UInt of length 0 is invalid')
+    })
   })
 
   describe('readVarUIntBigNum', function () {
@@ -962,6 +970,14 @@ describe('Reader', function () {
       assert.throws(function () {
         reader.readVarIntNumber()
       }, 'Value does not fit a JS number without sacrificing precision')
+    })
+
+    it('should throw when parsing a number of length zero', function () {
+      const reader = Reader.from(Buffer.from('00', 'hex'))
+
+      assert.throws(function () {
+        reader.readVarIntNumber()
+      }, 'Int of length 0 is invalid')
     })
   })
 
