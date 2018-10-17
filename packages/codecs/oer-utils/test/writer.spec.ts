@@ -596,6 +596,81 @@ describe('Writer', function () {
 
       assert.equal(writer.getBuffer().toString('hex'), 'ff020304')
     })
+
+    it('should fail to write a negative BigNumber', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeUInt32(new BigNumber(-1))
+      } , 'UInt must be positive')
+    })
+  })
+
+  describe('writeUInt64', function () {
+    it('should write an 64-bit integer formatted as an array', function () {
+      const writer = new Writer()
+
+      writer.writeUInt64([0xff020304, 0x05060708])
+
+      assert.equal(writer.getBuffer().toString('hex'), 'ff02030405060708')
+    })
+
+    it('should write an integer that is not formatted as an array', function () {
+      const writer = new Writer()
+
+      writer.writeUInt64(0xff0203040506)
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('should write a string', function () {
+      const writer = new Writer()
+
+      writer.writeUInt64(String(0xff0203040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('should write a BigNumber', function () {
+      const writer = new Writer()
+
+      writer.writeUInt64(new BigNumber(0xff0203040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('when writing an unsafe Javascript integer, should throw', function () {
+      const writer = new Writer()
+
+      assert.throws(
+        () => writer.writeUInt64(MAX_SAFE_INTEGER + 1),
+        'UInt is larger than safe JavaScript range (try using BigNumbers instead)'
+      )
+    })
+
+    it('should write a 64-bit integer', function () {
+      const writer = new Writer()
+
+      writer.writeUInt64(0xff0203040506)
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('should fail to write a negative BigNumber', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeUInt64(new BigNumber(-1))
+      } , 'UInt must be positive')
+    })
+
+    it('should fail to write a BigNumber that is too large', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeUInt64(new BigNumber(0x10102030405060708))
+      } , 'UInt 18519367933499933000 does not fit in 8 bytes')
+    })
   })
 
   describe('writeInt8', function () {
@@ -650,40 +725,104 @@ describe('Writer', function () {
 
       assert.equal(writer.getBuffer().toString('hex'), '80fdfcfc')
     })
-  })
 
-  describe('writeUInt64', function () {
-    it('should write an 64-bit integer formatted as an array', function () {
+    it('should write a string', function () {
       const writer = new Writer()
 
-      writer.writeUInt64([0xff020304, 0x05060708])
+      writer.writeUInt32(String(0x03040506))
 
-      assert.equal(writer.getBuffer().toString('hex'), 'ff02030405060708')
-    })
-
-    it('should write an integer that is not formatted as an array', function () {
-      const writer = new Writer()
-
-      writer.writeUInt64(0xff0203040506)
-
-      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+      assert.equal(writer.getBuffer().toString('hex'), '03040506')
     })
 
     it('should write a BigNumber', function () {
       const writer = new Writer()
 
-      writer.writeUInt64(new BigNumber(0xff0203040506))
+      writer.writeUInt32(new BigNumber(0x03040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), '03040506')
+    })
+  })
+
+  describe('writeInt64', function () {
+    it('should write a positive integer', function () {
+      const writer = new Writer()
+
+      writer.writeInt64(0xff0203040506)
 
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('should write a negative integer', function () {
+      const writer = new Writer()
+
+      writer.writeInt64(-0xff0203040506)
+
+      assert.equal(writer.getBuffer().toString('hex'), 'ffff00fdfcfbfafa')
+    })
+
+    it('should write a positive integer as a string', function () {
+      const writer = new Writer()
+
+      writer.writeInt64(String(0xff0203040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('should write a positive integer as a string', function () {
+      const writer = new Writer()
+
+      writer.writeInt64(String(-0xff0203040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), 'ffff00fdfcfbfafa')
+    })
+
+    it('should write a positive integer as a BigNumber', function () {
+      const writer = new Writer()
+
+      writer.writeInt64(new BigNumber(0xff0203040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('should write a negative integer as a BigNumber', function () {
+      const writer = new Writer()
+
+      writer.writeInt64(new BigNumber(-0xff0203040506))
+
+      assert.equal(writer.getBuffer().toString('hex'), 'ffff00fdfcfbfafa')
     })
 
     it('when writing an unsafe Javascript integer, should throw', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeUInt64(MAX_SAFE_INTEGER + 1),
-        'UInt is larger than safe JavaScript range (try using BigNumbers instead)'
+        () => writer.writeInt64(MAX_SAFE_INTEGER + 1),
+        'Int is larger than safe JavaScript range (try using BigNumbers instead)'
       )
+    })
+
+    it('should write a 64-bit integer', function () {
+      const writer = new Writer()
+
+      writer.writeInt64(0xff0203040506)
+
+      assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
+    })
+
+    it('should fail to write a BigNumber that is too small', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeInt64(new BigNumber(-0x101020304050607080))
+      } , 'Int -296309886935998900000 does not fit in 8 bytes')
+    })
+
+    it('should fail to write a BigNumber that is too large', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeInt64(new BigNumber(0x10102030405060708))
+      } , 'Int 18519367933499933000 does not fit in 8 bytes')
     })
   })
 })
