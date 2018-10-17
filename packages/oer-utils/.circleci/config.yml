@@ -11,20 +11,20 @@ defaults: &defaults
 
 jobs:
   test:
-    <<: *defaults  
+    <<: *defaults
     steps:
       - run:
           # By default node is installed as root and we are running as circleci
           # Using sudo causes wierd issues so we just switch to installing globals in our home dir
           name: Setup NPM to make global installs to home directory
-          command: | 
+          command: |
             echo "export PATH=$HOME/bin:$PATH" >> $BASH_ENV
             npm set prefix=$HOME
 
       - checkout
 
       - restore_cache:
-          keys: 
+          keys:
             # when lock file changes, use increasingly general patterns to restore cache
             - "node-v1-{{ .Branch }}-{{ checksum \"package-lock.json\" }}"
             - "node-v1-{{ .Branch }}-"
@@ -37,7 +37,7 @@ jobs:
       - run:
           name: Update Lockfile (Greenkeeper)
           command: greenkeeper-lockfile-update
-          
+
       - run:
           name: Install
           command: npm install
@@ -48,7 +48,11 @@ jobs:
 
       - run:
           name: Test
-          command: npm test
+          command: npm run cover
+
+      - run:
+          name: Upload code coverage
+          command: npm run codecov
 
       - run:
           name: Upload Lockfile (Greenkeeper)
@@ -73,7 +77,7 @@ jobs:
       - run:
           name: Publish package
           command: npm publish
-            
+
 workflows:
   version: 2
   test-deploy:
