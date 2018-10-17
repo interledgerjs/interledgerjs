@@ -291,4 +291,17 @@ describe('Predictor', function () {
       assert.equal(predictor.getSize(), 8)
     })
   })
+
+  describe('getBuffer', function () {
+    it('should return a dummy empty buffer', function () {
+      const predictor = new Predictor()
+
+      predictor.write(Buffer.alloc(10))
+
+      const buffer = predictor.getBuffer()
+
+      assert(Buffer.isBuffer(buffer))
+      assert.equal(predictor.getSize(), 10)
+    })
+  })
 })

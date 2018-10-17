@@ -110,6 +110,17 @@ describe('Reader', function () {
     })
   })
 
+  describe('readUIntNumber', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+
+      const v = reader.readUIntNumber(4)
+
+      assert.isNumber(v)
+      assert.equal(v, 16909060)
+    })
+  })
+
   describe('readUIntBigNum', function () {
     it('should return a BigNumber', function () {
       const reader = Reader.from(Buffer.from('010203040506', 'hex'))
@@ -117,6 +128,7 @@ describe('Reader', function () {
       const v = reader.readUIntBigNum(4)
 
       assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '16909060')
     })
   })
 
@@ -209,6 +221,28 @@ describe('Reader', function () {
     })
   })
 
+  describe('peekUIntNumber', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+
+      const v1 = reader.peekUIntNumber(1)
+      const v2 = reader.peekUIntNumber(1)
+
+      assert.isNumber(v1)
+      assert.isNumber(v2)
+      assert.equal(v1, 1)
+      assert.equal(v2, 1)
+    })
+
+    it('should throw if the number is too large', function () {
+      const reader = Reader.from(Buffer.from('01020304050607', 'hex'))
+
+      assert.throws(function () {
+        reader.peekUIntNumber(7)
+      }, 'Value does not fit a JS number without sacrificing precision')
+    })
+  })
+
   describe('peekUIntBigNum', function () {
     it('should return a BigNumber', function () {
       const reader = Reader.from(Buffer.from('010203040506', 'hex'))
@@ -218,6 +252,8 @@ describe('Reader', function () {
 
       assert(BigNumber.isBigNumber(v1))
       assert(BigNumber.isBigNumber(v2))
+      assert.equal(v1.toString(), '1')
+      assert.equal(v2.toString(), '1')
     })
   })
 
@@ -329,16 +365,30 @@ describe('Reader', function () {
     })
   })
 
+  describe('readIntNumber', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('ff0203040506', 'hex'))
+
+      const v1 = reader.readIntNumber(1)
+      const v2 = reader.readIntNumber(1)
+
+      assert.isNumber(v1)
+      assert.isNumber(v2)
+      assert.equal(v1, -1)
+      assert.equal(v2, 2)
+    })
+  })
+
   describe('readIntBigNum', function () {
     it('should return a BigNumber', function () {
-      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+      const reader = Reader.from(Buffer.from('ff0203040506', 'hex'))
 
       const v1 = reader.readIntBigNum(1)
       const v2 = reader.readIntBigNum(1)
 
       assert(BigNumber.isBigNumber(v1))
       assert(BigNumber.isBigNumber(v2))
-      assert.equal(v1.toString(), '1')
+      assert.equal(v1.toString(), '-1')
       assert.equal(v2.toString(), '2')
     })
   })
@@ -432,17 +482,39 @@ describe('Reader', function () {
     })
   })
 
+  describe('peekIntNumber', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('ff0203040506', 'hex'))
+
+      const v1 = reader.peekIntNumber(1)
+      const v2 = reader.peekIntNumber(1)
+
+      assert.isNumber(v1)
+      assert.isNumber(v2)
+      assert.equal(v1, -1)
+      assert.equal(v2, -1)
+    })
+
+    it('should throw when the number is too large', function () {
+      const reader = Reader.from(Buffer.from('ff0203040506', 'hex'))
+
+      assert.throws(function () {
+        reader.peekIntNumber(7)
+      }, 'Value does not fit a JS number without sacrificing precision')
+    })
+  })
+
   describe('peekIntBigNum', function () {
     it('should return a BigNumber', function () {
-      const reader = Reader.from(Buffer.from('010203040506', 'hex'))
+      const reader = Reader.from(Buffer.from('ff0203040506', 'hex'))
 
       const v1 = reader.peekIntBigNum(1)
       const v2 = reader.peekIntBigNum(1)
 
       assert(BigNumber.isBigNumber(v1))
       assert(BigNumber.isBigNumber(v2))
-      assert.equal(v1.toString(), '1')
-      assert.equal(v2.toString(), '1')
+      assert.equal(v1.toString(), '-1')
+      assert.equal(v2.toString(), '-1')
     })
   })
 
@@ -570,6 +642,26 @@ describe('Reader', function () {
     })
   })
 
+  describe('readVarUIntNumber', function () {
+    it('should parse an unsigned integer', function () {
+      const reader = Reader.from(Buffer.from('020102', 'hex'))
+
+      const v = reader.readVarUIntNumber()
+
+      assert.isNumber(v)
+      assert.equal(v, 258)
+      assert.equal(reader.cursor, 3)
+    })
+
+    it('should throw when parsing a number that is too large', function () {
+      const reader = Reader.from(Buffer.from('0701020304050607', 'hex'))
+
+      assert.throws(function () {
+        reader.readVarUIntNumber()
+      }, 'Value does not fit a JS number without sacrificing precision')
+    })
+  })
+
   describe('readVarUIntBigNum', function () {
     const reader = Reader.from(Buffer.from('020102', 'hex'))
 
@@ -679,14 +771,26 @@ describe('Reader', function () {
     })
   })
 
+  describe('peekVarUIntNumber', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('03010203', 'hex'))
+
+      const v = reader.peekVarUIntNumber()
+
+      assert.isNumber(v)
+      assert.equal(v, 66051)
+      assert.equal(reader.cursor, 0)
+    })
+  })
+
   describe('peekVarUIntBigNum', function () {
     it('should return a BigNumber', function () {
-      const reader = Reader.from(Buffer.from('0109', 'hex'))
+      const reader = Reader.from(Buffer.from('03010203', 'hex'))
 
       const v = reader.peekVarUIntBigNum()
 
       assert(BigNumber.isBigNumber(v))
-      assert.equal(v.toString(), '9')
+      assert.equal(v.toString(), '66051')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -841,15 +945,35 @@ describe('Reader', function () {
     })
   })
 
+  describe('readVarIntNumber', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('03be0807', 'hex'))
+
+      const v = reader.readVarIntNumber()
+
+      assert.isNumber(v)
+      assert.equal(v.toString(), '-4323321')
+      assert.equal(reader.cursor, 4)
+    })
+
+    it('should throw when the size of the number is too large', function () {
+      const reader = Reader.from(Buffer.from('07ff010203040506', 'hex'))
+
+      assert.throws(function () {
+        reader.readVarIntNumber()
+      }, 'Value does not fit a JS number without sacrificing precision')
+    })
+  })
+
   describe('readVarIntBigNum', function () {
     it('should return a BigNumber', function () {
-      const reader = Reader.from(Buffer.from('0109', 'hex'))
+      const reader = Reader.from(Buffer.from('03be0807', 'hex'))
 
       const v = reader.readVarIntBigNum()
 
       assert(BigNumber.isBigNumber(v))
-      assert.equal(v.toString(), '9')
-      assert.equal(reader.cursor, 2)
+      assert.equal(v.toString(), '-4323321')
+      assert.equal(reader.cursor, 4)
     })
   })
 
@@ -955,12 +1079,24 @@ describe('Reader', function () {
 
   describe('peekVarIntBigNum', function () {
     it('should return a BigNumber', function () {
-      const reader = Reader.from(Buffer.from('0109', 'hex'))
+      const reader = Reader.from(Buffer.from('03be0807', 'hex'))
 
       const v = reader.peekVarIntBigNum()
 
       assert(BigNumber.isBigNumber(v))
-      assert.equal(v.toString(), '9')
+      assert.equal(v.toString(), '-4323321')
+      assert.equal(reader.cursor, 0)
+    })
+  })
+
+  describe('peekVarIntNumber', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('03be0807', 'hex'))
+
+      const v = reader.peekVarIntNumber()
+
+      assert.isNumber(v)
+      assert.equal(v.toString(), '-4323321')
       assert.equal(reader.cursor, 0)
     })
   })
@@ -1498,6 +1634,18 @@ describe('Reader', function () {
     })
   })
 
+  describe('readUInt8Number', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('ff', 'hex'))
+
+      const v = reader.readUInt8Number()
+
+      assert.isNumber(v)
+      assert.equal(v, 255)
+      assert.equal(reader.cursor, 1)
+    })
+  })
+
   describe('readUInt8BigNum', function () {
     it('should return a BigNumber', function () {
       const reader = Reader.from(Buffer.from('ff', 'hex'))
@@ -1532,6 +1680,18 @@ describe('Reader', function () {
     })
   })
 
+  describe('readUInt32Number', function () {
+    it('should read an 32-bit unsigned integer as a number', function () {
+      const reader = Reader.from(Buffer.from('ffffffff', 'hex'))
+
+      const v = reader.readUInt32Number()
+
+      assert.isNumber(v)
+      assert.equal(v, 4294967295)
+      assert.equal(reader.cursor, 4)
+    })
+  })
+
   describe('readUInt64', function () {
     it('should read an 64-bit unsigned integer', function () {
       const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
@@ -1539,6 +1699,28 @@ describe('Reader', function () {
       const v = reader.readUInt64()
 
       assert.deepEqual(v, '72340177116200959')
+      assert.equal(reader.cursor, 8)
+    })
+  })
+
+  describe('readUInt64Number', function () {
+    it('should refuse to read an 64-bit unsigned integer as a number', function () {
+      const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
+
+      assert.throws(() => {
+        reader.readUInt64Number()
+      }, 'Value does not fit a JS number without sacrificing precision')
+    })
+  })
+
+  describe('readUInt64BigNum', function () {
+    it('should read an 64-bit unsigned integer as a BigNum', function () {
+      const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
+
+      const v = reader.readUInt64BigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '72340177116200959')
       assert.equal(reader.cursor, 8)
     })
   })
@@ -1638,6 +1820,30 @@ describe('Reader', function () {
     })
   })
 
+  describe('readInt8Number', function () {
+    it('should return a number', function () {
+      const reader = Reader.from(Buffer.from('ff', 'hex'))
+
+      const v = reader.readInt8Number()
+
+      assert.isNumber(v)
+      assert.equal(v, -1)
+      assert.equal(reader.cursor, 1)
+    })
+  })
+
+  describe('readInt8BigNum', function () {
+    it('should return a BigNumber', function () {
+      const reader = Reader.from(Buffer.from('ff', 'hex'))
+
+      const v = reader.readInt8BigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '-1')
+      assert.equal(reader.cursor, 1)
+    })
+  })
+
   describe('readInt16', function () {
     it('should read an 16-bit unsigned integer', function () {
       const reader = Reader.from(Buffer.from('ffff', 'hex'))
@@ -1660,6 +1866,28 @@ describe('Reader', function () {
     })
   })
 
+  describe('readUInt32Number', function () {
+    it('should read a positive 32-bit unsigned integer as a number', function () {
+      const reader = Reader.from(Buffer.from('7ffffffff', 'hex'))
+
+      const v = reader.readInt32Number()
+
+      assert.isNumber(v)
+      assert.equal(v, 2147483647)
+      assert.equal(reader.cursor, 4)
+    })
+
+    it('should read a negative 32-bit unsigned integer as a number', function () {
+      const reader = Reader.from(Buffer.from('fffffeff', 'hex'))
+
+      const v = reader.readInt32Number()
+
+      assert.isNumber(v)
+      assert.equal(v, -257)
+      assert.equal(reader.cursor, 4)
+    })
+  })
+
   describe('readInt64', function () {
     it('should read an 64-bit integer', function () {
       const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
@@ -1676,6 +1904,38 @@ describe('Reader', function () {
       const v = reader.readInt64()
 
       assert.equal(v, '-1')
+      assert.equal(reader.cursor, 8)
+    })
+  })
+
+  describe('readInt64Number', function () {
+    it('should refuse to read an 64-bit signed integer as a number', function () {
+      const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
+
+      assert.throws(() => {
+        reader.readInt64Number()
+      }, 'Value does not fit a JS number without sacrificing precision')
+    })
+  })
+
+  describe('readUInt64BigNum', function () {
+    it('should read a positive 64-bit unsigned integer as a BigNum', function () {
+      const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
+
+      const v = reader.readInt64BigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '72340177116200959')
+      assert.equal(reader.cursor, 8)
+    })
+
+    it('should read a negative 64-bit unsigned integer as a BigNum', function () {
+      const reader = Reader.from(Buffer.from('ffffffff01010101', 'hex'))
+
+      const v = reader.readInt64BigNum()
+
+      assert(BigNumber.isBigNumber(v))
+      assert.equal(v.toString(), '-4278124287')
       assert.equal(reader.cursor, 8)
     })
   })

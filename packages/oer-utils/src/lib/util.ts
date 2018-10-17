@@ -1,14 +1,21 @@
 import BigNumber from 'bignumber.js'
 
+// How many bytes are safe to decode as a JS number
+// MAX_SAFE_INTEGER = 2^53 - 1
+// 53 div 8 -> 6 bytes
+export const MAX_SAFE_BYTES = 6
+
+const INTEGER_REGEX = /^-?[0-9]+$/
 export function isInteger (value: any) {
   if (BigNumber.isBigNumber(value)) {
     return value.isFinite()
       && value.isInteger()
+  } else if (typeof value === 'number') {
+    return isFinite(value) && Math.floor(value) === value
+  } else if (typeof value === 'string') {
+    return !!INTEGER_REGEX.exec(value)
   } else {
-    return typeof value !== 'object'
-      && typeof value !== 'function'
-      && isFinite(value)
-      && Math.floor(value) === value
+    return false
   }
 }
 

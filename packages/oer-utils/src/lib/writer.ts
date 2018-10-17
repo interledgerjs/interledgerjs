@@ -1,4 +1,4 @@
-import { isInteger, bigNumberToBuffer } from './util'
+import { isInteger, bigNumberToBuffer, MAX_SAFE_BYTES } from './util'
 import BigNumber from 'bignumber.js'
 
 class Writer {
@@ -36,7 +36,7 @@ class Writer {
    * Write a fixed-length unsigned integer to the stream.
    *
    * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
-   * @param {number} length Number of bytes to encode this value as.
+   * @param length Number of bytes to encode this value as.
    */
   writeUInt (_value: BigNumber.Value | number[], length: number): void {
     if (Array.isArray(_value)) {
@@ -48,25 +48,38 @@ class Writer {
       throw new Error('UInt must be an integer')
     } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
       throw new Error('UInt is larger than safe JavaScript range (try using BigNumbers instead)')
-    }
-
-    const value = new BigNumber(_value)
-    if (value.isLessThan(0)) {
-      throw new Error('UInt must be positive')
     } else if (length <= 0) {
       throw new Error('UInt length must be greater than zero')
-    } else if (value.isGreaterThan(Writer.UINT_RANGES[length])) {
-      throw new Error(`UInt ${value} does not fit in ${length} bytes`)
     }
 
-    this.write(bigNumberToBuffer(value, length))
+    if (length <= MAX_SAFE_BYTES) {
+      const value = Number(_value)
+      if (value < 0) {
+        throw new Error('UInt must be positive')
+      } else if (value > Writer.UINT_RANGES[length]) {
+        throw new Error(`UInt ${value} does not fit in ${length} bytes`)
+      }
+
+      const buffer = Buffer.alloc(length)
+      buffer.writeUIntBE(value, 0, length)
+      this.write(buffer)
+    } else {
+      const value = new BigNumber(_value)
+      if (value.isLessThan(0)) {
+        throw new Error('UInt must be positive')
+      } else if (value.isGreaterThan(Writer.UINT_RANGES[length])) {
+        throw new Error(`UInt ${value} does not fit in ${length} bytes`)
+      }
+
+      this.write(bigNumberToBuffer(value, length))
+    }
   }
 
   /**
    * Write a fixed-length signed integer to the stream.
    *
    * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
-   * @param {number} length Number of bytes to encode this value as.
+   * @param length Number of bytes to encode this value as.
    */
   writeInt (_value: BigNumber.Value, length: number): void {
     if (!isInteger(_value)) {
@@ -74,19 +87,32 @@ class Writer {
     } else if (length <= 0) {
       throw new Error('Int length must be greater than zero')
     } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
-      throw new Error('Int is larger than safe JavaScript range')
+      throw new Error('Int is larger than safe JavaScript range (try using BigNumbers instead)')
     } else if (typeof _value === 'number' && _value < Writer.MIN_SAFE_INTEGER) {
-      throw new Error('Int is smaller than safe JavaScript range')
-    }
-    const value = new BigNumber(_value)
-    if (value.isLessThan(Writer.INT_RANGES[length][0])) {
-      throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
-    } else if (value.isGreaterThan(Writer.INT_RANGES[length][1])) {
-      throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
+      throw new Error('Int is smaller than safe JavaScript range (try using BigNumbers instead)')
     }
 
-    const valueToWrite = value.isLessThan(0) ? new BigNumber(256).exponentiatedBy(length).plus(value) : value
-    this.write(bigNumberToBuffer(valueToWrite, length))
+    if (length <= MAX_SAFE_BYTES) {
+      const value = Number(_value)
+      if (value < Writer.INT_RANGES[length][0] || value > Writer.INT_RANGES[length][1]) {
+        throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
+      }
+
+      const buffer = Buffer.alloc(length)
+      buffer.writeIntBE(value, 0, length)
+      this.write(buffer)
+    } else {
+      const value = new BigNumber(_value)
+      if (
+        value.isLessThan(Writer.INT_RANGES[length][0]) ||
+        value.isGreaterThan(Writer.INT_RANGES[length][1])
+      ) {
+        throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
+      }
+
+      const valueToWrite = value.isLessThan(0) ? new BigNumber(256).exponentiatedBy(length).plus(value) : value
+      this.write(bigNumberToBuffer(valueToWrite, length))
+    }
   }
 
   /**
@@ -152,8 +178,8 @@ class Writer {
    * Mostly just a raw write, but this method enforces the length of the
    * provided buffer is correct.
    *
-   * @param {Buffer} buffer Data to write.
-   * @param {number} length Length of data according to the format.
+   * @param buffer Data to write.
+   * @param length Length of data according to the format.
    */
   writeOctetString (buffer: Buffer, length: number): void {
     if (buffer.length !== length) {
@@ -168,7 +194,7 @@ class Writer {
    *
    * A variable-length octet string is a length-prefixed set of arbitrary bytes.
    *
-   * @param {Buffer} buffer Contents of the octet string.
+   * @param buffer Contents of the octet string.
    */
   writeVarOctetString (buffer: Buffer): void {
     if (!Buffer.isBuffer(buffer)) {
@@ -200,7 +226,7 @@ class Writer {
    *
    * Adds the given bytes to the output buffer.
    *
-   * @param {Buffer} buffer Bytes to write.
+   * @param buffer Bytes to write.
    */
   write (buffer: Buffer): void {
     this.components.push(buffer)
