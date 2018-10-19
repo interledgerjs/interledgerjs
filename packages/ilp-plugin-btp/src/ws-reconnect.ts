@@ -43,6 +43,7 @@ export class WebSocketReconnector extends EventEmitter2 {
   private _intervals: Array<number>
   private _clearTryTimeout: number
   private _clearTryTimer?: NodeJS.Timer
+  private _openTimer?: NodeJS.Timer
   private _tries: number
 
   /**
@@ -110,6 +111,9 @@ export class WebSocketReconnector extends EventEmitter2 {
     this._instance.removeAllListeners()
     this.emit('close')
     this._instance.close()
+
+    if (this._openTimer) clearTimeout(this._openTimer)
+    if (this._clearTryTimer) clearTimeout(this._clearTryTimer)
   }
 
   /**
@@ -122,7 +126,7 @@ export class WebSocketReconnector extends EventEmitter2 {
     debug.debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._intervals[this._tries]}}`)
     this._connected = false
     this._instance.removeAllListeners()
-    setTimeout(() => {
+    this._openTimer = setTimeout(() => {
       void this.open(this._url)
     }, this._intervals[this._tries])
     this._tries = Math.min(this._tries + 1, this._intervals.length - 1)

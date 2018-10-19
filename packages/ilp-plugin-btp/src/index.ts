@@ -397,12 +397,15 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
       this._ws.on('open', async () => {
         this._log.trace('connected to server')
-        await this._call('', {
+        this._call('', {
           type: BtpPacket.TYPE_MESSAGE,
           requestId: await _requestId(),
           data: { protocolData }
+        }).then(() => {
+          this._emitConnect()
+        }).catch((err) => {
+          this._log.error('error authenticating btp connection', err.message)
         })
-        this._emitConnect()
       })
 
       // CAUTION: Do not delete the following two lines, they have the side-effect
@@ -418,9 +421,15 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     }
 
     await new Promise((resolve, reject) => {
-      this.once('_first_time_connect', resolve)
-      this.once('disconnect', () =>
-        void reject(new Error('connection aborted')))
+      const onDisconnect = () => {
+        if (this._ws) this._ws.close()
+        reject(new Error('connection aborted'))
+      }
+      this.once('disconnect', onDisconnect)
+      this.once('_first_time_connect', () => {
+        this.removeListener('disconnect', onDisconnect)
+        resolve()
+      })
     })
 
     /* To be overriden. */

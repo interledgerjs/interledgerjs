@@ -141,6 +141,20 @@ describe('BtpPlugin', function () {
       }, /account\/token must be passed in via constructor or uri, but not both/)
     })
 
+    it('throws if the client auth is incorrect', async function () {
+      this.client = new Plugin({ server: 'btp+ws://bob:wrong_secret@localhost:9000' })
+      await Promise.all([
+        this.server.connect(),
+        this.client.connect()
+      ]).then(() => {
+        assert(false)
+      }).catch((err) => {
+        assert.equal(err.message, 'connection aborted')
+      })
+      assert.strictEqual(this.server.isConnected(), false)
+      assert.strictEqual(this.client.isConnected(), false)
+    })
+
     it('connects the client and server', async function () {
       this.client = new Plugin({
         server: 'btp+ws://localhost:9000',
