@@ -40,7 +40,7 @@ export const serializeEnvelope = (type: number, contents: Buffer) => {
 
 export const deserializeEnvelope = (binary: Buffer) => {
   const envelopeReader = Reader.from(binary)
-  const type = envelopeReader.readUInt8()
+  const type = envelopeReader.readUInt8Number()
   const contents = envelopeReader.readVarOctetString()
 
   return { type, contents }
@@ -60,11 +60,11 @@ export interface IlpPrepare {
 }
 
 export const serializeIlpPrepare = (json: IlpPrepare) => {
-  assert(json.amount && typeof json.amount === 'string', 'amount must be a string')
+  assert(json.amount && typeof (json as Partial<IlpPrepare>).amount === 'string', 'amount must be a string')
   assert(Buffer.isBuffer(json.executionCondition) &&
     json.executionCondition.length === 32, 'executionCondition must be a 32-byte buffer')
   assert(json.expiresAt && json.expiresAt instanceof Date, 'expiresAt must be a Date')
-  assert(typeof json.destination === 'string', 'destination is required')
+  assert(typeof (json as Partial<IlpPrepare>).destination === 'string', 'destination is required')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
 
   const writer = new Writer()
@@ -88,8 +88,8 @@ export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
   }
 
   const reader = Reader.from(contents)
-  const highBits = reader.readUInt32()
-  const lowBits = reader.readUInt32()
+  const highBits = reader.readUInt32Number()
+  const lowBits = reader.readUInt32Number()
   const amount = Long.fromBits(+lowBits, +highBits, true).toString()
   const expiresAt = interledgerTimeToDate(reader.read(INTERLEDGER_TIME_LENGTH).toString('ascii'))
   const executionCondition = reader.read(32)
@@ -149,9 +149,9 @@ export interface IlpReject {
 }
 
 export const serializeIlpReject = (json: IlpReject) => {
-  assert(json.code && typeof json.code === 'string', 'code must be a string')
-  assert(typeof json.triggeredBy === 'string', 'triggeredBy must be a string')
-  assert(typeof json.message === 'string', 'message must be a string')
+  assert(json.code && typeof (json as Partial<IlpReject>).code === 'string', 'code must be a string')
+  assert(typeof (json as Partial<IlpReject>).triggeredBy === 'string', 'triggeredBy must be a string')
+  assert(typeof (json as Partial<IlpReject>).message === 'string', 'message must be a string')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
 
   const writer = new Writer()
