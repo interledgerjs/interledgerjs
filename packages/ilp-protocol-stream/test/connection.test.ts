@@ -797,6 +797,41 @@ describe('Connection', function () {
       clock.restore()
     })
 
+    it('should establish the exchange rate despite T04 errors', async function () {
+      this.clientPlugin.exchangeRate = 1
+      this.clientPlugin.maxAmount = 100000
+      const t04RejectPacket = IlpPacket.serializeIlpReject({
+        code: 'T04',
+        message: 'Insufficient Liquidity Error',
+        data: Buffer.alloc(0),
+        triggeredBy: 'test.connector'
+      })
+
+      const mySendData = async (data: Buffer): Promise<Buffer> => {
+        const packetData = IlpPacket.deserializeIlpPrepare(data)
+        const packetAmount = Number(packetData.amount)
+        if (Number(packetData.amount) > 200) return t04RejectPacket
+        return await realSendData.call(this.clientPlugin, data)
+      }
+
+      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
+        .callsFake(mySendData)
+
+      const serverPromise = this.server.acceptConnection()
+      const clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
+
+      const serverConn = await serverPromise
+      serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(10000)
+      })
+      const stream = clientConn.createStream()
+      await stream.sendTotal(200, {timeout: 99999999})
+    })
+
     it('should stop trying to connect if it keeps getting temporary errors', async function () {
       const clock = sinon.useFakeTimers({
         toFake: ['setTimeout']

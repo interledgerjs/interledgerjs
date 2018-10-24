@@ -1086,13 +1086,17 @@ export class Connection extends EventEmitter {
 
     // Figure out which test packet discovered the exchange rate with the most precision and gather packet error codes
     const { maxDigits, exchangeRate, packetErrors } = results.reduce<any>(({ maxDigits, exchangeRate, packetErrors }, result, index) => {
+      const sourceAmount = testPacketAmounts[index]
       if (result && (result as IlpPacket.IlpReject).code) {
-        packetErrors.push((result as IlpPacket.IlpReject).code)
+        packetErrors.push({
+          sourceAmount: sourceAmount,
+          code: (result as IlpPacket.IlpReject).code
+        })
       }
       if (result && (result as Packet).prepareAmount) {
         const prepareAmount = (result as Packet).prepareAmount
-        const exchangeRate = prepareAmount.dividedBy(testPacketAmounts[index])
-        this.log.debug(`sending test packet of ${testPacketAmounts[index]} delivered ${prepareAmount} (exchange rate: ${exchangeRate})`)
+        const exchangeRate = prepareAmount.dividedBy(sourceAmount)
+        this.log.debug(`sending test packet of ${sourceAmount} delivered ${prepareAmount} (exchange rate: ${exchangeRate})`)
         if (prepareAmount.precision(true) >= maxDigits) {
           return {
             maxDigits: prepareAmount.precision(true),
@@ -1138,15 +1142,17 @@ export class Connection extends EventEmitter {
         return
       }
 
-      // Find the smallest packet amount we tried in case we ran into Txx errors
-      const smallestPacketAmount = testPacketAmounts.reduce((min: any, amount: any) => BigNumber.min(min, new BigNumber(amount)), new BigNumber(Infinity))
       // If we get here the first volley failed, try new volley using all unique packet amounts based on the max packets
       testPacketAmounts = maxPacketAmounts
         .filter((amount: any) => !amount.isEqualTo(new BigNumber(Infinity)))
         .reduce((acc: any, curr: any) => [...new Set([...acc, curr.toString()])], [])
 
       // Check for any Txx Errors
-      if (packetErrors.some((code: string) => code[0] === 'T')) {
+      if (packetErrors.some((error: any) => error.code[0] === 'T')) {
+        // Find the smallest packet amount we tried in case we ran into Txx errors
+        const smallestPacketAmount = packetErrors.reduce((min: BigNumber, error: any) => {
+          return BigNumber.min(min, new BigNumber(error.sourceAmount))
+        }, new BigNumber(Infinity))
         const reducedPacketAmount = smallestPacketAmount.minus(smallestPacketAmount.dividedToIntegerBy(3))
         this.log.debug(`got Txx error(s), waiting ${retryDelay}ms and reducing packet amount to ${reducedPacketAmount} before sending another test packet`)
         testPacketAmounts = [...testPacketAmounts, reducedPacketAmount]
