@@ -34,8 +34,15 @@ export function generateRandomCondition () {
   return crypto.randomBytes(32)
 }
 
-export function generateFulfillment (sharedSecret: Buffer, data: Buffer) {
-  const fulfillmentKey = hmac(sharedSecret, FULFILLMENT_GENERATION_STRING)
+export function generatePskEncryptionKey (sharedSecret: Buffer) {
+  return hmac(sharedSecret, ENCRYPTION_KEY_STRING)
+}
+
+export function generateFulfillmentKey (sharedSecret: Buffer) {
+  return hmac(sharedSecret, FULFILLMENT_GENERATION_STRING)
+}
+
+export function generateFulfillment (fulfillmentKey: Buffer, data: Buffer) {
   const fulfillment = hmac(fulfillmentKey, data)
   return fulfillment
 }
@@ -46,10 +53,8 @@ export function hash (preimage: Buffer) {
   return h.digest()
 }
 
-export function encrypt (sharedSecret: Buffer, ...buffers: Buffer[]): Buffer {
+export function encrypt (pskEncryptionKey: Buffer, ...buffers: Buffer[]): Buffer {
   const iv = crypto.randomBytes(IV_LENGTH)
-  // TODO only generate the key once per connection
-  const pskEncryptionKey = hmac(sharedSecret, ENCRYPTION_KEY_STRING)
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, iv)
 
   const ciphertext = []
@@ -62,10 +67,8 @@ export function encrypt (sharedSecret: Buffer, ...buffers: Buffer[]): Buffer {
   return Buffer.concat(ciphertext)
 }
 
-export function decrypt (sharedSecret: Buffer, data: Buffer): Buffer {
+export function decrypt (pskEncryptionKey: Buffer, data: Buffer): Buffer {
   assert(data.length > 0, 'cannot decrypt empty buffer')
-  // TODO only generate the key once per connection
-  const pskEncryptionKey = hmac(sharedSecret, ENCRYPTION_KEY_STRING)
   const nonce = data.slice(0, IV_LENGTH)
   const tag = data.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
   const encrypted = data.slice(IV_LENGTH + AUTH_TAG_LENGTH)

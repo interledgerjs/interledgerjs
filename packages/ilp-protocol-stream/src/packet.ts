@@ -92,10 +92,10 @@ export class Packet {
     this.frames = frames
   }
 
-  static decryptAndDeserialize (sharedSecret: Buffer, buffer: Buffer): Packet {
+  static decryptAndDeserialize (pskEncryptionKey: Buffer, buffer: Buffer): Packet {
     let decrypted: Buffer
     try {
-      decrypted = decrypt(sharedSecret, buffer)
+      decrypted = decrypt(pskEncryptionKey, buffer)
     } catch (err) {
       throw new Error(`Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key`)
     }
@@ -124,13 +124,13 @@ export class Packet {
     return new Packet(sequence, ilpPacketType, packetAmount, frames)
   }
 
-  serializeAndEncrypt (sharedSecret: Buffer, padPacketToSize?: number): Buffer {
+  serializeAndEncrypt (pskEncryptionKey: Buffer, padPacketToSize?: number): Buffer {
     const serialized = this._serialize()
 
     // Pad packet to max data size, if desired
     if (padPacketToSize !== undefined) {
       const paddingSize = padPacketToSize - ENCRYPTION_OVERHEAD - serialized.length
-      const args = [sharedSecret, serialized]
+      const args = [pskEncryptionKey, serialized]
       for (let i = 0; i < Math.floor(paddingSize / 32); i++) {
         args.push(ZERO_BYTES)
       }
@@ -138,7 +138,7 @@ export class Packet {
       return encrypt.apply(null, args)
     }
 
-    return encrypt(sharedSecret, serialized)
+    return encrypt(pskEncryptionKey, serialized)
   }
 
   /** @private */
