@@ -502,6 +502,25 @@ describe('Writer', function () {
       assert.equal(result.toString('hex'), '820100' + buffer.toString('hex'))
     })
 
+    it('should write another Writer', function () {
+      const a = new Writer()
+
+      const buffer = new Buffer(256)
+      buffer.fill(0xb0)
+      a.writeVarOctetString(buffer)
+
+      const b = new Writer()
+      b.writeVarOctetString(buffer)
+
+      a.write(b)
+
+      const result = a.getBuffer()
+
+      assert.equal(result.length, 259 * 2)
+      assert.equal(result.toString('hex'), '820100' + buffer.toString('hex') + '820100' + buffer.toString('hex'))
+
+    })
+
     it('when writing a non-buffer, should throw', function () {
       const writer = new Writer()
 
@@ -571,6 +590,22 @@ describe('Writer', function () {
 
       assert.equal(result.length, 256)
       assert.equal(result.toString('hex'), buffer.toString('hex'))
+    })
+
+    it('should write another writer', function () {
+      const a = new Writer()
+      const buffer = Buffer.alloc(256)
+      a.write(buffer)
+
+      const b = new Writer()
+      b.write(buffer)
+
+      a.write(b)
+
+      const result = a.getBuffer()
+
+      assert.equal(result.length, 256 * 2)
+      assert.equal(result.toString('hex'), buffer.toString('hex') + buffer.toString('hex'))
     })
   })
 
