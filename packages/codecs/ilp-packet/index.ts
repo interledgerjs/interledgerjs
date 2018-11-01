@@ -31,7 +31,7 @@ export const errorToReject = (address: string, error: IlpErrorClass) => {
   })
 }
 
-export const serializeEnvelope = (type: number, contents: Buffer) => {
+export const serializeEnvelope = (type: number, contents: Writer) => {
   const writer = new Writer()
   writer.writeUInt8(type)
   writer.writeVarOctetString(contents)
@@ -77,7 +77,7 @@ export const serializeIlpPrepare = (json: IlpPrepare) => {
   writer.writeVarOctetString(Buffer.from(json.destination, 'ascii'))
   writer.writeVarOctetString(json.data)
 
-  return serializeEnvelope(Type.TYPE_ILP_PREPARE, writer.getBuffer())
+  return serializeEnvelope(Type.TYPE_ILP_PREPARE, writer)
 }
 
 export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
@@ -119,7 +119,7 @@ export const serializeIlpFulfill = (json: IlpFulfill) => {
   writer.write(json.fulfillment)
   writer.writeVarOctetString(json.data)
 
-  return serializeEnvelope(Type.TYPE_ILP_FULFILL, writer.getBuffer())
+  return serializeEnvelope(Type.TYPE_ILP_FULFILL, writer)
 }
 
 export const deserializeIlpFulfill = (binary: Buffer): IlpFulfill => {
@@ -167,7 +167,7 @@ export const serializeIlpReject = (json: IlpReject) => {
   writer.writeVarOctetString(Buffer.from(json.message, 'utf8'))
   writer.writeVarOctetString(json.data || Buffer.alloc(0))
 
-  return serializeEnvelope(Type.TYPE_ILP_REJECT, writer.getBuffer())
+  return serializeEnvelope(Type.TYPE_ILP_REJECT, writer)
 }
 
 export const deserializeIlpReject = (binary: Buffer): IlpReject => {
