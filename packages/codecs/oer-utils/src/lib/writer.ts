@@ -196,29 +196,32 @@ class Writer {
    *
    * @param buffer Contents of the octet string.
    */
-  writeVarOctetString (buffer: Buffer): void {
-    if (!Buffer.isBuffer(buffer)) {
+  writeVarOctetString (buffer: Buffer | Writer): void {
+    if (Buffer.isBuffer(buffer)) {
+      const MSB = 0x80
+
+      if (buffer.length <= 127) {
+        // For buffers shorter than 128 bytes, we simply prefix the length as a
+        // single byte.
+        this.writeUInt8(buffer.length)
+      } else {
+        // For buffers longer than 128 bytes, we first write a single byte
+        // containing the length of the length in bytes, with the most significant
+        // bit set.
+        const lengthOfLength = Math.ceil(buffer.length.toString(2).length / 8)
+        this.writeUInt8(MSB | lengthOfLength)
+
+        // Then we write the length of the buffer in that many bytes.
+        this.writeUInt(buffer.length, lengthOfLength)
+      }
+
+      this.write(buffer)
+    } else if (buffer instanceof Writer) {
+      buffer.prependLengthPrefix()
+      this.write(buffer)
+    } else {
       throw new TypeError('Expects a buffer')
     }
-
-    const MSB = 0x80
-
-    if (buffer.length <= 127) {
-      // For buffers shorter than 128 bytes, we simply prefix the length as a
-      // single byte.
-      this.writeUInt8(buffer.length)
-    } else {
-      // For buffers longer than 128 bytes, we first write a single byte
-      // containing the length of the length in bytes, with the most significant
-      // bit set.
-      const lengthOfLength = Math.ceil(buffer.length.toString(2).length / 8)
-      this.writeUInt8(MSB | lengthOfLength)
-
-      // Then we write the length of the buffer in that many bytes.
-      this.writeUInt(buffer.length, lengthOfLength)
-    }
-
-    this.write(buffer)
   }
 
   /**
@@ -259,8 +262,12 @@ class Writer {
    *
    * @param buffer Bytes to write.
    */
-  write (buffer: Buffer): void {
-    this.components.push(buffer)
+  write (buffer: Buffer | Writer): void {
+    if (Buffer.isBuffer(buffer)) {
+      this.components.push(buffer)
+    } else {
+      this.components = this.components.concat(buffer.components)
+    }
   }
 
   /**
