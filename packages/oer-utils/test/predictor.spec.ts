@@ -192,6 +192,34 @@ describe('Predictor', function () {
     })
   })
 
+  describe('prependLengthPrefix', function () {
+    it('should calculate the correct length for an empty buffer', function () {
+      const predictor = new Predictor()
+
+      predictor.prependLengthPrefix()
+
+      assert.equal(predictor.getSize(), 1)
+    })
+
+    it('should calculate the correct length for a short buffer', function () {
+      const predictor = new Predictor()
+
+      predictor.write(Buffer.alloc(10))
+      predictor.prependLengthPrefix()
+
+      assert.equal(predictor.getSize(), 11)
+    })
+
+    it('should calculate the correct length for a long buffer', function () {
+      const predictor = new Predictor()
+
+      predictor.write(Buffer.alloc(256))
+      predictor.prependLengthPrefix()
+
+      assert.equal(predictor.getSize(), 259)
+    })
+  })
+
   describe('write', function () {
     it('should add the size of the buffer to the total size', function () {
       const predictor = new Predictor()

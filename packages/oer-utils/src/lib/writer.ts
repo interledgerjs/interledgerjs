@@ -222,6 +222,37 @@ class Writer {
   }
 
   /**
+   * Write the length prefix for the current buffer at the beginning of the buffer.
+   */
+  prependLengthPrefix (): void {
+    let length = 0
+    for (let buffer of this.components) {
+      length += buffer.length
+    }
+
+    const MSB = 0x80
+
+    if (length <= 127) {
+      // For buffers shorter than 128 bytes, we simply prefix the length as a
+      // single byte.
+      this.components.unshift(Buffer.from([length]))
+    } else {
+      // For buffers longer than 128 bytes, we first write a single byte
+      // containing the length of the length in bytes, with the most significant
+      // bit set.
+      const lengthOfLength = Math.ceil(length.toString(2).length / 8)
+
+      const lengthBuffer = new Writer()
+      lengthBuffer.writeUInt8(MSB | lengthOfLength)
+
+      // Then we write the length of the buffer in that many bytes.
+      lengthBuffer.writeUInt(length, lengthOfLength)
+
+      this.components.unshift(lengthBuffer.getBuffer())
+    }
+  }
+
+  /**
    * Write a series of raw bytes.
    *
    * Adds the given bytes to the output buffer.
