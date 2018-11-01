@@ -33,7 +33,7 @@
     "url": "git+https://github.com/interledgerjs/ilp-protocol-stream.git"
   },
   "dependencies": {
-    "@types/node": "^10.7.1",
+    "@types/node": "^10.12.2",
     "bignumber.js": "^7.2.1",
     "debug": "^4.0.0",
     "ilp-logger": "^1.1.2",
