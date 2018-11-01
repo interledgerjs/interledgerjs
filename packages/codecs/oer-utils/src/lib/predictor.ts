@@ -75,6 +75,22 @@ class Predictor {
   }
 
   /**
+   * Skip bytes for the length prefix.
+   */
+  prependLengthPrefix (): void {
+    const length = this.size
+
+    // Skip initial byte
+    this.skip(1)
+
+    // Skip separate length field if there is one
+    if (length > 127) {
+      const lengthOfLength = Math.ceil(length.toString(2).length / 8)
+      this.skip(lengthOfLength)
+    }
+  }
+
+  /**
    * Pretend to write a series of bytes.
    *
    * @param {Buffer} Bytes to write.

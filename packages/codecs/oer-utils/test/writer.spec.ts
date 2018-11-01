@@ -512,6 +512,38 @@ describe('Writer', function () {
     })
   })
 
+  describe('prependLengthPrefix', function () {
+    it('should work for an empty buffer', function () {
+      const writer = new Writer()
+
+      writer.prependLengthPrefix()
+
+      assert.equal(writer.getBuffer().toString('hex'), '00')
+    })
+
+    it('should write a length prefix for a buffer of length 1', function () {
+      const writer = new Writer()
+
+      writer.write(new Buffer('b0', 'hex'))
+      writer.prependLengthPrefix()
+
+      assert.equal(writer.getBuffer().toString('hex'), '01b0')
+    })
+
+    it('should write a buffer of length 256', function () {
+      const writer = new Writer()
+
+      const buffer = new Buffer(256)
+      buffer.fill(0xb0)
+      writer.write(buffer)
+      writer.prependLengthPrefix()
+      const result = writer.getBuffer()
+
+      assert.equal(result.length, 259)
+      assert.equal(result.toString('hex'), '820100' + buffer.toString('hex'))
+    })
+  })
+
   describe('write', function () {
     it('should write an empty octet string', function () {
       const writer = new Writer()
