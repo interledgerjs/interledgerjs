@@ -463,6 +463,21 @@ describe('Writer', function () {
       assert.equal(result.toString('hex'), buffer.toString('hex'))
     })
 
+    it('should accept another Writer', function () {
+      const a = new Writer()
+
+      const buffer = new Buffer(256)
+      buffer.fill(0xb0)
+
+      const b = new Writer()
+      b.writeOctetString(buffer, 256)
+      a.writeOctetString(b, 256)
+      const result = a.getBuffer()
+
+      assert.equal(result.length, 256)
+      assert.equal(result.toString('hex'), buffer.toString('hex'))
+    })
+
     it('when writing an octet string of the wrong length, should throw', function () {
       const writer = new Writer()
 

@@ -160,9 +160,28 @@ describe('Predictor', function () {
     it('should increment by the given length of the octet string', function () {
       const predictor = new Predictor()
 
-      predictor.writeOctetString(new Buffer(10), 5)
+      predictor.writeOctetString(Buffer.alloc(10), 10)
+
+      assert.equal(predictor.getSize(), 10)
+    })
+
+    it('should accept a Writer', function () {
+      const predictor = new Predictor()
+      const writer = new Writer()
+
+      writer.writeOctetString(Buffer.alloc(5), 5)
+      predictor.writeOctetString(writer, 5)
 
       assert.equal(predictor.getSize(), 5)
+    })
+
+    it('when writing an octet string of the wrong length, should throw', function () {
+      const predictor = new Writer()
+
+      assert.throws(
+        () => predictor.writeOctetString(new Buffer('02', 'hex'), 2),
+        'Incorrect length for octet string (actual: 1, expected: 2)'
+      )
     })
   })
 
@@ -187,6 +206,16 @@ describe('Predictor', function () {
       const predictor = new Predictor()
 
       predictor.writeVarOctetString(new Buffer(256))
+
+      assert.equal(predictor.getSize(), 259)
+    })
+
+    it('should accept a Writer', function () {
+      const predictor = new Predictor()
+      const writer = new Writer()
+
+      writer.write(Buffer.alloc(256))
+      predictor.writeVarOctetString(writer)
 
       assert.equal(predictor.getSize(), 259)
     })
@@ -227,6 +256,16 @@ describe('Predictor', function () {
       predictor.write(new Buffer(15))
 
       assert.equal(predictor.getSize(), 15)
+    })
+
+    it('should accept a Writer', function () {
+      const predictor = new Predictor()
+      const writer = new Writer()
+
+      writer.write(Buffer.alloc(256))
+      predictor.write(writer)
+
+      assert.equal(predictor.getSize(), 256)
     })
   })
 
