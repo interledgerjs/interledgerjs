@@ -32,6 +32,14 @@ class Writer {
     this.components = []
   }
 
+  get length (): number {
+    let length = 0
+    for (let component of this.components) {
+      length += component.length
+    }
+    return length
+  }
+
   /**
    * Write a fixed-length unsigned integer to the stream.
    *
@@ -181,7 +189,7 @@ class Writer {
    * @param buffer Data to write.
    * @param length Length of data according to the format.
    */
-  writeOctetString (buffer: Buffer, length: number): void {
+  writeOctetString (buffer: Buffer | Writer, length: number): void {
     if (buffer.length !== length) {
       throw new Error('Incorrect length for octet string (actual: ' +
         buffer.length + ', expected: ' + length + ')')
@@ -228,10 +236,7 @@ class Writer {
    * Write the length prefix for the current buffer at the beginning of the buffer.
    */
   prependLengthPrefix (): void {
-    let length = 0
-    for (let buffer of this.components) {
-      length += buffer.length
-    }
+    let length = this.length
 
     const MSB = 0x80
 
@@ -251,7 +256,7 @@ class Writer {
       // Then we write the length of the buffer in that many bytes.
       lengthBuffer.writeUInt(length, lengthOfLength)
 
-      this.components.unshift(lengthBuffer.getBuffer())
+      this.components.unshift(...lengthBuffer.components)
     }
   }
 

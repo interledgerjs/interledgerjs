@@ -1,5 +1,6 @@
 import { isInteger } from './util'
 import BigNumber from 'bignumber.js'
+import Writer from './writer'
 
 /**
  * Writable stream which tracks the amount of data written.
@@ -14,6 +15,10 @@ class Predictor {
   constructor () {
     this.size = 0
     this.components = []
+  }
+
+  get length (): number {
+    return this.size
   }
 
   /**
@@ -63,14 +68,18 @@ class Predictor {
   /**
    * Skip bytes for a fixed-length octet string.
    */
-  writeOctetString (buffer: Buffer, length: number) {
+  writeOctetString (buffer: Buffer | Writer, length: number) {
+    if (buffer.length !== length) {
+      throw new Error('Incorrect length for octet string (actual: ' +
+        buffer.length + ', expected: ' + length + ')')
+    }
     this.skip(length)
   }
 
   /**
    * Calculate the size of a variable-length octet string.
    */
-  writeVarOctetString (buffer: Buffer) {
+  writeVarOctetString (buffer: Buffer | Writer) {
     this.skipVarOctetString(buffer.length)
   }
 
@@ -95,7 +104,7 @@ class Predictor {
    *
    * @param {Buffer} Bytes to write.
    */
-  write (bytes: Buffer) {
+  write (bytes: Buffer | Writer) {
     this.size += bytes.length
   }
 
