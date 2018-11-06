@@ -199,7 +199,9 @@ export abstract class BaseFrame {
       } else if (typeof this[prop] === 'string') {
         contents.writeVarOctetString(Buffer.from(this[prop], 'utf8'))
       } else if (Buffer.isBuffer(this[prop])) {
-        contents.writeVarOctetString(this[prop])
+        const bufferWriter = new Writer()
+        bufferWriter.write(this[prop])
+        contents.writeVarOctetString(bufferWriter)
       } else if (this[prop] instanceof BigNumber) {
         contents.writeVarUInt(this[prop])
       } else {
@@ -207,8 +209,7 @@ export abstract class BaseFrame {
       }
     }
 
-    // TODO don't copy data again
-    writer.writeVarOctetString(contents.getBuffer())
+    writer.writeVarOctetString(contents)
     return writer
   }
 
