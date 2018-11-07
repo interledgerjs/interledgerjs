@@ -124,7 +124,7 @@ describe('Server', function () {
 
     it('should throw an error if the connectionTag includes characters that cannot go into an ILP address', async function () {
       await this.server.listen()
-      assert.throws(() => this.server.generateAddressAndSecret('invalid\n'), 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", and "-"')
+      assert.throws(() => this.server.generateAddressAndSecret('invalid\n'), 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", "-", and "~"')
     })
   })
 

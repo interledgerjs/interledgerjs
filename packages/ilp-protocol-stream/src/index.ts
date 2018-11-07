@@ -8,7 +8,7 @@ import { Connection, ConnectionOpts } from './connection'
 import { Plugin } from './util/plugin-interface'
 require('source-map-support').install()
 
-const CONNECTION_ID_REGEX = /^[a-zA-Z0-9_-]+$/
+const CONNECTION_ID_REGEX = /^[a-zA-Z0-9~_-]+$/
 
 export { Connection } from './connection'
 export { DataAndMoneyStream } from './stream'
@@ -191,7 +191,7 @@ export class Server extends EventEmitter {
     let token = base64url(cryptoHelper.generateToken())
     if (connectionTag) {
       if (!CONNECTION_ID_REGEX.test(connectionTag)) {
-        throw new Error('connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", and "-"')
+        throw new Error('connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", "-", and "~"')
       }
       token = token + '~' + connectionTag
     }
