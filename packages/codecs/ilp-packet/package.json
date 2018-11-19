@@ -1,6 +1,6 @@
 {
   "name": "ilp-packet",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "description": "Module for parsing and serializing ILP packets",
   "main": "dist/index.js",
   "typings": "dist/index",
