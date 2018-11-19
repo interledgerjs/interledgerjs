@@ -46,9 +46,18 @@ export const deserializeEnvelope = (binary: Buffer) => {
   return { type, contents }
 }
 
-export interface IlpPacket {
-  type: Type,
-  data: any
+export type IlpPacket = {
+  type: Type.TYPE_ILP_PREPARE,
+  typeString: 'ilp_prepare',
+  data: IlpPrepare
+} | {
+  type: Type.TYPE_ILP_FULFILL,
+  typeString: 'ilp_fulfill',
+  data: IlpFulfill
+} | {
+  type: Type.TYPE_ILP_REJECT,
+  typeString: 'ilp_reject',
+  data: IlpReject
 }
 
 export interface IlpPrepare {
@@ -200,28 +209,26 @@ export const serializeIlpPacket = (obj: IlpPacket) => {
   }
 }
 
-export const deserializeIlpPacket = (binary: Buffer) => {
-  let packet
-  let typeString
-  switch (binary[0]) {
-    case Type.TYPE_ILP_PREPARE:
-      packet = deserializeIlpPrepare(binary)
-      typeString = 'ilp_prepare'
-      break
-    case Type.TYPE_ILP_FULFILL:
-      packet = deserializeIlpFulfill(binary)
-      typeString = 'ilp_fulfill'
-      break
-    case Type.TYPE_ILP_REJECT:
-      packet = deserializeIlpReject(binary)
-      typeString = 'ilp_reject'
-      break
-    default:
-      throw new Error('Packet has invalid type')
-  }
-  return {
-    type: binary[0],
-    typeString,
-    data: packet
+export const deserializeIlpPacket = (binary: Buffer): IlpPacket => {
+  if (binary[0] === Type.TYPE_ILP_PREPARE) {
+    return {
+      type: binary[0],
+      typeString: 'ilp_prepare',
+      data: deserializeIlpPrepare(binary)
+    }
+  } else if (binary[0] === Type.TYPE_ILP_FULFILL) {
+    return {
+      type: binary[0],
+      typeString: 'ilp_fulfill',
+      data: deserializeIlpFulfill(binary)
+    }
+  } else if (binary[0] === Type.TYPE_ILP_REJECT) {
+    return {
+      type: binary[0],
+      typeString: 'ilp_reject',
+      data: deserializeIlpReject(binary)
+    }
+  } else {
+    throw new Error('Packet has invalid type')
   }
 }
