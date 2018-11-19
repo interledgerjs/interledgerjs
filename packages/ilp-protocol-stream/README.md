@@ -17,14 +17,20 @@ The protocol allows a "client" and "server" to establish a bidirectional connect
 Requires Node >= v8.10.
 
 ```sh
-npm install --save ilp-protocol-stream
+npm install ilp-protocol-stream
 ```
 
 ## Usage
 
-See [example.js](./example.js) for a runnable example.
-
 These snippets assume you are running a local [`moneyd`](https://github.com/interledgerjs/moneyd-xrp).
+
+You'll need [`ilp-plugin`](https://github.com/interledgerjs/ilp-plugin) to run the example.
+
+```sh
+npm install ilp-plugin
+```
+
+See [example.js](./example.js) for a runnable example, or paste the snippets into your own node project below. You'll need to provide a means of getting the shared secret from Server to Client.
 
 **Client:**
 
