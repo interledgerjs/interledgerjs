@@ -48,15 +48,15 @@ export const deserializeEnvelope = (binary: Buffer) => {
 
 export type IlpPacket = {
   type: Type.TYPE_ILP_PREPARE,
-  typeString: 'ilp_prepare',
+  typeString?: 'ilp_prepare',
   data: IlpPrepare
 } | {
   type: Type.TYPE_ILP_FULFILL,
-  typeString: 'ilp_fulfill',
+  typeString?: 'ilp_fulfill',
   data: IlpFulfill
 } | {
   type: Type.TYPE_ILP_REJECT,
-  typeString: 'ilp_reject',
+  typeString?: 'ilp_reject',
   data: IlpReject
 }
 
