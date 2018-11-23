@@ -235,7 +235,7 @@ export const deserializeIlpPacket = (binary: Buffer): IlpPacket => {
 
 export type IlpPacketHander = (packet: IlpPrepare) => Promise<IlpReply>
 
-export type AnyIlpPacket = IlpPrepare | IlpFulfill | IlpReject
+export type IlpAny = IlpPrepare | IlpFulfill | IlpReject
 
 export type IlpReply = IlpFulfill | IlpReject
 
@@ -256,10 +256,22 @@ export const errorToIlpReject = (address: string, error: IlpErrorClass): IlpReje
   }
 }
 
-export function isFulfill (packet: IlpReply): packet is IlpFulfill {
-  return typeof packet['fulfillment'] !== 'undefined'
+export function isPrepare (packet: IlpAny): packet is IlpPrepare {
+  return typeof packet['amount'] === 'string' &&
+    typeof packet['expiresAt'] !== 'undefined' &&
+    typeof packet['destination'] === 'string' &&
+    Buffer.isBuffer(packet['executionCondition']) &&
+    Buffer.isBuffer(packet['data'])
 }
 
-export function isReject (packet: IlpReply): packet is IlpReject {
-  return typeof packet['code'] !== 'undefined'
+export function isFulfill (packet: IlpAny): packet is IlpFulfill {
+  return Buffer.isBuffer(packet['fulfillment']) &&
+    Buffer.isBuffer(packet['data'])
+}
+
+export function isReject (packet: IlpAny): packet is IlpReject {
+  return typeof packet['code'] === 'string' &&
+    typeof packet['triggeredBy'] === 'string' &&
+    typeof packet['message'] === 'string' &&
+    Buffer.isBuffer(packet['data'])
 }
