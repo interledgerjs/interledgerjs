@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es2015",
+    "target": "es2017",
     "module": "commonjs",
     "declaration": true,
     "noImplicitAny": true,
@@ -9,7 +9,15 @@
     "sourceMap": true,
     "inlineSources": true,
     "strictNullChecks": true,
-    "suppressImplicitAnyIndexErrors": true
-  }
+    "suppressImplicitAnyIndexErrors": true,
+    "outDir": "./build",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.spec.ts",
+  ]
 }
-  

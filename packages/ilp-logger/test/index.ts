@@ -1,5 +1,5 @@
 import 'mocha'
-import createLogger, { Logger } from '..'
+import createLogger, { Logger } from '../src'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
