@@ -1,5 +1,4 @@
 import * as debug from 'debug'
-require('source-map-support').install()
 
 export class Logger {
   public info: debug.IDebugger

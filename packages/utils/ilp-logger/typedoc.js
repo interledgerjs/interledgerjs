@@ -1,5 +1,5 @@
 module.exports = {
-  out: 'doc',
+  out: 'build/doc',
   excludePrivate: true,
   excludeProtected: true,
   excludeExternals: true,
