@@ -119,6 +119,24 @@ describe('Reader', function () {
       assert.isNumber(v)
       assert.equal(v, 16909060)
     })
+
+    it('should throw if asked to read a zero-length number', function () {
+      const reader = Reader.from(Buffer.from('01', 'hex'))
+
+      assert.throw(
+        () => reader.readUIntNumber(0),
+        'UInt length must be greater than zero'
+      )
+    })
+
+    it('should throw if asked to read a too-long number', function () {
+      const reader = Reader.from(Buffer.from('01020304050607', 'hex'))
+
+      assert.throw(
+        () => reader.readUIntNumber(7),
+        'Value does not fit a JS number without sacrificing precision'
+      )
+    })
   })
 
   describe('readUIntBigNum', function () {
@@ -376,6 +394,24 @@ describe('Reader', function () {
       assert.isNumber(v2)
       assert.equal(v1, -1)
       assert.equal(v2, 2)
+    })
+
+    it('should throw if asked to read a zero-length number', function () {
+      const reader = Reader.from(Buffer.from('01', 'hex'))
+
+      assert.throw(
+        () => reader.readIntNumber(0),
+        'Int length must be greater than zero'
+      )
+    })
+
+    it('should throw if asked to read a too-long number', function () {
+      const reader = Reader.from(Buffer.from('01020304050607', 'hex'))
+
+      assert.throw(
+        () => reader.readIntNumber(7),
+        'Value does not fit a JS number without sacrificing precision'
+      )
     })
   })
 

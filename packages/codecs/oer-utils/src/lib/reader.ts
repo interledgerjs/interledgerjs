@@ -83,12 +83,14 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   readUIntNumber (length: number): number {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
+    if (length < 1) {
+      throw new Error('UInt length must be greater than zero')
+    } else if (MAX_SAFE_BYTES < length) {
+      throw new Error('Value does not fit a JS number without sacrificing precision')
+    } else {
       const value = this.buffer.readUIntBE(this.cursor, length)
       this.cursor += length
       return value
-    } else {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
     }
   }
 
@@ -168,12 +170,14 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   readIntNumber (length: number): number {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
+    if (length < 1) {
+      throw new Error('Int length must be greater than zero')
+    } else if (MAX_SAFE_BYTES < length) {
+      throw new Error('Value does not fit a JS number without sacrificing precision')
+    } else {
       const value = this.buffer.readIntBE(this.cursor, length)
       this.cursor += length
       return value
-    } else {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
     }
   }
 
@@ -451,15 +455,15 @@ class Reader {
    * variable-length octet strings and integers.
    */
   readLengthPrefix (): number {
-    const length = this.readUInt8BigNum().toNumber()
+    const length = this.readUInt8Number()
 
     if (length & Reader.HIGH_BIT) {
       const lengthPrefixLength = length & Reader.LOWER_SEVEN_BITS
-      const actualLength = this.readUIntBigNum(lengthPrefixLength).toNumber()
+      const actualLength = lengthPrefixLength && this.readUIntNumber(lengthPrefixLength)
 
       // Reject lengths that could have been encoded with a shorter prefix
       const minLength = Math.max(128, 1 << ((lengthPrefixLength - 1) * 8))
-      if (actualLength < minLength) {
+      if (lengthPrefixLength === 0 || actualLength < minLength) {
         throw new ParseError('Length prefix encoding is not canonical: ' +
           actualLength + ' encoded in ' + lengthPrefixLength + ' bytes')
       }

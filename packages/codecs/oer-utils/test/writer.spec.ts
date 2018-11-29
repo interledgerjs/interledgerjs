@@ -14,6 +14,34 @@ describe('Writer', function () {
 
       assert.instanceOf(writer, Writer)
     })
+
+    it('should create a writer with an explicit capacity', function () {
+      const writer = new Writer(10)
+
+      assert.throws(
+        () => writer.write(Buffer.alloc(11)),
+        'writer cannot exceed capacity'
+      )
+    })
+
+    it('should create a writer with an explicit underlying buffer', function () {
+      const writer = new Writer(Buffer.alloc(10))
+
+      assert.throws(
+        () => writer.write(Buffer.alloc(11)),
+        'writer cannot exceed capacity'
+      )
+    })
+  })
+
+  describe('length', function () {
+    it('should return the size of the Writer', function () {
+      const writer = new Writer()
+
+      writer.write(new Buffer(15))
+
+      assert.equal(writer.length, 15)
+    })
   })
 
   describe('writeUInt', function () {
@@ -75,6 +103,12 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
     })
 
+    it('should write the largest possible number', function () {
+      const writer = new Writer()
+      writer.writeUInt(MAX_SAFE_INTEGER, 7)
+      assert.equal(writer.getBuffer().toString('hex'), '1fffffffffffff')
+    })
+
     it('when asked to write an integer outside of safe JavaScript range, should throw', function () {
       const writer = new Writer()
 
@@ -99,6 +133,14 @@ describe('Writer', function () {
       assert.throws(
         () => writer.writeUInt(false as any, 1),
         'UInt must be an integer'
+      )
+    })
+
+    it('when asked to write an BigNumber too large for the given length, should throw', function () {
+      const writer = new Writer()
+      assert.throws(
+        () => writer.writeUInt(new BigNumber('ffffffffffffffff', 16), 7),
+        'UInt 18446744073709551615 does not fit in 7 bytes'
       )
     })
   })
@@ -221,6 +263,14 @@ describe('Writer', function () {
         'Int must be an integer'
       )
     })
+
+    it('when asked to write an BigNumber too large for the given length, should throw', function () {
+      const writer = new Writer()
+      assert.throws(
+        () => writer.writeInt(new BigNumber('ffffffffffffffff', 16), 7),
+        'Int 18446744073709551615 does not fit in 7 bytes'
+      )
+    })
   })
 
   describe('writeVarUInt', function () {
@@ -272,6 +322,14 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '080100000000000000')
     })
 
+    it('should write larger numbers as Strings', function () {
+      const writer = new Writer()
+
+      writer.writeVarUInt(new BigNumber('0100000000000000', 16).toString())
+
+      assert.equal(writer.getBuffer().toString('hex'), '080100000000000000')
+    })
+
     it('when trying to write an unsafe integer, should throw', function () {
       const writer = new Writer()
 
@@ -311,7 +369,7 @@ describe('Writer', function () {
     it('should accept a buffer to write', function () {
       const writer = new Writer()
 
-      writer.writeVarUInt(new Buffer('010203040506070810', 'hex'))
+      writer.writeVarUInt(Buffer.from('010203040506070810', 'hex'))
 
       assert.equal(writer.getBuffer().toString('hex'), '09010203040506070810')
     })
@@ -428,7 +486,7 @@ describe('Writer', function () {
     it('should accept a buffer to write', function () {
       const writer = new Writer()
 
-      writer.writeVarInt(new Buffer('010203040506070810', 'hex'))
+      writer.writeVarInt(Buffer.from('010203040506070810', 'hex'))
 
       assert.equal(writer.getBuffer().toString('hex'), '09010203040506070810')
     })
@@ -438,7 +496,7 @@ describe('Writer', function () {
     it('should write an empty octet string', function () {
       const writer = new Writer()
 
-      writer.writeOctetString(new Buffer(0), 0)
+      writer.writeOctetString(Buffer.alloc(0), 0)
 
       assert.equal(writer.getBuffer().toString('hex'), '')
     })
@@ -446,7 +504,7 @@ describe('Writer', function () {
     it('should write an octet string of length 1', function () {
       const writer = new Writer()
 
-      writer.writeOctetString(new Buffer('02', 'hex'), 1)
+      writer.writeOctetString(Buffer.from('02', 'hex'), 1)
 
       assert.equal(writer.getBuffer().toString('hex'), '02')
     })
@@ -454,25 +512,9 @@ describe('Writer', function () {
     it('should write an octet string of length 256', function () {
       const writer = new Writer()
 
-      const buffer = new Buffer(256)
-      buffer.fill(0xb0)
+      const buffer = Buffer.alloc(256, 0xb0)
       writer.writeOctetString(buffer, 256)
       const result = writer.getBuffer()
-
-      assert.equal(result.length, 256)
-      assert.equal(result.toString('hex'), buffer.toString('hex'))
-    })
-
-    it('should accept another Writer', function () {
-      const a = new Writer()
-
-      const buffer = new Buffer(256)
-      buffer.fill(0xb0)
-
-      const b = new Writer()
-      b.writeOctetString(buffer, 256)
-      a.writeOctetString(b, 256)
-      const result = a.getBuffer()
 
       assert.equal(result.length, 256)
       assert.equal(result.toString('hex'), buffer.toString('hex'))
@@ -482,7 +524,7 @@ describe('Writer', function () {
       const writer = new Writer()
 
       assert.throws(
-        () => writer.writeOctetString(new Buffer('02', 'hex'), 2),
+        () => writer.writeOctetString(Buffer.from('02', 'hex'), 2),
         'Incorrect length for octet string (actual: 1, expected: 2)'
       )
     })
@@ -492,7 +534,7 @@ describe('Writer', function () {
     it('should write an empty buffer', function () {
       const writer = new Writer()
 
-      writer.writeVarOctetString(new Buffer(0))
+      writer.writeVarOctetString(Buffer.alloc(0))
 
       assert.equal(writer.getBuffer().toString('hex'), '00')
     })
@@ -500,7 +542,7 @@ describe('Writer', function () {
     it('should write a buffer of length 1', function () {
       const writer = new Writer()
 
-      writer.writeVarOctetString(new Buffer('b0', 'hex'))
+      writer.writeVarOctetString(Buffer.from('b0', 'hex'))
 
       assert.equal(writer.getBuffer().toString('hex'), '01b0')
     })
@@ -508,32 +550,12 @@ describe('Writer', function () {
     it('should write a buffer of length 256', function () {
       const writer = new Writer()
 
-      const buffer = new Buffer(256)
-      buffer.fill(0xb0)
+      const buffer = Buffer.alloc(256, 0xb0)
       writer.writeVarOctetString(buffer)
       const result = writer.getBuffer()
 
       assert.equal(result.length, 259)
       assert.equal(result.toString('hex'), '820100' + buffer.toString('hex'))
-    })
-
-    it('should write another Writer', function () {
-      const a = new Writer()
-
-      const buffer = new Buffer(256)
-      buffer.fill(0xb0)
-      a.writeVarOctetString(buffer)
-
-      const b = new Writer()
-      b.writeVarOctetString(buffer)
-
-      a.write(b)
-
-      const result = a.getBuffer()
-
-      assert.equal(result.length, 259 * 2)
-      assert.equal(result.toString('hex'), '820100' + buffer.toString('hex') + '820100' + buffer.toString('hex'))
-
     })
 
     it('when writing a non-buffer, should throw', function () {
@@ -546,20 +568,20 @@ describe('Writer', function () {
     })
   })
 
-  describe('prependLengthPrefix', function () {
-    it('should work for an empty buffer', function () {
+  describe('createVarOctetString', function () {
+    it('should write an empty buffer', function () {
       const writer = new Writer()
 
-      writer.prependLengthPrefix()
+      writer.createVarOctetString(0)
 
       assert.equal(writer.getBuffer().toString('hex'), '00')
     })
 
-    it('should write a length prefix for a buffer of length 1', function () {
+    it('should write a buffer of length 1', function () {
       const writer = new Writer()
 
-      writer.write(new Buffer('b0', 'hex'))
-      writer.prependLengthPrefix()
+      const content = writer.createVarOctetString(1)
+      content.write(Buffer.from('b0', 'hex'))
 
       assert.equal(writer.getBuffer().toString('hex'), '01b0')
     })
@@ -567,14 +589,39 @@ describe('Writer', function () {
     it('should write a buffer of length 256', function () {
       const writer = new Writer()
 
-      const buffer = new Buffer(256)
-      buffer.fill(0xb0)
-      writer.write(buffer)
-      writer.prependLengthPrefix()
+      const buffer = Buffer.alloc(256, 0xb0)
+      const content = writer.createVarOctetString(buffer.length)
+      content.write(buffer.slice(0, 100))
+      content.write(buffer.slice(100))
       const result = writer.getBuffer()
 
       assert.equal(result.length, 259)
       assert.equal(result.toString('hex'), '820100' + buffer.toString('hex'))
+    })
+
+    it('appends the octet string to existing data', function () {
+      const writer = new Writer()
+      writer.write(Buffer.from('b0', 'hex'))
+
+      const content = writer.createVarOctetString(1)
+      content.write(Buffer.from('b1', 'hex'))
+
+      assert.equal(writer.getBuffer().toString('hex'), 'b001b1')
+    })
+
+    it('should throw when length is negative', function () {
+      assert.throws(function () {
+        const writer = new Writer()
+        writer.createVarOctetString(-1)
+      }, 'length must be non-negative')
+    })
+
+    it('should throw when too much data is written', function () {
+      assert.throws(function () {
+        const writer = new Writer()
+        const content = writer.createVarOctetString(1)
+        content.write(Buffer.alloc(2, 'b0', 'hex'))
+      }, 'writer cannot exceed capacity')
     })
   })
 
@@ -582,7 +629,7 @@ describe('Writer', function () {
     it('should write an empty octet string', function () {
       const writer = new Writer()
 
-      writer.write(new Buffer(0))
+      writer.write(Buffer.alloc(0))
 
       assert.equal(writer.getBuffer().toString('hex'), '')
     })
@@ -590,7 +637,7 @@ describe('Writer', function () {
     it('should write an octet string of length 1', function () {
       const writer = new Writer()
 
-      writer.write(new Buffer('02', 'hex'))
+      writer.write(Buffer.from('02', 'hex'))
 
       assert.equal(writer.getBuffer().toString('hex'), '02')
     })
@@ -598,29 +645,12 @@ describe('Writer', function () {
     it('should write an octet string of length 256', function () {
       const writer = new Writer()
 
-      const buffer = new Buffer(256)
-      buffer.fill(0xb0)
+      const buffer = Buffer.alloc(256, 0xb0)
       writer.write(buffer)
       const result = writer.getBuffer()
 
       assert.equal(result.length, 256)
       assert.equal(result.toString('hex'), buffer.toString('hex'))
-    })
-
-    it('should write another writer', function () {
-      const a = new Writer()
-      const buffer = Buffer.alloc(256)
-      a.write(buffer)
-
-      const b = new Writer()
-      b.write(buffer)
-
-      a.write(b)
-
-      const result = a.getBuffer()
-
-      assert.equal(result.length, 256 * 2)
-      assert.equal(result.toString('hex'), buffer.toString('hex') + buffer.toString('hex'))
     })
   })
 

@@ -1,6 +1,12 @@
-import { isInteger } from './util'
+import {
+  isInteger,
+  getUIntBufferSize,
+  getIntBufferSize,
+  getBigUIntBufferSize,
+  getBigIntBufferSize
+} from './util'
 import BigNumber from 'bignumber.js'
-import Writer from './writer'
+import { WriterInterface } from './writer'
 
 /**
  * Writable stream which tracks the amount of data written.
@@ -8,13 +14,11 @@ import Writer from './writer'
  * This class acts as a writable stream, but only does the minimum amount of
  * work necessary to count/predict the output size.
  */
-class Predictor {
-  size: number
-  components: Buffer[]
+class Predictor implements WriterInterface {
+  private size: number
 
   constructor () {
     this.size = 0
-    this.components = []
   }
 
   get length (): number {
@@ -42,13 +46,25 @@ class Predictor {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     }
-    const value = new BigNumber(_value)
 
-    if (value.isNegative()) {
-      throw new Error('UInt must be positive')
+    let lengthOfValue
+    if (typeof _value === 'number') {
+      if (_value < 0) {
+        throw new Error('UInt must be positive')
+      }
+      // Fast path for numbers.
+      lengthOfValue = getUIntBufferSize(_value)
+    } else {
+      // Don't clone an existing BigNumber, since it will not be modified.
+      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
+
+      if (value.isNegative()) {
+        throw new Error('UInt must be positive')
+      }
+
+      lengthOfValue = getBigUIntBufferSize(value)
     }
 
-    const lengthOfValue = Math.ceil(value.toString(16).length / 2)
     this.skipVarOctetString(lengthOfValue)
   }
 
@@ -59,16 +75,22 @@ class Predictor {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     }
-    const value = new BigNumber(_value)
 
-    const lengthOfValue = Math.ceil(value.toString(16).length / 2)
+    let lengthOfValue
+    if (typeof _value === 'number') {
+      lengthOfValue = getIntBufferSize(_value)
+    } else {
+      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
+      lengthOfValue = getBigIntBufferSize(value)
+    }
+
     this.skipVarOctetString(lengthOfValue)
   }
 
   /**
    * Skip bytes for a fixed-length octet string.
    */
-  writeOctetString (buffer: Buffer | Writer, length: number) {
+  writeOctetString (buffer: Buffer, length: number) {
     if (buffer.length !== length) {
       throw new Error('Incorrect length for octet string (actual: ' +
         buffer.length + ', expected: ' + length + ')')
@@ -77,26 +99,18 @@ class Predictor {
   }
 
   /**
-   * Calculate the size of a variable-length octet string.
+   * Skip bytes for a variable-length octet string.
    */
-  writeVarOctetString (buffer: Buffer | Writer) {
+  writeVarOctetString (buffer: Buffer) {
     this.skipVarOctetString(buffer.length)
   }
 
   /**
-   * Skip bytes for the length prefix.
+   * Skip bytes for a variable-length octet string.
    */
-  prependLengthPrefix (): void {
-    const length = this.size
-
-    // Skip initial byte
-    this.skip(1)
-
-    // Skip separate length field if there is one
-    if (length > 127) {
-      const lengthOfLength = Math.ceil(length.toString(2).length / 8)
-      this.skip(lengthOfLength)
-    }
+  createVarOctetString (length: number): WriterInterface {
+    this.skipVarOctetString(length)
+    return new Predictor()
   }
 
   /**
@@ -104,7 +118,7 @@ class Predictor {
    *
    * @param {Buffer} Bytes to write.
    */
-  write (bytes: Buffer | Writer) {
+  write (bytes: Buffer) {
     this.size += bytes.length
   }
 
@@ -126,24 +140,22 @@ class Predictor {
     return this.size
   }
 
-  /**
-   * Dummy function just to mimic Writer API
-   */
-  getBuffer (): Buffer {
-    return Buffer.alloc(0)
-  }
-
-  private skipVarOctetString (length: number) {
+  static measureVarOctetString (length: number): number {
     // Skip initial byte
-    this.skip(1)
+    let total = 1
 
     // Skip separate length field if there is one
     if (length > 127) {
-      const lengthOfLength = Math.ceil(length.toString(2).length / 8)
-      this.skip(lengthOfLength)
+      const lengthOfLength = getUIntBufferSize(length)
+      total += lengthOfLength
     }
 
-    this.skip(length)
+    total += length
+    return total
+  }
+
+  private skipVarOctetString (length: number) {
+    this.skip(Predictor.measureVarOctetString(length))
   }
 }
 
