@@ -1,5 +1,5 @@
 import Predictor from '../src/lib/predictor'
-import Writer from '../src/lib/writer'
+import Writer, { WriterInterface } from '../src/lib/writer'
 import BigNumber from 'bignumber.js'
 
 import chai = require('chai')
@@ -29,13 +29,23 @@ describe('Predictor', function () {
     })
 
     it('a function that takes a Writer should accept the Predictor instead', function () {
-      function writeSomeStuff (writer: Writer) {
+      function writeSomeStuff (writer: WriterInterface) {
         writer.writeUInt8(0)
         writer.writeVarOctetString(Buffer.alloc(10))
       }
 
       const predictor = new Predictor()
       writeSomeStuff(predictor)
+    })
+  })
+
+  describe('length', function () {
+    it('should return the size of the Writer', function () {
+      const predictor = new Predictor()
+
+      predictor.write(new Buffer(15))
+
+      assert.equal(predictor.length, 15)
     })
   })
 
@@ -102,6 +112,14 @@ describe('Predictor', function () {
       assert.equal(predictor.getSize(), 5)
     })
 
+    it('should accept a String and add the correct size', function () {
+      const predictor = new Predictor()
+
+      predictor.writeVarUInt(0x01020304.toString())
+
+      assert.equal(predictor.getSize(), 5)
+    })
+
     it('should accept MAX_SAFE_INTEGER and add 8 bytes to the size', function () {
       const predictor = new Predictor()
 
@@ -124,6 +142,15 @@ describe('Predictor', function () {
 
       assert.throws(
         () => predictor.writeVarUInt(-1),
+        'UInt must be positive'
+      )
+    })
+
+    it('when writing a negative integer string, should throw', function () {
+      const predictor = new Predictor()
+
+      assert.throws(
+        () => predictor.writeVarUInt('-1'),
         'UInt must be positive'
       )
     })
@@ -165,18 +192,8 @@ describe('Predictor', function () {
       assert.equal(predictor.getSize(), 10)
     })
 
-    it('should accept a Writer', function () {
-      const predictor = new Predictor()
-      const writer = new Writer()
-
-      writer.writeOctetString(Buffer.alloc(5), 5)
-      predictor.writeOctetString(writer, 5)
-
-      assert.equal(predictor.getSize(), 5)
-    })
-
     it('when writing an octet string of the wrong length, should throw', function () {
-      const predictor = new Writer()
+      const predictor = new Predictor()
 
       assert.throws(
         () => predictor.writeOctetString(new Buffer('02', 'hex'), 2),
@@ -209,41 +226,33 @@ describe('Predictor', function () {
 
       assert.equal(predictor.getSize(), 259)
     })
-
-    it('should accept a Writer', function () {
-      const predictor = new Predictor()
-      const writer = new Writer()
-
-      writer.write(Buffer.alloc(256))
-      predictor.writeVarOctetString(writer)
-
-      assert.equal(predictor.getSize(), 259)
-    })
   })
 
-  describe('prependLengthPrefix', function () {
+  describe('createVarOctetString', function () {
     it('should calculate the correct length for an empty buffer', function () {
       const predictor = new Predictor()
 
-      predictor.prependLengthPrefix()
+      predictor.createVarOctetString(0)
 
       assert.equal(predictor.getSize(), 1)
     })
 
-    it('should calculate the correct length for a short buffer', function () {
+    it('should calculate the correct length for write a buffer of length 1', function () {
       const predictor = new Predictor()
 
-      predictor.write(Buffer.alloc(10))
-      predictor.prependLengthPrefix()
+      const content = predictor.createVarOctetString(1)
+      content.write(Buffer.from('b0', 'hex'))
 
-      assert.equal(predictor.getSize(), 11)
+      assert.equal(predictor.getSize(), 2)
     })
 
-    it('should calculate the correct length for a long buffer', function () {
+    it('should calculate the correct length for write a buffer of length 256', function () {
       const predictor = new Predictor()
 
-      predictor.write(Buffer.alloc(256))
-      predictor.prependLengthPrefix()
+      const buffer = Buffer.alloc(256, 0xb0)
+      const content = predictor.createVarOctetString(buffer.length)
+      content.write(buffer.slice(0, 100))
+      content.write(buffer.slice(100))
 
       assert.equal(predictor.getSize(), 259)
     })
@@ -256,16 +265,6 @@ describe('Predictor', function () {
       predictor.write(new Buffer(15))
 
       assert.equal(predictor.getSize(), 15)
-    })
-
-    it('should accept a Writer', function () {
-      const predictor = new Predictor()
-      const writer = new Writer()
-
-      writer.write(Buffer.alloc(256))
-      predictor.write(writer)
-
-      assert.equal(predictor.getSize(), 256)
     })
   })
 
@@ -359,16 +358,17 @@ describe('Predictor', function () {
     })
   })
 
-  describe('getBuffer', function () {
-    it('should return a dummy empty buffer', function () {
-      const predictor = new Predictor()
+  describe('measureVarOctetString', function () {
+    it('should calculate the correct length for an empty buffer', function () {
+      assert.equal(Predictor.measureVarOctetString(0), 1)
+    })
 
-      predictor.write(Buffer.alloc(10))
+    it('should calculate the correct length for a short buffer', function () {
+      assert.equal(Predictor.measureVarOctetString(10), 11)
+    })
 
-      const buffer = predictor.getBuffer()
-
-      assert(Buffer.isBuffer(buffer))
-      assert.equal(predictor.getSize(), 10)
+    it('should calculate the correct length for a long buffer', function () {
+      assert.equal(Predictor.measureVarOctetString(256), 259)
     })
   })
 })

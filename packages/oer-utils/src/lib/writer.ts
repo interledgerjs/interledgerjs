@@ -1,19 +1,30 @@
-import { isInteger, bigNumberToBuffer, MAX_SAFE_BYTES } from './util'
+import {
+  isInteger,
+  bigNumberToBuffer,
+  MAX_SAFE_BYTES,
+  getBigIntBufferSize,
+  getBigUIntBufferSize,
+  getIntBufferSize,
+  getUIntBufferSize
+} from './util'
 import BigNumber from 'bignumber.js'
 
-class Writer {
+class Writer implements WriterInterface {
   // Largest value that can be written as a variable-length unsigned integer
   static MAX_SAFE_INTEGER: number = 0x1fffffffffffff
   static MIN_SAFE_INTEGER: number = -0x1fffffffffffff
+  static MIN_BUFFER_SIZE: number = 32
 
+  // The UINT_RANGES and INT_RANGES are only used up to util.MAX_SAFE_BYTES.
+  // After that the buffer length is determined using getUIntBufferSize and
+  // getIntBufferSize.
   static UINT_RANGES = {
     1: 0xff,
     2: 0xffff,
     3: 0xffffff,
     4: 0xffffffff,
     5: 0xffffffffff,
-    6: 0xffffffffffff,
-    8: new BigNumber('ffffffffffffffff', 16)
+    6: 0xffffffffffff
   }
 
   static INT_RANGES = {
@@ -22,22 +33,29 @@ class Writer {
     3: [-0x800000, 0x7fffff],
     4: [-0x80000000, 0x7fffffff],
     5: [-0x8000000000, 0x7fffffffff],
-    6: [-0x800000000000, 0x7fffffffffff],
-    8: [new BigNumber('-80000000000000', 16), new BigNumber('7fffffffffffff', 16)]
+    6: [-0x800000000000, 0x7fffffffffff]
   }
 
-  components: Buffer[]
+  private buffer: Buffer
+  private _offset: number
+  private strict: boolean
 
-  constructor () {
-    this.components = []
+  /**
+   * @param value Optional. Either a Buffer to use, or a capacity to allocate. If an explicit capacity or buffer is passed, the writer will throw if more bytes are written.
+   */
+  constructor (value?: number | Buffer) {
+    if (Buffer.isBuffer(value)) {
+      this.buffer = value
+      this.strict = true
+    } else { // capacity
+      this.buffer = Buffer.alloc(value || 0)
+      this.strict = typeof value === 'number'
+    }
+    this._offset = 0
   }
 
   get length (): number {
-    let length = 0
-    for (let component of this.components) {
-      length += component.length
-    }
-    return length
+    return this._offset
   }
 
   /**
@@ -68,14 +86,13 @@ class Writer {
         throw new Error(`UInt ${value} does not fit in ${length} bytes`)
       }
 
-      const buffer = Buffer.alloc(length)
-      buffer.writeUIntBE(value, 0, length)
-      this.write(buffer)
+      const offset = this.advance(length)
+      this.buffer.writeUIntBE(value, offset, length)
     } else {
-      const value = new BigNumber(_value)
+      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
       if (value.isLessThan(0)) {
         throw new Error('UInt must be positive')
-      } else if (value.isGreaterThan(Writer.UINT_RANGES[length])) {
+      } else if (length < getBigUIntBufferSize(value)) {
         throw new Error(`UInt ${value} does not fit in ${length} bytes`)
       }
 
@@ -106,15 +123,11 @@ class Writer {
         throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
       }
 
-      const buffer = Buffer.alloc(length)
-      buffer.writeIntBE(value, 0, length)
-      this.write(buffer)
+      const offset = this.advance(length)
+      this.buffer.writeIntBE(value, offset, length)
     } else {
-      const value = new BigNumber(_value)
-      if (
-        value.isLessThan(Writer.INT_RANGES[length][0]) ||
-        value.isGreaterThan(Writer.INT_RANGES[length][1])
-      ) {
+      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
+      if (length < getBigIntBufferSize(value)) {
         throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
       }
 
@@ -140,15 +153,18 @@ class Writer {
     } else if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     }
-    if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
-      throw new Error('UInt is larger than safe JavaScript range')
-    }
-    const value = new BigNumber(_value)
-    if (value.isLessThan(0)) {
-      throw new Error('UInt must be positive')
+
+    let value
+    let lengthOfValue
+    if (typeof _value === 'number') {
+      value = _value
+      lengthOfValue = getUIntBufferSize(value)
+    } else {
+      value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
+      lengthOfValue = getBigUIntBufferSize(value)
     }
 
-    this.writeVarOctetString(bigNumberToBuffer(value))
+    this.createVarOctetString(lengthOfValue).writeUInt(value, lengthOfValue)
   }
 
   /**
@@ -172,12 +188,18 @@ class Writer {
     } else if (typeof _value === 'number' && _value < Writer.MIN_SAFE_INTEGER) {
       throw new Error('Int is smaller than safe JavaScript range')
     }
-    const value = new BigNumber(_value)
 
-    const lengthDeterminingValue = value.isLessThan(0) ? new BigNumber(1).minus(value) : value
-    const lengthOfValue = Math.ceil((lengthDeterminingValue.toString(2).length + 1) / 8)
-    const valueToWrite = value.isLessThan(0) ? new BigNumber(256).exponentiatedBy(lengthOfValue).plus(value) : value
-    this.writeVarOctetString(bigNumberToBuffer(valueToWrite, lengthOfValue))
+    let value
+    let lengthOfValue
+    if (typeof _value === 'number') {
+      value = _value
+      lengthOfValue = getIntBufferSize(value)
+    } else {
+      value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
+      lengthOfValue = getBigIntBufferSize(value)
+    }
+
+    this.createVarOctetString(lengthOfValue).writeInt(value, lengthOfValue)
   }
 
   /**
@@ -189,7 +211,7 @@ class Writer {
    * @param buffer Data to write.
    * @param length Length of data according to the format.
    */
-  writeOctetString (buffer: Buffer | Writer, length: number): void {
+  writeOctetString (buffer: Buffer, length: number): void {
     if (buffer.length !== length) {
       throw new Error('Incorrect length for octet string (actual: ' +
         buffer.length + ', expected: ' + length + ')')
@@ -204,28 +226,9 @@ class Writer {
    *
    * @param buffer Contents of the octet string.
    */
-  writeVarOctetString (buffer: Buffer | Writer): void {
+  writeVarOctetString (buffer: Buffer): void {
     if (Buffer.isBuffer(buffer)) {
-      const MSB = 0x80
-
-      if (buffer.length <= 127) {
-        // For buffers shorter than 128 bytes, we simply prefix the length as a
-        // single byte.
-        this.writeUInt8(buffer.length)
-      } else {
-        // For buffers longer than 128 bytes, we first write a single byte
-        // containing the length of the length in bytes, with the most significant
-        // bit set.
-        const lengthOfLength = Math.ceil(buffer.length.toString(2).length / 8)
-        this.writeUInt8(MSB | lengthOfLength)
-
-        // Then we write the length of the buffer in that many bytes.
-        this.writeUInt(buffer.length, lengthOfLength)
-      }
-
-      this.write(buffer)
-    } else if (buffer instanceof Writer) {
-      buffer.prependLengthPrefix()
+      this._writeLengthPrefix(buffer.length)
       this.write(buffer)
     } else {
       throw new TypeError('Expects a buffer')
@@ -233,30 +236,40 @@ class Writer {
   }
 
   /**
-   * Write the length prefix for the current buffer at the beginning of the buffer.
+   * Write an OER-encoded variable-length octet string with the provided length.
+   *
+   * The returned Writer is only valid until another method is called on the
+   * parent writer, since the buffer may be replaced.
+   *
+   * Writing more than `length` bytes will throw.
+   *
+   * @param length Length of the octet string.
    */
-  prependLengthPrefix (): void {
-    let length = this.length
+  createVarOctetString (length: number): Writer {
+    if (length < 0) {
+      throw new Error('length must be non-negative')
+    }
+    this._writeLengthPrefix(length)
+    const offset = this.advance(length)
+    const slice = this.buffer.slice(offset, offset + length)
+    return new Writer(slice)
+  }
 
+  private _writeLengthPrefix (length: number): void {
     const MSB = 0x80
-
     if (length <= 127) {
       // For buffers shorter than 128 bytes, we simply prefix the length as a
       // single byte.
-      this.components.unshift(Buffer.from([length]))
+      this.writeUInt8(length)
     } else {
       // For buffers longer than 128 bytes, we first write a single byte
       // containing the length of the length in bytes, with the most significant
       // bit set.
-      const lengthOfLength = Math.ceil(length.toString(2).length / 8)
-
-      const lengthBuffer = new Writer()
-      lengthBuffer.writeUInt8(MSB | lengthOfLength)
+      const lengthOfLength = getUIntBufferSize(length)
+      this.writeUInt8(MSB | lengthOfLength)
 
       // Then we write the length of the buffer in that many bytes.
-      lengthBuffer.writeUInt(length, lengthOfLength)
-
-      this.components.unshift(...lengthBuffer.components)
+      this.writeUInt(length, lengthOfLength)
     }
   }
 
@@ -267,12 +280,9 @@ class Writer {
    *
    * @param buffer Bytes to write.
    */
-  write (buffer: Buffer | Writer): void {
-    if (Buffer.isBuffer(buffer)) {
-      this.components.push(buffer)
-    } else {
-      this.components = this.components.concat(buffer.components)
-    }
+  write (buffer: Buffer): void {
+    const offset = this.advance(buffer.length)
+    buffer.copy(this.buffer, offset)
   }
 
   /**
@@ -284,7 +294,36 @@ class Writer {
     // commit it...
     // console.log(this.components.map((x) => x.toString('hex')).join(' '))
 
-    return Buffer.concat(this.components)
+    return this.buffer.slice(0, this._offset)
+  }
+
+  /**
+   * Ensure that the buffer has the capacity to fit `advanceBy` bytes, reallocating
+   * a larger buffer if necessary.
+   */
+  private advance (advanceBy: number): number {
+    const srcOffset = this._offset
+    const minCapacity = srcOffset + advanceBy
+    if (minCapacity <= this.buffer.length) {
+      // Fast path: the buffer already has the capacity for the new data.
+      this._offset += advanceBy
+      return srcOffset
+    }
+
+    if (this.strict) {
+      throw new Error('writer cannot exceed capacity')
+    }
+
+    let capacity = this.buffer.length || Writer.MIN_BUFFER_SIZE
+    while (capacity < minCapacity) capacity *= 2
+
+    const newBuffer = Buffer.alloc(capacity)
+    if (this.buffer.length) {
+      this.buffer.copy(newBuffer)
+    }
+    this.buffer = newBuffer
+    this._offset += advanceBy
+    return srcOffset
   }
 }
 
@@ -309,5 +348,26 @@ interface Writer {
     this.writeInt(value, bytes)
   }
 })
+
+export interface WriterInterface {
+  readonly length: number
+  writeUInt (_value: BigNumber.Value, length: number): void
+  writeInt (_value: BigNumber.Value, length: number): void
+  writeVarUInt (_value: BigNumber.Value | Buffer): void
+  writeVarInt (_value: BigNumber.Value | Buffer): void
+  writeOctetString (buffer: Buffer, length: number): void
+  writeVarOctetString (buffer: Buffer): void
+  createVarOctetString (length: number): WriterInterface
+  write (buffer: Buffer): void
+
+  writeUInt8 (value: BigNumber.Value): undefined
+  writeUInt16 (value: BigNumber.Value): undefined
+  writeUInt32 (value: BigNumber.Value): undefined
+  writeUInt64 (value: BigNumber.Value | number[]): undefined
+  writeInt8 (value: BigNumber.Value): undefined
+  writeInt16 (value: BigNumber.Value): undefined
+  writeInt32 (value: BigNumber.Value): undefined
+  writeInt64 (value: BigNumber.Value): undefined
+}
 
 export default Writer
