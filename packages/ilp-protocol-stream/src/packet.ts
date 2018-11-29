@@ -1,4 +1,4 @@
-import { Reader, Writer, Predictor } from 'oer-utils'
+import { Reader, Writer, WriterInterface, Predictor } from 'oer-utils'
 import BigNumber from 'bignumber.js'
 import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
 import * as assert from 'assert'
@@ -143,12 +143,14 @@ export class Packet {
 
   /** @private */
   _serialize (): Buffer {
-    const writer = new Writer()
+    const predictor = new Predictor()
+    this.writeTo(predictor)
+    const writer = new Writer(predictor.length)
     this.writeTo(writer)
     return writer.getBuffer()
   }
 
-  writeTo (writer: Writer): void {
+  writeTo (writer: WriterInterface): void {
     // Write the packet header
     writer.writeUInt8(VERSION)
     writer.writeUInt8(this.ilpPacketType)
@@ -187,30 +189,30 @@ export abstract class BaseFrame {
     throw new Error(`class method "fromContents" is not implemented`)
   }
 
-  writeTo (writer: Writer): Writer {
-    const properties = Object.getOwnPropertyNames(this).filter((propName: string) => propName !== 'type' && propName !== 'name')
-
+  writeTo<T extends WriterInterface> (writer: T): T {
+    const predictor = new Predictor()
+    this.writeContentsTo(predictor)
     writer.writeUInt8(this.type)
+    this.writeContentsTo(writer.createVarOctetString(predictor.length))
+    return writer
+  }
 
-    const contents = new Writer()
+  protected writeContentsTo (contents: WriterInterface) {
+    const properties = Object.getOwnPropertyNames(this).filter((propName: string) => propName !== 'type' && propName !== 'name')
     for (let prop of properties) {
-      if (typeof this[prop] === 'number') {
-        contents.writeUInt8(this[prop])
-      } else if (typeof this[prop] === 'string') {
-        contents.writeVarOctetString(Buffer.from(this[prop], 'utf8'))
-      } else if (Buffer.isBuffer(this[prop])) {
-        const bufferWriter = new Writer()
-        bufferWriter.write(this[prop])
-        contents.writeVarOctetString(bufferWriter)
-      } else if (this[prop] instanceof BigNumber) {
-        contents.writeVarUInt(this[prop])
+      const value = this[prop]
+      if (typeof value === 'number') {
+        contents.writeUInt8(value)
+      } else if (typeof value === 'string') {
+        contents.writeVarOctetString(Buffer.from(value, 'utf8'))
+      } else if (Buffer.isBuffer(value)) {
+        contents.writeVarOctetString(value)
+      } else if (value instanceof BigNumber) {
+        contents.writeVarUInt(value)
       } else {
-        throw new Error(`Unexpected property type for property "${prop}": ${typeof this[prop]}`)
+        throw new Error(`Unexpected property type for property "${prop}": ${typeof value}`)
       }
     }
-
-    writer.writeVarOctetString(contents)
-    return writer
   }
 
   byteLength (): number {
