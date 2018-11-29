@@ -14,6 +14,7 @@
   },
   "include": [
     "index.ts",
-    "test/*.spec.ts"
+    "test/*.spec.ts",
+    "test/benchmarks/*.ts"
   ]
 }

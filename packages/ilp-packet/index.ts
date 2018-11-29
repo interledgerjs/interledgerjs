@@ -1,4 +1,4 @@
-import { Reader, Writer } from 'oer-utils'
+import { Predictor, Reader, Writer, WriterInterface } from 'oer-utils'
 import {
   dateToInterledgerTime,
   interledgerTimeToDate,
@@ -22,20 +22,13 @@ export interface IlpErrorClass {
   ilpErrorData?: Buffer
 }
 
-export const errorToReject = (address: string, error: IlpErrorClass) => {
+export const errorToReject = (address: string, error: IlpErrorClass): Buffer => {
   return serializeIlpReject({
     code: error.ilpErrorCode || 'F00',
     triggeredBy: address,
     message: error.message || '',
     data: error.ilpErrorData || Buffer.alloc(0)
   })
-}
-
-export const serializeEnvelope = (type: number, contents: Writer) => {
-  const writer = new Writer()
-  writer.writeUInt8(type)
-  writer.writeVarOctetString(contents)
-  return writer.getBuffer()
 }
 
 export const deserializeEnvelope = (binary: Buffer) => {
@@ -76,17 +69,30 @@ export const serializeIlpPrepare = (json: IlpPrepare) => {
   assert(typeof (json as Partial<IlpPrepare>).destination === 'string', 'destination is required')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
 
-  const writer = new Writer()
-
   const amount = Long.fromString(json.amount, true)
-  writer.writeUInt32(amount.getHighBitsUnsigned())
-  writer.writeUInt32(amount.getLowBitsUnsigned())
-  writer.write(Buffer.from(dateToInterledgerTime(json.expiresAt), 'ascii'))
-  writer.write(json.executionCondition)
-  writer.writeVarOctetString(Buffer.from(json.destination, 'ascii'))
-  writer.writeVarOctetString(json.data)
+  const expiresAt = Buffer.from(dateToInterledgerTime(json.expiresAt), 'ascii')
+  const destination = Buffer.from(json.destination, 'ascii')
 
-  return serializeEnvelope(Type.TYPE_ILP_PREPARE, writer)
+  const contentSize =
+    8 + // amount
+    INTERLEDGER_TIME_LENGTH +
+    32 + // executionCondition
+    Predictor.measureVarOctetString(destination.length) +
+    Predictor.measureVarOctetString(json.data.length)
+  const envelopeSize = 1 + Predictor.measureVarOctetString(contentSize)
+
+  const envelope = new Writer(envelopeSize)
+  envelope.writeUInt8(Type.TYPE_ILP_PREPARE)
+
+  const content = envelope.createVarOctetString(contentSize)
+  content.writeUInt32(amount.getHighBitsUnsigned())
+  content.writeUInt32(amount.getLowBitsUnsigned())
+  content.write(expiresAt)
+  content.write(json.executionCondition)
+  content.writeVarOctetString(destination)
+  content.writeVarOctetString(json.data)
+
+  return envelope.getBuffer()
 }
 
 export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
@@ -124,11 +130,17 @@ export const serializeIlpFulfill = (json: IlpFulfill) => {
     json.fulfillment.length === 32, 'fulfillment must be a 32-byte buffer')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
 
-  const writer = new Writer()
-  writer.write(json.fulfillment)
-  writer.writeVarOctetString(json.data)
+  const contentSize = 32 + Predictor.measureVarOctetString(json.data.length)
+  const envelopeSize = 1 + Predictor.measureVarOctetString(contentSize)
 
-  return serializeEnvelope(Type.TYPE_ILP_FULFILL, writer)
+  const envelope = new Writer(envelopeSize)
+  envelope.writeUInt8(Type.TYPE_ILP_FULFILL)
+
+  const content = envelope.createVarOctetString(contentSize)
+  content.write(json.fulfillment)
+  content.writeVarOctetString(json.data)
+
+  return envelope.getBuffer()
 }
 
 export const deserializeIlpFulfill = (binary: Buffer): IlpFulfill => {
@@ -157,13 +169,13 @@ export interface IlpReject {
   data: Buffer
 }
 
+const EMPTY_BUFFER = Buffer.alloc(0)
+
 export const serializeIlpReject = (json: IlpReject) => {
   assert(json.code && typeof (json as Partial<IlpReject>).code === 'string', 'code must be a string')
   assert(typeof (json as Partial<IlpReject>).triggeredBy === 'string', 'triggeredBy must be a string')
   assert(typeof (json as Partial<IlpReject>).message === 'string', 'message must be a string')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
-
-  const writer = new Writer()
 
   // Convert code to buffer to ensure we are counting bytes, not UTF8 characters
   const codeBuffer = Buffer.from(json.code, 'ascii')
@@ -171,12 +183,26 @@ export const serializeIlpReject = (json: IlpReject) => {
     throw new Error('ILP error codes must be three bytes long, received: ' + json.code)
   }
 
-  writer.write(codeBuffer)
-  writer.writeVarOctetString(Buffer.from(json.triggeredBy, 'ascii'))
-  writer.writeVarOctetString(Buffer.from(json.message, 'utf8'))
-  writer.writeVarOctetString(json.data || Buffer.alloc(0))
+  const triggeredBy = Buffer.from(json.triggeredBy, 'ascii')
+  const message = Buffer.from(json.message, 'utf8')
+  const data = json.data || EMPTY_BUFFER
 
-  return serializeEnvelope(Type.TYPE_ILP_REJECT, writer)
+  const contentSize = ILP_ERROR_CODE_LENGTH +
+    Predictor.measureVarOctetString(triggeredBy.length) +
+    Predictor.measureVarOctetString(message.length) +
+    Predictor.measureVarOctetString(data.length)
+  const envelopeSize = 1 + Predictor.measureVarOctetString(contentSize)
+
+  const envelope = new Writer(envelopeSize)
+  envelope.writeUInt8(Type.TYPE_ILP_REJECT)
+
+  const content = envelope.createVarOctetString(contentSize)
+  content.write(codeBuffer)
+  content.writeVarOctetString(triggeredBy)
+  content.writeVarOctetString(message)
+  content.writeVarOctetString(data)
+
+  return envelope.getBuffer()
 }
 
 export const deserializeIlpReject = (binary: Buffer): IlpReject => {
