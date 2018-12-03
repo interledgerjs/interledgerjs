@@ -85,13 +85,9 @@ export class WebSocketReconnector extends EventEmitter2 {
    * Return a promise which resolves when the connection is successfully
    * established (successfully established connection emits `open` event).
    */
-  open (url: string) {
+  open (url: string): Promise<void> {
     this._url = url
-    this._instance = new (this.WebSocket)(this._url)
-    this._instance.on('open', () => void this.emit('open'))
-    this._instance.on('close', (code: number, reason: string) => this._reconnect(code))
-    this._instance.on('error', (err: Error) => this._reconnect(err))
-    this._instance.on('message', (data: WebSocket.Data) => void this.emit('message', data))
+    this._open()
     return new Promise((resolve) => void this.once('open', resolve))
   }
 
@@ -116,6 +112,14 @@ export class WebSocketReconnector extends EventEmitter2 {
     if (this._clearTryTimer) clearTimeout(this._clearTryTimer)
   }
 
+  private _open () {
+    this._instance = new (this.WebSocket)(this._url)
+    this._instance.on('open', () => void this.emit('open'))
+    this._instance.on('close', (code: number, reason: string) => this._reconnect(code))
+    this._instance.on('error', (err: Error) => this._reconnect(err))
+    this._instance.on('message', (data: WebSocket.Data) => void this.emit('message', data))
+  }
+
   /**
    * Triggered on `close` or `error` event from `open ()`. If triggered, all
    * listeners are removed, reconnect happens. The process continues to try to
@@ -127,7 +131,7 @@ export class WebSocketReconnector extends EventEmitter2 {
     this._connected = false
     this._instance.removeAllListeners()
     this._openTimer = setTimeout(() => {
-      void this.open(this._url)
+      this._open()
     }, this._intervals[this._tries])
     this._tries = Math.min(this._tries + 1, this._intervals.length - 1)
 
