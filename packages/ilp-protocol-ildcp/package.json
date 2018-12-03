@@ -2,20 +2,17 @@
   "name": "ilp-protocol-ildcp",
   "version": "2.0.0",
   "description": "Implementation of the Interledger Dynamic Configuration Protocol (IL-DCP)",
-  "main": "src/index.js",
-  "types": "src/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
   "files": [
-    "src/**/*.ts",
-    "src/**/*.js",
-    "src/**/*.js.map"
+    "dist"
   ],
   "scripts": {
-    "build": "tsc",
-    "pretest": "tsc",
+    "build": "rm -rf dist; tsc",
+    "pretest": "rm -rf dist; tsc",
     "lint": "tslint --project .",
-    "test": "nyc mocha",
-    "watch": "mocha-typescript-watch",
-    "prepare": "tsc"
+    "test": "nyc --extension .ts --reporter=text-summary mocha",
+    "watch": "mocha-typescript-watch"
   },
   "repository": {
     "type": "git",
@@ -39,8 +36,8 @@
   "homepage": "https://github.com/interledgerjs/ilp-protocol-ildcp#readme",
   "dependencies": {
     "debug": "^3.1.0",
-    "ilp-packet": "^3.0.0",
-    "oer-utils": "^3.0.1"
+    "ilp-packet": "^3.0.7",
+    "oer-utils": "^4.0.0"
   },
   "devDependencies": {
     "@types/chai": "^4.1.4",
@@ -48,6 +45,7 @@
     "@types/mocha": "^5.2.5",
     "@types/node": "^10.9.4",
     "@types/sinon": "^5.0.2",
+    "benchmark": "^2.1.4",
     "bignumber.js": "^7.2.1",
     "chai": "^4.1.2",
     "chai-as-promised": "^7.1.1",
@@ -55,28 +53,9 @@
     "mocha-typescript": "^1.1.17",
     "nyc": "^13.0.1",
     "sinon": "^6.1.5",
-    "source-map-support": "^0.5.9",
     "ts-node": "^7.0.1",
     "tslint": "^5.11.0",
     "tslint-config-standard": "^8.0.0",
     "typescript": "^3.0.3"
-  },
-  "nyc": {
-    "check-coverage": true,
-    "lines": 80,
-    "statements": 80,
-    "functions": 80,
-    "branches": 80,
-    "include": [
-      "src/**/*.js"
-    ],
-    "exclude": [
-      "test/**/*.js"
-    ],
-    "reporter": [
-      "lcov",
-      "text-summary"
-    ],
-    "all": true
   }
 }
