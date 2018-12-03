@@ -1,5 +1,5 @@
 import * as IlpPacket from 'ilp-packet'
-import { Reader, Writer } from 'oer-utils'
+import { Predictor, Reader, Writer, WriterInterface } from 'oer-utils'
 const debug = require('debug')('ilp-protocol-ildcp')
 
 const ILDCP_DESTINATION = 'peer.config'
@@ -56,17 +56,33 @@ const deserializeIldcpResponse = (response: Buffer): IldcpResponse => {
 
   const clientAddress = reader.readVarOctetString().toString('ascii')
 
-  const assetScale = reader.readUInt8BigNum().toNumber()
+  const assetScale = reader.readUInt8Number()
   const assetCode = reader.readVarOctetString().toString('utf8')
 
   return { clientAddress, assetScale, assetCode }
 }
 
+const writeIldcpResponse = (
+  writer: WriterInterface,
+  clientAddress: Buffer,
+  assetScale: number,
+  assetCode: Buffer
+): void => {
+  writer.writeVarOctetString(clientAddress)
+  writer.writeUInt8(assetScale)
+  writer.writeVarOctetString(assetCode)
+}
+
 const serializeIldcpResponse = (response: IldcpResponse): Buffer => {
-  const writer = new Writer()
-  writer.writeVarOctetString(Buffer.from(response.clientAddress, 'ascii'))
-  writer.writeUInt8(response.assetScale)
-  writer.writeVarOctetString(Buffer.from(response.assetCode, 'utf8'))
+  const clientAddress = Buffer.from(response.clientAddress, 'ascii')
+  const assetCode = Buffer.from(response.assetCode, 'utf8')
+
+  const predictor = new Predictor()
+  writeIldcpResponse(predictor, clientAddress, response.assetScale, assetCode)
+
+  const writer = new Writer(predictor.length)
+  writeIldcpResponse(writer, clientAddress, response.assetScale, assetCode)
+
   return IlpPacket.serializeIlpFulfill({
     fulfillment: PEER_PROTOCOL_FULFILLMENT,
     data: writer.getBuffer()
