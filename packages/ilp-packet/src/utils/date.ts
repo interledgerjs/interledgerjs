@@ -23,15 +23,17 @@ export const dateToInterledgerTime = (date: Date) => {
 }
 
 export const INTERLEDGER_TIME_LENGTH = 17
-export const INTERLEDGER_TIME_REGEX =
-  /^([0-9]{4})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{3})$/
 
 export const interledgerTimeToDate = (interledgerTime: string) => {
-  const isoTimestamp = interledgerTime.replace(
-    INTERLEDGER_TIME_REGEX,
-    '$1-$2-$3T$4:$5:$6.$7Z')
-
-  const date = new Date(isoTimestamp)
+  const date = new Date(Date.UTC(
+    +interledgerTime.slice(0, 4), // year
+    +interledgerTime.slice(4, 6) - 1, // month
+    +interledgerTime.slice(6, 8), // day
+    +interledgerTime.slice(8, 10), // hours
+    +interledgerTime.slice(10, 12), // minutes
+    +interledgerTime.slice(12, 14), // seconds
+    +interledgerTime.slice(14, 17) // milliseconds
+  ))
 
   if (!date.valueOf()) {
     throw new Error('invalid date')
