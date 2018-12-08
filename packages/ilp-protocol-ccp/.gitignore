@@ -6,3 +6,4 @@
 *.js.map
 *.d.ts
 !wallaby.js
+*.tgz

@@ -92,13 +92,13 @@ const deserializeCcpRouteControlRequest = (request: Buffer): CcpRouteControlRequ
 
   const reader = new Reader(ilp.data)
 
-  const mode = reader.readUInt8()
+  const mode = reader.readUInt8Number()
 
   const lastKnownRoutingTableId = readUuid(reader)
 
-  const lastKnownEpoch = reader.readUInt32()
+  const lastKnownEpoch = reader.readUInt32Number()
 
-  const featureCount = reader.readVarUInt()
+  const featureCount = reader.readVarUIntNumber()
   const features = []
   for (let i = 0; i < featureCount; i++) {
     features.push(reader.readVarOctetString().toString('utf8'))
@@ -155,22 +155,22 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
 
   const routingTableId = readUuid(reader)
 
-  const currentEpochIndex = reader.readUInt32()
+  const currentEpochIndex = reader.readUInt32Number()
 
-  const fromEpochIndex = reader.readUInt32()
+  const fromEpochIndex = reader.readUInt32Number()
 
-  const toEpochIndex = reader.readUInt32()
+  const toEpochIndex = reader.readUInt32Number()
 
-  const holdDownTime = reader.readUInt32()
+  const holdDownTime = reader.readUInt32Number()
 
   const speaker = reader.readVarOctetString().toString('ascii')
 
-  const newRoutesCount = reader.readVarUInt()
+  const newRoutesCount = reader.readVarUIntNumber()
   const newRoutes = []
   for (let i = 0; i < newRoutesCount; i++) {
     const prefix = reader.readVarOctetString().toString('ascii')
 
-    const pathLength = reader.readVarUInt()
+    const pathLength = reader.readVarUIntNumber()
     const path = []
     for (let i = 0; i < pathLength; i++) {
       path.push(reader.readVarOctetString().toString('ascii'))
@@ -178,16 +178,16 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
 
     const auth = reader.read(32)
 
-    const propCount = reader.readVarUInt()
+    const propCount = reader.readVarUIntNumber()
     const props: CcpRouteProp[] = []
     for (let i = 0; i < propCount; i++) {
-      const meta = reader.readUInt8()
+      const meta = reader.readUInt8Number()
       const isOptional = Boolean(meta & 0x80)
       const isTransitive = Boolean(meta & 0x40)
       const isPartial = Boolean(meta & 0x20)
       const isUtf8 = Boolean(meta & 0x10)
 
-      const id = reader.readUInt16()
+      const id = reader.readUInt16Number()
       const value = reader.readVarOctetString()
 
       const incompleteProp = {
@@ -220,7 +220,7 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
     })
   }
 
-  const withdrawnRoutesCount = reader.readVarUInt()
+  const withdrawnRoutesCount = reader.readVarUIntNumber()
   const withdrawnRoutes = []
   for (let i = 0; i < withdrawnRoutesCount; i++) {
     withdrawnRoutes.push(reader.readVarOctetString().toString('utf8'))
