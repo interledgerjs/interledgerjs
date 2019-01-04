@@ -31,7 +31,8 @@ describe('Connection', function () {
     this.clientConn = await createConnection({
       plugin: this.clientPlugin,
       destinationAccount,
-      sharedSecret
+      sharedSecret,
+      slippage: 0
     })
 
     this.serverConn = await connectionPromise
@@ -104,7 +105,7 @@ describe('Connection', function () {
       this.clientConn.createStream().setSendMax(10)
     })
 
-    it('should allow the client side to create streams', function (done) {
+    it('should allow the server side to create streams', function (done) {
       this.clientConn.on('stream', (stream: DataAndMoneyStream) => {
         done()
       })
@@ -585,6 +586,27 @@ describe('Connection', function () {
       }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
     })
 
+    it('should apply a default slippage of 1% to the exchange rate', async function () {
+      const slippage = 0.01
+      const connection = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
+      const exchangeRateWithSlippage = (0.5 * (1 - slippage)).toString()
+      assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage) 
+    })
+
+    it('should apply slippage to the exchange rate when explicitly specified', async function () {
+      const slippage = 0.05
+      const connection = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin,
+        slippage
+      })
+      const exchangeRateWithSlippage = (0.5 * (1 - slippage)).toString()
+      assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage) 
+    })
+
     it('should determine the exchange rate if it gets F08 which can be used for a valid exchange rate ', async function () {
       const clock = sinon.useFakeTimers({
         toFake: ['setTimeout'],
@@ -596,7 +618,8 @@ describe('Connection', function () {
 
       const connection = await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
+        slippage: 0 
       })
       assert.equal(connection.minimumAcceptableExchangeRate, '0.001')
 
