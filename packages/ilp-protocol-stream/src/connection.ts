@@ -148,7 +148,7 @@ export class Connection extends EventEmitter {
     this._destinationAccount = opts.destinationAccount
     this.sharedSecret = opts.sharedSecret
     this.isServer = opts.isServer
-    this.slippage = new BigNumber(opts.slippage || 0.01)
+    this.slippage = new BigNumber(opts.slippage === undefined ? 0.01 : opts.slippage)
     this.allowableReceiveExtra = new BigNumber(1.01)
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
