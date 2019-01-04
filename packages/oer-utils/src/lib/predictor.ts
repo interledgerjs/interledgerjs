@@ -1,12 +1,15 @@
 import {
   isInteger,
+  longFromValue,
   getUIntBufferSize,
   getIntBufferSize,
-  getBigUIntBufferSize,
-  getBigIntBufferSize
+  getLongUIntBufferSize,
+  getLongIntBufferSize
 } from './util'
-import BigNumber from 'bignumber.js'
+import * as Long from 'long'
 import { WriterInterface } from './writer'
+
+type LongValue = Long | number | string
 
 /**
  * Writable stream which tracks the amount of data written.
@@ -28,21 +31,21 @@ export class Predictor implements WriterInterface {
   /**
    * Add the size of a fixed-length unsigned integer to the predicted size.
    */
-  writeUInt (value: BigNumber.Value, length: number) {
+  writeUInt (value: LongValue, length: number) {
     this.size += length
   }
 
   /**
    * Add the size of a fixed-length integer to the predicted size.
    */
-  writeInt (value: BigNumber.Value, length: number) {
+  writeInt (value: LongValue, length: number) {
     this.size += length
   }
 
   /**
    * Calculate the size of a variable-length unsigned integer.
    */
-  writeVarUInt (_value: BigNumber.Value) {
+  writeVarUInt (_value: LongValue) {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     }
@@ -55,14 +58,8 @@ export class Predictor implements WriterInterface {
       // Fast path for numbers.
       lengthOfValue = getUIntBufferSize(_value)
     } else {
-      // Don't clone an existing BigNumber, since it will not be modified.
-      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
-
-      if (value.isNegative()) {
-        throw new Error('UInt must be positive')
-      }
-
-      lengthOfValue = getBigUIntBufferSize(value)
+      const value = longFromValue(_value, true)
+      lengthOfValue = getLongUIntBufferSize(value)
     }
 
     this.skipVarOctetString(lengthOfValue)
@@ -71,7 +68,7 @@ export class Predictor implements WriterInterface {
   /**
    * Calculate the size of a variable-length integer.
    */
-  writeVarInt (_value: BigNumber.Value) {
+  writeVarInt (_value: LongValue) {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     }
@@ -80,8 +77,8 @@ export class Predictor implements WriterInterface {
     if (typeof _value === 'number') {
       lengthOfValue = getIntBufferSize(_value)
     } else {
-      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
-      lengthOfValue = getBigIntBufferSize(value)
+      const value = longFromValue(_value, false)
+      lengthOfValue = getLongIntBufferSize(value)
     }
 
     this.skipVarOctetString(lengthOfValue)

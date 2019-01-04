@@ -1,5 +1,6 @@
-import { Predictor, Writer, WriterInterface } from 'oer-utils'
-import BigNumber from 'bignumber.js'
+import { Predictor } from '../src/lib/predictor'
+import { Writer, WriterInterface } from '../src/lib/writer'
+import * as Long from 'long'
 
 import chai = require('chai')
 const assert = chai.assert
@@ -87,12 +88,15 @@ describe('Predictor', function () {
   })
 
   describe('writeVarUInt', function () {
-    it('should accept a BigNumber and add the correct size', function () {
-      const predictor = new Predictor()
+    it('should accept a Long and add the correct size', function () {
+      for (let i = 0; i < 8; i++) {
+        const predictor = new Predictor()
+        const value = Long.MAX_UNSIGNED_VALUE.shiftRightUnsigned(8 * i)
 
-      predictor.writeVarUInt(new BigNumber('10'.repeat(10), 16))
+        predictor.writeVarUInt(value)
 
-      assert.equal(predictor.getSize(), 11)
+        assert.equal(predictor.getSize(), 1 + (8 - i))
+      }
     })
 
     it('should accept zero and add 2 bytes to the size', function () {
@@ -156,20 +160,34 @@ describe('Predictor', function () {
   })
 
   describe('writeVarInt', function () {
-    it('should accept a BigNumber and add the correct size', function () {
-      const predictor = new Predictor()
+    it('should accept a Long and add the correct size', function () {
+      for (let i = 0; i < 8; i++) {
+        const predictor = new Predictor()
+        const value = Long.MAX_VALUE.shiftRight(8 * i)
 
-      predictor.writeVarInt(new BigNumber('10'.repeat(10), 16))
+        predictor.writeVarInt(value)
 
-      assert.equal(predictor.getSize(), 11)
+        assert.equal(predictor.getSize(), 1 + (8 - i))
+      }
     })
 
     it('should accept a negative number and add the correct size', function () {
+      for (let i = 0; i < 8; i++) {
+        const predictor = new Predictor()
+        const value = Long.MIN_VALUE.shiftRight(8 * i)
+
+        predictor.writeVarInt(value)
+
+        assert.equal(predictor.getSize(), 1 + (8 - i))
+      }
+    })
+
+    it('should accept MAX_SAFE_INTEGER and add 8 bytes to the size', function () {
       const predictor = new Predictor()
 
-      predictor.writeVarInt(new BigNumber('-' + '10'.repeat(10), 16))
+      predictor.writeVarInt(MAX_SAFE_INTEGER)
 
-      assert.equal(predictor.getSize(), 12)
+      assert.equal(predictor.getSize(), 8)
     })
 
     it('when writing a non-integer, should throw', function () {

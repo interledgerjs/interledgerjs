@@ -1,13 +1,17 @@
 import {
   isInteger,
-  bigNumberToBuffer,
+  isLong,
+  longFromValue,
+  longToBuffer,
   MAX_SAFE_BYTES,
-  getBigIntBufferSize,
-  getBigUIntBufferSize,
+  getLongIntBufferSize,
+  getLongUIntBufferSize,
   getIntBufferSize,
   getUIntBufferSize
 } from './util'
-import BigNumber from 'bignumber.js'
+import * as Long from 'long'
+
+type LongValue = Long | number | string
 
 export class Writer implements WriterInterface {
   // Largest value that can be written as a variable-length unsigned integer
@@ -61,21 +65,18 @@ export class Writer implements WriterInterface {
   /**
    * Write a fixed-length unsigned integer to the stream.
    *
-   * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
+   * @param {number | string | Long} value Value to write. Must be in range for the given length.
    * @param length Number of bytes to encode this value as.
    */
-  writeUInt (_value: BigNumber.Value | number[], length: number): void {
-    if (Array.isArray(_value)) {
-      this.writeUInt32(_value[0])
-      this.writeUInt32(_value[1])
-      return
-    }
+  writeUInt (_value: LongValue, length: number): void {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
-      throw new Error('UInt is larger than safe JavaScript range (try using BigNumbers instead)')
+      throw new Error('UInt is larger than safe JavaScript range (try using Longs instead)')
     } else if (length <= 0) {
       throw new Error('UInt length must be greater than zero')
+    } else if (isLong(_value) && !_value.unsigned) {
+      throw new Error('Expected unsigned Long')
     }
 
     if (length <= MAX_SAFE_BYTES) {
@@ -83,56 +84,55 @@ export class Writer implements WriterInterface {
       if (value < 0) {
         throw new Error('UInt must be positive')
       } else if (value > Writer.UINT_RANGES[length]) {
-        throw new Error(`UInt ${value} does not fit in ${length} bytes`)
+        throw new Error(`UInt ${_value} does not fit in ${length} bytes`)
       }
 
       const offset = this.advance(length)
       this.buffer.writeUIntBE(value, offset, length)
     } else {
-      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
-      if (value.isLessThan(0)) {
-        throw new Error('UInt must be positive')
-      } else if (length < getBigUIntBufferSize(value)) {
+      const value = longFromValue(_value, true)
+      if (length < getLongUIntBufferSize(value)) {
         throw new Error(`UInt ${value} does not fit in ${length} bytes`)
       }
 
-      this.write(bigNumberToBuffer(value, length))
+      this.write(longToBuffer(value, length))
     }
   }
 
   /**
    * Write a fixed-length signed integer to the stream.
    *
-   * @param {number | string | BigNumber} value Value to write. Must be in range for the given length.
+   * @param {number | string | Long} value Value to write. Must be in range for the given length.
    * @param length Number of bytes to encode this value as.
    */
-  writeInt (_value: BigNumber.Value, length: number): void {
+  writeInt (_value: LongValue, length: number): void {
     if (!isInteger(_value)) {
       throw new Error('Int must be an integer')
     } else if (length <= 0) {
       throw new Error('Int length must be greater than zero')
     } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
-      throw new Error('Int is larger than safe JavaScript range (try using BigNumbers instead)')
+      throw new Error('Int is larger than safe JavaScript range (try using Longs instead)')
     } else if (typeof _value === 'number' && _value < Writer.MIN_SAFE_INTEGER) {
-      throw new Error('Int is smaller than safe JavaScript range (try using BigNumbers instead)')
+      throw new Error('Int is smaller than safe JavaScript range (try using Longs instead)')
+    } else if (isLong(_value) && _value.unsigned) {
+      throw new Error('Expected signed Long')
     }
 
     if (length <= MAX_SAFE_BYTES) {
       const value = Number(_value)
       if (value < Writer.INT_RANGES[length][0] || value > Writer.INT_RANGES[length][1]) {
-        throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
+        throw new Error('Int ' + _value + ' does not fit in ' + length + ' bytes')
       }
 
       const offset = this.advance(length)
       this.buffer.writeIntBE(value, offset, length)
     } else {
-      const value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
-      if (length < getBigIntBufferSize(value)) {
+      const value = longFromValue(_value, false)
+      if (length < getLongIntBufferSize(value)) {
         throw new Error('Int ' + value + ' does not fit in ' + length + ' bytes')
       }
 
-      const valueToWrite = value.isLessThan(0) ? new BigNumber(256).exponentiatedBy(length).plus(value) : value
-      this.write(bigNumberToBuffer(valueToWrite, length))
+      this.write(longToBuffer(value, length))
     }
   }
 
@@ -142,9 +142,9 @@ export class Writer implements WriterInterface {
    * We need to first turn the integer into a buffer in big endian order, then
    * we write the buffer as an octet string.
    *
-   * @param {number | string | BigNumber | Buffer} value Integer to represent.
+   * @param {number | string | Long | Buffer} value Integer to represent.
    */
-  writeVarUInt (_value: BigNumber.Value | Buffer): void {
+  writeVarUInt (_value: LongValue | Buffer): void {
     if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -160,8 +160,8 @@ export class Writer implements WriterInterface {
       value = _value
       lengthOfValue = getUIntBufferSize(value)
     } else {
-      value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
-      lengthOfValue = getBigUIntBufferSize(value)
+      value = longFromValue(_value, true)
+      lengthOfValue = getLongUIntBufferSize(value)
     }
 
     this.createVarOctetString(lengthOfValue).writeUInt(value, lengthOfValue)
@@ -173,9 +173,9 @@ export class Writer implements WriterInterface {
    * We need to first turn the integer into a buffer in big endian order, then
    * we write the buffer as an octet string.
    *
-   * @param {number | string | BigNumber | Buffer} value Integer to represent.
+   * @param {number | string | Long | Buffer} value Integer to represent.
    */
-  writeVarInt (_value: BigNumber.Value | Buffer): void {
+  writeVarInt (_value: LongValue | Buffer): void {
     if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -195,8 +195,8 @@ export class Writer implements WriterInterface {
       value = _value
       lengthOfValue = getIntBufferSize(value)
     } else {
-      value = BigNumber.isBigNumber(_value) ? _value as BigNumber : new BigNumber(_value)
-      lengthOfValue = getBigIntBufferSize(value)
+      value = longFromValue(_value, false)
+      lengthOfValue = getLongIntBufferSize(value)
     }
 
     this.createVarOctetString(lengthOfValue).writeInt(value, lengthOfValue)
@@ -328,14 +328,14 @@ export class Writer implements WriterInterface {
 }
 
 export interface Writer {
-  writeUInt8 (value: BigNumber.Value): undefined
-  writeUInt16 (value: BigNumber.Value): undefined
-  writeUInt32 (value: BigNumber.Value): undefined
-  writeUInt64 (value: BigNumber.Value | number[]): undefined
-  writeInt8 (value: BigNumber.Value): undefined
-  writeInt16 (value: BigNumber.Value): undefined
-  writeInt32 (value: BigNumber.Value): undefined
-  writeInt64 (value: BigNumber.Value): undefined
+  writeUInt8 (value: LongValue): undefined
+  writeUInt16 (value: LongValue): undefined
+  writeUInt32 (value: LongValue): undefined
+  writeUInt64 (value: LongValue): undefined
+  writeInt8 (value: LongValue): undefined
+  writeInt16 (value: LongValue): undefined
+  writeInt32 (value: LongValue): undefined
+  writeInt64 (value: LongValue): undefined
 }
 
 // Create write(U)Int{8,16,32,64} shortcuts
@@ -351,21 +351,21 @@ export interface Writer {
 
 export interface WriterInterface {
   readonly length: number
-  writeUInt (_value: BigNumber.Value, length: number): void
-  writeInt (_value: BigNumber.Value, length: number): void
-  writeVarUInt (_value: BigNumber.Value | Buffer): void
-  writeVarInt (_value: BigNumber.Value | Buffer): void
+  writeUInt (_value: LongValue, length: number): void
+  writeInt (_value: LongValue, length: number): void
+  writeVarUInt (_value: LongValue | Buffer): void
+  writeVarInt (_value: LongValue | Buffer): void
   writeOctetString (buffer: Buffer, length: number): void
   writeVarOctetString (buffer: Buffer): void
   createVarOctetString (length: number): WriterInterface
   write (buffer: Buffer): void
 
-  writeUInt8 (value: BigNumber.Value): undefined
-  writeUInt16 (value: BigNumber.Value): undefined
-  writeUInt32 (value: BigNumber.Value): undefined
-  writeUInt64 (value: BigNumber.Value | number[]): undefined
-  writeInt8 (value: BigNumber.Value): undefined
-  writeInt16 (value: BigNumber.Value): undefined
-  writeInt32 (value: BigNumber.Value): undefined
-  writeInt64 (value: BigNumber.Value): undefined
+  writeUInt8 (value: LongValue): undefined
+  writeUInt16 (value: LongValue): undefined
+  writeUInt32 (value: LongValue): undefined
+  writeUInt64 (value: LongValue): undefined
+  writeInt8 (value: LongValue): undefined
+  writeInt16 (value: LongValue): undefined
+  writeInt32 (value: LongValue): undefined
+  writeInt64 (value: LongValue): undefined
 }

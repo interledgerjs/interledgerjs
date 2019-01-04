@@ -1,5 +1,5 @@
 import { Reader } from 'oer-utils'
-import BigNumber from 'bignumber.js'
+import * as Long from 'long'
 
 import chai = require('chai')
 const assert = chai.assert
@@ -139,13 +139,14 @@ describe('Reader', function () {
     })
   })
 
-  describe('readUIntBigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('readUIntLong', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('010203040506', 'hex'))
 
-      const v = reader.readUIntBigNum(4)
+      const v = reader.readUIntLong(4)
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(v.unsigned)
       assert.equal(v.toString(), '16909060')
     })
   })
@@ -261,15 +262,17 @@ describe('Reader', function () {
     })
   })
 
-  describe('peekUIntBigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('peekUIntLong', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('010203040506', 'hex'))
 
-      const v1 = reader.peekUIntBigNum(1)
-      const v2 = reader.peekUIntBigNum(1)
+      const v1 = reader.peekUIntLong(1)
+      const v2 = reader.peekUIntLong(1)
 
-      assert(BigNumber.isBigNumber(v1))
-      assert(BigNumber.isBigNumber(v2))
+      assert(Long.isLong(v1))
+      assert(Long.isLong(v2))
+      assert(v1.unsigned)
+      assert(v2.unsigned)
       assert.equal(v1.toString(), '1')
       assert.equal(v2.toString(), '1')
     })
@@ -415,15 +418,17 @@ describe('Reader', function () {
     })
   })
 
-  describe('readIntBigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('readIntLong', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('ff0203040506', 'hex'))
 
-      const v1 = reader.readIntBigNum(1)
-      const v2 = reader.readIntBigNum(1)
+      const v1 = reader.readIntLong(1)
+      const v2 = reader.readIntLong(1)
 
-      assert(BigNumber.isBigNumber(v1))
-      assert(BigNumber.isBigNumber(v2))
+      assert(Long.isLong(v1))
+      assert(Long.isLong(v2))
+      assert(!v1.unsigned)
+      assert(!v2.unsigned)
       assert.equal(v1.toString(), '-1')
       assert.equal(v2.toString(), '2')
     })
@@ -540,15 +545,17 @@ describe('Reader', function () {
     })
   })
 
-  describe('peekIntBigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('peekIntLong', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('ff0203040506', 'hex'))
 
-      const v1 = reader.peekIntBigNum(1)
-      const v2 = reader.peekIntBigNum(1)
+      const v1 = reader.peekIntLong(1)
+      const v2 = reader.peekIntLong(1)
 
-      assert(BigNumber.isBigNumber(v1))
-      assert(BigNumber.isBigNumber(v2))
+      assert(Long.isLong(v1))
+      assert(Long.isLong(v2))
+      assert(!v1.unsigned)
+      assert(!v2.unsigned)
       assert.equal(v1.toString(), '-1')
       assert.equal(v2.toString(), '-1')
     })
@@ -706,12 +713,13 @@ describe('Reader', function () {
     })
   })
 
-  describe('readVarUIntBigNum', function () {
+  describe('readVarUIntLong', function () {
     const reader = Reader.from(Buffer.from('020102', 'hex'))
 
-    const v = reader.readVarUIntBigNum()
+    const v = reader.readVarUIntLong()
 
-    assert(BigNumber.isBigNumber(v))
+    assert(Long.isLong(v))
+    assert(v.unsigned)
     assert.equal(v.toString(), '258')
     assert.equal(reader.cursor, 3)
   })
@@ -827,13 +835,14 @@ describe('Reader', function () {
     })
   })
 
-  describe('peekVarUIntBigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('peekVarUIntLong', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('03010203', 'hex'))
 
-      const v = reader.peekVarUIntBigNum()
+      const v = reader.peekVarUIntLong()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(v.unsigned)
       assert.equal(v.toString(), '66051')
       assert.equal(reader.cursor, 0)
     })
@@ -1017,13 +1026,14 @@ describe('Reader', function () {
     })
   })
 
-  describe('readVarIntBigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('readVarIntLong', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('03be0807', 'hex'))
 
-      const v = reader.readVarIntBigNum()
+      const v = reader.readVarIntLong()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(!v.unsigned)
       assert.equal(v.toString(), '-4323321')
       assert.equal(reader.cursor, 4)
     })
@@ -1093,13 +1103,13 @@ describe('Reader', function () {
       assert.equal(reader.cursor, 7)
     })
 
-    it('should read a sixteen byte variable-length integer', function () {
+    it('when reading a sixteen byte variable-length integer, should throw', function () {
       const reader = Reader.from(Buffer.from('100102030405060708091011121314151617', 'hex'))
 
-      const v = reader.readVarInt()
-
-      assert.equal(v, '1339673755198158349046276780029383958')
-      assert.equal(reader.cursor, 17)
+      assert.throws(
+        () => reader.readVarInt(),
+        'Int of length 16 is too large'
+      )
     })
 
     it('should read a large negative integer', function () {
@@ -1129,13 +1139,14 @@ describe('Reader', function () {
     })
   })
 
-  describe('peekVarIntBigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('peekVarIntLong', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('03be0807', 'hex'))
 
-      const v = reader.peekVarIntBigNum()
+      const v = reader.peekVarIntLong()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(!v.unsigned)
       assert.equal(v.toString(), '-4323321')
       assert.equal(reader.cursor, 0)
     })
@@ -1217,13 +1228,13 @@ describe('Reader', function () {
       assert.equal(reader.cursor, 0)
     })
 
-    it('should read a sixteen byte variable-length integer', function () {
+    it('when reading a sixteen byte variable-length integer, should throw', function () {
       const reader = Reader.from(Buffer.from('100102030405060708091011121314151617', 'hex'))
 
-      const v = reader.peekVarInt()
-
-      assert.equal(v, '1339673755198158349046276780029383958')
-      assert.equal(reader.cursor, 0)
+      assert.throws(
+        () => reader.peekVarInt(),
+        'Int of length 16 is too large'
+      )
     })
   })
 
@@ -1698,13 +1709,14 @@ describe('Reader', function () {
     })
   })
 
-  describe('readUInt8BigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('readUInt8Long', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('ff', 'hex'))
 
-      const v = reader.readUInt8BigNum()
+      const v = reader.readUInt8Long()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(v.unsigned)
       assert.equal(v.toString(), '255')
       assert.equal(reader.cursor, 1)
     })
@@ -1765,13 +1777,14 @@ describe('Reader', function () {
     })
   })
 
-  describe('readUInt64BigNum', function () {
-    it('should read an 64-bit unsigned integer as a BigNum', function () {
+  describe('readUInt64Long', function () {
+    it('should read an 64-bit unsigned integer as a Long', function () {
       const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
 
-      const v = reader.readUInt64BigNum()
+      const v = reader.readUInt64Long()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(v.unsigned)
       assert.equal(v.toString(), '72340177116200959')
       assert.equal(reader.cursor, 8)
     })
@@ -1884,13 +1897,14 @@ describe('Reader', function () {
     })
   })
 
-  describe('readInt8BigNum', function () {
-    it('should return a BigNumber', function () {
+  describe('readInt8Long', function () {
+    it('should return a Long', function () {
       const reader = Reader.from(Buffer.from('ff', 'hex'))
 
-      const v = reader.readInt8BigNum()
+      const v = reader.readInt8Long()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(!v.unsigned)
       assert.equal(v.toString(), '-1')
       assert.equal(reader.cursor, 1)
     })
@@ -1970,23 +1984,25 @@ describe('Reader', function () {
     })
   })
 
-  describe('readUInt64BigNum', function () {
-    it('should read a positive 64-bit unsigned integer as a BigNum', function () {
+  describe('readInt64Long', function () {
+    it('should read a positive 64-bit unsigned integer as a Long', function () {
       const reader = Reader.from(Buffer.from('01010101ffffffff', 'hex'))
 
-      const v = reader.readInt64BigNum()
+      const v = reader.readInt64Long()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(!v.unsigned)
       assert.equal(v.toString(), '72340177116200959')
       assert.equal(reader.cursor, 8)
     })
 
-    it('should read a negative 64-bit unsigned integer as a BigNum', function () {
+    it('should read a negative 64-bit unsigned integer as a Long', function () {
       const reader = Reader.from(Buffer.from('ffffffff01010101', 'hex'))
 
-      const v = reader.readInt64BigNum()
+      const v = reader.readInt64Long()
 
-      assert(BigNumber.isBigNumber(v))
+      assert(Long.isLong(v))
+      assert(!v.unsigned)
       assert.equal(v.toString(), '-4278124287')
       assert.equal(reader.cursor, 8)
     })

@@ -1,5 +1,5 @@
-import { Writer } from 'oer-utils'
-import BigNumber from 'bignumber.js'
+import { Writer } from '../src/lib/writer'
+import * as Long from 'long'
 
 import chai = require('chai')
 const assert = chai.assert
@@ -95,7 +95,7 @@ describe('Writer', function () {
       )
     })
 
-    it('should write a BigNumber outside of safe JavaScript range', function () {
+    it('should write a Long outside of safe JavaScript range', function () {
       const writer = new Writer()
 
       writer.writeUInt(0xff0203040506, 8)
@@ -136,10 +136,10 @@ describe('Writer', function () {
       )
     })
 
-    it('when asked to write an BigNumber too large for the given length, should throw', function () {
+    it('when asked to write an Long too large for the given length, should throw', function () {
       const writer = new Writer()
       assert.throws(
-        () => writer.writeUInt(new BigNumber('ffffffffffffffff', 16), 7),
+        () => writer.writeUInt(Long.fromString('ffffffffffffffff', true, 16), 7),
         'UInt 18446744073709551615 does not fit in 7 bytes'
       )
     })
@@ -264,11 +264,19 @@ describe('Writer', function () {
       )
     })
 
-    it('when asked to write an BigNumber too large for the given length, should throw', function () {
+    it('when asked to write an Long too large for the given length, should throw', function () {
       const writer = new Writer()
       assert.throws(
-        () => writer.writeInt(new BigNumber('ffffffffffffffff', 16), 7),
-        'Int 18446744073709551615 does not fit in 7 bytes'
+        () => writer.writeInt(Long.MAX_VALUE, 7),
+        'Int 9223372036854775807 does not fit in 7 bytes'
+      )
+    })
+
+    it('when asked to write an unsigned Long, should throw', function () {
+      const writer = new Writer()
+      assert.throws(
+        () => writer.writeInt(Long.fromNumber(123, true), 8),
+        'Expected signed Long'
       )
     })
   })
@@ -314,10 +322,10 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '071fffffffffffff')
     })
 
-    it('should write larger numbers as BigNumbers', function () {
+    it('should write larger numbers as Longs', function () {
       const writer = new Writer()
 
-      writer.writeVarUInt(new BigNumber('0100000000000000', 16))
+      writer.writeVarUInt(Long.fromString('0100000000000000', true, 16))
 
       assert.equal(writer.getBuffer().toString('hex'), '080100000000000000')
     })
@@ -325,7 +333,7 @@ describe('Writer', function () {
     it('should write larger numbers as Strings', function () {
       const writer = new Writer()
 
-      writer.writeVarUInt(new BigNumber('0100000000000000', 16).toString())
+      writer.writeVarUInt(Long.fromString('0100000000000000', true, 16).toString())
 
       assert.equal(writer.getBuffer().toString('hex'), '080100000000000000')
     })
@@ -458,20 +466,12 @@ describe('Writer', function () {
       )
     })
 
-    it('should write an eight byte BigNumber', function () {
+    it('should write an eight byte Long', function () {
       const writer = new Writer()
 
-      writer.writeVarInt(new BigNumber('0100000000000000', 16))
+      writer.writeVarInt(Long.fromString('0100000000000000', false, 16))
 
       assert.equal(writer.getBuffer().toString('hex'), '080100000000000000')
-    })
-
-    it('should write a large (absolute value) negative integer', function () {
-      const writer = new Writer()
-
-      writer.writeVarInt(new BigNumber('-010000000000000000000000000001', 16))
-
-      assert.equal(writer.getBuffer().toString('hex'), '0ffeffffffffffffffffffffffffffff')
     })
 
     it('when trying to write a non-integer, should throw', function () {
@@ -709,24 +709,24 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), 'ff020304')
     })
 
-    it('should fail to write a negative BigNumber', function () {
+    it('should fail to write a signed Long', function () {
       const writer = new Writer()
 
       assert.throws(function () {
-        writer.writeUInt32(new BigNumber(-1))
-      }, 'UInt must be positive')
+        writer.writeUInt32(Long.fromNumber(-1, false))
+      }, 'Expected unsigned Long')
+    })
+
+    it('should fail to write a Long that is too large', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeUInt32(Long.MAX_UNSIGNED_VALUE)
+      }, 'UInt 18446744073709551615 does not fit in 4 bytes')
     })
   })
 
   describe('writeUInt64', function () {
-    it('should write an 64-bit integer formatted as an array', function () {
-      const writer = new Writer()
-
-      writer.writeUInt64([0xff020304, 0x05060708])
-
-      assert.equal(writer.getBuffer().toString('hex'), 'ff02030405060708')
-    })
-
     it('should write an integer that is not formatted as an array', function () {
       const writer = new Writer()
 
@@ -743,10 +743,10 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
     })
 
-    it('should write a BigNumber', function () {
+    it('should write a Long', function () {
       const writer = new Writer()
 
-      writer.writeUInt64(new BigNumber(0xff0203040506))
+      writer.writeUInt64(Long.fromNumber(0xff0203040506, true))
 
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
     })
@@ -756,7 +756,7 @@ describe('Writer', function () {
 
       assert.throws(
         () => writer.writeUInt64(MAX_SAFE_INTEGER + 1),
-        'UInt is larger than safe JavaScript range (try using BigNumbers instead)'
+        'UInt is larger than safe JavaScript range (try using Longs instead)'
       )
     })
 
@@ -768,20 +768,12 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
     })
 
-    it('should fail to write a negative BigNumber', function () {
+    it('should fail to write a negative Long', function () {
       const writer = new Writer()
 
       assert.throws(function () {
-        writer.writeUInt64(new BigNumber(-1))
-      }, 'UInt must be positive')
-    })
-
-    it('should fail to write a BigNumber that is too large', function () {
-      const writer = new Writer()
-
-      assert.throws(function () {
-        writer.writeUInt64(new BigNumber(0x10102030405060708))
-      }, 'UInt 18519367933499933000 does not fit in 8 bytes')
+        writer.writeUInt64(Long.fromNumber(-1, false))
+      }, 'Expected unsigned Long')
     })
   })
 
@@ -841,17 +833,33 @@ describe('Writer', function () {
     it('should write a string', function () {
       const writer = new Writer()
 
-      writer.writeUInt32(String(0x03040506))
+      writer.writeInt32(String(0x03040506))
 
       assert.equal(writer.getBuffer().toString('hex'), '03040506')
     })
 
-    it('should write a BigNumber', function () {
+    it('should write a Long', function () {
       const writer = new Writer()
 
-      writer.writeUInt32(new BigNumber(0x03040506))
+      writer.writeInt32(Long.fromNumber(0x03040506, false))
 
       assert.equal(writer.getBuffer().toString('hex'), '03040506')
+    })
+
+    it('should fail to write a Long that is too small', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeInt32(Long.MIN_VALUE)
+      } , 'Int -9223372036854775808 does not fit in 4 bytes')
+    })
+
+    it('should fail to write a Long that is too large', function () {
+      const writer = new Writer()
+
+      assert.throws(function () {
+        writer.writeInt32(Long.MAX_VALUE)
+      } , 'Int 9223372036854775807 does not fit in 4 bytes')
     })
   })
 
@@ -888,18 +896,18 @@ describe('Writer', function () {
       assert.equal(writer.getBuffer().toString('hex'), 'ffff00fdfcfbfafa')
     })
 
-    it('should write a positive integer as a BigNumber', function () {
+    it('should write a positive integer as a Long', function () {
       const writer = new Writer()
 
-      writer.writeInt64(new BigNumber(0xff0203040506))
+      writer.writeInt64(Long.fromNumber(0xff0203040506, false))
 
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
     })
 
-    it('should write a negative integer as a BigNumber', function () {
+    it('should write a negative integer as a Long', function () {
       const writer = new Writer()
 
-      writer.writeInt64(new BigNumber(-0xff0203040506))
+      writer.writeInt64(Long.fromNumber(-0xff0203040506, false))
 
       assert.equal(writer.getBuffer().toString('hex'), 'ffff00fdfcfbfafa')
     })
@@ -909,7 +917,7 @@ describe('Writer', function () {
 
       assert.throws(
         () => writer.writeInt64(MAX_SAFE_INTEGER + 1),
-        'Int is larger than safe JavaScript range (try using BigNumbers instead)'
+        'Int is larger than safe JavaScript range (try using Longs instead)'
       )
     })
 
@@ -919,22 +927,6 @@ describe('Writer', function () {
       writer.writeInt64(0xff0203040506)
 
       assert.equal(writer.getBuffer().toString('hex'), '0000ff0203040506')
-    })
-
-    it('should fail to write a BigNumber that is too small', function () {
-      const writer = new Writer()
-
-      assert.throws(function () {
-        writer.writeInt64(new BigNumber(-0x101020304050607080))
-      }, 'Int -296309886935998900000 does not fit in 8 bytes')
-    })
-
-    it('should fail to write a BigNumber that is too large', function () {
-      const writer = new Writer()
-
-      assert.throws(function () {
-        writer.writeInt64(new BigNumber(0x10102030405060708))
-      }, 'Int 18519367933499933000 does not fit in 8 bytes')
     })
   })
 })
