@@ -714,14 +714,16 @@ describe('Reader', function () {
   })
 
   describe('readVarUIntLong', function () {
-    const reader = Reader.from(Buffer.from('020102', 'hex'))
+    it('should parse an unsigned integer', function () {
+      const reader = Reader.from(Buffer.from('020102', 'hex'))
 
-    const v = reader.readVarUIntLong()
+      const v = reader.readVarUIntLong()
 
-    assert(Long.isLong(v))
-    assert(v.unsigned)
-    assert.equal(v.toString(), '258')
-    assert.equal(reader.cursor, 3)
+      assert(Long.isLong(v))
+      assert(v.unsigned)
+      assert.equal(v.toString(), '258')
+      assert.equal(reader.cursor, 3)
+    })
   })
 
   describe('readVarUInt', function () {
