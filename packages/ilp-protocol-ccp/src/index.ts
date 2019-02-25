@@ -1,4 +1,4 @@
-import * as IlpPacket from 'ilp-packet'
+import { IlpPrepare, deserializeIlpPrepare, serializeIlpPrepare, IlpFulfill, serializeIlpFulfill, deserializeIlpFulfill }from 'ilp-packet'
 import { Reader, Writer } from 'oer-utils'
 import { readUuid, writeUuid } from './uuid'
 
@@ -75,22 +75,12 @@ export interface CcpRouteUpdateResponse {
   // empty
 }
 
-const deserializeCcpRouteControlRequest = (request: Buffer): CcpRouteControlRequest => {
-  const ilp = IlpPacket.deserializeIlpPrepare(request)
+/******************************************
+ * Route Control Request
+ *****************************************/
 
-  if (ilp.destination !== CCP_CONTROL_DESTINATION) {
-    throw new TypeError('packet is not a CCP route control request.')
-  }
-
-  if (!PEER_PROTOCOL_CONDITION.equals(ilp.executionCondition)) {
-    throw new Error('packet does not contain correct condition for a peer protocol request.')
-  }
-
-  if (Date.now() > Number(ilp.expiresAt)) {
-    throw new Error('CCP route control request packet is expired.')
-  }
-
-  const reader = new Reader(ilp.data)
+const deserializeCcpRouteControlRequestPayload = (data: Buffer): CcpRouteControlRequest => {
+  const reader = new Reader(data)
 
   const mode = reader.readUInt8Number()
 
@@ -112,7 +102,29 @@ const deserializeCcpRouteControlRequest = (request: Buffer): CcpRouteControlRequ
   }
 }
 
-const serializeCcpRouteControlRequest = (request: CcpRouteControlRequest): Buffer => {
+const extractCcpRouteControlRequest = (packet: IlpPrepare): CcpRouteControlRequest => {
+  if (packet.destination !== CCP_CONTROL_DESTINATION) {
+    throw new TypeError('packet is not a CCP route control request.')
+  }
+
+  if (!PEER_PROTOCOL_CONDITION.equals(packet.executionCondition)) {
+    throw new Error('packet does not contain correct condition for a peer protocol request.')
+  }
+
+  if (Date.now() > Number(packet.expiresAt)) {
+    throw new Error('CCP route control request packet is expired.')
+  }
+
+  return deserializeCcpRouteControlRequestPayload(packet.data)
+}
+
+const deserializeCcpRouteControlRequest = (request: Buffer): CcpRouteControlRequest => {
+  const packet = deserializeIlpPrepare(request)
+
+  return extractCcpRouteControlRequest(packet)
+}
+
+const serializeCcpRouteControlRequestPayload = (request: CcpRouteControlRequest): Buffer => {
   const writer = new Writer()
 
   writer.writeUInt8(request.mode)
@@ -127,42 +139,35 @@ const serializeCcpRouteControlRequest = (request: CcpRouteControlRequest): Buffe
     writer.writeVarOctetString(Buffer.from(feature, 'utf8'))
   }
 
-  return IlpPacket.serializeIlpPrepare({
+  return writer.getBuffer()
+}
+
+const constructCcpRouteControlRequest = (request: CcpRouteControlRequest): IlpPrepare => {
+  return {
     amount: '0',
     destination: CCP_CONTROL_DESTINATION,
     executionCondition: PEER_PROTOCOL_CONDITION,
     expiresAt: new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
-    data: writer.getBuffer()
-  })
+    data: serializeCcpRouteControlRequestPayload(request)
+  }
 }
 
-const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateRequest => {
-  const ilp = IlpPacket.deserializeIlpPrepare(request)
+const serializeCcpRouteControlRequest = (request: CcpRouteControlRequest): Buffer => {
+  return serializeIlpPrepare(constructCcpRouteControlRequest(request))
+}
 
-  if (ilp.destination !== CCP_UPDATE_DESTINATION) {
-    throw new TypeError('packet is not a CCP route update request.')
-  }
+/******************************************
+ * Route Control Update
+ *****************************************/
 
-  if (!PEER_PROTOCOL_CONDITION.equals(ilp.executionCondition)) {
-    throw new Error('packet does not contain correct condition for a peer protocol request.')
-  }
-
-  if (Date.now() > Number(ilp.expiresAt)) {
-    throw new Error('CCP route update request packet is expired.')
-  }
-
-  const reader = new Reader(ilp.data)
+const deserializeCcpRouteUpdateRequestPayload = (payload: Buffer): CcpRouteUpdateRequest => {
+  const reader = new Reader(payload)
 
   const routingTableId = readUuid(reader)
-
   const currentEpochIndex = reader.readUInt32Number()
-
   const fromEpochIndex = reader.readUInt32Number()
-
   const toEpochIndex = reader.readUInt32Number()
-
   const holdDownTime = reader.readUInt32Number()
-
   const speaker = reader.readVarOctetString().toString('ascii')
 
   const newRoutesCount = reader.readVarUIntNumber()
@@ -238,7 +243,29 @@ const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateReques
   }
 }
 
-const serializeCcpRouteUpdateRequest = (request: CcpRouteUpdateRequest): Buffer => {
+const extractCcpRouteUpdateRequest = (packet: IlpPrepare): CcpRouteUpdateRequest => {
+  if (packet.destination !== CCP_UPDATE_DESTINATION) {
+    throw new TypeError('packet is not a CCP route update request.')
+  }
+
+  if (!PEER_PROTOCOL_CONDITION.equals(packet.executionCondition)) {
+    throw new Error('packet does not contain correct condition for a peer protocol request.')
+  }
+
+  if (Date.now() > Number(packet.expiresAt)) {
+    throw new Error('CCP route update request packet is expired.')
+  }
+
+  return deserializeCcpRouteUpdateRequestPayload(packet.data)
+}
+
+const deserializeCcpRouteUpdateRequest = (request: Buffer): CcpRouteUpdateRequest => {
+  const packet = deserializeIlpPrepare(request)
+
+  return extractCcpRouteUpdateRequest(packet)
+}
+
+const serializeCcpRouteUpdateRequestPayload = (request: CcpRouteUpdateRequest): Buffer => {
   const writer = new Writer()
 
   writeUuid(writer, request.routingTableId)
@@ -297,35 +324,56 @@ const serializeCcpRouteUpdateRequest = (request: CcpRouteUpdateRequest): Buffer 
     writer.writeVarOctetString(Buffer.from(route, 'ascii'))
   }
 
-  return IlpPacket.serializeIlpPrepare({
+  return writer.getBuffer()
+}
+
+const constructCcpRouteUpdateRequest = (request: CcpRouteUpdateRequest): IlpPrepare => {
+  return {
     amount: '0',
     destination: CCP_UPDATE_DESTINATION,
     executionCondition: PEER_PROTOCOL_CONDITION,
     expiresAt: new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
-    data: writer.getBuffer()
-  })
+    data: serializeCcpRouteUpdateRequestPayload(request)
+  }
+}
+
+const serializeCcpRouteUpdateRequest = (request: CcpRouteUpdateRequest): Buffer => {
+  return serializeIlpPrepare(constructCcpRouteUpdateRequest(request))
 }
 
 const deserializeCcpResponse = (response: Buffer): void => {
-  const { fulfillment } = IlpPacket.deserializeIlpFulfill(response)
+  const { fulfillment } = deserializeIlpFulfill(response)
 
   if (!PEER_PROTOCOL_FULFILLMENT.equals(fulfillment)) {
     throw new Error('CCP response does not contain the expected fulfillment.')
   }
 }
 
-const serializeCcpResponse = (): Buffer => {
-  return IlpPacket.serializeIlpFulfill({
+const constructCcpResponse = (): IlpFulfill => {
+  return {
     fulfillment: PEER_PROTOCOL_FULFILLMENT,
     data: Buffer.alloc(0)
-  })
+  }
+}
+
+const serializeCcpResponse = (): Buffer => {
+  return serializeIlpFulfill(constructCcpResponse())
 }
 
 export {
+  deserializeCcpRouteControlRequestPayload,
+  extractCcpRouteControlRequest,
   deserializeCcpRouteControlRequest,
+  serializeCcpRouteControlRequestPayload,
+  constructCcpRouteControlRequest,
   serializeCcpRouteControlRequest,
+  deserializeCcpRouteUpdateRequestPayload,
+  extractCcpRouteUpdateRequest,
   deserializeCcpRouteUpdateRequest,
+  serializeCcpRouteUpdateRequestPayload,
+  constructCcpRouteUpdateRequest,
   serializeCcpRouteUpdateRequest,
   deserializeCcpResponse,
+  constructCcpResponse,
   serializeCcpResponse
 }

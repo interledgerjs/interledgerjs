@@ -1,12 +1,32 @@
 import * as CCP from '../src'
 import { assert } from 'chai'
 import { useFakeTimers } from 'sinon'
+import { deserializeIlpPacket, deserializeIlpPrepare, IlpPrepare } from 'ilp-packet'
 
 const START_DATE = 1434412800000 // June 16, 2015 00:00:00 GMT
 
 describe('CCP', function () {
   beforeEach(function () {
     this.clock = useFakeTimers(START_DATE)
+  })
+
+  describe('extractCcpRouteControlRequest', function () {
+    it('should extract a CCP control request', function () {
+      const ccpPacket: IlpPrepare = {
+        amount: '0',
+        expiresAt: new Date('2015-06-16T00:01:00.000Z'),
+        destination: 'peer.route.control',
+        executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+        data: Buffer.from('0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172', 'hex')
+      }
+
+      assert.deepEqual(CCP.extractCcpRouteControlRequest(ccpPacket), {
+        mode: CCP.Mode.MODE_SYNC,
+        lastKnownRoutingTableId: '70d1a134-a0df-4f47-964f-6e19e2ab3790',
+        lastKnownEpoch: 32,
+        features: ['foo', 'bar']
+      })
+    })
   })
 
   describe('deserializeCcpControlRequest', async function () {
