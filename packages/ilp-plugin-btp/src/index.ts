@@ -207,6 +207,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     port: number,
     secret: string
   }
+  private _listenerSecret?: Buffer
   protected _wss: WebSocket.Server | null = null
   private _incomingWs?: WebSocket
 
@@ -231,6 +232,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     this._responseTimeout = options.responseTimeout || DEFAULT_TIMEOUT
     this._listener = options.listener
     this._server = options.server
+
+    if (this._listener) {
+      this._listenerSecret = Buffer.from(this._listener.secret, 'utf8')
+    }
 
     if (this._server) {
       const parsedBtpUri = new URL(this._server)
@@ -793,9 +798,11 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     const tokenProto = authPacket.data.protocolData.find(
       (subProtocol) => subProtocol.protocolName === 'auth_token')
     assert(tokenProto, 'auth_token subprotocol is required')
-    const token = tokenProto!.data.toString()
-    if (token !== this._listener!.secret) {
-      this._log.debug('received token %s, but expected %s', JSON.stringify(token), JSON.stringify(this._listener!.secret))
+    const wantToken = this._listenerSecret!
+    const gotToken = tokenProto!.data
+    if (gotToken.length !== wantToken.length
+      || !crypto.timingSafeEqual(gotToken, wantToken)) {
+      this._log.debug('received token "%s", but expected "%s"', gotToken.toString(), this._listener!.secret.toString())
       throw new Error('invalid auth_token')
     }
   }
