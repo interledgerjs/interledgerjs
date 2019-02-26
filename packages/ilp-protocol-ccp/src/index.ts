@@ -75,10 +75,6 @@ export interface CcpRouteUpdateResponse {
   // empty
 }
 
-/******************************************
- * Route Control Request
- *****************************************/
-
 const deserializeCcpRouteControlRequestPayload = (data: Buffer): CcpRouteControlRequest => {
   const reader = new Reader(data)
 
@@ -155,10 +151,6 @@ const constructCcpRouteControlRequest = (request: CcpRouteControlRequest): IlpPr
 const serializeCcpRouteControlRequest = (request: CcpRouteControlRequest): Buffer => {
   return serializeIlpPrepare(constructCcpRouteControlRequest(request))
 }
-
-/******************************************
- * Route Control Update
- *****************************************/
 
 const deserializeCcpRouteUpdateRequestPayload = (payload: Buffer): CcpRouteUpdateRequest => {
   const reader = new Reader(payload)
