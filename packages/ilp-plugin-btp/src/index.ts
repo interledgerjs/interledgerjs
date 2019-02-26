@@ -2,6 +2,8 @@ import * as assert from 'assert'
 import * as crypto from 'crypto'
 import * as Debug from 'debug'
 import * as WebSocket from 'ws'
+import * as http from 'http'
+import * as https from 'https'
 import { WebSocketReconnector, WebSocketConstructor } from './ws-reconnect'
 import { EventEmitter2, Listener } from 'eventemitter2'
 import { URL } from 'url'
@@ -130,7 +132,8 @@ export interface IlpPluginBtpConstructorOptions {
   server?: string,
   listener?: {
     port: number,
-    secret: string
+    secret: string,
+    wsOpts?: WebSocket.ServerOptions
   },
   reconnectInterval?: number
   reconnectIntervals?: Array<number>
@@ -206,7 +209,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   private _listener?: {
     port: number,
     secret: string
+    wsOpts?: WebSocket.ServerOptions
   }
+  private _httpServer: http.Server | https.Server
   private _listenerSecret?: Buffer
   protected _wss: WebSocket.Server | null = null
   private _incomingWs?: WebSocket
@@ -235,6 +240,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
     if (this._listener) {
       this._listenerSecret = Buffer.from(this._listener.secret, 'utf8')
+      this._listener.wsOpts = this._listener.wsOpts || { port: this._listener.port }
+      if (this._listener.wsOpts.server) {
+        this._httpServer = this._listener.wsOpts.server
+      }
     }
 
     if (this._server) {
@@ -323,7 +332,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
     /* Server logic. */
     if (this._listener) {
-      const wss = this._wss = new (this.WebSocketServer)({ port: this._listener.port })
+      if (this._httpServer) {
+        this._httpServer.listen(this._listener.port)
+      }
+      const wss = this._wss = new (this.WebSocketServer)({ ...this._listener.wsOpts })
       this._incomingWs = undefined
 
       wss.on('connection', (socket: WebSocket) => {
@@ -484,7 +496,13 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       this._incomingWs.close()
       this._incomingWs = undefined
     }
-    if (this._wss) this._wss.close()
+    if (this._wss) {
+      this._wss.close()
+      if (this._httpServer) {
+        this._httpServer.close()
+      }
+      this._wss = null
+    }
   }
 
   isConnected () {

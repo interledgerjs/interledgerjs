@@ -43,7 +43,8 @@ class OutgoingSocket extends EventEmitter {
 }
 
 class Server extends EventEmitter {
-  constructor ({port}) {
+  // mock server constructor parameters mirror those found in https://github.com/websockets/ws/blob/master/doc/ws.md
+  constructor ({ host, port, backlog, server, verifyClient, handleProtocols, path, noServer, clientTracking, perMessageDeflate, maxPayload }, cb) {
     super()
     this.closed = false
   }

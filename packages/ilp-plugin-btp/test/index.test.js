@@ -4,6 +4,8 @@ const assert = require('assert')
 const btp = require('btp-packet')
 const Plugin = require('..')
 const mockSocket = require('./helpers/mockSocket')
+const fetch = require('node-fetch')
+const http = require('http')
 
 describe('BtpPlugin', function () {
   beforeEach(async function () {
@@ -186,7 +188,10 @@ describe('BtpPlugin', function () {
   describe('connect (server)', function () {
     beforeEach(async function () {
       this.ws = new mockSocket.IncomingSocket()
-      this.server = new Plugin(this.serverOpts, {WebSocketServer: mockSocket.Server})
+      this.server = new Plugin(this.serverOpts)
+    })
+    afterEach(async function () {
+      await this.server.disconnect()
     })
 
     it('succeeds if the auth is correct', async function () {
@@ -255,16 +260,15 @@ describe('BtpPlugin', function () {
         ],
         error: 'invalid auth_token'
       }
-    ].forEach(function ({label, authData, error}) {
+    ].forEach(function ({ label, authData, error }) {
       it(label, async function () {
-        const connect = this.server.connect()
+        this.server.connect().catch(() => {})
         this.server._wss.emit('connection', this.ws)
         this.ws.emit('message', btp.serialize({
           type: btp.TYPE_MESSAGE,
           requestId: 123,
           data: {protocolData: authData}
         }))
-
         assert.strictEqual(this.server.isConnected(), false)
         assert.equal(this.ws.responses.length, 1)
         const res = this.ws.responses[0]
@@ -313,6 +317,7 @@ describe('BtpPlugin', function () {
 
   describe('registerDataHandler', function () {
     beforeEach(async function () { await this.setupServer() })
+    afterEach(async function () { await this.plugin.disconnect() })
 
     it('registers a data handler', async function () {
       this.plugin.registerDataHandler((packet) => {
@@ -343,6 +348,7 @@ describe('BtpPlugin', function () {
 
   describe('deregisterDataHandler', function () {
     beforeEach(async function () { await this.setupServer() })
+    afterEach(async function () { await this.plugin.disconnect() })
 
     it('deregisters a data handler', async function () {
       this.plugin.registerDataHandler((packet) => { })
@@ -353,6 +359,7 @@ describe('BtpPlugin', function () {
 
   describe('_call', function () {
     beforeEach(async function () { await this.setupServer() })
+    afterEach(async function () { await this.plugin.disconnect() })
 
     it('resolves the response', async function () {
       setImmediate(() => {
@@ -363,13 +370,14 @@ describe('BtpPlugin', function () {
     })
 
     it('rejects an error', async function () {
-      setImmediate(() => {
-        this.plugin._handleIncomingBtpPacket('', this.errorPacket)
-      })
-      await this.plugin._call('', this.ilpReqPacket).then(() => {
-        assert(false)
-      }).catch((err) => {
-        assert.equal(err.message, JSON.stringify(this.errorData))
+      setImmediate(async () => {
+        try {
+          const res = await this.plugin._handleIncomingBtpPacket('', this.errorPacket)
+          await this.plugin._call('', this.ilpReqPacket)
+          assert(false)
+        } catch (err) {
+          assert.equal(err.message, `${this.ilpReqPacket.requestId} timed out`)
+        }
       })
     })
 
@@ -377,10 +385,55 @@ describe('BtpPlugin', function () {
       try {
         await this.plugin._call('', this.ilpReqPacket)
       } catch (err) {
-        assert.equal(err.message, '456 timed out')
+        assert.equal(err.message, `${this.ilpReqPacket.requestId} timed out`)
         return
       }
       assert(false)
+    })
+  })
+
+  describe('health check', function () {
+    afterEach(async function() {
+      await this.server.disconnect()
+      await this.client.disconnect()
+    })
+    it('fails health check (426)', async function () {
+      this.client = new Plugin(this.serverOpts)
+      this.server = new Plugin(this.clientOpts)
+      await Promise.all([
+        this.server.connect(),
+        this.client.connect()
+      ])
+      const res = await fetch(`http://localhost:${this.serverOpts.listener.port}`)
+      assert.strictEqual(res.status, 426)
+      assert.strictEqual(await res.text(), 'Upgrade Required')
+    })
+    it('passes health check (200)', async function () {
+      const httpServer = http.createServer((req, res) => {
+        res.writeHead(200, { 'Content-Type': 'text/html' })
+        res.write('ok')
+        res.end()
+      })
+      const serverOpts = {
+        listener: {
+          port: 9000,
+          secret: 'secret',
+          wsOpts: {
+            server: httpServer
+          },
+        },
+        responseTimeout: 100,
+      }
+      console.log(serverOpts.listener.wsOpts.server);
+      this.client = new Plugin(serverOpts)
+      this.server = new Plugin(this.clientOpts)
+      await Promise.all([
+        this.server.connect(),
+        this.client.connect()
+      ])
+      const res = await fetch(`http://localhost:${serverOpts.listener.port}`)
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(await res.text(), 'ok')
     })
   })
 })
