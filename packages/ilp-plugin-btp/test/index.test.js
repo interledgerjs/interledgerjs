@@ -424,7 +424,6 @@ describe('BtpPlugin', function () {
         },
         responseTimeout: 100,
       }
-      console.log(serverOpts.listener.wsOpts.server);
       this.client = new Plugin(serverOpts)
       this.server = new Plugin(this.clientOpts)
       await Promise.all([
