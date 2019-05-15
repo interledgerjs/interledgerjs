@@ -26,5 +26,7 @@ First, the script checks whether `ILP_CREDENTIALS` is defined in the environment
 `ILP_CREDENTIALS` must contain a JSON object with the options passed into the
 constructor of `ilp-plugin-btp` or the module name in `ILP_PLUGIN`.
 
+Next, the script checks for the `ILP_BTP_SERVER` environment variable. `ILP_BTP_SERVER` must be a URI with a protocol and host (e.g. `"btp+ws://localhost:7768"`). Using `ILP_BTP_SERVER` instead of `ILP_CREDENTIALS` ensures that each plugin gets a unique, random secret.
+
 By default, a random secret will be generated and the plugin will connect to
 `btp+ws://localhost:7768`.
