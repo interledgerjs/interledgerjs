@@ -27,7 +27,7 @@ function generateCredentials (opts) {
     return { server: `${url.protocol}//${name}:${secret}@${url.host}` }
   }
 
-  return { server: `btp+ws://${name}:${secret}@$localhost:7768` }
+  return { server: `btp+ws://${name}:${secret}@localhost:7768` }
 }
 
 module.exports = pluginFromEnvironment
