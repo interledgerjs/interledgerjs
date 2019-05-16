@@ -37,6 +37,8 @@ class OutgoingSocket extends EventEmitter {
     })
   }
 
+  ping () {}
+
   close () {
     this.closed = true
   }

@@ -3,6 +3,7 @@ const createLogger = require('ilp-logger')
 import { EventEmitter2 } from 'eventemitter2'
 const debug = createLogger('ilp-ws-reconnect')
 
+const HEARTBEAT_INTERVAL = 20000
 const DEFAULT_TRY_CLEAR_TIMEOUT = 10000
 const DEFAULT_RECONNECT_INTERVALS = [
   0,
@@ -66,6 +67,11 @@ export class WebSocketReconnector extends EventEmitter2 {
    */
   private WebSocket: WebSocketConstructor
 
+  /**
+   * Send a PING to the WS server at a regular interval
+   */
+  private _heartbeatTimer?: NodeJS.Timer
+
   constructor (options: WebSocketReconnectorConstructorOptions) {
     super()
     this.WebSocket = options.WebSocket
@@ -104,6 +110,10 @@ export class WebSocketReconnector extends EventEmitter2 {
    * `close ()` would not trigger a reconnect.
    */
   close () {
+    if (this._heartbeatTimer) {
+      clearTimeout(this._heartbeatTimer)
+    }
+
     this._instance.removeAllListeners()
     this.emit('close')
     this._instance.close()
@@ -114,10 +124,24 @@ export class WebSocketReconnector extends EventEmitter2 {
 
   private _open () {
     this._instance = new (this.WebSocket)(this._url)
-    this._instance.on('open', () => void this.emit('open'))
+    this._instance.on('open', () => {
+      this.emit('open')
+      this.heartbeat()
+    })
     this._instance.on('close', (code: number, reason: string) => this._reconnect(code))
     this._instance.on('error', (err: Error) => this._reconnect(err))
     this._instance.on('message', (data: WebSocket.Data) => void this.emit('message', data))
+  }
+
+  heartbeat () {
+    if (this._heartbeatTimer) {
+      clearTimeout(this._heartbeatTimer)
+    }
+
+    if (this._instance && this._instance.readyState === this._instance.OPEN) {
+      this._instance.ping()
+      this._heartbeatTimer = setTimeout(() => this.heartbeat(), HEARTBEAT_INTERVAL)
+    }
   }
 
   /**

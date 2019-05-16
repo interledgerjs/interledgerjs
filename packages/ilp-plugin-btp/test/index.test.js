@@ -155,6 +155,8 @@ describe('BtpPlugin', function () {
       })
       assert.strictEqual(this.server.isConnected(), false)
       assert.strictEqual(this.client.isConnected(), false)
+
+      await this.client.disconnect()
     })
 
     it('connects the client and server', async function () {
@@ -296,6 +298,8 @@ describe('BtpPlugin', function () {
       await new Promise((resolve) => setTimeout(resolve, 10))
       await pConnect
       assert.strictEqual(client.isConnected(), true)
+
+      await client.disconnect()
     })
   })
 
