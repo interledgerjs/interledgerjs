@@ -1,7 +1,7 @@
 import * as CCP from '../src'
 import { assert } from 'chai'
 import { useFakeTimers } from 'sinon'
-import { deserializeIlpPacket, deserializeIlpPrepare, IlpPrepare } from 'ilp-packet'
+import { deserializeIlpPacket, deserializeIlpPrepare, IlpPrepare, isFulfill } from 'ilp-packet'
 
 const START_DATE = 1434412800000 // June 16, 2015 00:00:00 GMT
 
@@ -10,22 +10,131 @@ describe('CCP', function () {
     this.clock = useFakeTimers(START_DATE)
   })
 
-  describe('extractCcpRouteControlRequest', function () {
-    it('should extract a CCP control request', function () {
-      const ccpPacket: IlpPrepare = {
-        amount: '0',
-        expiresAt: new Date('2015-06-16T00:01:00.000Z'),
-        destination: 'peer.route.control',
-        executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
-        data: Buffer.from('0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172', 'hex')
-      }
+  describe('Route Control Request', function () {
 
-      assert.deepEqual(CCP.extractCcpRouteControlRequest(ccpPacket), {
+    describe('payload', function () {
+      let routeControlRequest: CCP.CcpRouteControlRequest = {
         mode: CCP.Mode.MODE_SYNC,
         lastKnownRoutingTableId: '70d1a134-a0df-4f47-964f-6e19e2ab3790',
         lastKnownEpoch: 32,
         features: ['foo', 'bar']
+      }
+      let hexRouteControlRequest = '0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172'
+
+      it('can serialize Route Control Request Payload', function () {
+        assert.strictEqual(CCP.serializeCcpRouteControlRequestPayload(routeControlRequest).toString('hex'), hexRouteControlRequest)
       })
+
+      it('can deserialize Route Control Request Payload', function () {
+        assert.deepEqual(CCP.deserializeCcpRouteControlRequestPayload(Buffer.from(hexRouteControlRequest, 'hex')), routeControlRequest)
+      })
+    })
+
+    describe('request', function () {
+      it('should extract a CCP control request from IlpPacket', function () {
+        const ccpPacket: IlpPrepare = {
+          amount: '0',
+          expiresAt: new Date('2015-06-16T00:01:00.000Z'),
+          destination: 'peer.route.control',
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          data: Buffer.from('0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172', 'hex')
+        }
+        assert.deepEqual(CCP.extractCcpRouteControlRequest(ccpPacket), {
+          mode: CCP.Mode.MODE_SYNC,
+          lastKnownRoutingTableId: '70d1a134-a0df-4f47-964f-6e19e2ab3790',
+          lastKnownEpoch: 32,
+          features: ['foo', 'bar']
+        })
+      })
+
+      it('should construct an ILP Prepare CCP control request from CCP', function () {
+        const ccpControlRequest: CCP.CcpRouteControlRequest = {
+          mode: CCP.Mode.MODE_SYNC,
+          lastKnownRoutingTableId: '70d1a134-a0df-4f47-964f-6e19e2ab3790',
+          lastKnownEpoch: 32,
+          features: ['foo', 'bar']
+        }
+        assert.deepEqual(CCP.constructCcpRouteControlRequest(ccpControlRequest), {
+          amount: '0',
+          expiresAt: new Date('2015-06-16T00:01:00.000Z'),
+          destination: 'peer.route.control',
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          data: Buffer.from('0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172', 'hex')
+        })
+      })
+    })
+  })
+
+  describe('Route Control Update', function () {
+
+    describe('payload', function () {
+      let routeControlUpdate: CCP.CcpRouteUpdateRequest = {
+        routingTableId: '21e55f8e-abcd-4e97-9ab9-bf0ff00a224c',
+        currentEpochIndex: 52,
+        fromEpochIndex: 52,
+        toEpochIndex: 52,
+        holdDownTime: 30000,
+        speaker: 'example.alice',
+        newRoutes: [],
+        withdrawnRoutes: []
+      }
+      let hexRouteControlUpdate = '21e55f8eabcd4e979ab9bf0ff00a224c000000340000003400000034000075300d6578616d706c652e616c69636501000100'
+
+      it('can serialize Route Control Update Payload', function () {
+        assert.strictEqual(CCP.serializeCcpRouteUpdateRequestPayload(routeControlUpdate).toString('hex'), hexRouteControlUpdate)
+      })
+
+      it('can deserialize Route Control Update Payload', function () {
+        assert.deepEqual(CCP.deserializeCcpRouteUpdateRequestPayload(Buffer.from(hexRouteControlUpdate, 'hex')), routeControlUpdate)
+      })
+    })
+
+    describe('request', function () {
+      it('should extract a CCP control Update from IlpPacket', function () {
+        const ccpPacket: IlpPrepare = {
+          amount: '0',
+          expiresAt: new Date('2015-06-16T00:01:00.000Z'),
+          destination: 'peer.route.update',
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          data: Buffer.from('21e55f8eabcd4e979ab9bf0ff00a224c000000340000003400000034000075300d6578616d706c652e616c69636501000100', 'hex')
+        }
+        assert.deepEqual(CCP.extractCcpRouteUpdateRequest(ccpPacket), {
+          routingTableId: '21e55f8e-abcd-4e97-9ab9-bf0ff00a224c',
+          currentEpochIndex: 52,
+          fromEpochIndex: 52,
+          toEpochIndex: 52,
+          holdDownTime: 30000,
+          speaker: 'example.alice',
+          newRoutes: [],
+          withdrawnRoutes: []
+        })
+      })
+
+      it('should construct an ILP Prepare CCP update request from CCP', function () {
+        const ccpRouteUpdateRequest: CCP.CcpRouteUpdateRequest = {
+          routingTableId: '21e55f8e-abcd-4e97-9ab9-bf0ff00a224c',
+          currentEpochIndex: 52,
+          fromEpochIndex: 52,
+          toEpochIndex: 52,
+          holdDownTime: 30000,
+          speaker: 'example.alice',
+          newRoutes: [],
+          withdrawnRoutes: []
+        }
+        assert.deepEqual(CCP.constructCcpRouteUpdateRequest(ccpRouteUpdateRequest), {
+          amount: '0',
+          expiresAt: new Date('2015-06-16T00:01:00.000Z'),
+          destination: 'peer.route.update',
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          data: Buffer.from('21e55f8eabcd4e979ab9bf0ff00a224c000000340000003400000034000075300d6578616d706c652e616c69636501000100', 'hex')
+        })
+      })
+    })
+  })
+
+  describe('Route Control Response', function () {
+    it('can construct ILP Fulfill Packet CCP Response', function () {
+      assert.isTrue(isFulfill(CCP.constructCcpResponse()))
     })
   })
 
