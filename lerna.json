@@ -2,7 +2,7 @@
   "packages": [
     "packages/codecs/*",
     "packages/protocols/*",
-    "packages/utils/logger"
+    "packages/utils/*"
   ],
   "version": "independent",
   "npmClient": "yarn",
