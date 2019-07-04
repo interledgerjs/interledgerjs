@@ -2,4 +2,7 @@
 node_modules
 coverage
 .nyc_output
-build
+packages/*/*/build
+lerna-debug.log
+npm-debug.log
+yarn-error.log

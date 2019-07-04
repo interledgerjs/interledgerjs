@@ -1,9 +1,4 @@
 {
-  "packages": [
-    "packages/codecs/*",
-    "packages/protocols/*",
-    "packages/utils/*"
-  ],
   "version": "independent",
   "npmClient": "yarn",
   "useWorkspaces": true
