@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@interledger/*" : ["node_modules/@interledger/*/src"],
+    }
+  }
+}

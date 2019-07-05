@@ -1,29 +1,157 @@
 {
-  "name": "interledger",
+  "name": "@interledger/interledgerjs",
   "version": "1.0.0",
   "description": "Interledger.JS Monorepo",
-  "repository": "https://github.com/interledgerjs/interledger",
-  "author": "Adrian Hope-Bailie",
-  "license": "Apache-2.0",
   "private": true,
   "workspaces": [
-    "packages/codecs/*",
-    "packages/protocols/*",
-    "packages/utils/*"
+    "packages/utils/*",
+    "packages/codecs/oer",
+    "packages/codecs/ilp",
+    "packages/protocols/*"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interledgerjs/interledgerjs.git"
+  },
+  "keywords": [
+    "ilp",
+    "interledger",
+    "packet",
+    "binary",
+    "serialization",
+    "format",
+    "convert"
+  ],
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/interledgerjs/interledgerjs/issues"
+  },
+  "homepage": "https://github.com/interledgerjs/interledgerjs#readme",
+  "scripts": {
+    "postinstall": "lerna bootstrap",
+    "clean": "yarn clean:artifacts && yarn clean:packages && yarn clean:root",
+    "clean:artifacts": "lerna run clean --parallel",
+    "clean:packages": "lerna clean --yes",
+    "clean:root": "rimraf node_modules",
+    "build": "lerna run build --sort --concurrency=1 --stream",
+    "build:quick": "yarn build -- --scope=@interledger/*",
+    "test": "lerna run test --concurrency=1 --stream",
+    "test:quick": "lerna run test:quick --concurrency=1 --stream",
+    "test:coverage": "lerna run test:coverage --parallel",
+    "test:watch": "lerna run test:watch --parallel",
+    "prepare:release": "lerna version",
+    "prepare:prerelease": "yarn prepare:release prerelease --preid alpha",
+    "publish:canary": "lerna publish --canary",
+    "publish:release": "lerna publish from-package",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
+    "lint:all": "yarn lint 'packages/*/*/src/**/*.ts*'",
+    "lint:staged": "lint-staged"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lerna run --concurrency 1 --stream precommit"
+    }
+  },
+  "eslintConfig": {
+    "parser": "@typescript-eslint/parser",
+    "extends": [
+      "eslint:recommended",
+      "plugin:@typescript-eslint/recommended",
+      "standard"
+    ],
+    "plugins": [
+      "@typescript-eslint"
+    ],
+    "env": {
+      "node": true,
+      "mocha": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2017,
+      "sourceType": "module",
+      "project": "./tsconfig.src.json"
+    },
+    "rules": {
+      "@typescript-eslint/indent": [
+        "error",
+        2
+      ],
+      "@typescript-eslint/explicit-function-return-type": [
+        "off"
+      ],
+      "@typescript-eslint/explicit-member-accessibility": [
+        "off"
+      ],
+      "@typescript-eslint/no-empty-interface": [
+        "off"
+      ],
+      "@typescript-eslint/member-delimiter-style": [
+        "off"
+      ]
+    }
+  },
+  "prettier": {
+    "semi": false
+  },
+  "lint-staged": {
+    "*.ts*": [
+      "npm run lint --",
+      "git add"
+    ]
+  },
+  "nyc": {
+    "check-coverage": true,
+    "lines": 80,
+    "statements": 80,
+    "functions": 80,
+    "branches": 80,
+    "include": [
+      "src/**/*"
+    ],
+    "exclude": [
+      "test"
+    ],
+    "reporter": [
+      "lcov",
+      "text-summary"
+    ],
+    "extension": [
+      ".ts",
+      ".tsx"
+    ],
+    "sourceMap": true,
+    "instrument": true,
+    "all": true
+  },
   "devDependencies": {
+    "@types/chai": "^4.1.7",
+    "@types/chai-as-promised": "^7.1.0",
+    "@types/long": "^4.0.0",
+    "@types/sinon": "^7.0.13",
+    "@typescript-eslint/eslint-plugin": "^1.11.0",
+    "@typescript-eslint/parser": "^1.11.0",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "codecov": "^3.5.0",
+    "eslint": "^5",
+    "eslint-config-standard": "^12.0.0",
+    "eslint-plugin-import": "^2.18.0",
+    "eslint-plugin-mocha": "^5.3.0",
+    "eslint-plugin-node": "^9.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.0",
+    "husky": "^3.0.0",
     "lerna": "^3.15.0",
+    "lint-staged": "^9.0.2",
     "mocha": "^6.1.4",
     "mocha-typescript": "^1.1.17",
     "nyc": "^14.1.1",
+    "prettier": "^1.18.2",
+    "rimraf": "^2.6.3",
     "sinon": "^7.3.2",
     "source-map-support": "^0.5.12",
-    "ts-lint": "^4.5.1",
     "ts-node": "^8.3.0",
-    "tslint-config-standard": "^8.0.1",
     "typescript": "^3.5.2"
   }
 }

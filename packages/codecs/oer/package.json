@@ -1,9 +1,12 @@
 {
-  "name": "@interledger/utils-logger",
+  "name": "@interledger/codecs-oer",
   "version": "1.0.0",
-  "description": "Logging utility for Interledger modules",
+  "description": "Tools for OER parsing and serialization",
   "main": "build/index.js",
   "types": "build/index.d.ts",
+  "directories": {
+    "test": "test"
+  },
   "files": [
     "build/**/*.js",
     "build/**/*.js.map",
@@ -18,8 +21,6 @@
     "codecov": "nyc report --reporter=json && codecov -f coverage/*.json"
   },
   "dependencies": {
-    "@types/debug": "^0.0.31",
-    "debug": "^4.1.0",
-    "supports-color": "^5.5.0"
+    "bignumber.js": "^7.2.1"
   }
 }
