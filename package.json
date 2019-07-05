@@ -35,11 +35,9 @@
     "clean:packages": "lerna clean --yes",
     "clean:root": "rimraf node_modules",
     "build": "lerna run build --sort --concurrency=1 --stream",
-    "build:quick": "yarn build -- --scope=@interledger/*",
     "test": "lerna run test --concurrency=1 --stream",
-    "test:quick": "lerna run test:quick --concurrency=1 --stream",
-    "test:coverage": "lerna run test:coverage --parallel",
-    "test:watch": "lerna run test:watch --parallel",
+    "test:quick": "lerna run test --parallel",
+    "cover": "lerna run cover --concurrency=1 --stream",
     "prepare:release": "lerna version",
     "prepare:prerelease": "yarn prepare:release prerelease --preid alpha",
     "publish:canary": "lerna publish --canary",
@@ -50,7 +48,7 @@
   },
   "husky": {
     "hooks": {
-      "pre-commit": "lerna run --concurrency 1 --stream precommit"
+      "pre-commit": "yarn lint:staged && lerna run precommit"
     }
   },
   "eslintConfig": {
@@ -91,12 +89,9 @@
       ]
     }
   },
-  "prettier": {
-    "semi": false
-  },
   "lint-staged": {
     "*.ts*": [
-      "npm run lint --",
+      "yarn lint --fix",
       "git add"
     ]
   },
@@ -147,7 +142,6 @@
     "mocha": "^6.1.4",
     "mocha-typescript": "^1.1.17",
     "nyc": "^14.1.1",
-    "prettier": "^1.18.2",
     "rimraf": "^2.6.3",
     "sinon": "^7.3.2",
     "source-map-support": "^0.5.12",

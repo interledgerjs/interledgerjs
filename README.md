@@ -10,9 +10,14 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
 
 ## Design Decisions
 
- - Keep it simple. Minimal custom stuff
- - Use the @interledger scope and new package names to allow for some refactoring to do away with legacy hacks
- - Switch to synchronized versioning
+ - Use lerna and yarn workspaces.
+ - Keep it simple. Minimal custom stuff.
+ - DRY. Where possible avoid repetition in packages
+ - Use the @interledger scope instead of `ilp` prefix in package names.
+ - Use package categories `utils`, `codecs`, `protocols` (others may be added) instead of naming convention.
+ - New package names allow for some refactoring to do away with legacy hacks to accommodate JS module funnies.
+ - Switch to synchronized versioning.
+ - Switch to eslint from tslint (See: https://eslint.org/blog/2019/01/future-typescript-eslint).
 
 ## Process
 
@@ -26,8 +31,8 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
 
 ## Importing
 
-This process preserves the commit history of the legacy modules.
-(This assume the module being imported should go into `protocols`, as opposed to a `codecs` or `utils`)
+This process preserves the commit history of the legacy modules.  
+_(This assumes the module being imported should go into `protocols`, as opposed to a `codecs` or `utils`)_
 
 ```sh
 git clone git@github.com:adrianhopebailie/interledgerjs.git
@@ -37,4 +42,22 @@ git pull
 cd ../interledgerjs
 lerna import ../legacy-module --dest=packages/protocols --preserve-commit --flatten
 ```
- 
+
+## Scripts
+
+- postinstall : Ensure the repo is ready to go after install
+- clean: Clean everything
+- clean:artifacts: Recursively clean packages
+- clean:packages: Run `lerna clean --yes`
+- clean:root: Remove root `node_modules`
+- build: Build each package in topological order
+- test: Run tests in each package
+- test:quick: Run tests in each package (in parallel)
+- cover: Run test coverage in all packages
+- prepare:release: Run `lerna version`
+- prepare:prerelease: Prepare a prerelease (alpha)
+- publish:canary: Run `lerna publish --canary`
+- publish:release: Run `lerna publish from-package`
+- lint: Lint the provided files (requires a glob param)
+- lint:all: Lint everything
+- lint:staged: Run `lint-staged`

@@ -2,6 +2,7 @@ import { Writer } from '@interledger/codecs-oer'
 import Long = require('long')
 import BaseError = require('extensible-error')
 
+// TEST
 export const codes = {
   F00_BAD_REQUEST: 'F00',
   F01_INVALID_PACKET: 'F01',
