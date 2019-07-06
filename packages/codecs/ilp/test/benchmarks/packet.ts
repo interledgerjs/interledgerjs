@@ -1,5 +1,5 @@
 const Benchmark = require('benchmark')
-import * as PacketV1 from '../..'
+import * as PacketV1 from '../../src'
 const packageV0 = process.argv[2]
 if (!packageV0) {
   console.error('usage: node ' + process.argv.slice(0, 2).join(' ') + ' <v0>')
@@ -72,7 +72,7 @@ const rejectBuffer = PacketV1.serializeIlpReject(rejectObject)
 
 ;(new Benchmark.Suite('deserializeIlpReject'))
   .add('v0', function () { PacketV0.deserializeIlpReject(rejectBuffer) })
-  .add('v1', function () { PacketV1.deserializeIlpReject(rejectBuffer) })
+  .add('v1', function () { PacketV1.deserializeIlpRejectLOL(rejectBuffer) })
   .on('cycle', function(event: any) {
     console.log(this.name, '\t', String(event.target));
   })

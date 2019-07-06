@@ -1,6 +1,6 @@
 import { assert } from 'chai'
 
-const { Errors } = require('..')
+import { Errors } from '@interledger/codecs-ilp'
 
 describe('Errors', function () {
   describe('AmountTooLargeError', function () {

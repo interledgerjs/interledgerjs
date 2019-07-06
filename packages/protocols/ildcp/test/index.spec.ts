@@ -1,4 +1,4 @@
-import * as ILDCP from '../src'
+import * as ILDCP from '@interledger/protocols-ildcp'
 import * as IlpPacket from '@interledger/codecs-ilp'
 import chai = require('chai')
 import chaiAsPromised = require('chai-as-promised')

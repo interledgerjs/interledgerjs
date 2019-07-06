@@ -2,7 +2,11 @@ import * as assert from 'assert'
 import {
   dateToInterledgerTime,
   interledgerTimeToDate
-} from '../src/utils/date'
+} from '@interledger/codecs-ilp/utils'
+
+function randomBetween (min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min))
+}
 
 describe('utils/date', function () {
   describe('interledgerTimeToDate', function () {
@@ -24,6 +28,3 @@ describe('utils/date', function () {
   })
 })
 
-function randomBetween (min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min))
-}

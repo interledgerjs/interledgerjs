@@ -14,6 +14,7 @@ import { WriterInterface } from './writer'
  * This class acts as a writable stream, but only does the minimum amount of
  * work necessary to count/predict the output size.
  */
+
 class Predictor implements WriterInterface {
   private size: number
 

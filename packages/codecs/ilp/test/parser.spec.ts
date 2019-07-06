@@ -2,7 +2,7 @@ import { assert } from 'chai'
 
 import loadTests from './helpers/loadTests'
 
-const Parser = require('..')
+import * as Parser from '@interledger/codecs-ilp'
 
 describe('Parser', function () {
   describe('serializeIlpPrepare', function () {
@@ -33,7 +33,8 @@ describe('Parser', function () {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
-          const parsed = Parser.deserializeIlpPrepare(binary)
+          // TODO
+          const parsed: any = Parser.deserializeIlpPrepare(binary)
 
           parsed.data = parsed.data.toString('base64')
           parsed.executionCondition = parsed.executionCondition.toString('base64')
@@ -72,7 +73,8 @@ describe('Parser', function () {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
-          const parsed = Parser.deserializeIlpFulfill(binary)
+          // TODO
+          const parsed: any = Parser.deserializeIlpFulfill(binary)
 
           parsed.fulfillment = parsed.fulfillment.toString('base64')
           parsed.data = parsed.data.toString('base64')
@@ -101,7 +103,7 @@ describe('Parser', function () {
     })
   })
 
-  describe('deserializeIlpReject', function () {
+  describe('deserializeIlpRejectLOL', function () {
     describe('correctly parses valid ilp reject', function () {
       const validTests = loadTests({ type: 'ilp_reject' })
 
@@ -109,7 +111,8 @@ describe('Parser', function () {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
-          const parsed = Parser.deserializeIlpReject(binary)
+          // TODO:
+          const parsed: any = Parser.deserializeIlpRejectLOL(binary)
 
           parsed.data = parsed.data.toString('base64')
 
@@ -121,16 +124,13 @@ describe('Parser', function () {
 
   describe('deserializeIlpPacket', function () {
     describe('correctly parses valid ilp packets', function () {
-      testPackets('ilp_fulfill', Parser.Type.TYPE_ILP_FULFILL)
-      testPackets('ilp_prepare', Parser.Type.TYPE_ILP_PREPARE)
-      testPackets('ilp_reject', Parser.Type.TYPE_ILP_REJECT)
-
       function testPackets (typeString: string, type: number) {
         const validTests = loadTests({ type: typeString })
         for (let test of validTests) {
           it('parses ' + typeString + ': ' + test.name, function () {
             const binary = Buffer.from(test.binary, 'hex')
-            const parsed = Parser.deserializeIlpPacket(binary)
+            // TODO
+            const parsed: any = Parser.deserializeIlpPacket(binary)
             if (typeString === 'ilp_prepare' || typeString === 'ilp_fulfill' || typeString === 'ilp_reject') {
               parsed.data.data = parsed.data.data.toString('base64')
             }
@@ -145,6 +145,9 @@ describe('Parser', function () {
           })
         }
       }
+      testPackets('ilp_fulfill', Parser.Type.TYPE_ILP_FULFILL)
+      testPackets('ilp_prepare', Parser.Type.TYPE_ILP_PREPARE)
+      testPackets('ilp_reject', Parser.Type.TYPE_ILP_REJECT)
     })
   })
 })

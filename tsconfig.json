@@ -1,8 +1,29 @@
 {
   "compilerOptions": {
+    "target": "es2017",
+    "module": "commonjs",
+    "declaration": true,
+    "noImplicitAny": true,
+    "removeComments": true,
+    "moduleResolution": "node",
+    "sourceMap": true,
+    "inlineSources": true,
+    "strictNullChecks": true,
+    "suppressImplicitAnyIndexErrors": true,
     "baseUrl": ".",
     "paths": {
-      "@interledger/*" : ["node_modules/@interledger/*/src"],
+      "@interledger/codecs-oer" : ["packages/codecs/oer/src"],
+      "@interledger/codecs-ilp" : ["packages/codecs/ilp/src"],
+      "@interledger/codecs-ilp/*" : ["packages/codecs/ilp/src/*"],
+      "@interledger/protocols-ildcp" : ["packages/protocols/ildcp/src"],
+      "@interledger/utils-logger" : ["packages/utils/logger/src"]
     }
-  }
+  },
+  "exclude": [
+    "**/node_modules/**/*",
+    "packages/*/*/build/**/*"
+  ],
+  "include": [
+    "packages/**/*.ts"
+  ]
 }
