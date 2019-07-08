@@ -1,4 +1,4 @@
-import { deserializeIlpPrepare, serializeIlpPrepare, deserializeIlpFulfill, serializeIlpFulfill, Type, deserializeIlpRejectLOL, serializeIlpReject } from '@interledger/codecs-ilp'
+import { deserializeIlpPrepare, serializeIlpPrepare, deserializeIlpFulfill, serializeIlpFulfill, Type, deserializeIlpReject, serializeIlpReject } from '@interledger/codecs-ilp'
 import { Predictor, Reader, Writer, WriterInterface } from '@interledger/codecs-oer'
 const debug = require('debug')('ilp-protocol-ildcp')
 
@@ -100,7 +100,7 @@ const fetch = async (sendData: (data: Buffer) => Promise<Buffer>): Promise<Ildcp
   }))
 
   if (data[0] === Type.TYPE_ILP_REJECT) {
-    const { triggeredBy, message } = deserializeIlpRejectLOL(data)
+    const { triggeredBy, message } = deserializeIlpReject(data)
     debug('IL-DCP request rejected. triggeredBy=%s errorMessage=%s', triggeredBy, message)
     throw new Error('IL-DCP failed: ' + message)
   } else if (data[0] !== Type.TYPE_ILP_FULFILL) {

@@ -111,7 +111,7 @@ describe('Parser', function () {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
-          const reject = Parser.deserializeIlpRejectLOL(binary)
+          const reject = Parser.deserializeIlpReject(binary)
           const parsed: { [key: string]: string } = {}
 
           parsed.data = reject.data.toString('base64')

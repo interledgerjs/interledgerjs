@@ -75,7 +75,7 @@ const rejectBuffer = PacketV1.serializeIlpReject(rejectObject)
 
 ;(new Benchmark.Suite('deserializeIlpReject'))
   .add('v0', function () { PacketV0.deserializeIlpReject(rejectBuffer) })
-  .add('v1', function () { PacketV1.deserializeIlpRejectLOL(rejectBuffer) })
+  .add('v1', function () { PacketV1.deserializeIlpReject(rejectBuffer) })
   .on('cycle', function (event: Event) {
     console.log(this.name, '\t', String(event.target))
   })
