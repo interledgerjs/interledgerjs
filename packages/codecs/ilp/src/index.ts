@@ -21,7 +21,7 @@ export interface IlpErrorClass {
   ilpErrorData?: Buffer
 }
 
-export const deserializeEnvelope = (binary: Buffer) => {
+export const deserializeEnvelopeNow = (binary: Buffer) => {
   const envelopeReader = Reader.from(binary)
   const type = envelopeReader.readUInt8Number()
   const contents = envelopeReader.readVarOctetString()
@@ -106,7 +106,7 @@ export const serializeIlpPrepare = (json: IlpPrepare) => {
 }
 
 export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
-  const { type, contents } = deserializeEnvelope(binary)
+  const { type, contents } = deserializeEnvelopeNow(binary)
 
   if (+type !== Type.TYPE_ILP_PREPARE) {
     throw new Error('Packet has incorrect type')
@@ -154,7 +154,7 @@ export const serializeIlpFulfill = (json: IlpFulfill) => {
 }
 
 export const deserializeIlpFulfill = (binary: Buffer): IlpFulfill => {
-  const { type, contents } = deserializeEnvelope(binary)
+  const { type, contents } = deserializeEnvelopeNow(binary)
 
   if (+type !== Type.TYPE_ILP_FULFILL) {
     throw new Error('Packet has incorrect type')
@@ -215,8 +215,8 @@ export const serializeIlpReject = (json: IlpReject) => {
   return envelope.getBuffer()
 }
 
-export const deserializeIlpReject = (binary: Buffer): IlpReject => {
-  const { type, contents } = deserializeEnvelope(binary)
+export const deserializeIlpRejectLOL = (binary: Buffer): IlpReject => {
+  const { type, contents } = deserializeEnvelopeNow(binary)
 
   if (+type !== Type.TYPE_ILP_REJECT) {
     throw new Error('Packet has incorrect type')
@@ -262,7 +262,7 @@ export const deserializeIlpPacket = (binary: Buffer): IlpPacket => {
     return {
       type: binary[0],
       typeString: 'ilp_reject',
-      data: deserializeIlpReject(binary)
+      data: deserializeIlpRejectLOL(binary)
     }
   } else {
     throw new Error('Packet has invalid type')

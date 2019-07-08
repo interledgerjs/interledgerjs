@@ -68,7 +68,7 @@
     "parserOptions": {
       "ecmaVersion": 2017,
       "sourceType": "module",
-      "project": "./tsconfig.src.json"
+      "project": "./tsconfig.json"
     },
     "rules": {
       "@typescript-eslint/indent": [
@@ -142,6 +142,8 @@
     "mocha": "^6.1.4",
     "mocha-typescript": "^1.1.17",
     "nyc": "^14.1.1",
+    "prettier": "^1.18.2",
+    "prettier-standard": "^9.1.1",
     "rimraf": "^2.6.3",
     "sinon": "^7.3.2",
     "source-map-support": "^0.5.12",

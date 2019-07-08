@@ -1,4 +1,4 @@
-import BaseError from '../src/errors/base-error'
+import { BaseError } from '@interledger/codecs-oer'
 
 import chai = require('chai')
 const assert = chai.assert

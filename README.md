@@ -19,6 +19,13 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
  - Switch to synchronized versioning.
  - Switch to eslint from tslint (See: https://eslint.org/blog/2019/01/future-typescript-eslint).
 
+## TODO
+
+ - [ ] Circle CI Config
+ - [ ] Update `README.md` in individual packages
+ - [ ] Test release process
+ - [ ] Merge boilerplate into `package.json` of packages
+
 ## Process
 
  1. Setup a monorepo framework with a few small modules
