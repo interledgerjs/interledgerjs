@@ -1,5 +1,8 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
+/* eslint-disable no-console */
+import * as PacketV1 from '@interledger/codecs-ilp'
+
 const Benchmark = require('benchmark')
-import * as PacketV1 from '../..'
 const packageV0 = process.argv[2]
 if (!packageV0) {
   console.error('usage: node ' + process.argv.slice(0, 2).join(' ') + ' <v0>')
@@ -33,47 +36,47 @@ const rejectBuffer = PacketV1.serializeIlpReject(rejectObject)
 ;(new Benchmark.Suite('serializeIlpPrepare'))
   .add('v0', function () { PacketV0.serializeIlpPrepare(prepareObject) })
   .add('v1', function () { PacketV1.serializeIlpPrepare(prepareObject) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
+  .on('cycle', function (event: Event) {
+    console.log(this.name, '\t', String(event.target))
   })
   .run({})
 
 ;(new Benchmark.Suite('deserializeIlpPrepare'))
   .add('v0', function () { PacketV0.deserializeIlpPacket(prepareBuffer) })
   .add('v1', function () { PacketV1.deserializeIlpPacket(prepareBuffer) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
+  .on('cycle', function (event: Event) {
+    console.log(this.name, '\t', String(event.target))
   })
   .run({})
 
 ;(new Benchmark.Suite('serializeIlpFulfill'))
   .add('v0', function () { PacketV0.serializeIlpFulfill(fulfillObject) })
   .add('v1', function () { PacketV1.serializeIlpFulfill(fulfillObject) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
+  .on('cycle', function (event: Event) {
+    console.log(this.name, '\t', String(event.target))
   })
   .run({})
 
 ;(new Benchmark.Suite('deserializeIlpFulfill'))
   .add('v0', function () { PacketV0.deserializeIlpFulfill(fulfillBuffer) })
   .add('v1', function () { PacketV1.deserializeIlpFulfill(fulfillBuffer) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
+  .on('cycle', function (event: Event) {
+    console.log(this.name, '\t', String(event.target))
   })
   .run({})
 
 ;(new Benchmark.Suite('serializeIlpReject'))
   .add('v0', function () { PacketV0.serializeIlpReject(rejectObject) })
   .add('v1', function () { PacketV1.serializeIlpReject(rejectObject) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
+  .on('cycle', function (event: Event) {
+    console.log(this.name, '\t', String(event.target))
   })
   .run({})
 
 ;(new Benchmark.Suite('deserializeIlpReject'))
   .add('v0', function () { PacketV0.deserializeIlpReject(rejectBuffer) })
   .add('v1', function () { PacketV1.deserializeIlpReject(rejectBuffer) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
+  .on('cycle', function (event: Event) {
+    console.log(this.name, '\t', String(event.target))
   })
   .run({})

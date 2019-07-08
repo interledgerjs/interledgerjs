@@ -2,7 +2,7 @@ import { assert } from 'chai'
 
 import loadTests from './helpers/loadTests'
 
-const Parser = require('..')
+import * as Parser from '@interledger/codecs-ilp'
 
 describe('Parser', function () {
   describe('serializeIlpPrepare', function () {
@@ -33,11 +33,12 @@ describe('Parser', function () {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
-          const parsed = Parser.deserializeIlpPrepare(binary)
+          const prepare = Parser.deserializeIlpPrepare(binary)
 
-          parsed.data = parsed.data.toString('base64')
-          parsed.executionCondition = parsed.executionCondition.toString('base64')
-          parsed.expiresAt = parsed.expiresAt.toISOString()
+          const parsed: { [key: string]: string } = {}
+          parsed.data = prepare.data.toString('base64')
+          parsed.executionCondition = prepare.executionCondition.toString('base64')
+          parsed.expiresAt = prepare.expiresAt.toISOString()
 
           assert.deepEqual(parsed, test.json)
         })
@@ -72,10 +73,11 @@ describe('Parser', function () {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
-          const parsed = Parser.deserializeIlpFulfill(binary)
+          const fulfill = Parser.deserializeIlpFulfill(binary)
 
-          parsed.fulfillment = parsed.fulfillment.toString('base64')
-          parsed.data = parsed.data.toString('base64')
+          const parsed: { [key: string]: string } = {}
+          parsed.fulfillment = fulfill.fulfillment.toString('base64')
+          parsed.data = fulfill.data.toString('base64')
 
           assert.deepEqual(parsed, test.json)
         })
@@ -101,7 +103,7 @@ describe('Parser', function () {
     })
   })
 
-  describe('deserializeIlpReject', function () {
+  describe('deserializeIlpRejectLOL', function () {
     describe('correctly parses valid ilp reject', function () {
       const validTests = loadTests({ type: 'ilp_reject' })
 
@@ -109,9 +111,10 @@ describe('Parser', function () {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
-          const parsed = Parser.deserializeIlpReject(binary)
+          const reject = Parser.deserializeIlpReject(binary)
+          const parsed: { [key: string]: string } = {}
 
-          parsed.data = parsed.data.toString('base64')
+          parsed.data = reject.data.toString('base64')
 
           assert.deepEqual(parsed, test.json)
         })
@@ -121,30 +124,31 @@ describe('Parser', function () {
 
   describe('deserializeIlpPacket', function () {
     describe('correctly parses valid ilp packets', function () {
-      testPackets('ilp_fulfill', Parser.Type.TYPE_ILP_FULFILL)
-      testPackets('ilp_prepare', Parser.Type.TYPE_ILP_PREPARE)
-      testPackets('ilp_reject', Parser.Type.TYPE_ILP_REJECT)
-
       function testPackets (typeString: string, type: number) {
         const validTests = loadTests({ type: typeString })
         for (let test of validTests) {
           it('parses ' + typeString + ': ' + test.name, function () {
             const binary = Buffer.from(test.binary, 'hex')
-            const parsed = Parser.deserializeIlpPacket(binary)
+            // TODO
+            const packet = Parser.deserializeIlpPacket(binary)
+            const data: { [key: string]: string } = {}
             if (typeString === 'ilp_prepare' || typeString === 'ilp_fulfill' || typeString === 'ilp_reject') {
-              parsed.data.data = parsed.data.data.toString('base64')
+              data.data = packet.data.data.toString('base64')
             }
             if (typeString === 'ilp_prepare') {
-              parsed.data.expiresAt = parsed.data.expiresAt.toISOString()
-              parsed.data.executionCondition = parsed.data.executionCondition.toString('base64')
+              data.expiresAt = (packet.data as Parser.IlpPrepare).expiresAt.toISOString()
+              data.executionCondition = (packet.data as Parser.IlpPrepare).executionCondition.toString('base64')
             }
             if (typeString === 'ilp_fulfill') {
-              parsed.data.fulfillment = parsed.data.fulfillment.toString('base64')
+              data.fulfillment = (packet.data as Parser.IlpFulfill).fulfillment.toString('base64')
             }
-            assert.deepEqual(parsed, { type, typeString, data: test.json })
+            assert.deepStrictEqual({ type: packet.type, typeString: packet.typeString, data }, { type, typeString, data: test.json })
           })
         }
       }
+      testPackets('ilp_fulfill', Parser.Type.TYPE_ILP_FULFILL)
+      testPackets('ilp_prepare', Parser.Type.TYPE_ILP_PREPARE)
+      testPackets('ilp_reject', Parser.Type.TYPE_ILP_REJECT)
     })
   })
 })

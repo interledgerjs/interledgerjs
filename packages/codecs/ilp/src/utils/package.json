@@ -1,0 +1,6 @@
+{
+  "name": "@interledger/codecs-ilp/utils",
+  "main": "../../build/utils/index.js",
+  "types": "../../build/utils/index.d.ts",
+  "private": true
+}
