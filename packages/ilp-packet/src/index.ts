@@ -3,11 +3,11 @@ import {
   dateToInterledgerTime,
   interledgerTimeToDate,
   INTERLEDGER_TIME_LENGTH
-} from './src/utils/date'
+} from './utils/date'
 import Long = require('long')
 import * as assert from 'assert'
 
-import * as errors from './src/errors'
+import * as errors from './errors'
 export const Errors = errors
 
 export enum Type {

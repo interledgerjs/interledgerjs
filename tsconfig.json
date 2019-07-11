@@ -10,14 +10,19 @@
     "inlineSources": true,
     "strictNullChecks": true,
     "suppressImplicitAnyIndexErrors": true,
-    "outDir": "./build",
-    "rootDir": "./src"
+    "baseUrl": ".",
+    "paths": {
+      "oer-utils" : ["packages/oer-utils"],
+      "ilp-packet" : ["packages/ilp-packet"],
+      "ilp-logger" : ["packages/ilp-logger"],
+      "ilp-protocol-ildcp" : ["packages/ilp-protocol-ildcp"]
+    }
   },
-  "include": [
-    "src/**/*"
-  ],
   "exclude": [
-    "**/*.test.ts",
-    "**/*.spec.ts",
+    "**/node_modules/**/*",
+    "packages/*/build/**/*"
+  ],
+  "include": [
+    "packages/**/*.ts"
   ]
 }

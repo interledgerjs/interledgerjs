@@ -1,78 +1,25 @@
 {
   "name": "ilp-logger",
-  "version": "1.1.3",
+  "version": "2.0.0",
   "description": "Logging utility for Interledger modules",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "files": [
     "build/**/*.js",
     "build/**/*.js.map",
-    "build/**/*.d.ts",
-    "build/doc"
+    "build/**/*.d.ts"
   ],
   "scripts": {
-    "clean": "rm -Rf .nyc_output && rm -Rf coverage && rm -Rf build ",
-    "build": "tsc",
-    "lint": "tslint --project .",
-    "pretest": "tsc --build",
-    "test": "nyc mocha --require ts-node/register --ui mocha-typescript --require source-map-support/register test/**/*.ts",
-    "doc": "typedoc --options typedoc.js src/index.ts",
-    "codecov": "codecov",
-    "preversion": "npm run lint && npm test",
-    "prepublishOnly": "npm run lint && npm test && npm run doc"
+    "clean": "rimraf .nyc_output/* build/* coverage/*",
+    "build": "tsc -p src/tsconfig.build.json",
+    "pretest": "tsc -b src/tsconfig.build.json",
+    "test": "mocha --require ts-node/register --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
+    "cover": "yarn clean && yarn build && nyc --extension .ts --reporter=text-summary --reporter=html --require ts-node/register --ui mocha-typescript --require source-map-support/register mocha test/*.spec.ts",
+    "codecov": "nyc report --reporter=json && codecov -f coverage/*.json"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/interledgerjs/ilp-logger.git"
-  },
-  "author": "Interledger Team <info@interledger.org>",
-  "license": "Apache-2.0",
   "dependencies": {
     "@types/debug": "^0.0.31",
     "debug": "^4.1.0",
     "supports-color": "^5.5.0"
-  },
-  "devDependencies": {
-    "@types/chai": "^4.1.7",
-    "@types/chai-as-promised": "^7.1.0",
-    "@types/mocha": "^5.2.5",
-    "@types/sinon": "^5.0.7",
-    "chai": "^4.2.0",
-    "chai-as-promised": "^7.1.1",
-    "codecov": "^3.1.0",
-    "mocha": "^5.2.0",
-    "mocha-typescript": "^1.1.17",
-    "nyc": "^13.1.0",
-    "sinon": "^7.1.1",
-    "source-map-support": "^0.5.9",
-    "ts-node": "^7.0.1",
-    "tslint": "^5.11.0",
-    "tslint-config-standard": "^8.0.1",
-    "typedoc": "^0.13.0",
-    "typescript": "^3.1.6"
-  },
-  "nyc": {
-    "check-coverage": true,
-    "lines": 80,
-    "statements": 80,
-    "functions": 80,
-    "branches": 80,
-    "include": [
-      "src/**/*"
-    ],
-    "exclude": [
-      "test"
-    ],
-    "reporter": [
-      "lcov",
-      "text-summary"
-    ],
-    "extension": [
-      ".ts",
-      ".tsx"
-    ],
-    "sourceMap": true,
-    "instrument": true,
-    "all": true
   }
 }
