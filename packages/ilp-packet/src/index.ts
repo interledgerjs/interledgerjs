@@ -1,13 +1,9 @@
-import { Predictor, Reader, Writer, WriterInterface } from 'oer-utils'
-import {
-  dateToInterledgerTime,
-  interledgerTimeToDate,
-  INTERLEDGER_TIME_LENGTH
-} from './utils/date'
-import Long = require('long')
-import * as assert from 'assert'
-
+import { Predictor, Reader, Writer } from 'oer-utils'
 import * as errors from './errors'
+import * as assert from 'assert'
+import { dateToInterledgerTime, interledgerTimeToDate, INTERLEDGER_TIME_LENGTH } from './utils/date'
+
+import Long = require('long')
 export const Errors = errors
 
 export enum Type {
@@ -20,15 +16,6 @@ export interface IlpErrorClass {
   message: string,
   ilpErrorCode?: string,
   ilpErrorData?: Buffer
-}
-
-export const errorToReject = (address: string, error: IlpErrorClass): Buffer => {
-  return serializeIlpReject({
-    code: error.ilpErrorCode || 'F00',
-    triggeredBy: address,
-    message: error.message || '',
-    data: error.ilpErrorData || Buffer.alloc(0)
-  })
 }
 
 export const deserializeEnvelope = (binary: Buffer) => {
@@ -123,6 +110,26 @@ export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
 export interface IlpFulfill {
   fulfillment: Buffer,
   data: Buffer
+}
+
+export function isPrepare (packet: IlpAny): packet is IlpPrepare {
+  return typeof packet['amount'] === 'string' &&
+    typeof packet['expiresAt'] !== 'undefined' &&
+    typeof packet['destination'] === 'string' &&
+    Buffer.isBuffer(packet['executionCondition']) &&
+    Buffer.isBuffer(packet['data'])
+}
+
+export function isFulfill (packet: IlpAny): packet is IlpFulfill {
+  return Buffer.isBuffer(packet['fulfillment']) &&
+    Buffer.isBuffer(packet['data'])
+}
+
+export function isReject (packet: IlpAny): packet is IlpReject {
+  return typeof packet['code'] === 'string' &&
+    typeof packet['triggeredBy'] === 'string' &&
+    typeof packet['message'] === 'string' &&
+    Buffer.isBuffer(packet['data'])
 }
 
 export const serializeIlpFulfill = (json: IlpFulfill) => {
@@ -273,6 +280,15 @@ export function serializeIlpReply (packet: IlpReply): Buffer {
   return isFulfill(packet) ? serializeIlpFulfill(packet) : serializeIlpReject(packet)
 }
 
+export const errorToReject = (address: string, error: IlpErrorClass): Buffer => {
+  return serializeIlpReject({
+    code: error.ilpErrorCode || 'F00',
+    triggeredBy: address,
+    message: error.message || '',
+    data: error.ilpErrorData || Buffer.alloc(0)
+  })
+}
+
 export const errorToIlpReject = (address: string, error: IlpErrorClass): IlpReject => {
   return {
     code: error.ilpErrorCode || 'F00',
@@ -280,24 +296,4 @@ export const errorToIlpReject = (address: string, error: IlpErrorClass): IlpReje
     message: error.message || '',
     data: error.ilpErrorData || Buffer.alloc(0)
   }
-}
-
-export function isPrepare (packet: IlpAny): packet is IlpPrepare {
-  return typeof packet['amount'] === 'string' &&
-    typeof packet['expiresAt'] !== 'undefined' &&
-    typeof packet['destination'] === 'string' &&
-    Buffer.isBuffer(packet['executionCondition']) &&
-    Buffer.isBuffer(packet['data'])
-}
-
-export function isFulfill (packet: IlpAny): packet is IlpFulfill {
-  return Buffer.isBuffer(packet['fulfillment']) &&
-    Buffer.isBuffer(packet['data'])
-}
-
-export function isReject (packet: IlpAny): packet is IlpReject {
-  return typeof packet['code'] === 'string' &&
-    typeof packet['triggeredBy'] === 'string' &&
-    typeof packet['message'] === 'string' &&
-    Buffer.isBuffer(packet['data'])
 }

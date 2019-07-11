@@ -8,7 +8,7 @@ const PEER_PROTOCOL_CONDITION = Buffer.from('Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCp
 const PEER_PROTOCOL_EXPIRY_DURATION = 60000
 
 export interface IldcpRequest {
-  // empty for now
+  data?: Buffer
 }
 
 export interface IldcpResponse {
@@ -41,7 +41,7 @@ const serializeIldcpRequest = (request: IldcpRequest): Buffer => {
     destination: ILDCP_DESTINATION,
     executionCondition: PEER_PROTOCOL_CONDITION,
     expiresAt: new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
-    data: Buffer.alloc(0)
+    data: request.data || Buffer.alloc(0)
   })
 }
 

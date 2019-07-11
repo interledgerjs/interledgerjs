@@ -37,7 +37,7 @@
     "publish:canary": "lerna publish --canary",
     "publish:release": "lerna publish from-package",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
-    "lint:all": "yarn lint 'packages/*/*/src/**/*.ts*'",
+    "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
     "lint:staged": "lint-staged"
   },
   "husky": {

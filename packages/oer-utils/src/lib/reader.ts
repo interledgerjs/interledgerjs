@@ -58,6 +58,7 @@ class Reader {
     if (!this.bookmarks.length) {
       throw new Error('Cannot restore bookmark when no bookmark set')
     }
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     this.cursor = this.bookmarks.pop()!
   }
 

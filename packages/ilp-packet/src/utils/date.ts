@@ -43,7 +43,7 @@ export const interledgerTimeToDate = (interledgerTime: string) => {
 }
 
 export const dateToGeneralizedTime = (date: Date) => {
-  return date.toISOString().replace(/[\-T:]/g, '')
+  return date.toISOString().replace(/[-T:]/g, '')
 }
 
 export const GENERALIZED_TIME_REGEX =

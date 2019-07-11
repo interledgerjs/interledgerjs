@@ -6,10 +6,39 @@ import BigNumber from 'bignumber.js'
 export const MAX_SAFE_BYTES = 6
 
 const INTEGER_REGEX = /^-?[0-9]+$/
+interface BigNumberSizeRange {
+  // UInt ranges don't use min.
+  min?: BigNumber,
+  max: BigNumber,
+  bytes: number
+}
+
+interface NumberSizeRange {
+  // UInt ranges don't use min.
+  min?: number,
+  max: number,
+  bytes: number
+}
+
+function makeNumberRanges (ranges: BigNumberSizeRange[]): NumberSizeRange[] {
+  return ranges
+    .filter((range) => range.bytes <= MAX_SAFE_BYTES)
+    .map((range) => ({
+      min: range.min && range.min.toNumber(),
+      max: range.max.toNumber(),
+      bytes: range.bytes
+    }))
+}
+
+function computeBigNumberBufferSize (value: BigNumber): number {
+  return Math.ceil(value.toString(16).length / 2)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function isInteger (value: any) {
   if (BigNumber.isBigNumber(value)) {
-    return value.isFinite()
-      && value.isInteger()
+    return value.isFinite() &&
+      value.isInteger()
   } else if (typeof value === 'number') {
     return isFinite(value) && Math.floor(value) === value
   } else if (typeof value === 'string') {
@@ -87,6 +116,7 @@ export function getBigIntBufferSize (value: BigNumber): number {
   for (let i = 0; i < VAR_INT_SIZES.length; i++) {
     const item = VAR_INT_SIZES[i]
     if (
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       value.isGreaterThanOrEqualTo(item.min!) &&
       value.isLessThanOrEqualTo(item.max)
     ) {
@@ -100,35 +130,8 @@ export function getBigIntBufferSize (value: BigNumber): number {
 export function getIntBufferSize (value: number): number {
   for (let i = 0; i < VAR_INT_SIZES.length; i++) {
     const item = VAR_INT_SIZES[i]
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     if (value >= item.min! && value <= item.max) return item.bytes
   }
   return computeBigNumberBufferSize(new BigNumber(value))
-}
-
-function computeBigNumberBufferSize (value: BigNumber): number {
-  return Math.ceil(value.toString(16).length / 2)
-}
-
-interface BigNumberSizeRange {
-  // UInt ranges don't use min.
-  min?: BigNumber,
-  max: BigNumber,
-  bytes: number
-}
-
-interface NumberSizeRange {
-  // UInt ranges don't use min.
-  min?: number,
-  max: number,
-  bytes: number
-}
-
-function makeNumberRanges (ranges: BigNumberSizeRange[]): NumberSizeRange[] {
-  return ranges
-    .filter((range) => range.bytes <= MAX_SAFE_BYTES)
-    .map((range) => ({
-      min: range.min && range.min.toNumber(),
-      max: range.max.toNumber(),
-      bytes: range.bytes
-    }))
 }
