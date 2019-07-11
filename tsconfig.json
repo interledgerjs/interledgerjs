@@ -12,10 +12,10 @@
     "suppressImplicitAnyIndexErrors": true,
     "baseUrl": ".",
     "paths": {
-      "oer-utils" : ["packages/oer-utils"],
-      "ilp-packet" : ["packages/ilp-packet"],
-      "ilp-logger" : ["packages/ilp-logger"],
-      "ilp-protocol-ildcp" : ["packages/ilp-protocol-ildcp"]
+      "oer-utils" : ["packages/oer-utils/src"],
+      "ilp-packet" : ["packages/ilp-packet/src"],
+      "ilp-logger" : ["packages/ilp-logger/src"],
+      "ilp-protocol-ildcp" : ["packages/ilp-protocol-ildcp/src"]
     }
   },
   "exclude": [
