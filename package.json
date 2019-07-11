@@ -2,14 +2,11 @@
   "name": "interledger",
   "version": "1.0.0",
   "description": "Interledger.JS Monorepo",
-  "repository": "https://github.com/interledgerjs/interledger",
-  "author": "Adrian Hope-Bailie",
+  "repository": "https://github.com/interledgerjs/interledgerjs",
   "license": "Apache-2.0",
   "private": true,
   "workspaces": [
-    "packages/codecs/*",
-    "packages/protocols/*",
-    "packages/utils/*"
+    "packages/*"
   ],
   "devDependencies": {
     "lerna": "^3.15.0",
