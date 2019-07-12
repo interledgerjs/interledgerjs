@@ -1,8 +1,4 @@
 /**
- * @module util
- */
-
-/**
  * Extensible error class.
  *
  * The built-in Error class is not actually a constructor, but a factory. It
@@ -15,7 +11,7 @@
  *
  * Note that this code is specific to V8 (due to `Error.captureStackTrace`).
  */
-class BaseError extends Error {
+export class BaseError extends Error {
   constructor (message: string = '') {
     super()
 
@@ -39,5 +35,3 @@ class BaseError extends Error {
     }
   }
 }
-
-export default BaseError

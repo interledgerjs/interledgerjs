@@ -15,18 +15,6 @@ export class Logger {
   }
 }
 
-const createLogger = function (namespace: string) {
+export function createLogger (namespace: string) {
   return new Logger(namespace)
-} as ModuleExport
-
-interface ModuleExport {
-  (namespace: string): Logger
-  default: ModuleExport
-  Logger: Function
 }
-
-createLogger.default = createLogger
-createLogger.Logger = Logger
-export default createLogger
-
-module.exports = createLogger

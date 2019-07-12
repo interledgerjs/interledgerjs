@@ -1,4 +1,4 @@
-import Reader from '../src/lib/reader'
+import { Reader } from 'oer-utils'
 import BigNumber from 'bignumber.js'
 
 import chai = require('chai')

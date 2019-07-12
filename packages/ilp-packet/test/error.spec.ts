@@ -1,6 +1,5 @@
 import { assert } from 'chai'
-
-const { Errors } = require('..')
+import { Errors } from 'ilp-packet'
 
 describe('Errors', function () {
   describe('AmountTooLargeError', function () {

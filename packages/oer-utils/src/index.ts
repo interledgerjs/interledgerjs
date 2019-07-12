@@ -1,5 +1,4 @@
-import Reader from './lib/reader'
-import Writer, { WriterInterface } from './lib/writer'
-import Predictor from './lib/predictor'
-
-export { Reader, Writer, WriterInterface, Predictor }
+export { Reader } from './lib/reader'
+export { Writer, WriterInterface } from './lib/writer'
+export { Predictor } from './lib/predictor'
+export { isInteger } from './lib/util'

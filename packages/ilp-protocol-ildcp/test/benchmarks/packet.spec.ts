@@ -1,5 +1,8 @@
+/* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-var-requires */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import * as PacketV1 from 'ilp-protocol-ildcp'
 const Benchmark = require('benchmark')
-import * as PacketV1 from '../../src'
 const packageV0 = process.argv[2]
 if (!packageV0) {
   console.error('usage: node ' + process.argv.slice(0, 2).join(' ') + ' <v0>')

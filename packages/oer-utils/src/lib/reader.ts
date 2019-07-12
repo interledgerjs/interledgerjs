@@ -1,5 +1,5 @@
-import UnderflowError from '../errors/underflow-error'
-import ParseError from '../errors/parse-error'
+import { UnderflowError } from '../errors/underflow-error'
+import { ParseError } from '../errors/parse-error'
 import BigNumber from 'bignumber.js'
 import { bufferToBigNumber, MAX_SAFE_BYTES } from './util'
 
@@ -7,7 +7,7 @@ BigNumber.config({
   EXPONENTIAL_AT: [-7, 50]
 })
 
-class Reader {
+export class Reader {
   // Most significant bit in a byte
   static HIGH_BIT = 0x80
 
@@ -548,7 +548,7 @@ class Reader {
   }
 }
 
-interface Reader {
+export interface Reader {
   readUInt8 (): string
   readUInt16 (): string
   readUInt32 (): string
@@ -638,5 +638,3 @@ interface Reader {
     }
   })
 })
-
-export default Reader

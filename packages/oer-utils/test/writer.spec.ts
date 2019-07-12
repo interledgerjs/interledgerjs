@@ -1,4 +1,4 @@
-import Writer from '../src/lib/writer'
+import { Writer } from 'oer-utils'
 import BigNumber from 'bignumber.js'
 
 import chai = require('chai')
@@ -38,7 +38,7 @@ describe('Writer', function () {
     it('should return the size of the Writer', function () {
       const writer = new Writer()
 
-      writer.write(new Buffer(15))
+      writer.write(Buffer.alloc(15))
 
       assert.equal(writer.length, 15)
     })
@@ -714,7 +714,7 @@ describe('Writer', function () {
 
       assert.throws(function () {
         writer.writeUInt32(new BigNumber(-1))
-      } , 'UInt must be positive')
+      }, 'UInt must be positive')
     })
   })
 
@@ -773,7 +773,7 @@ describe('Writer', function () {
 
       assert.throws(function () {
         writer.writeUInt64(new BigNumber(-1))
-      } , 'UInt must be positive')
+      }, 'UInt must be positive')
     })
 
     it('should fail to write a BigNumber that is too large', function () {
@@ -781,7 +781,7 @@ describe('Writer', function () {
 
       assert.throws(function () {
         writer.writeUInt64(new BigNumber(0x10102030405060708))
-      } , 'UInt 18519367933499933000 does not fit in 8 bytes')
+      }, 'UInt 18519367933499933000 does not fit in 8 bytes')
     })
   })
 
@@ -926,7 +926,7 @@ describe('Writer', function () {
 
       assert.throws(function () {
         writer.writeInt64(new BigNumber(-0x101020304050607080))
-      } , 'Int -296309886935998900000 does not fit in 8 bytes')
+      }, 'Int -296309886935998900000 does not fit in 8 bytes')
     })
 
     it('should fail to write a BigNumber that is too large', function () {
@@ -934,7 +934,7 @@ describe('Writer', function () {
 
       assert.throws(function () {
         writer.writeInt64(new BigNumber(0x10102030405060708))
-      } , 'Int 18519367933499933000 does not fit in 8 bytes')
+      }, 'Int 18519367933499933000 does not fit in 8 bytes')
     })
   })
 })

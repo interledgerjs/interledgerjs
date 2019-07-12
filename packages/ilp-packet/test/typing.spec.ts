@@ -1,5 +1,5 @@
 import { assert } from 'chai'
-import { isFulfill, isPrepare, isReject } from '..'
+import { isFulfill, isPrepare, isReject } from 'ilp-packet'
 
 describe('Types', function () {
   describe('isPrepare', function () {

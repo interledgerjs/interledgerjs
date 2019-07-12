@@ -1,5 +1,2 @@
-import BaseError from './base-error'
-
-class ParseError extends BaseError { }
-
-export default ParseError
+import { BaseError } from './base-error'
+export class ParseError extends BaseError { }

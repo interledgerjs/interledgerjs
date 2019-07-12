@@ -1,5 +1,3 @@
-import BaseError from './base-error'
+import { BaseError } from './base-error'
 
-class UnderflowError extends BaseError { }
-
-export default UnderflowError
+export class UnderflowError extends BaseError { }

@@ -14,7 +14,7 @@ import { WriterInterface } from './writer'
  * This class acts as a writable stream, but only does the minimum amount of
  * work necessary to count/predict the output size.
  */
-class Predictor implements WriterInterface {
+export class Predictor implements WriterInterface {
   private size: number
 
   constructor () {
@@ -159,7 +159,7 @@ class Predictor implements WriterInterface {
   }
 }
 
-interface Predictor {
+export interface Predictor {
   writeUInt8 (value: number): undefined
   writeUInt16 (value: number): undefined
   writeUInt32 (value: number): undefined
@@ -180,5 +180,3 @@ interface Predictor {
     return this.writeUInt(value, bytes)
   }
 })
-
-export default Predictor

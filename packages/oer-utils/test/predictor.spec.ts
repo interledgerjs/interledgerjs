@@ -1,5 +1,4 @@
-import Predictor from '../src/lib/predictor'
-import Writer, { WriterInterface } from '../src/lib/writer'
+import { Predictor, Writer, WriterInterface } from 'oer-utils'
 import BigNumber from 'bignumber.js'
 
 import chai = require('chai')
@@ -43,7 +42,7 @@ describe('Predictor', function () {
     it('should return the size of the Writer', function () {
       const predictor = new Predictor()
 
-      predictor.write(new Buffer(15))
+      predictor.write(Buffer.alloc(15))
 
       assert.equal(predictor.length, 15)
     })
@@ -196,7 +195,7 @@ describe('Predictor', function () {
       const predictor = new Predictor()
 
       assert.throws(
-        () => predictor.writeOctetString(new Buffer('02', 'hex'), 2),
+        () => predictor.writeOctetString(Buffer.from('02', 'hex'), 2),
         'Incorrect length for octet string (actual: 1, expected: 2)'
       )
     })
@@ -206,7 +205,7 @@ describe('Predictor', function () {
     it('should calculate the correct length for an empty buffer', function () {
       const predictor = new Predictor()
 
-      predictor.writeVarOctetString(new Buffer(0))
+      predictor.writeVarOctetString(Buffer.alloc(0))
 
       assert.equal(predictor.getSize(), 1)
     })
@@ -214,7 +213,7 @@ describe('Predictor', function () {
     it('should calculate the correct length for a short buffer', function () {
       const predictor = new Predictor()
 
-      predictor.writeVarOctetString(new Buffer(10))
+      predictor.writeVarOctetString(Buffer.alloc(10))
 
       assert.equal(predictor.getSize(), 11)
     })
@@ -222,7 +221,7 @@ describe('Predictor', function () {
     it('should calculate the correct length for a long buffer', function () {
       const predictor = new Predictor()
 
-      predictor.writeVarOctetString(new Buffer(256))
+      predictor.writeVarOctetString(Buffer.alloc(256))
 
       assert.equal(predictor.getSize(), 259)
     })
@@ -262,7 +261,7 @@ describe('Predictor', function () {
     it('should add the size of the buffer to the total size', function () {
       const predictor = new Predictor()
 
-      predictor.write(new Buffer(15))
+      predictor.write(Buffer.alloc(15))
 
       assert.equal(predictor.getSize(), 15)
     })

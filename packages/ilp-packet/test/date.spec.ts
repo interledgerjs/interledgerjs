@@ -4,6 +4,10 @@ import {
   interledgerTimeToDate
 } from '../src/utils/date'
 
+function randomBetween (min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min))
+}
+
 describe('utils/date', function () {
   describe('interledgerTimeToDate', function () {
     it('matches dateToInterledgerTime', function () {
@@ -18,12 +22,8 @@ describe('utils/date', function () {
         const date = new Date(Date.UTC(year, month, day, hour, minute, second, millisecond))
 
         const ilpDate = dateToInterledgerTime(date)
-        assert.deepEqual(interledgerTimeToDate(ilpDate), date)
+        assert.deepStrictEqual(interledgerTimeToDate(ilpDate), date)
       }
     })
   })
 })
-
-function randomBetween (min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min))
-}

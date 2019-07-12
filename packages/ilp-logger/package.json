@@ -18,8 +18,8 @@
     "codecov": "nyc report --reporter=json && codecov -f coverage/*.json"
   },
   "dependencies": {
-    "@types/debug": "^0.0.31",
-    "debug": "^4.1.0",
-    "supports-color": "^5.5.0"
+    "@types/debug": "^4.1.4",
+    "debug": "^4.1.1",
+    "supports-color": "^7.0.0"
   }
 }

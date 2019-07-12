@@ -9,7 +9,7 @@ import {
 } from './util'
 import BigNumber from 'bignumber.js'
 
-class Writer implements WriterInterface {
+export class Writer implements WriterInterface {
   // Largest value that can be written as a variable-length unsigned integer
   static MAX_SAFE_INTEGER: number = 0x1fffffffffffff
   static MIN_SAFE_INTEGER: number = -0x1fffffffffffff
@@ -327,7 +327,7 @@ class Writer implements WriterInterface {
   }
 }
 
-interface Writer {
+export interface Writer {
   writeUInt8 (value: BigNumber.Value): undefined
   writeUInt16 (value: BigNumber.Value): undefined
   writeUInt32 (value: BigNumber.Value): undefined
@@ -369,5 +369,3 @@ export interface WriterInterface {
   writeInt32 (value: BigNumber.Value): undefined
   writeInt64 (value: BigNumber.Value): undefined
 }
-
-export default Writer
