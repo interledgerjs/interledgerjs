@@ -1473,6 +1473,15 @@ describe('Reader', function () {
         'Length prefix encoding is not canonical: 1 encoded in 2 bytes'
       )
     })
+
+    it('should throw when length wont fit in JS number', function () {
+      const reader = Reader.from(Buffer.from('8711223344556677', 'hex'))
+
+      assert.throws(
+        () => reader.readLengthPrefix(),
+        'Value does not fit a JS number without sacrificing precision'
+      )
+    })
   })
 
   describe('readVarOctetString', function () {
