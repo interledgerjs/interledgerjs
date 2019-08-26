@@ -1,12 +1,12 @@
 import 'mocha'
 import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
-import BigNumber from 'bignumber.js'
+import * as Long from 'long'
 import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
 import { Duplex } from 'stream'
 import * as IlpPacket from 'ilp-packet'
-import { Packet, StreamCloseFrame, ErrorCode, StreamMoneyFrame, StreamDataFrame } from '../src/packet'
+import { Packet, StreamCloseFrame, ErrorCode, StreamMoneyFrame, StreamDataFrame, Frame } from '../src/packet'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
@@ -71,6 +71,14 @@ describe('DataAndMoneyStream', function () {
     it('should throw if the amount is infinite', function () {
       const clientStream = this.clientConn.createStream()
       assert.throws(() => clientStream.setSendMax(Infinity), 'sendMax must be finite')
+    })
+
+    it('should throw if the amount doesn\'t fit in a UInt64', function () {
+      const clientStream = this.clientConn.createStream()
+      assert.throws(
+        () => clientStream.setSendMax('18446744073709551616'),
+        'Value 18446744073709551616 does not fit in a Long.'
+      )
     })
   })
 
@@ -500,9 +508,15 @@ describe('DataAndMoneyStream', function () {
 
       const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
         new StreamMoneyFrame(clientStream.id, 1)
-      ]), new BigNumber(100))
+      ]), Long.fromNumber(100, true))
       assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
-      assert.deepInclude(response.frames, new StreamCloseFrame(clientStream.id, ErrorCode.NoError, ''))
+
+      const closeFrame = response.frames.find((frame: Frame) => frame.name === 'StreamClose')
+      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.NoError, '')
+      // Longs don't compare properly with deepEqual.
+      assert.equal(closeFrame.streamId.toString(), expectFrame.streamId.toString())
+      assert.equal(closeFrame.errorCode, expectFrame.errorCode)
+      assert.equal(closeFrame.errorMessage, expectFrame.errorMessage)
     })
 
     it('should reject packets that include data for streams that are already closed', async function () {
@@ -518,9 +532,14 @@ describe('DataAndMoneyStream', function () {
 
       const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
         new StreamDataFrame(clientStream.id, 5, Buffer.from('blah'))
-      ]), new BigNumber(0))
+      ]), Long.UZERO)
       assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
-      assert.deepInclude(response.frames, new StreamCloseFrame(clientStream.id, ErrorCode.NoError, ''))
+
+      const closeFrame = response.frames.find((frame: Frame) => frame.name === 'StreamClose')
+      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.NoError, '')
+      assert.equal(closeFrame.streamId.toString(), expectFrame.streamId.toString())
+      assert.equal(closeFrame.errorCode, expectFrame.errorCode)
+      assert.equal(closeFrame.errorMessage, expectFrame.errorMessage)
     })
 
     it('should not allow more data to be written once the stream is closed and throw an error if there is no error listener', async function () {

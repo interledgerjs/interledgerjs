@@ -1,8 +1,9 @@
 import { EventEmitter } from 'events'
 import * as IlpPacket from 'ilp-packet'
-import BigNumber from 'bignumber.js'
+import * as Long from 'long'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import { Writer } from 'oer-utils'
+import Rational from '../../src/util/rational'
 require('source-map-support').install()
 
 export interface DataHandler {
@@ -21,7 +22,7 @@ export default class MockPlugin extends EventEmitter {
   public mirror: MockPlugin
   protected identity: string
   protected assetCode: string
-  public maxAmount?: number
+  public maxAmount?: number | Long
 
   constructor (exchangeRate: number, mirror?: MockPlugin) {
     super()
@@ -52,6 +53,7 @@ export default class MockPlugin extends EventEmitter {
 
   async sendData (data: Buffer): Promise<Buffer> {
     if (data[0] === IlpPacket.Type.TYPE_ILP_PREPARE) {
+      const exchangeRate = Rational.fromNumber(this.exchangeRate, true)
       const parsed = IlpPacket.deserializeIlpPrepare(data)
       if (parsed.destination === 'peer.config') {
         return ILDCP.serializeIldcpResponse({
@@ -60,10 +62,10 @@ export default class MockPlugin extends EventEmitter {
           assetCode: this.assetCode
         })
       }
-      const amount = new BigNumber(parsed.amount)
-      if (typeof this.maxAmount === 'number' && amount.isGreaterThan(this.maxAmount)) {
+      const amount = Long.fromString(parsed.amount, true)
+      if (this.maxAmount !== undefined && amount.greaterThan(this.maxAmount)) {
         const writer = new Writer()
-        writer.writeUInt64(amount.toNumber())
+        writer.writeUInt64(amount)
         writer.writeUInt64(this.maxAmount)
         return IlpPacket.serializeIlpReject({
           code: 'F08',
@@ -74,7 +76,7 @@ export default class MockPlugin extends EventEmitter {
       }
       const newPacket = IlpPacket.serializeIlpPrepare({
         ...parsed,
-        amount: amount.times(this.exchangeRate).decimalPlaces(0, BigNumber.ROUND_DOWN).toString(10)
+        amount: exchangeRate.multiplyByLong(amount).toString(10)
       })
       return this.mirror.dataHandler(newPacket)
     } else {

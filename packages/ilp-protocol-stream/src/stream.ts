@@ -1,11 +1,21 @@
 import createLogger from 'ilp-logger'
-import BigNumber from 'bignumber.js'
+import * as Long from 'long'
 import { Duplex } from 'stream'
 import { DataQueue } from './util/data-queue'
 import { OffsetSorter } from './util/data-offset-sorter'
+import {
+  LongValue,
+  longFromValue,
+  maxLong,
+  minLong,
+  checkedAdd,
+  checkedSubtract
+} from './util/long'
 require('source-map-support').install()
 
 const DEFAULT_TIMEOUT = 60000
+
+const MAX_REMOTE_RECEIVE = Long.MAX_UNSIGNED_VALUE
 
 export interface StreamOpts {
   id: number,
@@ -34,9 +44,9 @@ export class DataAndMoneyStream extends Duplex {
   /** @private */
   _remoteClosed: boolean
   /** @private */
-  _remoteReceiveMax: BigNumber
+  _remoteReceiveMax: Long
   /** @private */
-  _remoteReceived: BigNumber
+  _remoteReceived: Long
   /** @private */
   _remoteMaxOffset: number
   /** @private */
@@ -47,14 +57,14 @@ export class DataAndMoneyStream extends Duplex {
   protected log: any
   protected isServer: boolean
 
-  protected _totalSent: BigNumber
-  protected _totalReceived: BigNumber
-  protected _sendMax: BigNumber
-  protected _receiveMax: BigNumber
-  protected _outgoingHeldAmount: BigNumber
+  protected _totalSent: Long
+  protected _totalReceived: Long
+  protected _sendMax: Long
+  protected _receiveMax: Long
+  protected _outgoingHeldAmount: Long
 
   protected closed: boolean
-  protected holds: { [id: string]: BigNumber }
+  protected holds: { [id: string]: Long }
 
   protected _incomingData: OffsetSorter
   protected _outgoingData: DataQueue
@@ -72,11 +82,11 @@ export class DataAndMoneyStream extends Duplex {
     this.log = createLogger(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Stream:${this.id}`)
     this.log.info('new stream created')
 
-    this._totalSent = new BigNumber(0)
-    this._totalReceived = new BigNumber(0)
-    this._sendMax = new BigNumber(0)
-    this._receiveMax = new BigNumber(0)
-    this._outgoingHeldAmount = new BigNumber(0)
+    this._totalSent = Long.UZERO
+    this._totalReceived = Long.UZERO
+    this._sendMax = Long.UZERO
+    this._receiveMax = Long.UZERO
+    this._outgoingHeldAmount = Long.UZERO
 
     this._sentEnd = false
     this._remoteSentEnd = false
@@ -90,8 +100,8 @@ export class DataAndMoneyStream extends Duplex {
     this.outgoingOffset = 0
 
     this._remoteClosed = false
-    this._remoteReceived = new BigNumber(0)
-    this._remoteReceiveMax = new BigNumber(Infinity)
+    this._remoteReceived = Long.UZERO
+    this._remoteReceiveMax = MAX_REMOTE_RECEIVE
     // TODO should we have a different default?
     this._remoteMaxOffset = 16384 // 16kb
 
@@ -196,17 +206,16 @@ export class DataAndMoneyStream extends Duplex {
    * Set the total amount this stream will send, denominated in the connection plugin's units.
    * Note that this is absolute, not relative so calling `setSendMax(100)` twice will only send 100 units.
    */
-  setSendMax (limit: BigNumber.Value): void {
+  setSendMax (limit: LongValue): void {
     if (this.closed) {
       throw new Error('Stream already closed')
+    } else if (typeof limit === 'number' && !isFinite(limit)) {
+      throw new Error('sendMax must be finite')
     }
-    const sendMax = new BigNumber(limit)
-    if (this._totalSent.isGreaterThan(sendMax)) {
+    const sendMax = longFromValue(limit, true)
+    if (this._totalSent.greaterThan(sendMax)) {
       this.log.debug(`cannot set sendMax to ${sendMax} because we have already sent: ${this._totalSent}`)
       throw new Error(`Cannot set sendMax lower than the totalSent`)
-    }
-    if (!sendMax.isFinite()) {
-      throw new Error('sendMax must be finite')
     }
     this.log.debug(`setting sendMax to ${sendMax}`)
     this._sendMax = sendMax
@@ -224,20 +233,21 @@ export class DataAndMoneyStream extends Duplex {
    * Note that this is absolute, not relative so calling `setReceiveMax(100)` twice will only let the stream receive 100 units.
    * @fires money
    */
-  setReceiveMax (limit: BigNumber.Value): void {
+  setReceiveMax (limit: LongValue): void {
     if (this.closed) {
       throw new Error('Stream already closed')
     }
-    if (this._totalReceived.isGreaterThan(limit)) {
-      this.log.debug(`cannot set receiveMax to ${limit} because we have already received: ${this._totalReceived}`)
+    const receiveMax = longFromValue(limit, true)
+    if (this._totalReceived.greaterThan(receiveMax)) {
+      this.log.debug(`cannot set receiveMax to ${receiveMax} because we have already received: ${this._totalReceived}`)
       throw new Error('Cannot set receiveMax lower than the totalReceived')
     }
-    if (this._receiveMax.isGreaterThan(limit)) {
-      this.log.debug(`cannot set receiveMax to ${limit} because the current limit is: ${this._receiveMax}`)
+    if (this._receiveMax.greaterThan(receiveMax)) {
+      this.log.debug(`cannot set receiveMax to ${receiveMax} because the current limit is: ${this._receiveMax}`)
       throw new Error('Cannot decrease the receiveMax')
     }
-    this.log.debug(`setting receiveMax to ${limit}`)
-    this._receiveMax = new BigNumber(limit)
+    this.log.debug(`setting receiveMax to ${receiveMax}`)
+    this._receiveMax = receiveMax
     this.emit('_maybe_start_send_loop')
   }
 
@@ -247,9 +257,10 @@ export class DataAndMoneyStream extends Duplex {
    *
    * This promise will only resolve when the absolute amount specified is reached, so lowering the `sendMax` may cause this not to resolve.
    */
-  async sendTotal (limit: BigNumber.Value, opts?: SendOpts): Promise<void> {
+  async sendTotal (_limit: LongValue, opts?: SendOpts): Promise<void> {
+    const limit = longFromValue(_limit, true)
     const timeout = (opts && opts.timeout) || DEFAULT_TIMEOUT
-    if (this._totalSent.isGreaterThanOrEqualTo(limit)) {
+    if (this._totalSent.greaterThanOrEqual(limit)) {
       this.log.debug(`already sent ${this._totalSent}, not sending any more`)
       return Promise.resolve()
     }
@@ -258,7 +269,7 @@ export class DataAndMoneyStream extends Duplex {
     await new Promise((resolve, reject) => {
       const self = this
       function outgoingHandler () {
-        if (self._totalSent.isGreaterThanOrEqualTo(limit)) {
+        if (self._totalSent.greaterThanOrEqual(limit)) {
           cleanup()
           resolve()
         }
@@ -266,7 +277,7 @@ export class DataAndMoneyStream extends Duplex {
       function endHandler () {
         // Clean up on next tick in case an error was also emitted
         setImmediate(cleanup)
-        if ((self._totalSent.isGreaterThanOrEqualTo(limit))) {
+        if ((self._totalSent.greaterThanOrEqual(limit))) {
           resolve()
         } else {
           self.log.debug(`Stream was closed before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`)
@@ -301,9 +312,10 @@ export class DataAndMoneyStream extends Duplex {
    *
    * This promise will only resolve when the absolute amount specified is reached, so lowering the `receiveMax` may cause this not to resolve.
    */
-  async receiveTotal (limit: BigNumber.Value, opts?: ReceiveOpts): Promise<void> {
+  async receiveTotal (_limit: LongValue, opts?: ReceiveOpts): Promise<void> {
+    const limit = longFromValue(_limit, true)
     const timeout = (opts && opts.timeout) || DEFAULT_TIMEOUT
-    if (this._totalReceived.isGreaterThanOrEqualTo(limit)) {
+    if (this._totalReceived.greaterThanOrEqual(limit)) {
       this.log.debug(`already received ${this._totalReceived}, not waiting for more`)
       return Promise.resolve()
     }
@@ -312,7 +324,7 @@ export class DataAndMoneyStream extends Duplex {
     await new Promise((resolve, reject) => {
       const self = this
       function moneyHandler () {
-        if (self._totalReceived.isGreaterThanOrEqualTo(limit)) {
+        if (self._totalReceived.greaterThanOrEqual(limit)) {
           cleanup()
           resolve()
         }
@@ -320,7 +332,7 @@ export class DataAndMoneyStream extends Duplex {
       function endHandler () {
         // Clean up on next tick in case an error was also emitted
         setImmediate(cleanup)
-        if (self._totalReceived.isGreaterThanOrEqualTo(limit)) {
+        if (self._totalReceived.greaterThanOrEqual(limit)) {
           resolve()
         } else {
           self.log.debug(`Stream was closed before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`)
@@ -354,8 +366,11 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _getAmountStreamCanReceive (): BigNumber {
-    return this._receiveMax.minus(this._totalReceived)
+  _getAmountStreamCanReceive (): Long {
+    if (this._receiveMax.lessThan(this._totalReceived)) {
+      return Long.UZERO
+    }
+    return checkedSubtract(this._receiveMax, this._totalReceived).difference
   }
 
   /**
@@ -363,8 +378,9 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _addToIncoming (amount: BigNumber): void {
-    this._totalReceived = this._totalReceived.plus(amount)
+  _addToIncoming (amount: Long): void {
+    // If this overflows, it will als be caught (and handled) at the connection level.
+    this._totalReceived = checkedAdd(this._totalReceived, amount).sum
     this.log.trace(`received ${amount} (totalReceived: ${this._totalReceived})`)
     this.emit('money', amount.toString())
   }
@@ -374,12 +390,15 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _getAmountAvailableToSend (): BigNumber {
+  _getAmountAvailableToSend (): Long {
     if (this.closed) {
-      return new BigNumber(0)
+      return Long.UZERO
     }
-    const amountAvailable = this._sendMax.minus(this._totalSent).minus(this._outgoingHeldAmount)
-    return BigNumber.maximum(amountAvailable, 0)
+    const amountAvailable = checkedSubtract(
+      checkedSubtract(this._sendMax, this._totalSent).difference,
+      this._outgoingHeldAmount
+    ).difference
+    return amountAvailable
   }
 
   /**
@@ -387,11 +406,11 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _holdOutgoing (holdId: string, maxAmount?: BigNumber): BigNumber {
+  _holdOutgoing (holdId: string, maxAmount?: Long): Long {
     const amountAvailable = this._getAmountAvailableToSend()
-    const amountToHold = (maxAmount ? BigNumber.minimum(amountAvailable, maxAmount) : amountAvailable)
-    if (amountToHold.isGreaterThan(0)) {
-      this._outgoingHeldAmount = this._outgoingHeldAmount.plus(amountToHold)
+    const amountToHold = (maxAmount ? minLong(amountAvailable, maxAmount) : amountAvailable)
+    if (amountToHold.greaterThan(0)) {
+      this._outgoingHeldAmount = this._outgoingHeldAmount.add(amountToHold)
       this.holds[holdId] = amountToHold
       this.log.trace(`holding outgoing balance. holdId: ${holdId}, amount: ${amountToHold}`)
     }
@@ -408,13 +427,13 @@ export class DataAndMoneyStream extends Duplex {
       return
     }
     const amount = this.holds[holdId]
-    this._outgoingHeldAmount = this._outgoingHeldAmount.minus(amount)
-    this._totalSent = this._totalSent.plus(amount)
+    this._outgoingHeldAmount = this._outgoingHeldAmount.subtract(amount)
+    this._totalSent = this._totalSent.add(amount)
     delete this.holds[holdId]
     this.log.trace(`executed holdId: ${holdId} for: ${amount}`)
     this.emit('outgoing_money', amount.toString())
 
-    if (this._totalSent.isGreaterThanOrEqualTo(this._sendMax)) {
+    if (this._totalSent.greaterThanOrEqual(this._sendMax)) {
       this.log.debug('outgoing total sent')
       this.emit('outgoing_total_sent')
     }
@@ -431,7 +450,7 @@ export class DataAndMoneyStream extends Duplex {
     }
     const amount = this.holds[holdId]
     this.log.trace(`cancelled holdId: ${holdId} for: ${amount}`)
-    this._outgoingHeldAmount = this._outgoingHeldAmount.minus(amount)
+    this._outgoingHeldAmount = this._outgoingHeldAmount.subtract(amount)
     delete this.holds[holdId]
   }
 
@@ -467,7 +486,7 @@ export class DataAndMoneyStream extends Duplex {
       callback(err)
     }
 
-    if (this._remoteSentEnd || this._sendMax.isLessThanOrEqualTo(this._totalSent)) {
+    if (this._remoteSentEnd || this._sendMax.lessThanOrEqual(this._totalSent)) {
       finish()
     } else {
       this.log.info('waiting to finish sending money before ending stream')

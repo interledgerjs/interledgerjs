@@ -8,6 +8,7 @@ import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import { Writer } from 'oer-utils'
 import * as chaiAsPromised from 'chai-as-promised'
+import * as Long from 'long'
 Chai.use(chaiAsPromised)
 const assert = Object.assign(Chai.assert, sinon.assert)
 require('source-map-support').install()
@@ -607,7 +608,7 @@ describe('Connection', function () {
       assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage) 
     })
 
-    it('should determine the exchange rate if it gets F08 which can be used for a valid exchange rate ', async function () {
+    it('should determine the exchange rate if it gets F08 which can be used for a valid exchange rate', async function () {
       const clock = sinon.useFakeTimers({
         toFake: ['setTimeout'],
       })
@@ -1136,6 +1137,37 @@ describe('Connection', function () {
       })
 
       await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before the desired amount was sent (target: 1000, totalSent: 0)')
+    })
+
+    it('closes the connection if totalReceived exceeds MaxUint64', async function () {
+      this.serverPlugin.maxAmount = Long.MAX_UNSIGNED_VALUE
+
+      const serverPromise = this.server.acceptConnection()
+      const clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
+      const serverConn = await serverPromise
+      clientConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(Long.MAX_UNSIGNED_VALUE)
+      })
+
+      const spy1 = sinon.spy()
+      const spy2 = sinon.spy()
+      clientConn.once('error', spy1)
+      serverConn.once('error', spy2)
+
+      const serverStream1 = serverConn.createStream()
+      const serverStream2 = serverConn.createStream()
+
+      await serverStream1.sendTotal(Long.MAX_UNSIGNED_VALUE.divide(2))
+      // Cause `totalReceived` to exceed MAX_UNSIGNED_VALUE.
+      await assert.isRejected(serverStream2.sendTotal(1),
+        'Stream was closed before the desired amount was sent (target: 1, totalSent: 0)')
+      assert.calledOnce(spy1)
+      assert.equal(spy1.args[0][0].message, 'Total received exceeded MaxUint64')
+      assert.calledOnce(spy2)
+      assert.equal(spy2.args[0][0].message, 'Remote connection error. Code: InternalError, message: Total received exceeded MaxUint64')
     })
   })
 

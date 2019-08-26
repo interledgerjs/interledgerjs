@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import * as assert from 'assert'
 import createLogger from 'ilp-logger'
 import { DataAndMoneyStream } from './stream'
 import * as IlpPacket from 'ilp-packet'
@@ -26,7 +27,20 @@ import {
 } from './packet'
 import { Reader } from 'oer-utils'
 import { Plugin } from './util/plugin-interface'
-import BigNumber from 'bignumber.js'
+import {
+  LongValue,
+  longFromValue,
+  maxLong,
+  minLong,
+  minLongs,
+  countDigits,
+  checkedAdd,
+  checkedSubtract,
+  checkedMultiply,
+  multiplyDivideFloor
+} from './util/long'
+import * as Long from 'long'
+import Rational from './util/rational'
 require('source-map-support').install()
 
 const RETRY_DELAY_START = 100
@@ -47,7 +61,7 @@ export interface ConnectionOpts {
   /** ILP Address of the plugin */
   sourceAccount?: string,
   /** Specifies how much worse than the initial test packet that the exchange rate is allowed to get before packets are rejected */
-  slippage?: BigNumber.Value,
+  slippage?: number,
   /** Pad packets to the maximum size (data field of 32767 bytes). False by default */
   enablePadding?: boolean,
   /** User-specified connection identifier that was passed into [`generateAddressAndSecret`]{@link Server#generateAddressAndSecret} */
@@ -102,8 +116,8 @@ export class Connection extends EventEmitter {
   protected _pskKey: Buffer
   protected _fulfillmentKey: Buffer
   protected isServer: boolean
-  protected slippage: BigNumber
-  protected allowableReceiveExtra: BigNumber
+  protected slippage: Rational
+  protected allowableReceiveExtra: Rational
   protected enablePadding: boolean
   protected maxBufferedData: number
 
@@ -119,12 +133,12 @@ export class Connection extends EventEmitter {
   protected log: any
   protected sending: boolean
   /** Used to probe for the Maximum Packet Amount if the connectors don't tell us directly */
-  protected testMaximumPacketAmount: BigNumber
+  protected testMaximumPacketAmount: Long
   /** The path's Maximum Packet Amount, discovered through F08 errors */
-  protected maximumPacketAmount: BigNumber
+  protected maximumPacketAmount: Long
   protected minExchangeRatePrecision: number
   protected closed: boolean
-  protected exchangeRate?: BigNumber
+  protected exchangeRate?: Rational
   protected retryDelay: number
   protected queuedFrames: Frame[]
 
@@ -132,12 +146,12 @@ export class Connection extends EventEmitter {
   protected remoteMaxStreamId: number
   protected remoteKnowsOurAccount: boolean
 
-  // TODO use bignumbers for byte offsets
+  // TODO use longs for byte offsets
   protected remoteMaxOffset: number
-  protected _totalReceived: BigNumber
-  protected _totalSent: BigNumber
-  protected _totalDelivered: BigNumber
-  protected _lastPacketExchangeRate: BigNumber
+  protected _totalReceived: Long
+  protected _totalSent: Long
+  protected _totalDelivered: Long
+  protected _lastPacketExchangeRate: Rational
 
   constructor (opts: FullConnectionOpts) {
     super()
@@ -148,8 +162,11 @@ export class Connection extends EventEmitter {
     this._destinationAccount = opts.destinationAccount
     this.sharedSecret = opts.sharedSecret
     this.isServer = opts.isServer
-    this.slippage = new BigNumber(opts.slippage === undefined ? 0.01 : opts.slippage)
-    this.allowableReceiveExtra = new BigNumber(1.01)
+    this.slippage = Rational.fromNumber(opts.slippage === undefined ? 0.01 : opts.slippage, true)
+    if (this.slippage.greaterThanOne()) {
+      throw new Error('slippage must be less than one')
+    }
+    this.allowableReceiveExtra = Rational.fromNumber(1.01, true)
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
     this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
@@ -168,8 +185,8 @@ export class Connection extends EventEmitter {
     this.closed = true
     this.queuedFrames = []
 
-    this.maximumPacketAmount = new BigNumber(Infinity)
-    this.testMaximumPacketAmount = new BigNumber(Infinity)
+    this.maximumPacketAmount = Long.MAX_UNSIGNED_VALUE
+    this.testMaximumPacketAmount = Long.MAX_UNSIGNED_VALUE
     this.retryDelay = RETRY_DELAY_START
 
     this.remoteClosed = false
@@ -178,10 +195,10 @@ export class Connection extends EventEmitter {
 
     this.remoteMaxOffset = this.maxBufferedData
 
-    this._totalReceived = new BigNumber(0)
-    this._totalSent = new BigNumber(0)
-    this._totalDelivered = new BigNumber(0)
-    this._lastPacketExchangeRate = new BigNumber(0)
+    this._totalReceived = Long.UZERO
+    this._totalSent = Long.UZERO
+    this._totalDelivered = Long.UZERO
+    this._lastPacketExchangeRate = Rational.UZERO
     this._pskKey = cryptoHelper.generatePskEncryptionKey(this.sharedSecret)
     this._fulfillmentKey = cryptoHelper.generateFulfillmentKey(this.sharedSecret)
   }
@@ -370,7 +387,7 @@ export class Connection extends EventEmitter {
   get minimumAcceptableExchangeRate (): string {
     if (this.exchangeRate) {
       const minimumExchangeWithSlippage = this.exchangeRate
-         .times(new BigNumber(1).minus(this.slippage))
+         .multiplyByRational(this.slippage.complement())
       return minimumExchangeWithSlippage.toString()
     }
     return '0'
@@ -460,7 +477,7 @@ export class Connection extends EventEmitter {
 
           // Respond with a StreamClose frame (unless there is already one queued)
           const framesToSend = responseFrames.concat(this.queuedFrames)
-          const includesStreamClose = framesToSend.find((frame) => frame.type === FrameType.StreamClose && frame.streamId.isEqualTo(streamId))
+          const includesStreamClose = framesToSend.find((frame) => frame.type === FrameType.StreamClose && frame.streamId.equals(streamId))
           if (!includesStreamClose) {
             responseFrames.push(new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed'))
           }
@@ -493,7 +510,8 @@ export class Connection extends EventEmitter {
       throwFinalApplicationError()
     }
 
-    if (requestPacket.prepareAmount.isGreaterThan(prepare.amount)) {
+    const incomingAmount = Long.fromString(prepare.amount, true)
+    if (requestPacket.prepareAmount.greaterThan(incomingAmount)) {
       this.log.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${requestPacket.prepareAmount}`)
       throwFinalApplicationError()
     }
@@ -507,23 +525,23 @@ export class Connection extends EventEmitter {
     }
 
     // Determine amount to receive on each frame
-    const amountsToReceive: { stream: DataAndMoneyStream, amount: BigNumber }[] = []
-    const totalMoneyShares = requestPacket.frames.reduce((sum: BigNumber, frame: Frame) => {
+    const amountsToReceive: { stream: DataAndMoneyStream, amount: Long }[] = []
+    const totalMoneyShares = requestPacket.frames.reduce((sum: Long, frame: Frame) => {
       if (frame instanceof StreamMoneyFrame) {
-        return sum.plus(frame.shares)
+        const result = checkedAdd(sum, frame.shares)
+        if (result.overflow) throw new Error('Total shares exceeded MaxUint64')
+        return result.sum
       }
       return sum
-    }, new BigNumber(0))
+    }, Long.UZERO)
     for (let frame of requestPacket.frames) {
       if (!(frame instanceof StreamMoneyFrame)) {
         continue
       }
       const streamId = frame.streamId.toNumber()
-      const streamAmount = new BigNumber(prepare.amount)
-        .times(frame.shares)
-        .dividedBy(totalMoneyShares)
-        // TODO make sure we don't lose any because of rounding issues
-        .integerValue(BigNumber.ROUND_FLOOR)
+      // TODO make sure we don't lose any because of rounding issues
+      const streamAmount = multiplyDivideFloor(
+        incomingAmount, frame.shares, totalMoneyShares)
       const stream = this.streams.get(streamId)!
       amountsToReceive.push({
         stream,
@@ -531,10 +549,9 @@ export class Connection extends EventEmitter {
       })
 
       // Ensure that this amount isn't more than the stream can receive
-      const maxStreamCanReceive = stream._getAmountStreamCanReceive()
-        .times(this.allowableReceiveExtra)
-        .integerValue(BigNumber.ROUND_CEIL)
-      if (maxStreamCanReceive.isLessThan(streamAmount)) {
+      const maxStreamCanReceive = this.allowableReceiveExtra
+        .multiplyByLongCeil(stream._getAmountStreamCanReceive())
+      if (maxStreamCanReceive.lessThan(streamAmount)) {
         // TODO should this be distributed to other streams if it can be?
         this.log.debug(`peer sent too much for stream: ${streamId}. got: ${streamAmount}, max receivable: ${maxStreamCanReceive}`)
         // Tell peer how much the streams they sent for can receive
@@ -585,8 +602,8 @@ export class Connection extends EventEmitter {
     this.queuedFrames = []
 
     // Return fulfillment and response packet
-    const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Fulfill, prepare.amount, responseFrames)
-    this._totalReceived = this._totalReceived.plus(prepare.amount)
+    const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Fulfill, incomingAmount, responseFrames)
+    this.addTotalReceived(incomingAmount)
     this.log.trace(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
     return {
       fulfillment,
@@ -634,7 +651,7 @@ export class Connection extends EventEmitter {
         case FrameType.ConnectionMaxData:
           const outgoingOffsets = this.getOutgoingOffsets()
           this.log.trace(`remote connection max byte offset is: ${frame.maxOffset}, we've sent: ${outgoingOffsets.currentOffset}, we want to send up to: ${outgoingOffsets.maxOffset}`)
-          if (frame.maxOffset.isGreaterThan(MAX_DATA_SIZE * 2)) {
+          if (frame.maxOffset.greaterThan(MAX_DATA_SIZE * 2)) {
             this.remoteMaxOffset = Math.max(frame.maxOffset.toNumber(), this.remoteMaxOffset)
           } else {
             // We assumed their size was 64kb but it turned out to be less
@@ -661,14 +678,14 @@ export class Connection extends EventEmitter {
           if (!stream) {
             break
           }
-          stream._remoteReceived = BigNumber.maximum(stream._remoteReceived, frame.totalReceived)
-          if (stream._remoteReceiveMax.isFinite()) {
-            stream._remoteReceiveMax = BigNumber.maximum(stream._remoteReceiveMax, frame.receiveMax)
+          stream._remoteReceived = maxLong(stream._remoteReceived, frame.totalReceived)
+          if (stream._remoteReceiveMax.notEquals(Long.MAX_UNSIGNED_VALUE)) {
+            stream._remoteReceiveMax = maxLong(stream._remoteReceiveMax, frame.receiveMax)
           } else {
             stream._remoteReceiveMax = frame.receiveMax
           }
-          if (stream._remoteReceiveMax.isGreaterThan(stream._remoteReceived)
-            && stream._getAmountAvailableToSend().isGreaterThan(0)) {
+          if (stream._remoteReceiveMax.greaterThan(stream._remoteReceived)
+            && stream._getAmountAvailableToSend().greaterThan(0)) {
             /* tslint:disable-next-line:no-floating-promises */
             this.startSendLoop()
           }
@@ -884,7 +901,7 @@ export class Connection extends EventEmitter {
     await new Promise((resolve, reject) => setImmediate(resolve))
 
     this.log.trace('loadAndSendPacket')
-    let amountToSend = new BigNumber(0)
+    let amountToSend = Long.UZERO
 
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
@@ -912,6 +929,13 @@ export class Connection extends EventEmitter {
 
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromNextStream = this.testMaximumPacketAmount
+    if (this.exchangeRate && this.exchangeRate.greaterThanOne()) {
+      // Ensure that the packet's PrepareAmount will never be larger than MAX_UNSIGNED_VALUE.
+      maxAmountFromNextStream = minLong(
+        maxAmountFromNextStream,
+        this.exchangeRate.reciprocal()
+          .multiplyByLong(Long.MAX_UNSIGNED_VALUE))
+    }
     const streamsSentFrom = []
     for (let [_, stream] of this.streams) {
       if (stream._sentEnd) {
@@ -920,11 +944,12 @@ export class Connection extends EventEmitter {
       }
       // Determine how much to send from this stream based on how much it has available
       // and how much the receiver side of this stream can receive
-      let amountToSendFromStream = BigNumber.minimum(stream._getAmountAvailableToSend(), maxAmountFromNextStream)
+      let amountToSendFromStream = minLong(stream._getAmountAvailableToSend(), maxAmountFromNextStream)
       if (this.exchangeRate) {
-        const maxDestinationAmount = stream._remoteReceiveMax.minus(stream._remoteReceived)
-        const maxSourceAmount = maxDestinationAmount.dividedBy(this.exchangeRate).integerValue(BigNumber.ROUND_CEIL)
-        if (maxSourceAmount.isLessThan(amountToSendFromStream)) {
+        const maxDestinationAmount = checkedSubtract(stream._remoteReceiveMax, stream._remoteReceived).difference
+        const maxSourceAmount = this.exchangeRate.reciprocal()
+          .multiplyByLongCeil(maxDestinationAmount)
+        if (maxSourceAmount.lessThan(amountToSendFromStream)) {
           this.log.trace(`stream ${stream.id} could send ${amountToSendFromStream} but that would be more than the receiver says they can receive, so we'll send ${maxSourceAmount} instead`)
           amountToSendFromStream = maxSourceAmount
         }
@@ -932,23 +957,30 @@ export class Connection extends EventEmitter {
       this.log.trace(`amount to send from stream ${stream.id}: ${amountToSendFromStream}, exchange rate: ${this.exchangeRate}, remote total received: ${stream._remoteReceived}, remote receive max: ${stream._remoteReceiveMax}`)
 
       // Hold the money and add a frame to the packet
-      if (amountToSendFromStream.isGreaterThan(0)) {
+      if (amountToSendFromStream.greaterThan(0)) {
         stream._holdOutgoing(requestPacket.sequence.toString(), amountToSendFromStream)
         // TODO make sure the length of the frames doesn't exceed packet data limit
         requestPacket.frames.push(new StreamMoneyFrame(stream.id, amountToSendFromStream))
-        amountToSend = amountToSend.plus(amountToSendFromStream)
-        maxAmountFromNextStream = maxAmountFromNextStream.minus(amountToSendFromStream)
+        amountToSend = amountToSend.add(amountToSendFromStream)
+        maxAmountFromNextStream = maxAmountFromNextStream.subtract(amountToSendFromStream)
         streamsSentFrom.push(stream)
       }
 
       // Tell peer if they're blocking us from sending money
-      const amountLeftStreamWantsToSend = new BigNumber(stream.sendMax).minus(stream.totalSent).minus(amountToSendFromStream)
+      const amountLeftStreamWantsToSend = Long.fromString(stream.sendMax, true)
+        .subtract(stream.totalSent)
+        .subtract(amountToSendFromStream)
       /* tslint:disable-next-line:no-unnecessary-type-assertion */
-      if (amountLeftStreamWantsToSend.times(this.exchangeRate!).isGreaterThan(stream._remoteReceiveMax.minus(stream._remoteReceived))) {
+      if (this.exchangeRate!
+        .multiplyByLong(amountLeftStreamWantsToSend)
+        .greaterThan(
+          checkedSubtract(stream._remoteReceiveMax, stream._remoteReceived).difference
+        )
+      ) {
         requestPacket.frames.push(new StreamMoneyBlockedFrame(stream.id, stream.sendMax, stream.totalSent))
       }
 
-      if (maxAmountFromNextStream.isEqualTo(0)) {
+      if (maxAmountFromNextStream.equals(0)) {
         // TODO make sure that we start with those later frames the next time around
         break
       }
@@ -988,7 +1020,7 @@ export class Connection extends EventEmitter {
     }
 
     // Check if we can stop sending
-    if (amountToSend.isEqualTo(0)) {
+    if (amountToSend.equals(0)) {
       if (requestPacket.frames.length === 0) {
         this.sending = false
         return
@@ -1007,10 +1039,10 @@ export class Connection extends EventEmitter {
 
     // Set minimum destination amount
     if (this.exchangeRate) {
-      const minimumDestinationAmount = amountToSend.times(this.exchangeRate)
-        .times(new BigNumber(1).minus(this.slippage))
-        .integerValue(BigNumber.ROUND_FLOOR)
-      if (minimumDestinationAmount.isGreaterThan(0)) {
+      const minimumDestinationAmount =
+        this.slippage.complement().multiplyByLong(
+          this.exchangeRate.multiplyByLong(amountToSend))
+      if (minimumDestinationAmount.greaterThan(0)) {
         requestPacket.prepareAmount = minimumDestinationAmount
       }
     }
@@ -1021,8 +1053,8 @@ export class Connection extends EventEmitter {
       this.handleControlFrames(responsePacket.frames)
 
       // Track the exchange rate for the last packet (whether it was fulfilled or rejected)
-      if (amountToSend.isGreaterThan(0)) {
-        this._lastPacketExchangeRate = responsePacket.prepareAmount.dividedBy(amountToSend)
+      if (amountToSend.greaterThan(0)) {
+        this._lastPacketExchangeRate = new Rational(responsePacket.prepareAmount, amountToSend, true)
       }
 
       if (responsePacket.ilpPacketType === IlpPacketType.Fulfill) {
@@ -1031,22 +1063,26 @@ export class Connection extends EventEmitter {
         }
 
         // Update stats based on amount sent
-        this._totalDelivered = this._totalDelivered.plus(responsePacket.prepareAmount)
-        this._totalSent = this._totalSent.plus(amountToSend)
+        this.addTotalDelivered(responsePacket.prepareAmount)
+        this.addTotalSent(amountToSend)
 
         // If we're trying to pinpoint the Maximum Packet Amount, raise
         // the limit because we know that the testMaximumPacketAmount works
-        if (amountToSend.isEqualTo(this.testMaximumPacketAmount)
-            && this.testMaximumPacketAmount.isLessThan(this.maximumPacketAmount)) {
+        if (amountToSend.equals(this.testMaximumPacketAmount)
+            && this.testMaximumPacketAmount.lessThan(this.maximumPacketAmount)) {
           let newTestMax
-          if (this.maximumPacketAmount.isFinite()) {
+          if (this.maximumPacketAmount.notEquals(Long.MAX_UNSIGNED_VALUE)) {
             // Take the max packet amount / 10 and then add it to the last test packet amount for an additive increase
-            const additiveIncrease = this.maximumPacketAmount.dividedToIntegerBy(10)
-            newTestMax = BigNumber.min(this.testMaximumPacketAmount.plus(additiveIncrease), this.maximumPacketAmount)
+            const additiveIncrease = this.maximumPacketAmount.divide(10)
+            newTestMax = minLong(
+              checkedAdd(this.testMaximumPacketAmount, additiveIncrease).sum,
+              this.maximumPacketAmount)
             this.log.trace(`last packet amount was successful (max packet amount: ${this.maximumPacketAmount}), raising packet amount from ${this.testMaximumPacketAmount} to: ${newTestMax}`)
           } else {
             // Increase by 2 times in this case since we do not know the max packet amount
-            newTestMax = this.testMaximumPacketAmount.times(2)
+            newTestMax = checkedMultiply(
+              this.testMaximumPacketAmount,
+              Long.fromNumber(2, true)).product
             this.log.trace(`last packet amount was successful, unknown max packet amount, raising packet amount from: ${this.testMaximumPacketAmount} to: ${newTestMax}`)
           }
           this.testMaximumPacketAmount = newTestMax
@@ -1064,7 +1100,7 @@ export class Connection extends EventEmitter {
   protected async sendTestPacketVolley (testPacketAmounts: number[]): Promise<any> {
     const results = await Promise.all(testPacketAmounts.map(async (amount) => {
       try {
-        return this.sendTestPacket(new BigNumber(amount))
+        return this.sendTestPacket(Long.fromNumber(amount, true))
       } catch (err) {
         this.log.error(`Error sending test packet for amount ${amount}:`, err)
         return null
@@ -1076,18 +1112,19 @@ export class Connection extends EventEmitter {
       if (results[index] && (results[index] as IlpPacket.IlpReject).code === 'F08') {
         try {
           const reader = Reader.from((results[index] as IlpPacket.IlpReject).data)
-          const receivedAmount = reader.readUInt64BigNum()
-          const maximumAmount = reader.readUInt64BigNum()
-          const maximumPacketAmount = new BigNumber(sourceAmount)
-            .times(maximumAmount)
-            .dividedToIntegerBy(receivedAmount)
+          const receivedAmount = reader.readUInt64Long()
+          const maximumAmount = reader.readUInt64Long()
+          const maximumPacketAmount = multiplyDivideFloor(
+            Long.fromNumber(sourceAmount, true),
+            maximumAmount,
+            receivedAmount)
           this.log.debug(`sending test packet of ${testPacketAmounts[index]} resulted in F08 error that told us maximum packet amount is ${maximumPacketAmount}`)
           return maximumPacketAmount
         } catch (err) {
-          return new BigNumber(Infinity)
+          return Long.MAX_UNSIGNED_VALUE
         }
       }
-      return new BigNumber(Infinity)
+      return Long.MAX_UNSIGNED_VALUE
     })
 
     // Figure out which test packet discovered the exchange rate with the most precision and gather packet error codes
@@ -1101,18 +1138,18 @@ export class Connection extends EventEmitter {
       }
       if (result && (result as Packet).prepareAmount) {
         const prepareAmount = (result as Packet).prepareAmount
-        const exchangeRate = prepareAmount.dividedBy(sourceAmount)
+        const exchangeRate = new Rational(prepareAmount, Long.fromNumber(sourceAmount, true), true)
         this.log.debug(`sending test packet of ${sourceAmount} delivered ${prepareAmount} (exchange rate: ${exchangeRate})`)
-        if (prepareAmount.precision(true) >= maxDigits) {
+        if (countDigits(prepareAmount) >= maxDigits) {
           return {
-            maxDigits: prepareAmount.precision(true),
+            maxDigits: countDigits(prepareAmount),
             exchangeRate,
             packetErrors
           }
         }
       }
       return { maxDigits, exchangeRate, packetErrors }
-    }, { maxDigits: 0, exchangeRate: new BigNumber(0), packetErrors: [] })
+    }, { maxDigits: 0, exchangeRate: Rational.UZERO, packetErrors: [] })
     return { maxDigits, exchangeRate, maxPacketAmounts, packetErrors }
   }
 
@@ -1135,9 +1172,9 @@ export class Connection extends EventEmitter {
       attempts++
       const { maxDigits, exchangeRate, maxPacketAmounts, packetErrors } = await this.sendTestPacketVolley(testPacketAmounts)
 
-      this.maximumPacketAmount = BigNumber.minimum(...maxPacketAmounts.concat(this.maximumPacketAmount))
+      this.maximumPacketAmount = minLongs(maxPacketAmounts.concat(this.maximumPacketAmount))
       this.testMaximumPacketAmount = this.maximumPacketAmount
-      if (this.maximumPacketAmount.isEqualTo(0)) {
+      if (this.maximumPacketAmount.equals(0)) {
         this.log.error(`cannot send anything through this path. the maximum packet amount is 0`)
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
@@ -1150,16 +1187,16 @@ export class Connection extends EventEmitter {
 
       // If we get here the first volley failed, try new volley using all unique packet amounts based on the max packets
       testPacketAmounts = maxPacketAmounts
-        .filter((amount: any) => !amount.isEqualTo(new BigNumber(Infinity)))
+        .filter((amount: any) => !amount.equals(Long.MAX_UNSIGNED_VALUE))
         .reduce((acc: any, curr: any) => [...new Set([...acc, curr.toString()])], [])
 
       // Check for any Txx Errors
       if (packetErrors.some((error: any) => error.code[0] === 'T')) {
         // Find the smallest packet amount we tried in case we ran into Txx errors
-        const smallestPacketAmount = packetErrors.reduce((min: BigNumber, error: any) => {
-          return BigNumber.min(min, new BigNumber(error.sourceAmount))
-        }, new BigNumber(Infinity))
-        const reducedPacketAmount = smallestPacketAmount.minus(smallestPacketAmount.dividedToIntegerBy(3))
+        const smallestPacketAmount = packetErrors.reduce((min: Long, error: any) => {
+          return minLong(min, Long.fromNumber(error.sourceAmount, true))
+        }, Long.MAX_UNSIGNED_VALUE)
+        const reducedPacketAmount = smallestPacketAmount.subtract(smallestPacketAmount.divide(3))
         this.log.debug(`got Txx error(s), waiting ${retryDelay}ms and reducing packet amount to ${reducedPacketAmount} before sending another test packet`)
         testPacketAmounts = [...testPacketAmounts, reducedPacketAmount]
         await new Promise((resolve, reject) => setTimeout(resolve, retryDelay))
@@ -1176,7 +1213,7 @@ export class Connection extends EventEmitter {
    * (Internal) Send an unfulfillable test packet. Primarily used for determining the path exchange rate.
    * @private
    */
-  protected async sendTestPacket (amount: BigNumber, timeout = DEFAULT_PACKET_TIMEOUT): Promise<Packet | IlpPacket.IlpReject | null> {
+  protected async sendTestPacket (amount: Long, timeout = DEFAULT_PACKET_TIMEOUT): Promise<Packet | IlpPacket.IlpReject | null> {
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
 
@@ -1220,7 +1257,7 @@ export class Connection extends EventEmitter {
       responsePacket = Packet.decryptAndDeserialize(this._pskKey, ilpReject.data)
 
       // Ensure the response corresponds to the request
-      if (!responsePacket.sequence.isEqualTo(requestPacket.sequence)) {
+      if (!responsePacket.sequence.equals(requestPacket.sequence)) {
         this.log.error(`response packet sequence does not match the request packet. expected sequence: ${requestPacket.sequence}, got response packet:`, JSON.stringify(responsePacket))
         throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${requestPacket.sequence}`)
       }
@@ -1287,7 +1324,7 @@ export class Connection extends EventEmitter {
    * This automatically generates the condition and sets the packet expiry.
    * It also ensures that responses are valid and match the outgoing request.
    */
-  protected async sendPacket (packet: Packet, sourceAmount: BigNumber, unfulfillable = false): Promise<Packet | void> {
+  protected async sendPacket (packet: Packet, sourceAmount: Long, unfulfillable = false): Promise<Packet | void> {
     this.log.trace(`sending packet ${packet.sequence} with source amount: ${sourceAmount}: ${JSON.stringify(packet)})`)
     const data = packet.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined))
 
@@ -1302,7 +1339,7 @@ export class Connection extends EventEmitter {
     }
     const prepare = {
       destination: this._destinationAccount!,
-      amount: (sourceAmount).toString(),
+      amount: sourceAmount.toString(),
       data,
       executionCondition,
       expiresAt: new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
@@ -1357,7 +1394,7 @@ export class Connection extends EventEmitter {
     }
 
     // Ensure the response corresponds to the request
-    if (!responsePacket.sequence.isEqualTo(packet.sequence)) {
+    if (!responsePacket.sequence.equals(packet.sequence)) {
       this.log.error(`response packet sequence does not match the request packet. expected sequence: ${packet.sequence}, got response packet:`, JSON.stringify(responsePacket))
       throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${packet.sequence}`)
     }
@@ -1400,32 +1437,30 @@ export class Connection extends EventEmitter {
    * (Internal) Handle final and temporary errors that were not generated by the receiver.
    * @private
    */
-  protected async handleConnectorError (reject: IlpPacket.IlpReject, amountSent: BigNumber) {
+  protected async handleConnectorError (reject: IlpPacket.IlpReject, amountSent: Long) {
     this.log.debug(`handling reject triggered by: ${reject.triggeredBy} error: ${reject.code} message: ${reject.message} data: ${reject.data}`)
     if (reject.code === 'F08') {
-      let receivedAmount
-      let maximumAmount
+      let receivedAmount: Long | undefined
+      let maximumAmount: Long | undefined
       try {
         const reader = Reader.from(reject.data)
-        receivedAmount = reader.readUInt64BigNum()
-        maximumAmount = reader.readUInt64BigNum()
+        receivedAmount = reader.readUInt64Long()
+        maximumAmount = reader.readUInt64Long()
       } catch (err) {
         receivedAmount = undefined
         maximumAmount = undefined
       }
-      if (receivedAmount && maximumAmount && receivedAmount.isGreaterThan(maximumAmount)) {
-        const newMaximum = amountSent
-          .times(maximumAmount)
-          .dividedToIntegerBy(receivedAmount)
+      if (receivedAmount && maximumAmount && receivedAmount.greaterThan(maximumAmount)) {
+        const newMaximum = multiplyDivideFloor(amountSent, maximumAmount, receivedAmount)
         this.log.trace(`reducing maximum packet amount from ${this.maximumPacketAmount} to ${newMaximum}`)
         this.maximumPacketAmount = newMaximum
         this.testMaximumPacketAmount = newMaximum
       } else {
         // Connector didn't include amounts
-        this.maximumPacketAmount = amountSent.minus(1)
-        this.testMaximumPacketAmount = this.maximumPacketAmount.dividedToIntegerBy(2)
+        this.maximumPacketAmount = amountSent.subtract(1)
+        this.testMaximumPacketAmount = this.maximumPacketAmount.divide(2)
       }
-      if (this.maximumPacketAmount.isEqualTo(0)) {
+      if (this.maximumPacketAmount.equals(0)) {
         this.log.error(`cannot send anything through this path. the maximum packet amount is 0`)
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
@@ -1435,9 +1470,9 @@ export class Connection extends EventEmitter {
         // we should really be keeping track of the amount sent within a given window of time
         // and figuring out the max amount per window. this logic is just a stand in to fix
         // infinite retries when it runs into this type of error
-        const minPacketAmount = BigNumber.minimum(amountSent, this.testMaximumPacketAmount)
-        const newTestAmount = minPacketAmount.minus(minPacketAmount.dividedToIntegerBy(3))
-        this.testMaximumPacketAmount = BigNumber.maximum(2, newTestAmount) // don't let it go to zero, set to 2 so that the other side gets at least 1 after the exchange rate is taken into account
+        const minPacketAmount = minLong(amountSent, this.testMaximumPacketAmount)
+        const newTestAmount = minPacketAmount.subtract(minPacketAmount.divide(3))
+        this.testMaximumPacketAmount = maxLong(Long.fromNumber(2, true), newTestAmount) // don't let it go to zero, set to 2 so that the other side gets at least 1 after the exchange rate is taken into account
         this.log.warn(`got T04: Insufficient Liquidity error triggered by: ${reject.triggeredBy}. reducing the packet amount to ${this.testMaximumPacketAmount}`)
       }
 
@@ -1531,6 +1566,42 @@ export class Connection extends EventEmitter {
   }
 
   private bumpIdle (): void { this.lastActive = new Date() }
+
+  private addTotalReceived (value: Long): void {
+    const result = checkedAdd(this._totalReceived, value)
+    if (result.overflow) {
+      const err = new Error('Total received exceeded MaxUint64')
+      /* tslint:disable-next-line:no-floating-promises */
+      this.destroy(err)
+      throw err
+    } else {
+      this._totalReceived = result.sum
+    }
+  }
+
+  private addTotalSent (value: Long): void {
+    const result = checkedAdd(this._totalSent, value)
+    if (result.overflow) {
+      const err = new Error('Total sent exceeded MaxUint64')
+      /* tslint:disable-next-line:no-floating-promises */
+      this.destroy(err)
+      throw err
+    } else {
+      this._totalSent = result.sum
+    }
+  }
+
+  private addTotalDelivered (value: Long): void {
+    const result = checkedAdd(this._totalDelivered, value)
+    if (result.overflow) {
+      const err = new Error('Total delivered exceeded MaxUint64')
+      /* tslint:disable-next-line:no-floating-promises */
+      this.destroy(err)
+      throw err
+    } else {
+      this._totalDelivered = result.sum
+    }
+  }
 }
 
 function isFulfill (packet: IlpPacket.IlpFulfill | IlpPacket.IlpReject): packet is IlpPacket.IlpFulfill {

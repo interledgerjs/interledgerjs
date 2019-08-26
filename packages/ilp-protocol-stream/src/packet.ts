@@ -1,13 +1,12 @@
 import { Reader, Writer, WriterInterface, Predictor } from 'oer-utils'
-import BigNumber from 'bignumber.js'
+import * as Long from 'long'
 import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
-import * as assert from 'assert'
+import { LongValue, longFromValue } from './util/long'
 require('source-map-support').install()
 
-const VERSION = 1
+const VERSION = Long.fromNumber(1, true)
 
 const ZERO_BYTES = Buffer.alloc(32)
-const MAX_UINT64 = new BigNumber('18446744073709551615')
 
 /**
  * ILPv4 Packet Type Identifiers
@@ -80,15 +79,20 @@ export type Frame =
  * Packets are serialized, encrypted, and sent as the data field in ILP Packets.
  */
 export class Packet {
-  sequence: BigNumber
+  sequence: Long
   ilpPacketType: IlpPacketType
-  prepareAmount: BigNumber
+  prepareAmount: Long
   frames: Frame[]
 
-  constructor (sequence: BigNumber.Value, ilpPacketType: IlpPacketType, packetAmount: BigNumber.Value = 0, frames: Frame[] = []) {
-    this.sequence = new BigNumber(sequence)
+  constructor (
+    sequence: LongValue,
+    ilpPacketType: IlpPacketType,
+    packetAmount: LongValue = Long.UZERO,
+    frames: Frame[] = []
+  ) {
+    this.sequence = longFromValue(sequence, true)
     this.ilpPacketType = ilpPacketType
-    this.prepareAmount = new BigNumber(packetAmount)
+    this.prepareAmount = longFromValue(packetAmount, true)
     this.frames = frames
   }
 
@@ -105,14 +109,14 @@ export class Packet {
   /** @private */
   static _deserializeUnencrypted (buffer: Buffer): Packet {
     const reader = Reader.from(buffer)
-    const version = reader.readUInt8BigNum()
-    if (!version.isEqualTo(VERSION)) {
+    const version = reader.readUInt8Long()
+    if (!version.equals(VERSION)) {
       throw new Error(`Unsupported protocol version: ${version}`)
     }
-    const ilpPacketType = reader.readUInt8BigNum().toNumber()
-    const sequence = reader.readVarUIntBigNum()
-    const packetAmount = reader.readVarUIntBigNum()
-    const numFrames = reader.readVarUIntBigNum().toNumber()
+    const ilpPacketType = reader.readUInt8Number()
+    const sequence = reader.readVarUIntLong()
+    const packetAmount = reader.readVarUIntLong()
+    const numFrames = reader.readVarUIntNumber()
     const frames: Frame[] = []
 
     for (let i = 0; i < numFrames; i++) {
@@ -207,7 +211,7 @@ export abstract class BaseFrame {
         contents.writeVarOctetString(Buffer.from(value, 'utf8'))
       } else if (Buffer.isBuffer(value)) {
         contents.writeVarOctetString(value)
-      } else if (value instanceof BigNumber) {
+      } else if (Long.isLong(value)) {
         contents.writeVarUInt(value)
       } else {
         throw new Error(`Unexpected property type for property "${prop}": ${typeof value}`)
@@ -234,7 +238,7 @@ export class ConnectionCloseFrame extends BaseFrame {
   }
 
   static fromContents (reader: Reader): ConnectionCloseFrame {
-    const errorCode = reader.readUInt8BigNum().toNumber() as ErrorCode
+    const errorCode = reader.readUInt8Number() as ErrorCode
     const errorMessage = reader.readVarOctetString().toString()
     return new ConnectionCloseFrame(errorCode, errorMessage)
   }
@@ -268,87 +272,87 @@ export class ConnectionAssetDetailsFrame extends BaseFrame {
 
   static fromContents (reader: Reader): ConnectionAssetDetailsFrame {
     const sourceAssetCode = reader.readVarOctetString().toString('utf8')
-    const sourceAssetScale = reader.readUInt8BigNum().toNumber()
+    const sourceAssetScale = reader.readUInt8Number()
     return new ConnectionAssetDetailsFrame(sourceAssetCode, sourceAssetScale)
   }
 }
 
 export class ConnectionMaxDataFrame extends BaseFrame {
   type: FrameType.ConnectionMaxData
-  maxOffset: BigNumber
+  maxOffset: Long
 
-  constructor (maxOffset: BigNumber.Value) {
+  constructor (maxOffset: LongValue) {
     super('ConnectionMaxData')
-    this.maxOffset = new BigNumber(maxOffset)
+    this.maxOffset = longFromValue(maxOffset, true)
   }
 
   static fromContents (reader: Reader): ConnectionMaxDataFrame {
-    const maxOffset = reader.readVarUIntBigNum()
+    const maxOffset = reader.readVarUIntLong()
     return new ConnectionMaxDataFrame(maxOffset)
   }
 }
 
 export class ConnectionDataBlockedFrame extends BaseFrame {
   type: FrameType.ConnectionDataBlocked
-  maxOffset: BigNumber
+  maxOffset: Long
 
-  constructor (maxOffset: BigNumber.Value) {
+  constructor (maxOffset: LongValue) {
     super('ConnectionDataBlocked')
-    this.maxOffset = new BigNumber(maxOffset)
+    this.maxOffset = longFromValue(maxOffset, true)
   }
 
   static fromContents (reader: Reader): ConnectionDataBlockedFrame {
-    const maxOffset = reader.readVarUIntBigNum()
+    const maxOffset = reader.readVarUIntLong()
     return new ConnectionDataBlockedFrame(maxOffset)
   }
 }
 
 export class ConnectionMaxStreamIdFrame extends BaseFrame {
   type: FrameType.ConnectionMaxStreamId
-  maxStreamId: BigNumber
+  maxStreamId: Long
 
-  constructor (maxStreamId: BigNumber.Value) {
+  constructor (maxStreamId: LongValue) {
     super('ConnectionMaxStreamId')
-    this.maxStreamId = new BigNumber(maxStreamId)
+    this.maxStreamId = longFromValue(maxStreamId, true)
   }
 
   static fromContents (reader: Reader): ConnectionMaxStreamIdFrame {
-    const maxStreamId = reader.readVarUIntBigNum()
+    const maxStreamId = reader.readVarUIntLong()
     return new ConnectionMaxStreamIdFrame(maxStreamId)
   }
 }
 
 export class ConnectionStreamIdBlockedFrame extends BaseFrame {
   type: FrameType.ConnectionStreamIdBlocked
-  maxStreamId: BigNumber
+  maxStreamId: Long
 
-  constructor (maxStreamId: BigNumber.Value) {
+  constructor (maxStreamId: LongValue) {
     super('ConnectionStreamIdBlocked')
-    this.maxStreamId = new BigNumber(maxStreamId)
+    this.maxStreamId = longFromValue(maxStreamId, true)
   }
 
   static fromContents (reader: Reader): ConnectionStreamIdBlockedFrame {
-    const maxStreamId = reader.readVarUIntBigNum()
+    const maxStreamId = reader.readVarUIntLong()
     return new ConnectionStreamIdBlockedFrame(maxStreamId)
   }
 }
 
 export class StreamCloseFrame extends BaseFrame {
   type: FrameType.StreamClose
-  streamId: BigNumber
+  streamId: Long
   errorCode: ErrorCode
   errorMessage: string
 
-  constructor (streamId: BigNumber.Value, errorCode: ErrorCode, errorMessage: string) {
+  constructor (streamId: LongValue, errorCode: ErrorCode, errorMessage: string) {
     super('StreamClose')
-    this.streamId = new BigNumber(streamId)
+    this.streamId = longFromValue(streamId, true)
     this.errorCode = errorCode
     this.errorMessage = errorMessage
   }
 
   static fromContents (reader: Reader): StreamCloseFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const errorCode = reader.readUInt8BigNum().toNumber() as ErrorCode
+    const streamId = reader.readVarUIntLong()
+    const errorCode = reader.readUInt8Number() as ErrorCode
     const errorMessage = reader.readVarOctetString().toString('utf8')
     return new StreamCloseFrame(streamId, errorCode, errorMessage)
   }
@@ -356,92 +360,84 @@ export class StreamCloseFrame extends BaseFrame {
 
 export class StreamMoneyFrame extends BaseFrame {
   type: FrameType.StreamMoney
-  streamId: BigNumber
-  shares: BigNumber
+  streamId: Long
+  shares: Long
 
-  constructor (streamId: BigNumber.Value, shares: BigNumber.Value) {
+  constructor (streamId: LongValue, shares: LongValue) {
     super('StreamMoney')
-    this.streamId = new BigNumber(streamId)
-    this.shares = new BigNumber(shares)
-
-    assert(this.shares.isInteger() && this.shares.isPositive(), `shares must be a positive integer: ${shares}`)
+    this.streamId = longFromValue(streamId, true)
+    this.shares = longFromValue(shares, true)
   }
 
   static fromContents (reader: Reader): StreamMoneyFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const amount = reader.readVarUIntBigNum()
+    const streamId = reader.readVarUIntLong()
+    const amount = reader.readVarUIntLong()
     return new StreamMoneyFrame(streamId, amount)
   }
 }
 
 export class StreamMaxMoneyFrame extends BaseFrame {
   type: FrameType.StreamMaxMoney
-  streamId: BigNumber
-  receiveMax: BigNumber
-  totalReceived: BigNumber
+  streamId: Long
+  receiveMax: Long
+  totalReceived: Long
 
-  constructor (streamId: BigNumber.Value, receiveMax: BigNumber.Value, totalReceived: BigNumber.Value) {
+  constructor (streamId: LongValue, receiveMax: LongValue, totalReceived: LongValue) {
     super('StreamMaxMoney')
-    this.streamId = new BigNumber(streamId)
-    this.receiveMax = new BigNumber(receiveMax)
-    this.totalReceived = new BigNumber(totalReceived)
-
-    if (!this.receiveMax.isFinite()) {
-      this.receiveMax = MAX_UINT64
+    if (typeof receiveMax === 'number' && !isFinite(receiveMax)) {
+      receiveMax = Long.MAX_UNSIGNED_VALUE
     }
 
-    assert(this.receiveMax.isInteger() && this.receiveMax.isPositive(), `receiveMax must be a positive integer. got: ${receiveMax}`)
-    assert(this.totalReceived.isInteger() && this.totalReceived.isPositive(), `totalReceived must be a positive integer. got: ${totalReceived}`)
+    this.streamId = longFromValue(streamId, true)
+    this.receiveMax = longFromValue(receiveMax, true)
+    this.totalReceived = longFromValue(totalReceived, true)
   }
 
   static fromContents (reader: Reader): StreamMaxMoneyFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const receiveMax = reader.readVarUIntBigNum()
-    const totalReceived = reader.readVarUIntBigNum()
+    const streamId = reader.readVarUIntLong()
+    const receiveMax = saturatingReadVarUInt(reader)
+    const totalReceived = reader.readVarUIntLong()
     return new StreamMaxMoneyFrame(streamId, receiveMax, totalReceived)
   }
 }
 
 export class StreamMoneyBlockedFrame extends BaseFrame {
   type: FrameType.StreamMoneyBlocked
-  streamId: BigNumber
-  sendMax: BigNumber
-  totalSent: BigNumber
+  streamId: Long
+  sendMax: Long
+  totalSent: Long
 
-  constructor (streamId: BigNumber.Value, sendMax: BigNumber.Value, totalSent: BigNumber.Value) {
+  constructor (streamId: LongValue, sendMax: LongValue, totalSent: LongValue) {
     super('StreamMoneyBlocked')
-    this.streamId = new BigNumber(streamId)
-    this.sendMax = new BigNumber(sendMax)
-    this.totalSent = new BigNumber(totalSent)
-
-    assert(this.sendMax.isInteger() && this.sendMax.isPositive(), `sendMax must be a positive integer. got: ${sendMax}`)
-    assert(this.totalSent.isInteger() && this.totalSent.isPositive(), `totalSent must be a positive integer. got: ${totalSent}`)
+    this.streamId = longFromValue(streamId, true)
+    this.sendMax = longFromValue(sendMax, true)
+    this.totalSent = longFromValue(totalSent, true)
   }
 
   static fromContents (reader: Reader): StreamMoneyBlockedFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const sendMax = reader.readVarUIntBigNum()
-    const totalSent = reader.readVarUIntBigNum()
+    const streamId = reader.readVarUIntLong()
+    const sendMax = saturatingReadVarUInt(reader)
+    const totalSent = reader.readVarUIntLong()
     return new StreamMoneyBlockedFrame(streamId, sendMax, totalSent)
   }
 }
 
 export class StreamDataFrame extends BaseFrame {
   type: FrameType.StreamData
-  streamId: BigNumber
-  offset: BigNumber
+  streamId: Long
+  offset: Long
   data: Buffer
 
-  constructor (streamId: BigNumber.Value, offset: BigNumber.Value, data: Buffer) {
+  constructor (streamId: LongValue, offset: LongValue, data: Buffer) {
     super('StreamData')
-    this.streamId = new BigNumber(streamId)
-    this.offset = new BigNumber(offset)
+    this.streamId = longFromValue(streamId, true)
+    this.offset = longFromValue(offset, true)
     this.data = data
   }
 
   static fromContents (reader: Reader): StreamDataFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const offset = reader.readVarUIntBigNum()
+    const streamId = reader.readVarUIntLong()
+    const offset = reader.readVarUIntLong()
     const data = reader.readVarOctetString()
     return new StreamDataFrame(streamId, offset, data)
   }
@@ -460,42 +456,42 @@ export class StreamDataFrame extends BaseFrame {
 
 export class StreamMaxDataFrame extends BaseFrame {
   type: FrameType.StreamMaxData
-  streamId: BigNumber
-  maxOffset: BigNumber
+  streamId: Long
+  maxOffset: Long
 
-  constructor (streamId: BigNumber.Value, maxOffset: BigNumber.Value) {
+  constructor (streamId: LongValue, maxOffset: LongValue) {
     super('StreamMaxData')
-    this.streamId = new BigNumber(streamId)
-    this.maxOffset = new BigNumber(maxOffset)
+    this.streamId = longFromValue(streamId, true)
+    this.maxOffset = longFromValue(maxOffset, true)
   }
 
   static fromContents (reader: Reader): StreamMaxDataFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const maxOffset = reader.readVarUIntBigNum()
+    const streamId = reader.readVarUIntLong()
+    const maxOffset = reader.readVarUIntLong()
     return new StreamMaxDataFrame(streamId, maxOffset)
   }
 }
 
 export class StreamDataBlockedFrame extends BaseFrame {
   type: FrameType.StreamDataBlocked
-  streamId: BigNumber
-  maxOffset: BigNumber
+  streamId: Long
+  maxOffset: Long
 
-  constructor (streamId: BigNumber.Value, maxOffset: BigNumber.Value) {
+  constructor (streamId: LongValue, maxOffset: LongValue) {
     super('StreamDataBlocked')
-    this.streamId = new BigNumber(streamId)
-    this.maxOffset = new BigNumber(maxOffset)
+    this.streamId = longFromValue(streamId, true)
+    this.maxOffset = longFromValue(maxOffset, true)
   }
 
   static fromContents (reader: Reader): StreamDataBlockedFrame {
-    const streamId = reader.readVarUIntBigNum()
-    const maxOffset = reader.readVarUIntBigNum()
+    const streamId = reader.readVarUIntLong()
+    const maxOffset = reader.readVarUIntLong()
     return new StreamDataBlockedFrame(streamId, maxOffset)
   }
 }
 
 function parseFrame (reader: Reader): Frame | undefined {
-  const type = reader.readUInt8BigNum().toNumber()
+  const type = reader.readUInt8Number()
   const contents = Reader.from(reader.readVarOctetString())
 
   switch (type) {
@@ -529,5 +525,16 @@ function parseFrame (reader: Reader): Frame | undefined {
       return StreamDataBlockedFrame.fromContents(contents)
     default:
       return undefined
+  }
+}
+
+// Behaves like `readVarUIntLong`, but returns `Long.MAX_UNSIGNED_VALUE` if the
+// VarUInt is too large to fit in a UInt64.
+function saturatingReadVarUInt (reader: Reader): Long {
+  if (reader.peekVarOctetString().length > 8) {
+    reader.skipVarOctetString()
+    return Long.MAX_UNSIGNED_VALUE
+  } else {
+    return reader.readVarUIntLong()
   }
 }
