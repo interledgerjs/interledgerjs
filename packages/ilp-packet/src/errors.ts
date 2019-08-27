@@ -1,5 +1,4 @@
 import { Writer } from 'oer-utils'
-import Long = require('long')
 import BaseError = require('extensible-error')
 
 export const codes = {
@@ -103,12 +102,8 @@ export class AmountTooLargeError extends BaseError {
     this.ilpErrorCode = codes.F08_AMOUNT_TOO_LARGE
 
     const writer = new Writer(8 + 8)
-    const receivedAmountLong = Long.fromString(opts.receivedAmount, true)
-    const maximumAmountLong = Long.fromString(opts.maximumAmount, true)
-    writer.writeUInt32(receivedAmountLong.getHighBitsUnsigned())
-    writer.writeUInt32(receivedAmountLong.getLowBitsUnsigned())
-    writer.writeUInt32(maximumAmountLong.getHighBitsUnsigned())
-    writer.writeUInt32(maximumAmountLong.getLowBitsUnsigned())
+    writer.writeUInt64(opts.receivedAmount)
+    writer.writeUInt64(opts.maximumAmount)
 
     this.ilpErrorData = writer.getBuffer()
   }
