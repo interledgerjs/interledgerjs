@@ -5,7 +5,6 @@ import {
   INTERLEDGER_TIME_LENGTH
 } from './utils/date'
 import * as assert from 'assert'
-
 import * as errors from './errors'
 export const Errors = errors
 
