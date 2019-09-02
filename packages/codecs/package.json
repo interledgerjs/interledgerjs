@@ -1,0 +1,28 @@
+{
+  "name": "@interledger/codecs",
+  "version": "1.0.0",
+  "description": "Module for parsing and serializing ILP packets and OER Buffers",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "directories": {
+    "test": "test"
+  },
+  "files": [
+    "build/**/*.js",
+    "build/**/*.js.map",
+    "build/**/*.d.ts"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "rimraf .nyc_output/* build/* coverage/*",
+    "codecov": "codecov --root=../../ -F protocols",
+    "test": "TS_NODE_TRANSPILE_ONLY=true mocha --require ts-node/register --ui mocha-typescript --require source-map-support/register 'test/**/*.{test.ts|ts}'",
+    "test:ci": "TS_NODE_TRANSPILE_ONLY=true nyc mocha --require ts-node/register --ui mocha-typescript --require source-map-support/register 'test/**/*.{test.ts|ts}'"
+  },
+  "dependencies": {
+    "bignumber.js": "^7.2.1",
+    "extensible-error": "^1.0.2",
+    "long": "^4.0.0",
+    "@interledger/codecs-oer": "^1.0.0"
+  }
+}
