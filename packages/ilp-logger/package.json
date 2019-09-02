@@ -11,9 +11,8 @@
   ],
   "scripts": {
     "clean": "rimraf .nyc_output/* build/* coverage/*",
-    "build": "tsc -p src/tsconfig.build.json",
-    "pretest": "tsc -b src/tsconfig.build.json",
-    "test": "mocha --require ts-node/register --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "mocha --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
     "cover": "yarn clean && yarn build && nyc --extension .ts --reporter=text-summary --reporter=html --require ts-node/register --ui mocha-typescript --require source-map-support/register mocha test/*.spec.ts",
     "codecov": "nyc report --reporter=json && codecov -f coverage/*.json"
   },
