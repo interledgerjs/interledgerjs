@@ -1,4 +1,4 @@
-import { IlpPrepare, deserializeIlpPrepare, serializeIlpPrepare, IlpFulfill, serializeIlpFulfill, deserializeIlpFulfill }from 'ilp-packet'
+import { IlpPrepare, deserializeIlpPrepare, serializeIlpPrepare, IlpFulfill, serializeIlpFulfill, deserializeIlpFulfill } from 'ilp-packet'
 import { Reader, Writer } from 'oer-utils'
 import { readUuid, writeUuid } from './uuid'
 

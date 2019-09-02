@@ -1,7 +1,7 @@
 import * as CCP from '../src'
 import { assert } from 'chai'
 import { useFakeTimers } from 'sinon'
-import { deserializeIlpPacket, deserializeIlpPrepare, IlpPrepare, isFulfill } from 'ilp-packet'
+import { IlpPrepare, isFulfill } from 'ilp-packet'
 
 const START_DATE = 1434412800000 // June 16, 2015 00:00:00 GMT
 
@@ -11,7 +11,6 @@ describe('CCP', function () {
   })
 
   describe('Route Control Request', function () {
-
     describe('payload', function () {
       let routeControlRequest: CCP.CcpRouteControlRequest = {
         mode: CCP.Mode.MODE_SYNC,
@@ -36,7 +35,7 @@ describe('CCP', function () {
           amount: '0',
           expiresAt: new Date('2015-06-16T00:01:00.000Z'),
           destination: 'peer.route.control',
-          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925', 'hex'),
           data: Buffer.from('0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172', 'hex')
         }
         assert.deepEqual(CCP.extractCcpRouteControlRequest(ccpPacket), {
@@ -58,7 +57,7 @@ describe('CCP', function () {
           amount: '0',
           expiresAt: new Date('2015-06-16T00:01:00.000Z'),
           destination: 'peer.route.control',
-          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925', 'hex'),
           data: Buffer.from('0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172', 'hex')
         })
       })
@@ -66,7 +65,6 @@ describe('CCP', function () {
   })
 
   describe('Route Control Update', function () {
-
     describe('payload', function () {
       let routeControlUpdate: CCP.CcpRouteUpdateRequest = {
         routingTableId: '21e55f8e-abcd-4e97-9ab9-bf0ff00a224c',
@@ -95,7 +93,7 @@ describe('CCP', function () {
           amount: '0',
           expiresAt: new Date('2015-06-16T00:01:00.000Z'),
           destination: 'peer.route.update',
-          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925', 'hex'),
           data: Buffer.from('21e55f8eabcd4e979ab9bf0ff00a224c000000340000003400000034000075300d6578616d706c652e616c69636501000100', 'hex')
         }
         assert.deepEqual(CCP.extractCcpRouteUpdateRequest(ccpPacket), {
@@ -125,7 +123,7 @@ describe('CCP', function () {
           amount: '0',
           expiresAt: new Date('2015-06-16T00:01:00.000Z'),
           destination: 'peer.route.update',
-          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925' , 'hex'),
+          executionCondition: Buffer.from('66687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f2925', 'hex'),
           data: Buffer.from('21e55f8eabcd4e979ab9bf0ff00a224c000000340000003400000034000075300d6578616d706c652e616c69636501000100', 'hex')
         })
       })
