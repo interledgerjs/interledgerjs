@@ -13,8 +13,8 @@
     "clean": "rimraf .nyc_output/* build/* coverage/*",
     "build": "tsc -p tsconfig.build.json",
     "test": "mocha --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
-    "cover": "yarn clean && yarn build && nyc --extension .ts --reporter=text-summary --reporter=html --require ts-node/register --ui mocha-typescript --require source-map-support/register mocha test/*.spec.ts",
-    "codecov": "nyc report --reporter=json && codecov -f coverage/*.json"
+    "cover": "nyc --extension .ts --reporter=json --reporter=html --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register mocha test/*.spec.ts",
+    "codecov": "codecov -f coverage/*.json -F ilp-logger"
   },
   "dependencies": {
     "@types/debug": "^4.1.4",

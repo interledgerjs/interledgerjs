@@ -28,6 +28,7 @@
     "clean:artifacts": "lerna run clean --parallel",
     "clean:packages": "lerna clean --yes",
     "clean:root": "rimraf node_modules",
+    "codecov": "lerna run codecov",
     "build": "lerna run build --sort --concurrency=1 --stream",
     "test": "lerna run test --concurrency=1 --stream",
     "test:quick": "lerna run test --parallel",
