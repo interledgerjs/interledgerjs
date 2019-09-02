@@ -18,7 +18,7 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
 
 ## TODO
 
- - [ ] Circle CI Config
+ - [ ] Verify Circle CI Config
  - [ ] Update `README.md` in individual packages
  - [ ] Test release process
  - [ ] Merge boilerplate into `package.json` of packages
@@ -57,10 +57,9 @@ lerna import ../legacy-module --dest=packages --preserve-commit --flatten
 - test: Run tests in each package
 - test:quick: Run tests in each package (in parallel)
 - cover: Run test coverage in all packages
-- prepare:release: Run `lerna version`
-- prepare:prerelease: Prepare a prerelease (alpha)
-- publish:canary: Run `lerna publish --canary`
-- publish:release: Run `lerna publish from-package`
+- version:release: Run `git pull && lerna version --no-push && git push --force && git push --force --tags`
+- version:prerelease: Prepare a prerelease (alpha). Run `git pull && lerna version prerelease --preid alpha && git push --force && git push --force --tags`
+- publish:release: Run `lerna publish from-git --yes`. Called from circleci deploy workflow.
 - lint: Lint the provided files (requires a glob param)
 - lint:all: Lint everything
 - lint:staged: Run `lint-staged`
