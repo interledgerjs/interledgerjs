@@ -13,15 +13,12 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
  - Use lerna and yarn workspaces.
  - Keep it simple. Minimal custom stuff.
  - DRY. Where possible avoid repetition in packages
- - Use the @interledger scope instead of `ilp` prefix in package names.
- - Use package categories `utils`, `codecs`, `protocols` (others may be added) instead of naming convention.
- - New package names allow for some refactoring to do away with legacy hacks to accommodate JS module funnies.
- - Switch to synchronized versioning.
+ - New major version allows for some refactoring to do away with legacy hacks to accommodate JS module funnies.
  - Switch to eslint from tslint (See: https://eslint.org/blog/2019/01/future-typescript-eslint).
 
 ## TODO
 
- - [ ] Circle CI Config
+ - [ ] Verify Circle CI Config
  - [ ] Update `README.md` in individual packages
  - [ ] Test release process
  - [ ] Merge boilerplate into `package.json` of packages
@@ -30,16 +27,15 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
 
  1. Setup a monorepo framework with a few small modules
  2. [Import](#importing) existing modules one by one and deprecate the old module
- 3. Rename the module to fit the new structure and naming
+ 3. Update version next major
  4. Update the new package to use the same build, test and linting scripts as others
  5. Remove dev dependencies
- 6. Update dependencies and imports to use new module names
+ 6. Update dependencies and imports to use new module version
  7. Fix linting or build errors
 
 ## Importing
 
 This process preserves the commit history of the legacy modules.  
-_(This assumes the module being imported should go into `protocols`, as opposed to a `codecs` or `utils`)_
 
 ```sh
 git clone git@github.com:adrianhopebailie/interledgerjs.git
@@ -47,7 +43,7 @@ git clone git@github.com:interledgerjs/legacy-module.git
 cd legacy-module
 git pull
 cd ../interledgerjs
-lerna import ../legacy-module --dest=packages/protocols --preserve-commit --flatten
+lerna import ../legacy-module --dest=packages --preserve-commit --flatten
 ```
 
 ## Scripts
@@ -61,10 +57,9 @@ lerna import ../legacy-module --dest=packages/protocols --preserve-commit --flat
 - test: Run tests in each package
 - test:quick: Run tests in each package (in parallel)
 - cover: Run test coverage in all packages
-- prepare:release: Run `lerna version`
-- prepare:prerelease: Prepare a prerelease (alpha)
-- publish:canary: Run `lerna publish --canary`
-- publish:release: Run `lerna publish from-package`
+- version:release: Run `git pull && lerna version --no-push && git push --force && git push --force --tags`
+- version:prerelease: Prepare a prerelease (alpha). Run `git pull && lerna version prerelease --preid alpha && git push --force && git push --force --tags`
+- publish:release: Run `lerna publish from-git --yes`. Called from circleci deploy workflow.
 - lint: Lint the provided files (requires a glob param)
 - lint:all: Lint everything
 - lint:staged: Run `lint-staged`

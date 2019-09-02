@@ -12,16 +12,16 @@
     "suppressImplicitAnyIndexErrors": true,
     "baseUrl": ".",
     "paths": {
-      "@interledger/codecs-oer" : ["packages/codecs/oer/src"],
-      "@interledger/codecs-ilp" : ["packages/codecs/ilp/src"],
-      "@interledger/codecs-ilp/*" : ["packages/codecs/ilp/src/*"],
-      "@interledger/protocols-ildcp" : ["packages/protocols/ildcp/src"],
-      "@interledger/utils-logger" : ["packages/utils/logger/src"]
+      "oer-utils" : ["packages/oer-utils/src"],
+      "ilp-packet" : ["packages/ilp-packet/src"],
+      "ilp-logger" : ["packages/ilp-logger/src"],
+      "ilp-protocol-ildcp" : ["packages/ilp-protocol-ildcp/src"],
+      "ilp-protocol-ccp" : ["packages/ilp-protocol-ccp/src"]
     }
   },
   "exclude": [
     "**/node_modules/**/*",
-    "packages/*/*/build/**/*"
+    "packages/*/build/**/*"
   ],
   "include": [
     "packages/**/*.ts"

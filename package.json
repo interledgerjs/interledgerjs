@@ -2,17 +2,12 @@
   "name": "@interledger/interledgerjs",
   "version": "1.0.0",
   "description": "Interledger.JS Monorepo",
+  "repository": "https://github.com/interledgerjs/interledgerjs",
+  "license": "Apache-2.0",
   "private": true,
   "workspaces": [
-    "packages/utils/*",
-    "packages/codecs/oer",
-    "packages/codecs/ilp",
-    "packages/protocols/*"
+    "packages/*"
   ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/interledgerjs/interledgerjs.git"
-  },
   "keywords": [
     "ilp",
     "interledger",
@@ -34,59 +29,21 @@
     "clean:artifacts": "lerna run clean --parallel",
     "clean:packages": "lerna clean --yes",
     "clean:root": "rimraf node_modules",
+    "codecov": "lerna run codecov",
+    "cover": "lerna run cover --concurrency=1 --stream",
     "build": "lerna run build --sort --concurrency=1 --stream",
     "test": "lerna run test --concurrency=1 --stream",
     "test:quick": "lerna run test --parallel",
-    "cover": "lerna run cover --concurrency=1 --stream",
-    "prepare:release": "lerna version",
-    "prepare:prerelease": "yarn prepare:release prerelease --preid alpha",
-    "publish:canary": "lerna publish --canary",
-    "publish:release": "lerna publish from-package",
+    "version:release": "git pull && lerna version --no-push && git push --force && git push --force --tags",
+    "version:prerelease": "git pull && lerna version prerelease --preid alpha && git push --force && git push --force --tags",
+    "publish:release": "lerna publish from-git --yes",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
-    "lint:all": "yarn lint 'packages/*/*/src/**/*.ts*'",
+    "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
     "lint:staged": "lint-staged"
   },
   "husky": {
     "hooks": {
       "pre-commit": "yarn lint:staged && lerna run precommit"
-    }
-  },
-  "eslintConfig": {
-    "parser": "@typescript-eslint/parser",
-    "extends": [
-      "eslint:recommended",
-      "plugin:@typescript-eslint/recommended",
-      "standard"
-    ],
-    "plugins": [
-      "@typescript-eslint"
-    ],
-    "env": {
-      "node": true,
-      "mocha": true
-    },
-    "parserOptions": {
-      "ecmaVersion": 2017,
-      "sourceType": "module",
-      "project": "./tsconfig.json"
-    },
-    "rules": {
-      "@typescript-eslint/indent": [
-        "error",
-        2
-      ],
-      "@typescript-eslint/explicit-function-return-type": [
-        "off"
-      ],
-      "@typescript-eslint/explicit-member-accessibility": [
-        "off"
-      ],
-      "@typescript-eslint/no-empty-interface": [
-        "off"
-      ],
-      "@typescript-eslint/member-delimiter-style": [
-        "off"
-      ]
     }
   },
   "lint-staged": {
