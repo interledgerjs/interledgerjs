@@ -35,8 +35,8 @@
     "cover": "lerna run cover --concurrency=1 --stream",
     "prepare:release": "lerna version",
     "prepare:prerelease": "yarn prepare:release prerelease --preid alpha",
-    "publish:canary": "lerna publish --canary",
-    "publish:release": "lerna publish from-package",
+    "publish:canary": "lerna publish --canary --yes",
+    "publish:release": "lerna publish from-git --yes",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
     "lint:staged": "lint-staged"

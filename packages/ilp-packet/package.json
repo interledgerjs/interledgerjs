@@ -1,6 +1,8 @@
 {
   "name": "ilp-packet",
   "version": "4.0.0",
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
   "description": "Module for parsing and serializing ILP packets",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -12,6 +14,9 @@
     "build/**/*.js.map",
     "build/**/*.d.ts"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "clean": "rimraf .nyc_output/* build/* coverage/*",
     "build": "tsc -p tsconfig.build.json",

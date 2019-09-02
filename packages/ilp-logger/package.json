@@ -1,6 +1,8 @@
 {
   "name": "ilp-logger",
   "version": "2.0.0",
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
   "description": "Logging utility for Interledger modules",
   "main": "build/index.js",
   "types": "build/index.d.ts",
@@ -9,6 +11,9 @@
     "build/**/*.js.map",
     "build/**/*.d.ts"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "clean": "rimraf .nyc_output/* build/* coverage/*",
     "build": "tsc -p tsconfig.build.json",

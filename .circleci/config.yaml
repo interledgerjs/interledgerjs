@@ -1,0 +1,86 @@
+# Javascript Node CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-javascript/ for more details
+#
+version: 2
+
+defaults: &defaults
+  working_directory: ~/repo
+  docker:
+      # Use active LTS release: https://github.com/nodejs/Release#release-schedule 
+    - image: circleci/node:10.13
+
+jobs:
+  test:
+    <<: *defaults  
+    steps:
+
+      - checkout
+
+      - restore_cache:
+          keys: 
+            # when lock file changes, use increasingly general patterns to restore cache
+            - "node-v1-{{ .Branch }}-{{ checksum \"yarn.lock\" }}"
+            - "node-v1-{{ .Branch }}-"
+            - "node-v1-"
+
+      - run:
+          name: Install
+          command: yarn install
+
+      - run:
+          name: Lint
+          command: yarn lint:all
+     
+      - run:
+          name: Build
+          command: yarn build
+     
+      - run:
+          name: Test with coverage
+          command: yarn cover
+
+      - run:
+          name: Upload coverage
+          command: yarn codecov
+
+      - save_cache:
+          paths:
+            - node_modules
+          key: node-v1-{{ .Branch }}-{{ checksum "yarn.lock" }}
+
+      - persist_to_workspace:
+          root: ~/repo
+          paths: .
+
+  deploy:
+    <<: *defaults  
+    steps:
+
+      - attach_workspace:
+          at: ~/repo
+
+      - run:
+          name: Authenticate with registry
+          command: echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/repo/.npmrc
+
+      - run:
+          name: Publish package
+          command: yarn publish:release
+
+workflows:
+  version: 2
+  test-deploy:
+    jobs:
+      - test:
+          filters:
+              tags:
+                only: /.*/
+      - deploy:
+          requires:
+            - test
+          filters:
+            tags:
+              only: /(@v\.[0-9]+)*/
+            branches:
+              only: master
