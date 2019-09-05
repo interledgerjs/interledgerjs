@@ -18,7 +18,6 @@
     "convert"
   ],
   "author": "Interledger Team <info@interledger.org>",
-  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/interledgerjs/interledgerjs/issues"
   },
@@ -34,8 +33,6 @@
     "build": "lerna run build --sort --concurrency=1 --stream",
     "test": "lerna run test --concurrency=1 --stream",
     "test:quick": "lerna run test --parallel",
-    "version:release": "git pull && lerna version --no-push && git push --force && git push --force --tags",
-    "version:prerelease": "git pull && lerna version prerelease --preid alpha && git push --force && git push --force --tags",
     "publish:release": "lerna publish from-git --yes",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
