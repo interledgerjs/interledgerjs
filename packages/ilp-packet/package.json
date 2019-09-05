@@ -4,15 +4,15 @@
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "description": "Module for parsing and serializing ILP packets",
-  "main": "build/index.js",
-  "types": "build/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "directories": {
     "test": "test"
   },
   "files": [
-    "build/**/*.js",
-    "build/**/*.js.map",
-    "build/**/*.d.ts"
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts"
   ],
   "publishConfig": {
     "access": "public"

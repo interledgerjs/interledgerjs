@@ -4,8 +4,8 @@
     "composite": true,
     "baseUrl": ".",
     "rootDir": "src",
-    "outDir": "build",
-    "tsBuildInfoFile": "./build/tsconfig.build.tsbuildinfo"
+    "outDir": "dist",
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
   },
   "include": [
     "src"
