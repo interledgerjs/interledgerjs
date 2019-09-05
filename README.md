@@ -21,7 +21,6 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
  - [ ] Verify Circle CI Config
  - [ ] Update `README.md` in individual packages
  - [ ] Test release process
- - [ ] Merge boilerplate into `package.json` of packages
 
 ## Process
 
@@ -61,3 +60,10 @@ lerna import ../legacy-module --dest=packages --preserve-commit --flatten
 - lint: Lint the provided files (requires a glob param)
 - lint:all: Lint everything
 - lint:staged: Run `lint-staged`
+
+## Note to maintainers: Versioning
+
+Independent versioning is used for this project and releases can only be made from `master`.
+The following steps are used to create a release:
+  1. Make sure you are up to date with master.
+  2. Run `lerna version` and follow the command prompts. This will commit the package version changes and create the necessary tags - all of which will be pushed to master.
