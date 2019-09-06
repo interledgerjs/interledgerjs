@@ -27,6 +27,6 @@
   "dependencies": {
     "debug": "^3.1.0",
     "ilp-packet": "^4.0.0",
-    "oer-utils": "^5.0.0"
+    "oer-utils": "^5.0.1"
   }
 }
