@@ -23,6 +23,7 @@
     "codecov": "codecov --root=../../ -f coverage/*.json -F oer-utils"
   },
   "dependencies": {
+    "@types/long": "4.0.0",
     "long": "^4.0.0"
   }
 }
