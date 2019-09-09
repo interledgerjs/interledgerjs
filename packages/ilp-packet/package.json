@@ -1,6 +1,6 @@
 {
   "name": "ilp-packet",
-  "version": "4.0.0",
+  "version": "3.0.9",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "description": "Module for parsing and serializing ILP packets",
