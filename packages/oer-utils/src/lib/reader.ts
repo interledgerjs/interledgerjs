@@ -3,7 +3,7 @@ import { ParseError } from '../errors/parse-error'
 import * as Long from 'long'
 import { bufferToLong, MAX_SAFE_BYTES } from './util'
 
-export class Reader {
+class Reader {
   // Most significant bit in a byte
   static HIGH_BIT = 0x80
 
@@ -530,7 +530,7 @@ export class Reader {
   }
 }
 
-export interface Reader {
+interface Reader {
   readUInt8 (): string
   readUInt16 (): string
   readUInt32 (): string
@@ -620,3 +620,5 @@ export interface Reader {
     }
   })
 })
+
+export default Reader

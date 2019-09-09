@@ -13,7 +13,7 @@ import * as Long from 'long'
 
 type LongValue = Long | number | string
 
-export class Writer implements WriterInterface {
+class Writer implements WriterInterface {
   // Largest value that can be written as a variable-length unsigned integer
   static MAX_SAFE_INTEGER: number = 0x1fffffffffffff
   static MIN_SAFE_INTEGER: number = -0x1fffffffffffff
@@ -327,7 +327,7 @@ export class Writer implements WriterInterface {
   }
 }
 
-export interface Writer {
+interface Writer {
   writeUInt8 (value: LongValue): undefined
   writeUInt16 (value: LongValue): undefined
   writeUInt32 (value: LongValue): undefined
@@ -369,3 +369,5 @@ export interface WriterInterface {
   writeInt32 (value: LongValue): undefined
   writeInt64 (value: LongValue): undefined
 }
+
+export default Writer

@@ -8,6 +8,9 @@
     "test": "test"
   },
   "files": [
+    "reader.js",
+    "writer.js",
+    "predictor.js",
     "dist/**/*.js",
     "dist/**/*.js.map",
     "dist/**/*.d.ts"

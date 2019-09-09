@@ -1,4 +1,4 @@
-import { Writer } from '../src/lib/writer'
+import Writer from '../src/lib/writer'
 import * as Long from 'long'
 
 import chai = require('chai')
@@ -851,7 +851,7 @@ describe('Writer', function () {
 
       assert.throws(function () {
         writer.writeInt32(Long.MIN_VALUE)
-      } , 'Int -9223372036854775808 does not fit in 4 bytes')
+      }, 'Int -9223372036854775808 does not fit in 4 bytes')
     })
 
     it('should fail to write a Long that is too large', function () {
@@ -859,7 +859,7 @@ describe('Writer', function () {
 
       assert.throws(function () {
         writer.writeInt32(Long.MAX_VALUE)
-      } , 'Int 9223372036854775807 does not fit in 4 bytes')
+      }, 'Int 9223372036854775807 does not fit in 4 bytes')
     })
   })
 

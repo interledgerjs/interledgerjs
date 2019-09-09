@@ -11,7 +11,7 @@
  *
  * Note that this code is specific to V8 (due to `Error.captureStackTrace`).
  */
-export class BaseError extends Error {
+class BaseError extends Error {
   constructor (message: string = '') {
     super()
 
@@ -35,3 +35,5 @@ export class BaseError extends Error {
     }
   }
 }
+
+export default BaseError

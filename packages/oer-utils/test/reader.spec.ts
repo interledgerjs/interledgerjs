@@ -1,4 +1,4 @@
-import { Reader } from 'oer-utils'
+import Reader from '../src/lib/reader'
 import * as Long from 'long'
 
 import chai = require('chai')

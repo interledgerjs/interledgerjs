@@ -17,7 +17,7 @@ type LongValue = Long | number | string
  * This class acts as a writable stream, but only does the minimum amount of
  * work necessary to count/predict the output size.
  */
-export class Predictor implements WriterInterface {
+class Predictor implements WriterInterface {
   private size: number
 
   constructor () {
@@ -156,7 +156,7 @@ export class Predictor implements WriterInterface {
   }
 }
 
-export interface Predictor {
+interface Predictor {
   writeUInt8 (value: number): undefined
   writeUInt16 (value: number): undefined
   writeUInt32 (value: number): undefined
@@ -177,3 +177,5 @@ export interface Predictor {
     return this.writeUInt(value, bytes)
   }
 })
+
+export default Predictor
