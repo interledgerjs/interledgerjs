@@ -24,7 +24,7 @@ jobs:
         yarn install
         yarn lint
         yarn build
-        yarn test:ci
+        yarn cover
       env:
         CI: true
 
