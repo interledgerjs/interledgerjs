@@ -33,11 +33,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/bin/filter@master
+        with:
+          args: branch master
       - uses: actions/setup-node@v1
         with:
           node-version: 12
           registry-url: https://registry.npmjs.org/
-      - run: echo TODO enable publishing
+      - name: Publish
+        run: echo TODO enable publishing
+        shell: bash
         env:
           NODE_AUTH_TOKEN: ${{secrets.npm_token}}
