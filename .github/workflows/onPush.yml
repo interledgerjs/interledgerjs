@@ -1,0 +1,29 @@
+name: OnPush CI
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [8.x, 10.x, 12.x]
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Use yarn
+      uses: Borales/actions-yarn@master
+    - name: yarn install, lint, build, and test
+      run: |
+        yarn install
+        yarn lint
+        yarn build
+        yarn test:ci
+      env:
+        CI: true
