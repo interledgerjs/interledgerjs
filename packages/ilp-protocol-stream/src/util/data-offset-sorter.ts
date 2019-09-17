@@ -1,10 +1,10 @@
 // Inspired by https://github.com/toajs/quic/blob/master/src/stream.ts
 
-/** @private */
-export class OffsetDataEntry {
+class OffsetDataEntry {
   data: Buffer
   offset: number
   next?: OffsetDataEntry
+
   constructor (data: Buffer, offset: number, next?: OffsetDataEntry) {
     this.data = data
     this.offset = offset
@@ -14,9 +14,10 @@ export class OffsetDataEntry {
 
 /** @private */
 export class OffsetSorter {
-  head?: OffsetDataEntry
+  private head?: OffsetDataEntry
   readOffset: number
   maxOffset: number
+
   constructor () {
     this.readOffset = 0
     this.maxOffset = 0

@@ -2,7 +2,7 @@ import 'mocha'
 import * as assert from 'assert'
 import BigNumber from 'bignumber.js'
 import * as Long from 'long'
-import Rational from '../src/util/rational'
+import Rational from '../../src/util/rational'
 
 function L (value: number, unsigned?: boolean): Long {
   return Long.fromNumber(value, unsigned === undefined ? true : unsigned)

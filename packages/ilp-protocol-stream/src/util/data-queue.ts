@@ -1,10 +1,10 @@
 // Inspired by https://github.com/toajs/quic/blob/master/src/stream.ts
 
-/** @private */
-export class DataQueueEntry {
+class DataQueueEntry {
   data: Buffer
   next?: DataQueueEntry
   callback?: () => void
+
   constructor (buf: Buffer, callback?: () => void, entry?: DataQueueEntry) {
     this.data = buf
     this.callback = callback
@@ -14,9 +14,10 @@ export class DataQueueEntry {
 
 /** @private */
 export class DataQueue {
-  head?: DataQueueEntry
-  tail?: DataQueueEntry
-  length: number
+  private head?: DataQueueEntry
+  private tail?: DataQueueEntry
+  private length: number
+
   constructor () {
     this.length = 0
   }
@@ -33,7 +34,7 @@ export class DataQueue {
     this.length += 1
   }
 
-  shift () {
+  private shift () {
     if (!this.head) {
       return null
     }

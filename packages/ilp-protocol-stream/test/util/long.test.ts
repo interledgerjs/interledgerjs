@@ -15,7 +15,7 @@ import {
   multiplyDivideCeil,
   multiplyDivideRound,
   multiplyDivide
-} from '../src/util/long'
+} from '../../src/util/long'
 
 function L (value: number, unsigned?: boolean): Long {
   return Long.fromNumber(value, unsigned === undefined ? true : unsigned)
