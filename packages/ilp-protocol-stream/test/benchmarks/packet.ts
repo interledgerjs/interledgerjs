@@ -22,7 +22,6 @@ const moneyPacketV1 = new PacketV1.Packet(0, 14, 5, [
 
 const encryptionKey = crypto.randomBytes(32)
 const packetBuffer = moneyPacketV0._serialize()
-const packetEncrypted = moneyPacketV0.serializeAndEncrypt(encryptionKey)
 
 ;(new Benchmark.Suite('serialize:   MoneyFrame'))
   .add('v0', function () { moneyPacketV0._serialize() })
@@ -35,22 +34,6 @@ const packetEncrypted = moneyPacketV0.serializeAndEncrypt(encryptionKey)
 ;(new Benchmark.Suite('deserialize: MoneyFrame'))
   .add('v0', function () { PacketV0.Packet._deserializeUnencrypted(packetBuffer) })
   .add('v1', function () { PacketV1.Packet._deserializeUnencrypted(packetBuffer) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
-  })
-  .run({})
-
-;(new Benchmark.Suite('encrypt:     MoneyFrame'))
-  .add('v0', function () { moneyPacketV0.serializeAndEncrypt(encryptionKey) })
-  .add('v1', function () { moneyPacketV1.serializeAndEncrypt(encryptionKey) })
-  .on('cycle', function(event: any) {
-    console.log(this.name, '\t', String(event.target));
-  })
-  .run({})
-
-;(new Benchmark.Suite('decrypt:     MoneyFrame'))
-  .add('v0', function () { PacketV0.Packet.decryptAndDeserialize(encryptionKey, packetEncrypted) })
-  .add('v1', function () { PacketV1.Packet.decryptAndDeserialize(encryptionKey, packetEncrypted) })
   .on('cycle', function(event: any) {
     console.log(this.name, '\t', String(event.target));
   })

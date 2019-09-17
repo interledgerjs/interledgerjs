@@ -6,6 +6,7 @@ node_modules
 !example.js
 !typedoc.js
 !scripts/publish-docs.js
+!test/browser/*.js
 coverage
 .nyc_output
 doc

@@ -4,9 +4,8 @@ import * as IlpPacket from 'ilp-packet'
 import createLogger from 'ilp-logger'
 import * as cryptoHelper from './crypto'
 import { randomBytes } from 'crypto'
-import { Connection, ConnectionOpts } from './connection'
+import { buildConnection, Connection, ConnectionOpts } from './connection'
 import { Plugin } from './util/plugin-interface'
-require('source-map-support').install()
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9~_-]+$/
 
@@ -28,7 +27,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
   await plugin.connect()
   const log = createLogger('ilp-protocol-stream:Client')
   const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(plugin.sendData.bind(plugin))
-  const connection = new Connection({
+  const connection = await buildConnection({
     ...opts,
     sourceAccount: clientAddress,
     assetCode,
@@ -96,7 +95,7 @@ export class Server extends EventEmitter {
   protected serverAccount: string
   protected serverAssetCode: string
   protected serverAssetScale: number
-  protected connections: { [key: string]: Connection }
+  protected connections: { [key: string]: Connection | Promise<Connection> }
   protected closedConnections: { [key: string]: boolean }
   protected log: any
   protected enablePadding?: boolean
@@ -147,7 +146,9 @@ export class Server extends EventEmitter {
    */
   async close (): Promise<void> {
     await Promise.all(Object.keys(this.connections).map((id: string) => {
-      return this.connections[id].end()
+      const connection = this.connections[id]
+      // TODO does this handle pending connections properly?
+      return connection instanceof Connection ? connection.end() : Promise.resolve()
     }))
 
     this.plugin.deregisterDataHandler()
@@ -184,7 +185,7 @@ export class Server extends EventEmitter {
    *
    * @param connectionTag Optional connection identifier that will be appended to the ILP address and can be used to identify incoming connections. Can only include characters that can go into an ILP Address
    */
-  generateAddressAndSecret (connectionTag?: string): { destinationAccount: string, sharedSecret: Buffer } {
+  async generateAddressAndSecret (connectionTag?: string): Promise<{ destinationAccount: string, sharedSecret: Buffer }> {
     if (!this.connected) {
       throw new Error('Server must be connected to generate address and secret')
     }
@@ -195,7 +196,7 @@ export class Server extends EventEmitter {
       }
       token = token + '~' + connectionTag
     }
-    const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, Buffer.from(token, 'ascii'))
+    const sharedSecret = await cryptoHelper.generateSharedSecretFromToken(this.serverSecret, Buffer.from(token, 'ascii'))
     return {
       // TODO should this be called serverAccount or serverAddress instead?
       destinationAccount: `${this.serverAccount}.${token}`,
@@ -255,49 +256,63 @@ export class Server extends EventEmitter {
         throw new IlpPacket.Errors.UnreachableError('')
       }
 
-      if (!this.connections[connectionId]) {
-        let sharedSecret
-        try {
-          const token = Buffer.from(connectionId, 'ascii')
-          sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
-          const pskKey = cryptoHelper.generatePskEncryptionKey(sharedSecret)
-          cryptoHelper.decrypt(pskKey, prepare.data)
-        } catch (err) {
-          this.log.error(`got prepare for an address and token that we did not generate: ${prepare.destination}`)
-          // See "Why no error message here?" note above
-          throw new IlpPacket.Errors.UnreachableError('')
-        }
+      // TODO refactor into ConnectionManager or ConnectionPool or …?
 
-        // If we get here, that means it was a token + sharedSecret we created
-        const connectionTag = (connectionId.indexOf('~') !== -1 ? connectionId.slice(connectionId.indexOf('~') + 1) : undefined)
-        const connection = new Connection({
-          ...this.connectionOpts,
-          sourceAccount: this.serverAccount,
-          assetCode: this.serverAssetCode,
-          assetScale: this.serverAssetScale,
-          sharedSecret,
-          isServer: true,
-          connectionTag,
-          plugin: this.plugin
-        })
-        this.connections[connectionId] = connection
-        this.log.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
-        try {
-          this.emit('connection', connection)
-        } catch (err) {
-          this.log.error('error in connection event handler:', err)
-        }
+      let connection = this.connections[connectionId]
+      if (connection instanceof Promise) {
+        connection = await connection
+      } else if (!connection) {
+        const connectionPromise: Promise<Connection> = (async () => {
+          let sharedSecret
+          try {
+            const token = Buffer.from(connectionId, 'ascii')
+            sharedSecret = await cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
+            // TODO just pass this into the connection?
+            const pskKey = await cryptoHelper.generatePskEncryptionKey(sharedSecret)
+            await cryptoHelper.decrypt(pskKey, prepare.data)
+          } catch (err) {
+            this.log.error(`got prepare for an address and token that we did not generate: ${prepare.destination}`)
+            // See "Why no error message here?" note above
+            throw new IlpPacket.Errors.UnreachableError('')
+          }
 
-        connection.once('close', () => {
+          // If we get here, that means it was a token + sharedSecret we created
+          const connectionTag = (connectionId.indexOf('~') !== -1 ? connectionId.slice(connectionId.indexOf('~') + 1) : undefined)
+          const conn = await buildConnection({
+            ...this.connectionOpts,
+            sourceAccount: this.serverAccount,
+            assetCode: this.serverAssetCode,
+            assetScale: this.serverAssetScale,
+            sharedSecret,
+            isServer: true,
+            connectionTag,
+            plugin: this.plugin
+          })
+          this.log.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
+          try {
+            this.emit('connection', conn)
+          } catch (err) {
+            this.log.error('error in connection event handler:', err)
+          }
+
+          conn.once('close', () => {
+            delete this.connections[connectionId]
+            this.closedConnections[connectionId] = true
+          })
+          return conn
+        })()
+        connectionPromise.catch(() => {
           delete this.connections[connectionId]
-          this.closedConnections[connectionId] = true
         })
+        this.connections[connectionId] = connectionPromise
+        connection = await connectionPromise
+        this.connections[connectionId] = connection
 
         // Wait for the next tick of the event loop before handling the prepare
         await new Promise((resolve, reject) => setImmediate(resolve))
       }
 
-      const fulfill = await this.connections[connectionId].handlePrepare(prepare)
+      const fulfill = await connection.handlePrepare(prepare)
       return IlpPacket.serializeIlpFulfill(fulfill)
 
     } catch (err) {

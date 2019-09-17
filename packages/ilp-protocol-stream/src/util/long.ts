@@ -1,5 +1,4 @@
 import * as Long from 'long'
-require('source-map-support').install()
 
 export type LongValue = Long | string | number
 

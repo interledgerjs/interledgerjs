@@ -41,7 +41,6 @@ import {
 } from './util/long'
 import * as Long from 'long'
 import Rational from './util/rational'
-require('source-map-support').install()
 
 const RETRY_DELAY_START = 100
 const RETRY_DELAY_MAX = 43200000 // 12 hours should be long enough
@@ -92,6 +91,12 @@ export class ConnectionError extends Error {
     super(message)
     this.streamErrorCode = streamErrorCode || ErrorCode.InternalError
   }
+}
+
+export async function buildConnection (opts: FullConnectionOpts): Promise<Connection> {
+  const connection = new Connection(opts)
+  await connection._setupKeys()
+  return connection
 }
 
 /**
@@ -199,8 +204,14 @@ export class Connection extends EventEmitter {
     this._totalSent = Long.UZERO
     this._totalDelivered = Long.UZERO
     this._lastPacketExchangeRate = Rational.UZERO
-    this._pskKey = cryptoHelper.generatePskEncryptionKey(this.sharedSecret)
-    this._fulfillmentKey = cryptoHelper.generateFulfillmentKey(this.sharedSecret)
+  }
+
+  /**
+   * @private
+   */
+  async _setupKeys () {
+    this._pskKey = await cryptoHelper.generatePskEncryptionKey(this.sharedSecret)
+    this._fulfillmentKey = await cryptoHelper.generateFulfillmentKey(this.sharedSecret)
   }
 
   /**
@@ -306,7 +317,8 @@ export class Connection extends EventEmitter {
       // TODO should we pass the error to each stream?
       stream.destroy()
     }
-    await this.sendConnectionClose(err)
+    // Send an error to ensure that the other side doesn't get a NoError.
+    await this.sendConnectionClose(err || new Error('Connection destroyed'))
     // wait for all the streams to be closed before emitting the connection 'close'
     await Promise.all(streamClosePromises)
     this.safeEmit('close')
@@ -431,7 +443,7 @@ export class Connection extends EventEmitter {
     // Parse packet
     let requestPacket: Packet
     try {
-      requestPacket = Packet.decryptAndDeserialize(this._pskKey, prepare.data)
+      requestPacket = await Packet.decryptAndDeserialize(this._pskKey, prepare.data)
     } catch (err) {
       this.log.error(`error parsing frames:`, err)
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
@@ -449,12 +461,12 @@ export class Connection extends EventEmitter {
     // Tell peer how much data connection can receive
     responseFrames.push(new ConnectionMaxDataFrame(this.getIncomingOffsets().maxAcceptable))
 
-    const throwFinalApplicationError = () => {
+    const throwFinalApplicationError = async () => {
       responseFrames = responseFrames.concat(this.queuedFrames)
       this.queuedFrames = []
       const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Reject, prepare.amount, responseFrames)
       this.log.trace(`rejecting packet ${requestPacket.sequence}: ${JSON.stringify(responsePacket)}`)
-      throw new IlpPacket.Errors.FinalApplicationError('', responsePacket.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined)))
+      throw new IlpPacket.Errors.FinalApplicationError('', await responsePacket.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined)))
     }
 
     // Handle new streams
@@ -481,7 +493,7 @@ export class Connection extends EventEmitter {
           if (!includesStreamClose) {
             responseFrames.push(new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed'))
           }
-          throwFinalApplicationError()
+          await throwFinalApplicationError()
         }
 
         try {
@@ -489,7 +501,7 @@ export class Connection extends EventEmitter {
           this.handleNewStream(frame.streamId.toNumber())
         } catch (err) {
           this.log.debug(`error handling new stream ${frame.streamId}:`, err && err.message)
-          throwFinalApplicationError()
+          await throwFinalApplicationError()
         }
       }
     }
@@ -499,7 +511,7 @@ export class Connection extends EventEmitter {
       this.handleControlFrames(requestPacket.frames)
     } catch (err) {
       this.log.debug('error handling frames:', err && err.message)
-      throwFinalApplicationError()
+      await throwFinalApplicationError()
     }
 
     // TODO keep a running total of the offsets so we don't need to recalculate each time
@@ -507,21 +519,21 @@ export class Connection extends EventEmitter {
     if (incomingOffsets.max > incomingOffsets.maxAcceptable) {
       /* tslint:disable-next-line:no-floating-promises */
       this.destroy(new ConnectionError(`Exceeded flow control limits. Max connection byte offset: ${incomingOffsets.maxAcceptable}, received: ${incomingOffsets.max}`, ErrorCode.FlowControlError))
-      throwFinalApplicationError()
+      await throwFinalApplicationError()
     }
 
     const incomingAmount = Long.fromString(prepare.amount, true)
     if (requestPacket.prepareAmount.greaterThan(incomingAmount)) {
       this.log.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${requestPacket.prepareAmount}`)
-      throwFinalApplicationError()
+      await throwFinalApplicationError()
     }
 
     // Ensure we can generate correct fulfillment
-    const fulfillment = cryptoHelper.generateFulfillment(this._fulfillmentKey, prepare.data)
-    const generatedCondition = cryptoHelper.hash(fulfillment)
+    const fulfillment = await cryptoHelper.generateFulfillment(this._fulfillmentKey, prepare.data)
+    const generatedCondition = await cryptoHelper.hash(fulfillment)
     if (!generatedCondition.equals(prepare.executionCondition)) {
       this.log.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
-      throwFinalApplicationError()
+      await throwFinalApplicationError()
     }
 
     // Determine amount to receive on each frame
@@ -558,7 +570,7 @@ export class Connection extends EventEmitter {
         responseFrames.push(new StreamMaxMoneyFrame(streamId, stream.receiveMax, stream.totalReceived))
 
         // TODO include error frame
-        throwFinalApplicationError()
+        await throwFinalApplicationError()
       }
 
       // Reject the packet if any of the streams is already closed
@@ -566,7 +578,7 @@ export class Connection extends EventEmitter {
         this.log.debug(`peer sent money for stream that was already closed: ${streamId}`)
         responseFrames.push(new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed'))
 
-        throwFinalApplicationError()
+        await throwFinalApplicationError()
       }
     }
 
@@ -607,7 +619,7 @@ export class Connection extends EventEmitter {
     this.log.trace(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
     return {
       fulfillment,
-      data: responsePacket.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined))
+      data: await responsePacket.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined))
     }
   }
 
@@ -1228,7 +1240,7 @@ export class Connection extends EventEmitter {
     const prepare = {
       destination: this._destinationAccount!,
       amount: amount.toString(),
-      data: requestPacket.serializeAndEncrypt(this._pskKey),
+      data: await requestPacket.serializeAndEncrypt(this._pskKey),
       executionCondition: cryptoHelper.generateRandomCondition(),
       expiresAt: new Date(Date.now() + timeout)
     }
@@ -1254,7 +1266,7 @@ export class Connection extends EventEmitter {
     // Return the receiver's response if there was one
     let responsePacket
     if (ilpReject.code === 'F99' && ilpReject.data.length > 0) {
-      responsePacket = Packet.decryptAndDeserialize(this._pskKey, ilpReject.data)
+      responsePacket = await Packet.decryptAndDeserialize(this._pskKey, ilpReject.data)
 
       // Ensure the response corresponds to the request
       if (!responsePacket.sequence.equals(requestPacket.sequence)) {
@@ -1308,7 +1320,7 @@ export class Connection extends EventEmitter {
       const prepare = {
         destination: this._destinationAccount!,
         amount: '0',
-        data: packet.serializeAndEncrypt(this._pskKey),
+        data: await packet.serializeAndEncrypt(this._pskKey),
         executionCondition: cryptoHelper.generateRandomCondition(),
         expiresAt: new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
       }
@@ -1326,7 +1338,7 @@ export class Connection extends EventEmitter {
    */
   protected async sendPacket (packet: Packet, sourceAmount: Long, unfulfillable = false): Promise<Packet | void> {
     this.log.trace(`sending packet ${packet.sequence} with source amount: ${sourceAmount}: ${JSON.stringify(packet)})`)
-    const data = packet.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined))
+    const data = await packet.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined))
 
     let fulfillment: Buffer | undefined
     let executionCondition: Buffer
@@ -1334,8 +1346,8 @@ export class Connection extends EventEmitter {
       fulfillment = undefined
       executionCondition = cryptoHelper.generateRandomCondition()
     } else {
-      fulfillment = cryptoHelper.generateFulfillment(this._fulfillmentKey, data)
-      executionCondition = cryptoHelper.hash(fulfillment)
+      fulfillment = await cryptoHelper.generateFulfillment(this._fulfillmentKey, data)
+      executionCondition = await cryptoHelper.hash(fulfillment)
     }
     const prepare = {
       destination: this._destinationAccount!,
@@ -1364,7 +1376,7 @@ export class Connection extends EventEmitter {
 
     // Handle fulfillment
     if (fulfillment && isFulfill(response)) {
-      if (!cryptoHelper.hash(response.fulfillment).equals(executionCondition)) {
+      if (!(await cryptoHelper.hash(response.fulfillment)).equals(executionCondition)) {
         this.log.error(`got invalid fulfillment for packet ${packet.sequence}: ${response.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
         throw new Error(`Got invalid fulfillment for packet ${packet.sequence}. Actual: ${response.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
       }
@@ -1386,7 +1398,7 @@ export class Connection extends EventEmitter {
     // Parse response data from receiver
     let responsePacket: Packet
     try {
-      responsePacket = Packet.decryptAndDeserialize(this._pskKey, response.data)
+      responsePacket = await Packet.decryptAndDeserialize(this._pskKey, response.data)
     } catch (err) {
       this.log.error(`unable to decrypt and parse response data:`, err, response.data.toString('hex'))
       // TODO should we continue processing anyway? what if it was fulfilled?

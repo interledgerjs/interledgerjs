@@ -72,7 +72,7 @@ async function run () {
   })
 
   // These need to be passed to the client through an authenticated communication channel
-  const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
+  const { destinationAccount, sharedSecret } = await server.generateAddressAndSecret()
 
   server.on('connection', (connection) => {
     connection.on('stream', (stream) => {

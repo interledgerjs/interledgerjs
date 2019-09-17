@@ -16,7 +16,6 @@ import {
   multiplyDivideRound,
   multiplyDivide
 } from '../src/util/long'
-require('source-map-support').install()
 
 function L (value: number, unsigned?: boolean): Long {
   return Long.fromNumber(value, unsigned === undefined ? true : unsigned)

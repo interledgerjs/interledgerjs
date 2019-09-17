@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "target": "es2015",
+    "outDir": "dist",
     "module": "commonjs",
     "declaration": true,
     "noImplicitAny": true,
@@ -10,5 +11,9 @@
     "inlineSources": true,
     "strictNullChecks": true,
     "suppressImplicitAnyIndexErrors": true
-  }
+  },
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
 }

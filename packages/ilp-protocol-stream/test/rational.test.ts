@@ -3,7 +3,6 @@ import * as assert from 'assert'
 import BigNumber from 'bignumber.js'
 import * as Long from 'long'
 import Rational from '../src/util/rational'
-require('source-map-support').install()
 
 function L (value: number, unsigned?: boolean): Long {
   return Long.fromNumber(value, unsigned === undefined ? true : unsigned)

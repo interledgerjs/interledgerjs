@@ -11,7 +11,6 @@ import {
   checkedAdd,
   checkedSubtract
 } from './util/long'
-require('source-map-support').install()
 
 const DEFAULT_TIMEOUT = 60000
 

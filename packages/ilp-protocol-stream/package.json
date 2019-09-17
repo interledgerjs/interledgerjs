@@ -2,18 +2,23 @@
   "name": "ilp-protocol-stream",
   "version": "2.0.2",
   "description": "Interledger Transport Protocol for sending multiple streams of money and data over ILP.",
-  "main": "src/index.js",
+  "main": "dist/src/index.js",
+  "browser": {
+    "./src/util/crypto_node.ts": "./src/util/crypto_browser.ts"
+  },
   "types": "src/index.d.ts",
   "files": [
-    "src/**/*.js",
-    "src/**/*.js.map",
-    "src/**/*.d.ts"
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts"
   ],
   "scripts": {
     "build": "tsc",
-    "prepare": "tsc",
+    "build-webpack": "webpack --progress",
+    "prepare": "npm run build && npm run build-webpack",
     "lint": "tslint --project .",
-    "test": "nyc mocha",
+    "test": "TS_NODE_PROJECT='./tsconfig.test.json' mocha",
+    "test-cover": "nyc --extension .ts mocha",
     "doc": "typedoc --options typedoc.js src/index.ts src/connection.ts src/stream.ts",
     "publish-docs": "npm run doc && node scripts/publish-docs.js",
     "codecov": "codecov"
@@ -34,21 +39,20 @@
   },
   "dependencies": {
     "@types/node": "^10.12.2",
-    "debug": "^4.0.0",
     "ilp-logger": "^1.1.3",
     "ilp-packet": "^3.0.9",
     "ilp-protocol-ildcp": "^2.0.2",
     "long": "^4.0.0",
-    "oer-utils": "^5.0.1",
-    "source-map-support": "^0.5.6"
+    "oer-utils": "^5.0.1"
   },
   "devDependencies": {
     "@types/chai": "^4.1.3",
     "@types/chai-as-promised": "^7.1.0",
-    "@types/debug": "0.0.31",
-    "@types/lolex": "^2.1.2",
+    "@types/long": "^4.0.0",
     "@types/mocha": "^5.2.5",
+    "@types/puppeteer": "^1.19.1",
     "@types/sinon": "^5.0.1",
+    "@types/webpack": "^4.39.1",
     "benchmark": "^2.1.4",
     "bignumber.js": "^7.2.1",
     "chai": "^4.1.2",
@@ -56,16 +60,22 @@
     "codecov": "^3.0.2",
     "gh-pages": "^2.0.0",
     "ilp-plugin": "^3.2.1",
-    "ilp-plugin-btp": "^1.2.1",
+    "ilp-plugin-btp": "^1.3.11",
+    "ilp-plugin-mini-accounts": "^4.1.0",
     "mocha": "^5.1.1",
     "mocha-typescript": "^1.1.14",
-    "nyc": "^12.0.2",
+    "nyc": "^13.1.0",
+    "puppeteer": "^1.19.0",
     "sinon": "^6.0.1",
+    "source-map-support": "^0.5.6",
+    "ts-loader": "^6.1.0",
     "ts-node": "^7.0.1",
     "tslint": "^5.10.0",
     "tslint-config-standard": "^8.0.0",
     "typedoc": "^0.13.0",
-    "typescript": "^3.0.1"
+    "typescript": "^3.0.1",
+    "webpack": "^4.39.3",
+    "webpack-cli": "^3.3.7"
   },
   "nyc": {
     "check-coverage": true,
@@ -73,16 +83,9 @@
     "statements": 80,
     "functions": 80,
     "branches": 80,
-    "include": [
-      "src/**/*.js"
-    ],
-    "exclude": [
-      "test/**/*.js"
-    ],
     "reporter": [
       "lcov",
       "text-summary"
-    ],
-    "all": true
+    ]
   }
 }

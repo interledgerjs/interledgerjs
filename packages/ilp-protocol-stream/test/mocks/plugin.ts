@@ -4,7 +4,6 @@ import * as Long from 'long'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import { Writer } from 'oer-utils'
 import Rational from '../../src/util/rational'
-require('source-map-support').install()
 
 export interface DataHandler {
   (data: Buffer): Promise<Buffer>

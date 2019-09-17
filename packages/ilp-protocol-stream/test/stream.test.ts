@@ -12,7 +12,6 @@ import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
 const assert = Object.assign(Chai.assert, sinon.assert)
-require('source-map-support').install()
 
 describe('DataAndMoneyStream', function () {
   beforeEach(async function () {
@@ -25,7 +24,7 @@ describe('DataAndMoneyStream', function () {
     })
     await this.server.listen()
 
-    const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+    const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
     this.destinationAccount = destinationAccount
     this.sharedSecret = sharedSecret
 
@@ -512,7 +511,7 @@ describe('DataAndMoneyStream', function () {
       assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
 
       const closeFrame = response.frames.find((frame: Frame) => frame.name === 'StreamClose')
-      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.NoError, '')
+      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.StreamStateError, 'Stream is already closed')
       // Longs don't compare properly with deepEqual.
       assert.equal(closeFrame.streamId.toString(), expectFrame.streamId.toString())
       assert.equal(closeFrame.errorCode, expectFrame.errorCode)
@@ -536,7 +535,7 @@ describe('DataAndMoneyStream', function () {
       assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
 
       const closeFrame = response.frames.find((frame: Frame) => frame.name === 'StreamClose')
-      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.NoError, '')
+      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.StreamStateError, 'Stream is already closed')
       assert.equal(closeFrame.streamId.toString(), expectFrame.streamId.toString())
       assert.equal(closeFrame.errorCode, expectFrame.errorCode)
       assert.equal(closeFrame.errorMessage, expectFrame.errorMessage)

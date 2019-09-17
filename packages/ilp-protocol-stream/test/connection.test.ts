@@ -11,7 +11,6 @@ import * as chaiAsPromised from 'chai-as-promised'
 import * as Long from 'long'
 Chai.use(chaiAsPromised)
 const assert = Object.assign(Chai.assert, sinon.assert)
-require('source-map-support').install()
 
 describe('Connection', function () {
   beforeEach(async function () {
@@ -23,7 +22,7 @@ describe('Connection', function () {
       serverSecret: Buffer.alloc(32)
     })
 
-    const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+    const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
     this.destinationAccount = destinationAccount
     this.sharedSecret = sharedSecret
 
@@ -439,7 +438,7 @@ describe('Connection', function () {
       const serverStream = this.serverConn.createStream()
       await this.serverConn.destroy()
 
-      assert.throws(() => clientStream.write('hello'), 'write after end')
+      assert.throws(() => clientStream.write('hello'), 'Cannot call write after a stream was destroyed')
       assert.throws(() => clientStream.setSendMax(300), 'Stream already closed')
       await assert.isRejected(clientStream.sendTotal(300), 'Stream already closed')
       // Node v10.0.0 throws 'Cannot call write after a stream was destroyed'
@@ -484,7 +483,7 @@ describe('Connection', function () {
         toFake: ['setTimeout', 'Date']
       })
       const clientConn = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
       const errPromise = new Promise((resolve, reject) => {
@@ -564,7 +563,7 @@ describe('Connection', function () {
       this.clientPlugin.exchangeRate = 0.0000001
       this.clientPlugin.maxAmount = 1000000000 // 10^9
       await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
     })
@@ -573,7 +572,7 @@ describe('Connection', function () {
       this.clientPlugin.exchangeRate = 0.0000000001
       this.clientPlugin.maxAmount = 1000000000000 // 10^12
       await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
     })
@@ -582,7 +581,7 @@ describe('Connection', function () {
       this.clientPlugin.exchangeRate = 0.0000000001
       this.serverPlugin.exchangeRate = 1 / this.clientPlugin.exchangeRate
       await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
     })
@@ -590,7 +589,7 @@ describe('Connection', function () {
     it('should apply a default slippage of 1% to the exchange rate', async function () {
       const slippage = 0.01
       const connection = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
       const exchangeRateWithSlippage = (0.5 * (1 - slippage)).toString()
@@ -600,7 +599,7 @@ describe('Connection', function () {
     it('should apply slippage to the exchange rate when explicitly specified', async function () {
       const slippage = 0.05
       const connection = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
         slippage
       })
@@ -618,7 +617,7 @@ describe('Connection', function () {
       this.clientPlugin.maxAmount = 150000
 
       const connection = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
         slippage: 0 
       })
@@ -638,7 +637,7 @@ describe('Connection', function () {
       this.clientPlugin.maxAmount = 1500
 
       await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
       clearInterval(interval)
@@ -668,7 +667,7 @@ describe('Connection', function () {
         }))
 
       await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
 
@@ -704,7 +703,7 @@ describe('Connection', function () {
         }))
         .callThrough()
       await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
       clearInterval(interval)
@@ -739,7 +738,7 @@ describe('Connection', function () {
         }))
         .callThrough()
       await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         minExchangeRatePrecision: 1,
         plugin: this.clientPlugin
       })
@@ -812,7 +811,7 @@ describe('Connection', function () {
         .callsFake(mySendData)
 
       await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         minExchangeRatePrecision: 2,
         plugin: this.clientPlugin
       })
@@ -844,7 +843,7 @@ describe('Connection', function () {
 
       const serverPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
 
@@ -875,7 +874,7 @@ describe('Connection', function () {
         }))
 
       await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
 
@@ -925,7 +924,7 @@ describe('Connection', function () {
       })
       await this.server.listen()
 
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
       this.destinationAccount = destinationAccount
       this.sharedSecret = sharedSecret
 
@@ -981,7 +980,7 @@ describe('Connection', function () {
       })
       await this.server.listen()
 
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
       this.destinationAccount = destinationAccount
       this.sharedSecret = sharedSecret
 
@@ -1037,7 +1036,7 @@ describe('Connection', function () {
     it('should find the maximum amount immediately if the connector returns the receivedAmount and maximumAmount in the F08 error data', async function () {
       this.clientPlugin.maxAmount = 1500
       const clientConn = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
       assert.equal(clientConn['maximumPacketAmount'].toString(), '1500')
@@ -1144,7 +1143,7 @@ describe('Connection', function () {
 
       const serverPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
       const serverConn = await serverPromise
@@ -1355,7 +1354,7 @@ describe('Connection', function () {
         enablePadding: true
       })
 
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
       this.destinationAccount = destinationAccount
       this.sharedSecret = sharedSecret
 
@@ -1394,8 +1393,8 @@ describe('Connection', function () {
   })
 
   describe('Stream IDs', function () {
-    it('should close the connection if the peer uses the wrong numbered stream ID', function (done) {
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+    it('should close the connection if the peer uses the wrong numbered stream ID', async function () {
+      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
       const clientPlugin = this.clientPlugin
       class BadConnection extends Connection {
         constructor() {
@@ -1412,20 +1411,24 @@ describe('Connection', function () {
         }
       }
       const clientConn = new BadConnection()
-      clientConn.on('error', (err: Error) => {
-        assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
-        done()
+      await clientConn._setupKeys()
+      const done = new Promise((resolve) => {
+        clientConn.on('error', (err: Error) => {
+          assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
+          resolve()
+        })
       })
       clientConn.connect()
       const stream = clientConn.createStream()
       stream.on('error', (err: Error) => {
         assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
       })
+      await done
     })
 
     it('should close the connection if the peer opens too many streams', async function () {
       const spy = sinon.spy()
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
       this.server.on('connection', (serverConn: Connection) => {
         serverConn['maxStreamId'] = 6
         serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -1450,6 +1453,7 @@ describe('Connection', function () {
         }
       }
       const clientConn = new BadConnection()
+      await clientConn._setupKeys()
       clientConn.on('error', spy)
       await clientConn.connect()
       clientConn.remoteMaxStreamId = 100
@@ -1468,7 +1472,7 @@ describe('Connection', function () {
     it('should allow the user to set the maximum number of open streams', async function () {
       const serverConnPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
         maxRemoteStreams: 1
       })
@@ -1492,7 +1496,7 @@ describe('Connection', function () {
     it('should throw an error when the user calls createStream if it would exceed the other side\'s limit', async function () {
       const serverConnPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
         maxRemoteStreams: 2
       })
@@ -1510,7 +1514,7 @@ describe('Connection', function () {
     it('should increase the max stream id as streams are closed', async function () {
       const serverConnPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
-        ...this.server.generateAddressAndSecret(),
+        ...await this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
         maxRemoteStreams: 2
       })
@@ -1611,7 +1615,7 @@ describe('Connection', function () {
       const serverConnPromise = server.acceptConnection()
 
       const clientConn = await createConnection({
-        ...server.generateAddressAndSecret(),
+        ...await server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
         connectionBufferSize: 2500
       })

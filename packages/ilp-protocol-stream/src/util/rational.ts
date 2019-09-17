@@ -5,7 +5,6 @@ import {
   multiplyDivideCeil,
   multiplyDivideRound
 } from './long'
-require('source-map-support').install()
 
 export default class Rational {
   static UZERO = new Rational(Long.UZERO, Long.UONE, true)

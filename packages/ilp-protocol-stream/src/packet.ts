@@ -2,7 +2,6 @@ import { Reader, Writer, WriterInterface, Predictor } from 'oer-utils'
 import * as Long from 'long'
 import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
 import { LongValue, longFromValue } from './util/long'
-require('source-map-support').install()
 
 const VERSION = Long.fromNumber(1, true)
 
@@ -96,10 +95,10 @@ export class Packet {
     this.frames = frames
   }
 
-  static decryptAndDeserialize (pskEncryptionKey: Buffer, buffer: Buffer): Packet {
+  static async decryptAndDeserialize (pskEncryptionKey: Buffer, buffer: Buffer): Promise<Packet> {
     let decrypted: Buffer
     try {
-      decrypted = decrypt(pskEncryptionKey, buffer)
+      decrypted = await decrypt(pskEncryptionKey, buffer)
     } catch (err) {
       throw new Error(`Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key`)
     }
@@ -128,7 +127,7 @@ export class Packet {
     return new Packet(sequence, ilpPacketType, packetAmount, frames)
   }
 
-  serializeAndEncrypt (pskEncryptionKey: Buffer, padPacketToSize?: number): Buffer {
+  serializeAndEncrypt (pskEncryptionKey: Buffer, padPacketToSize?: number): Promise<Buffer> {
     const serialized = this._serialize()
 
     // Pad packet to max data size, if desired

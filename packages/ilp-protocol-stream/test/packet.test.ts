@@ -12,16 +12,18 @@ import {
 import { Reader, Writer } from 'oer-utils'
 import * as Long from 'long'
 
-require('source-map-support').install()
-
 describe('Packet Format', function () {
   describe('decryptAndDeserialize()', function () {
-    it('should throw an error if it cannot decrypt the packet', function () {
+    it('should throw an error if it cannot decrypt the packet', async function () {
       const packet = Buffer.from('9c4f511dbc865607311609d7559e01e1fd22f985292539e1f5d8f3eb0832060f', 'hex')
 
-      assert.throws(() => {
-        return Packet.decryptAndDeserialize(Buffer.alloc(32), packet)
-      }, new Error('Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key'))
+      try {
+        await Packet.decryptAndDeserialize(Buffer.alloc(32), packet)
+      } catch (err) {
+        assert.equal(err.message, 'Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key')
+        return
+      }
+      assert(false)
     })
 
     it('should throw an error if the version is unsupported', function () {
@@ -80,7 +82,7 @@ describe('Packet Format', function () {
     it('converts larger receiveMax to MaxUInt64', function () {
       const writer = new Writer()
       writer.writeVarUInt(123) // streamId
-      writer.writeVarOctetString(new Buffer([ // receiveMax
+      writer.writeVarOctetString(Buffer.from([ // receiveMax
         0x01, 0x02, 0x03,
         0x04, 0x05, 0x06,
         0x07, 0x08, 0x09
@@ -96,7 +98,7 @@ describe('Packet Format', function () {
     it('converts larger sendMax to MaxUInt64', function () {
       const writer = new Writer()
       writer.writeVarUInt(123) // streamId
-      writer.writeVarOctetString(new Buffer([ // sendMax
+      writer.writeVarOctetString(Buffer.from([ // sendMax
         0x01, 0x02, 0x03,
         0x04, 0x05, 0x06,
         0x07, 0x08, 0x09
