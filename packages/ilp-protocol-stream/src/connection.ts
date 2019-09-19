@@ -318,7 +318,7 @@ export class Connection extends EventEmitter {
       stream.destroy()
     }
     // Send an error to ensure that the other side doesn't get a NoError.
-    await this.sendConnectionClose(err || new Error('Connection destroyed'))
+    await this.sendConnectionClose(err || new ConnectionError('Connection destroyed', ErrorCode.ApplicationError))
     // wait for all the streams to be closed before emitting the connection 'close'
     await Promise.all(streamClosePromises)
     this.safeEmit('close')
