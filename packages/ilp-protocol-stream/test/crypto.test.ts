@@ -1,7 +1,16 @@
+import 'mocha'
 import * as assert from 'assert'
 import * as helpers from '../src/crypto'
 
-describe('crypto helpers', function () {
+if (typeof describe === 'function') {
+  describe('crypto helpers (node)', function () {
+    runCryptoTests({ describe, it })
+  })
+}
+
+export function runCryptoTests (args: {describe: any, it: any}) {
+  const { describe, it } = args
+
   describe('generateToken', function () {
     it('generates a random 18-byte token', function () {
       assert.equal(helpers.generateToken().length, 18)
@@ -74,4 +83,4 @@ describe('crypto helpers', function () {
       assert.deepEqual(await helpers.decrypt(key, ciphertext), cleartext)
     })
   })
-})
+}

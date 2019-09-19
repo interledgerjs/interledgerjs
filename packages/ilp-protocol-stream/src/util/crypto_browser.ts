@@ -1,3 +1,7 @@
+// According to their type declarations, SubtleCrypto functions return `PromiseLike`.
+// They are close enough to a `Promise` to `await`, but tslint doesn't know that.
+/* tslint:disable:await-promise */
+
 const { crypto } = window
 const HASH_ALGORITHM = 'SHA-256'
 const ENCRYPTION_ALGORITHM = 'AES-GCM'
@@ -8,10 +12,7 @@ const AUTH_TAG_BITS = 8 * AUTH_TAG_BYTES
 // TODO cache imported keys somehow; dont call importKey repeatedly
 
 export async function hash (preimage: Buffer): Promise<Buffer> {
-  const digest = await crypto.subtle.digest(
-    { name: HASH_ALGORITHM },
-    preimage
-  )
+  const digest = await crypto.subtle.digest({ name: HASH_ALGORITHM }, preimage)
   return Buffer.from(digest)
 }
 
@@ -24,7 +25,7 @@ export async function encrypt (pskEncryptionKey: Buffer, ...buffers: Buffer[]): 
     false,
     ['encrypt', 'decrypt']
   )
-  const ctBuffer = await crypto.subtle.encrypt(
+  const ciphertext = await crypto.subtle.encrypt(
     {
       name: ENCRYPTION_ALGORITHM,
       iv,
@@ -33,22 +34,20 @@ export async function encrypt (pskEncryptionKey: Buffer, ...buffers: Buffer[]): 
     key,
     Buffer.concat(buffers)
   )
-  const tagStart = ctBuffer.byteLength - AUTH_TAG_BYTES
-  const tag = ctBuffer.slice(tagStart)
-  const data = ctBuffer.slice(0, tagStart)
-  // TODO accomplish this w/ less copying
-  const dataArr = Buffer.concat([
+  const tagStart = ciphertext.byteLength - AUTH_TAG_BYTES
+  const tag = ciphertext.slice(tagStart)
+  const data = ciphertext.slice(0, tagStart)
+  return Buffer.concat([
     Buffer.from(iv),
     Buffer.from(tag),
     Buffer.from(data)
   ])
-  return dataArr
 }
 
 export async function decrypt (pskEncryptionKey: Buffer, data: Buffer): Promise<Buffer> {
   const nonce = data.slice(0, IV_LENGTH)
   const tag = data.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_BYTES)
-  const encrypted = data.slice(IV_LENGTH + AUTH_TAG_BYTES)
+  const cipherdata = data.slice(IV_LENGTH + AUTH_TAG_BYTES)
   const key = await crypto.subtle.importKey(
     'raw',
     pskEncryptionKey,
@@ -63,17 +62,16 @@ export async function decrypt (pskEncryptionKey: Buffer, data: Buffer): Promise<
       tagLength: AUTH_TAG_BITS
     },
     key,
-    Buffer.concat([encrypted, tag])
+    Buffer.concat([cipherdata, tag])
   )
   return Buffer.from(decryptedData)
 }
 
 const HMAC_ALGORITHM = {
   name: 'HMAC',
-  hash: {name: HASH_ALGORITHM}
+  hash: { name: HASH_ALGORITHM }
 }
 
-// Tested indirectly by other functions, not directly accessed by STREAM
 export async function hmac (key: Buffer, message: Buffer): Promise<Buffer> {
   const hmacKey = await crypto.subtle.importKey(
     'raw', key, HMAC_ALGORITHM, false, ['sign', 'verify'])

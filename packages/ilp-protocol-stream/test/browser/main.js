@@ -18,4 +18,5 @@ async function makeStreamClient (btpOpts, opts) {
   })
 }
 
-window['makeStreamClient'] = makeStreamClient
+window.makeStreamClient = makeStreamClient
+window.runCryptoTests = require('../crypto.test').runCryptoTests

@@ -2,8 +2,6 @@
 // ilp-protocol-stream. The main point is to exercise `src/util/crypto_browser`,
 // since every thing else is the same as in Node.
 
-// TODO run the crypto.test.ts tests in a puppeteer page
-
 import * as assert from 'assert'
 import * as path from 'path'
 import * as puppeteer from 'puppeteer'
@@ -46,7 +44,7 @@ describe('Puppeteer', function () {
 
   beforeEach('Set up client', async function () {
     this.page = await this.browser.newPage()
-    this.page.on('error', (err: Error) => { // XXX
+    this.page.on('error', (err: Error) => {
       console.log('puppeteer_error:', err.stack)
     })
     this.page.on('console', (message: puppeteer.ConsoleMessage) => {
@@ -69,10 +67,15 @@ describe('Puppeteer', function () {
       destinationAccount: string,
       sharedSecret: string
     }) => {
-      window['streamClient'] = await window['makeStreamClient']({
-        server: 'btp+ws://127.0.0.1:' + opts.port,
-        btpToken: 'secret'
-      }, opts)
+      try {
+        window['streamClient'] = await window['makeStreamClient']({
+          server: 'btp+ws://127.0.0.1:' + opts.port,
+          btpToken: 'secret'
+        }, opts)
+      } catch (err) {
+        console.error("uncaught error:", err.stack)
+        throw err
+      }
     }, {
       port: BTP_SERVER_OPTS.port,
       destinationAccount,
@@ -81,8 +84,6 @@ describe('Puppeteer', function () {
   })
 
   afterEach('Tear down client & server', async function () {
-    //await this.serverConnection.end()
-    //await this.serverConnection.destroy(new Error('fail'))
     await this.page.evaluate(async function () {
       await window['streamClient'].end()
     })
@@ -97,6 +98,20 @@ describe('Puppeteer', function () {
         await stream.sendTotal(100)
       })
       assert.equal(this.serverConnection.totalReceived, '100')
+    })
+  })
+
+  // This test runner is pretty clumsy/fragile.
+  describe('crypto helpers (browser)', function () {
+    it('passes', async function () {
+      await this.page.evaluate(async function () {
+        const tests: any[] = []
+        window['runCryptoTests']({
+          describe: function (label: any, run: any) { run() },
+          it: function (label: any, run: any) { tests.push(run()) }
+        })
+        await Promise.all(tests)
+      })
     })
   })
 })
