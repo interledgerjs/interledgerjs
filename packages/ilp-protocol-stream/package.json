@@ -4,6 +4,7 @@
   "description": "Interledger Transport Protocol for sending multiple streams of money and data over ILP.",
   "main": "dist/src/index.js",
   "browser": {
+    "./dist/src/util/crypto_node.js": "./dist/src/util/crypto_browser.js",
     "./src/util/crypto_node.ts": "./src/util/crypto_browser.ts"
   },
   "types": "src/index.d.ts",

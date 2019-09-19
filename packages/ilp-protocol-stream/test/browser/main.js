@@ -1,7 +1,7 @@
 // This code is executed within Chromium by Puppeteer.
 
 const IlpPluginBtp = require('ilp-plugin-btp')
-const { createConnection, Connection } = require('../../src')
+const { createConnection, Connection } = require('../..')
 const { WebSocketPolyfill } = require('./ws')
 
 // Use a wrapper function, because for some reason attaching `Client` to `window`
