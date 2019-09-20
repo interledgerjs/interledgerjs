@@ -2,8 +2,8 @@ import { EventEmitter } from 'events'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import * as IlpPacket from 'ilp-packet'
 import createLogger from 'ilp-logger'
+import './util/formatters'
 import * as cryptoHelper from './crypto'
-import { randomBytes } from 'crypto'
 import { buildConnection, Connection, ConnectionOpts } from './connection'
 import { Plugin } from './util/plugin-interface'
 
@@ -40,7 +40,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
     try {
       prepare = IlpPacket.deserializeIlpPrepare(data)
     } catch (err) {
-      log.error(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
+      log.error('got data that is not an ILP Prepare packet: %h', data)
       return IlpPacket.serializeIlpReject({
         code: 'F00',
         message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
@@ -104,7 +104,7 @@ export class Server extends EventEmitter {
 
   constructor (opts: ServerOpts) {
     super()
-    this.serverSecret = opts.serverSecret || randomBytes(32)
+    this.serverSecret = opts.serverSecret || cryptoHelper.randomBytes(32)
     this.plugin = opts.plugin
     this.log = createLogger('ilp-protocol-stream:Server')
     this.connections = {}
@@ -227,7 +227,7 @@ export class Server extends EventEmitter {
       try {
         prepare = IlpPacket.deserializeIlpPrepare(data)
       } catch (err) {
-        this.log.error(`got data that is not an ILP Prepare packet: ${data.toString('hex')}`)
+        this.log.error('got data that is not an ILP Prepare packet: %h', data)
         return IlpPacket.serializeIlpReject({
           code: 'F00',
           message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
@@ -238,7 +238,7 @@ export class Server extends EventEmitter {
 
       const localAddressParts = prepare.destination.replace(this.serverAccount + '.', '').split('.')
       if (localAddressParts.length === 0 || !localAddressParts[0]) {
-        this.log.error(`destination in ILP Prepare packet does not have a Connection ID: ${prepare.destination}`)
+        this.log.error('destination in ILP Prepare packet does not have a Connection ID: %s', prepare.destination)
         /* Why no error message here?
         We return an empty message here because we want to minimize the amount of information sent unencrypted
         that identifies this protocol and specific implementation for the rest of the network. For example,
@@ -251,7 +251,7 @@ export class Server extends EventEmitter {
       const connectionId = localAddressParts[0]
 
       if (this.closedConnections[connectionId]) {
-        this.log.debug(`got packet for connection that was already closed: ${connectionId}`)
+        this.log.debug('got packet for connection that was already closed: %s', connectionId)
         // See "Why no error message here?" note above
         throw new IlpPacket.Errors.UnreachableError('')
       }
@@ -271,7 +271,7 @@ export class Server extends EventEmitter {
             const pskKey = await cryptoHelper.generatePskEncryptionKey(sharedSecret)
             await cryptoHelper.decrypt(pskKey, prepare.data)
           } catch (err) {
-            this.log.error(`got prepare for an address and token that we did not generate: ${prepare.destination}`)
+            this.log.error('got prepare for an address and token that we did not generate: %s', prepare.destination)
             // See "Why no error message here?" note above
             throw new IlpPacket.Errors.UnreachableError('')
           }
@@ -288,7 +288,7 @@ export class Server extends EventEmitter {
             connectionTag,
             plugin: this.plugin
           })
-          this.log.debug(`got incoming packet for new connection: ${connectionId}${(connectionTag ? ' (connectionTag: ' + connectionTag + ')' : '')}`)
+          this.log.debug('got incoming packet for new connection: %s%s', connectionId, (connectionTag ? ' (connectionTag: ' + connectionTag + ')' : ''))
           try {
             this.emit('connection', conn)
           } catch (err) {

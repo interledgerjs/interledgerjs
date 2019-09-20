@@ -331,7 +331,7 @@ export class Connection extends EventEmitter {
   createStream (): DataAndMoneyStream {
     // Make sure we don't open more streams than the remote will allow
     if (this.remoteMaxStreamId < this.nextStreamId) {
-      this.log.debug(`cannot create another stream. nextStreamId: ${this.nextStreamId}, remote maxStreamId: ${this.remoteMaxStreamId}`)
+      this.log.debug('cannot create another stream. nextStreamId: %d, remote maxStreamId: %d', this.nextStreamId, this.remoteMaxStreamId)
       this.queuedFrames.push(new ConnectionStreamIdBlockedFrame(this.nextStreamId))
       throw new Error(`Creating another stream would exceed the remote connection's maximum number of open streams`)
     }
@@ -342,7 +342,7 @@ export class Connection extends EventEmitter {
       isServer: this.isServer
     })
     this.streams.set(this.nextStreamId, stream)
-    this.log.debug(`created stream: ${this.nextStreamId}`)
+    this.log.debug('created stream: %d', this.nextStreamId)
     this.nextStreamId += 2
 
     stream.on('_maybe_start_send_loop', this.startSendLoop.bind(this))
@@ -445,13 +445,13 @@ export class Connection extends EventEmitter {
     try {
       requestPacket = await Packet.decryptAndDeserialize(this._pskKey, prepare.data)
     } catch (err) {
-      this.log.error(`error parsing frames:`, err)
+      this.log.error('error parsing frames:', err)
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
     }
     this.log.trace('handling packet:', JSON.stringify(requestPacket))
 
     if (requestPacket.ilpPacketType.valueOf() !== IlpPacket.Type.TYPE_ILP_PREPARE) {
-      this.log.error(`prepare packet contains a frame that says it should be something other than a prepare: ${requestPacket.ilpPacketType}`)
+      this.log.error('prepare packet contains a frame that says it should be something other than a prepare: %d', requestPacket.ilpPacketType)
       throw new IlpPacket.Errors.UnexpectedPaymentError('')
     }
     this.bumpIdle()
@@ -465,7 +465,7 @@ export class Connection extends EventEmitter {
       responseFrames = responseFrames.concat(this.queuedFrames)
       this.queuedFrames = []
       const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Reject, prepare.amount, responseFrames)
-      this.log.trace(`rejecting packet ${requestPacket.sequence}: ${JSON.stringify(responsePacket)}`)
+      this.log.trace('rejecting packet %s: %j', requestPacket.sequence, responsePacket)
       throw new IlpPacket.Errors.FinalApplicationError('', await responsePacket.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined)))
     }
 
@@ -480,7 +480,7 @@ export class Connection extends EventEmitter {
 
         // Check if the stream was already closed
         if (this.closedStreams[streamId]) {
-          this.log.trace(`got packet with frame for stream ${streamId}, which was already closed`)
+          this.log.trace('got packet with frame for stream %d, which was already closed', streamId)
 
           // Don't bother sending an error frame back unless they've actually sent money or data
           if (frame.type !== FrameType.StreamMoney && frame.type !== FrameType.StreamData) {
@@ -500,7 +500,7 @@ export class Connection extends EventEmitter {
           // Note this will throw if the stream was already closed
           this.handleNewStream(frame.streamId.toNumber())
         } catch (err) {
-          this.log.debug(`error handling new stream ${frame.streamId}:`, err && err.message)
+          this.log.debug('error handling new stream %s: %s', frame.streamId, err && err.message)
           await throwFinalApplicationError()
         }
       }
@@ -524,7 +524,7 @@ export class Connection extends EventEmitter {
 
     const incomingAmount = Long.fromString(prepare.amount, true)
     if (requestPacket.prepareAmount.greaterThan(incomingAmount)) {
-      this.log.debug(`received less than minimum destination amount. actual: ${prepare.amount}, expected: ${requestPacket.prepareAmount}`)
+      this.log.debug('received less than minimum destination amount. actual: %s, expected: %s', prepare.amount, requestPacket.prepareAmount)
       await throwFinalApplicationError()
     }
 
@@ -532,7 +532,7 @@ export class Connection extends EventEmitter {
     const fulfillment = await cryptoHelper.generateFulfillment(this._fulfillmentKey, prepare.data)
     const generatedCondition = await cryptoHelper.hash(fulfillment)
     if (!generatedCondition.equals(prepare.executionCondition)) {
-      this.log.debug(`got unfulfillable prepare for amount: ${prepare.amount}. generated condition: ${generatedCondition.toString('hex')}, prepare condition: ${prepare.executionCondition.toString('hex')}`)
+      this.log.debug('got unfulfillable prepare for amount: %s. generated condition: %h, prepare condition: %h', prepare.amount, generatedCondition, prepare.executionCondition)
       await throwFinalApplicationError()
     }
 
@@ -565,7 +565,7 @@ export class Connection extends EventEmitter {
         .multiplyByLongCeil(stream._getAmountStreamCanReceive())
       if (maxStreamCanReceive.lessThan(streamAmount)) {
         // TODO should this be distributed to other streams if it can be?
-        this.log.debug(`peer sent too much for stream: ${streamId}. got: ${streamAmount}, max receivable: ${maxStreamCanReceive}`)
+        this.log.debug('peer sent too much for stream: %d. got: %s, max receivable: %s', streamId, streamAmount, maxStreamCanReceive)
         // Tell peer how much the streams they sent for can receive
         responseFrames.push(new StreamMaxMoneyFrame(streamId, stream.receiveMax, stream.totalReceived))
 
@@ -575,7 +575,7 @@ export class Connection extends EventEmitter {
 
       // Reject the packet if any of the streams is already closed
       if (!stream.isOpen()) {
-        this.log.debug(`peer sent money for stream that was already closed: ${streamId}`)
+        this.log.debug('peer sent money for stream that was already closed: %d', streamId)
         responseFrames.push(new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed'))
 
         await throwFinalApplicationError()
@@ -591,7 +591,7 @@ export class Connection extends EventEmitter {
     if (!this.closed && !this.remoteClosed) {
       for (let [_, stream] of this.streams) {
         if (!stream.isOpen() && !stream._remoteClosed) {
-          this.log.trace(`telling other side that stream ${stream.id} is closed`)
+          this.log.trace('telling other side that stream %d is closed', stream.id)
           if (stream._errorMessage) {
             responseFrames.push(new StreamCloseFrame(stream.id, ErrorCode.ApplicationError, stream._errorMessage))
           } else {
@@ -600,7 +600,7 @@ export class Connection extends EventEmitter {
           // TODO confirm that they get this
           stream._remoteClosed = true
         } else {
-          this.log.trace(`telling other side that stream ${stream.id} can receive ${stream.receiveMax}`)
+          this.log.trace('telling other side that stream %d can receive %s', stream.id, stream.receiveMax)
           responseFrames.push(new StreamMaxMoneyFrame(stream.id, stream.receiveMax, stream.totalReceived))
 
           // TODO only send these frames when we need to
@@ -616,7 +616,7 @@ export class Connection extends EventEmitter {
     // Return fulfillment and response packet
     const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Fulfill, incomingAmount, responseFrames)
     this.addTotalReceived(incomingAmount)
-    this.log.trace(`fulfilling prepare with fulfillment: ${fulfillment.toString('hex')} and response packet: ${JSON.stringify(responsePacket)}`)
+    this.log.trace('fulfilling prepare with fulfillment: %h and response packet: %j', fulfillment, responsePacket)
     return {
       fulfillment,
       data: await responsePacket.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined))
@@ -632,7 +632,7 @@ export class Connection extends EventEmitter {
       let stream
       switch (frame.type) {
         case FrameType.ConnectionNewAddress:
-          this.log.trace(`peer notified us of their account: ${frame.sourceAccount}`)
+          this.log.trace('peer notified us of their account: %s', frame.sourceAccount)
           const firstConnection = this._destinationAccount === undefined
           this._destinationAccount = frame.sourceAccount
           if (firstConnection) {
@@ -641,7 +641,7 @@ export class Connection extends EventEmitter {
           // TODO reset the exchange rate and send a test packet to make sure they haven't spoofed the address
           break
         case FrameType.ConnectionAssetDetails:
-          this.log.trace(`peer notified us of their asset details: code=${frame.sourceAssetCode}, scale=${frame.sourceAssetScale}`)
+          this.log.trace('peer notified us of their asset details: code=%s, scale=%d', frame.sourceAssetCode, frame.sourceAssetScale)
           this._destinationAssetCode = frame.sourceAssetCode
           this._destinationAssetScale = frame.sourceAssetScale
           break
@@ -651,18 +651,18 @@ export class Connection extends EventEmitter {
           this.closed = true
           this.remoteClosed = true
           if (frame.errorCode === ErrorCode.NoError) {
-            this.log.info(`remote closed connection`)
+            this.log.info('remote closed connection')
             /* tslint:disable-next-line:no-floating-promises */
             this.end()
           } else {
-            this.log.error(`remote connection error. code: ${ErrorCode[frame.errorCode]}, message: ${frame.errorMessage}`)
+            this.log.error('remote connection error. code: %s, message: %s', ErrorCode[frame.errorCode], frame.errorMessage)
             /* tslint:disable-next-line:no-floating-promises */
             this.destroy(new Error(`Remote connection error. Code: ${ErrorCode[frame.errorCode]}, message: ${frame.errorMessage}`))
           }
           break
         case FrameType.ConnectionMaxData:
           const outgoingOffsets = this.getOutgoingOffsets()
-          this.log.trace(`remote connection max byte offset is: ${frame.maxOffset}, we've sent: ${outgoingOffsets.currentOffset}, we want to send up to: ${outgoingOffsets.maxOffset}`)
+          this.log.trace('remote connection max byte offset is: %s, we\'ve sent: %d, we want to send up to: %d', frame.maxOffset, outgoingOffsets.currentOffset, outgoingOffsets.maxOffset)
           if (frame.maxOffset.greaterThan(MAX_DATA_SIZE * 2)) {
             this.remoteMaxOffset = Math.max(frame.maxOffset.toNumber(), this.remoteMaxOffset)
           } else {
@@ -671,21 +671,21 @@ export class Connection extends EventEmitter {
           }
           break
         case FrameType.ConnectionDataBlocked:
-          this.log.trace(`remote wants to send more data but we are blocking them. current max incoming offset: ${this.getIncomingOffsets()}, remote max offset: ${frame.maxOffset}`)
+          this.log.trace('remote wants to send more data but we are blocking them. current max incoming offset: %d, remote max offset: %s', this.getIncomingOffsets(), frame.maxOffset)
           break
         case FrameType.ConnectionMaxStreamId:
           // TODO make sure the number isn't lowered
-          this.log.trace(`remote set max stream id to ${frame.maxStreamId}`)
+          this.log.trace('remote set max stream id to %s', frame.maxStreamId)
           this.remoteMaxStreamId = frame.maxStreamId.toNumber()
           break
         case FrameType.ConnectionStreamIdBlocked:
-          this.log.trace(`remote wants to open more streams but we are blocking them`)
+          this.log.trace('remote wants to open more streams but we are blocking them')
           break
         case FrameType.StreamClose:
           this.handleStreamClose(frame)
           break
         case FrameType.StreamMaxMoney:
-          this.log.trace(`peer told us that stream ${frame.streamId} can receive up to: ${frame.receiveMax} and has received: ${frame.totalReceived} so far`)
+          this.log.trace('peer told us that stream %s can receive up to: %s and has received: %s so far', frame.streamId, frame.receiveMax, frame.totalReceived)
           stream = this.streams.get(frame.streamId.toNumber())
           if (!stream) {
             break
@@ -703,10 +703,10 @@ export class Connection extends EventEmitter {
           }
           break
         case FrameType.StreamMoneyBlocked:
-          this.log.debug(`peer told us that they want to send more money on stream ${frame.streamId} but we are blocking them. they have sent: ${frame.totalSent} so far and want to send: ${frame.sendMax}`)
+          this.log.debug('peer told us that they want to send more money on stream %s but we are blocking them. they have sent: %s so far and want to send: %s', frame.streamId, frame.totalSent, frame.sendMax)
           break
         case FrameType.StreamData:
-          this.log.trace(`got data for stream ${frame.streamId}`)
+          this.log.trace('got data for stream %s', frame.streamId)
 
           stream = this.streams.get(frame.streamId.toNumber())
           if (!stream) {
@@ -729,12 +729,12 @@ export class Connection extends EventEmitter {
           const oldOffset = stream._remoteMaxOffset
           const newOffset = frame.maxOffset.toNumber()
           if (newOffset > oldOffset) {
-            this.log.trace(`peer told us that stream ${frame.streamId} can receive up to byte offset: ${frame.maxOffset} (we've sent up to offset: ${stream._getOutgoingOffsets().current})`)
+            this.log.trace('peer told us that stream %s can receive up to byte offset: %s (we\'ve sent up to offset: %d)', frame.streamId, frame.maxOffset, stream._getOutgoingOffsets().current)
             stream._remoteMaxOffset = newOffset
             /* tslint:disable-next-line:no-floating-promises */
             this.startSendLoop()
           } else {
-            this.log.trace(`peer told us that stream ${frame.streamId} can receive up to byte offset: ${oldOffset}; ignoring new offset: ${newOffset}`)
+            this.log.trace('peer told us that stream %s can receive up to byte offset: %d; ignoring new offset: %d', frame.streamId, oldOffset, newOffset)
           }
           break
         case FrameType.StreamDataBlocked:
@@ -742,7 +742,7 @@ export class Connection extends EventEmitter {
           if (!stream) {
             break
           }
-          this.log.debug(`peer told us that stream ${frame.streamId} is blocked. they want to send up to offset: ${frame.maxOffset}, but we are only allowing up to: ${stream._getIncomingOffsets().maxAcceptable}`)
+          this.log.debug('peer told us that stream %s is blocked. they want to send up to offset: %s, but we are only allowing up to: %d', frame.streamId, frame.maxOffset, stream._getIncomingOffsets().maxAcceptable)
           break
         default:
           continue
@@ -776,14 +776,14 @@ export class Connection extends EventEmitter {
 
     // Validate stream ID
     if (this.isServer && streamId % 2 === 0) {
-      this.log.error(`got invalid stream ID ${streamId} from peer (should be odd)`)
+      this.log.error('got invalid stream ID %d from peer (should be odd)', streamId)
       this.queuedFrames.push(new ConnectionCloseFrame(ErrorCode.ProtocolViolation, `Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`))
       // TODO this should probably call this.destroy
       const err = new Error(`Invalid Stream ID: ${streamId}. Client-initiated streams must have odd-numbered IDs`)
       this.safeEmit('error', err)
       throw err
     } else if (!this.isServer && streamId % 2 === 1) {
-      this.log.error(`got invalid stream ID ${streamId} from peer (should be even)`)
+      this.log.error('got invalid stream ID %d from peer (should be even)', streamId)
       this.queuedFrames.push(new ConnectionCloseFrame(ErrorCode.ProtocolViolation, `Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`))
       const err = new Error(`Invalid Stream ID: ${streamId}. Server-initiated streams must have even-numbered IDs`)
       this.safeEmit('error', err)
@@ -792,7 +792,7 @@ export class Connection extends EventEmitter {
 
     // Make sure there aren't too many open streams
     if (streamId > this.maxStreamId) {
-      this.log.debug(`peer opened too many streams. got stream: ${streamId}, but max stream id is: ${this.maxStreamId}. closing connection`)
+      this.log.debug('peer opened too many streams. got stream: %d, but max stream id is: %d. closing connection', streamId, this.maxStreamId)
       this.queuedFrames.push(new ConnectionCloseFrame(ErrorCode.StreamIdError, `Maximum number of open streams exceeded. Got stream: ${streamId}, current max stream ID: ${this.maxStreamId}`))
       const err = new Error(`Maximum number of open streams exceeded. Got stream: ${streamId}, current max stream ID: ${this.maxStreamId}`)
       this.safeEmit('error', err)
@@ -801,11 +801,11 @@ export class Connection extends EventEmitter {
 
     // Let the other side know if they're getting close to the number of streams
     if (this.maxStreamId * .75 < streamId) {
-      this.log.trace(`informing peer that our max stream id is: ${this.maxStreamId}`)
+      this.log.trace('informing peer that our max stream id is: %d', this.maxStreamId)
       this.queuedFrames.push(new ConnectionMaxStreamIdFrame(this.maxStreamId))
     }
 
-    this.log.info(`got new stream: ${streamId}`)
+    this.log.info('got new stream: %d', streamId)
     const stream = new DataAndMoneyStream({
       id: streamId,
       isServer: this.isServer
@@ -825,7 +825,7 @@ export class Connection extends EventEmitter {
     const streamId = frame.streamId.toNumber()
     const stream = this.streams.get(streamId)
     if (!stream) {
-      this.log.error(`remote error on stream ${streamId}, but we don't have a record of that stream`)
+      this.log.error('remote error on stream %d, but we don\'t have a record of that stream', streamId)
       return
     }
 
@@ -833,7 +833,7 @@ export class Connection extends EventEmitter {
       return
     }
 
-    this.log.error(`peer closed stream ${stream.id} with error code: ${ErrorCode[frame.errorCode]} and message: ${frame.errorMessage}`)
+    this.log.error('peer closed stream %d with error code: %s and message: %s', stream.id, ErrorCode[frame.errorCode], frame.errorMessage)
     // TODO should we confirm with the other side that we closed it?
     stream._sentEnd = true
     let err
@@ -845,7 +845,7 @@ export class Connection extends EventEmitter {
 
     // TODO make sure we don't send more than one of these frames per packet
     this.maxStreamId += 2
-    this.log.trace(`raising maxStreamId to ${this.maxStreamId}`)
+    this.log.trace('raising maxStreamId to %d', this.maxStreamId)
     this.queuedFrames.push(new ConnectionMaxStreamIdFrame(this.maxStreamId))
     // Start send loop to make sure this frame is sent
     /* tslint:disable-next-line:no-floating-promises */
@@ -962,11 +962,11 @@ export class Connection extends EventEmitter {
         const maxSourceAmount = this.exchangeRate.reciprocal()
           .multiplyByLongCeil(maxDestinationAmount)
         if (maxSourceAmount.lessThan(amountToSendFromStream)) {
-          this.log.trace(`stream ${stream.id} could send ${amountToSendFromStream} but that would be more than the receiver says they can receive, so we'll send ${maxSourceAmount} instead`)
+          this.log.trace('stream %d could send %s but that would be more than the receiver says they can receive, so we\'ll send %s instead', stream.id, amountToSendFromStream, maxSourceAmount)
           amountToSendFromStream = maxSourceAmount
         }
       }
-      this.log.trace(`amount to send from stream ${stream.id}: ${amountToSendFromStream}, exchange rate: ${this.exchangeRate}, remote total received: ${stream._remoteReceived}, remote receive max: ${stream._remoteReceiveMax}`)
+      this.log.trace('amount to send from stream %d: %s, exchange rate: %s, remote total received: %s, remote receive max: %s', stream.id, amountToSendFromStream, this.exchangeRate, stream._remoteReceived, stream._remoteReceiveMax)
 
       // Hold the money and add a frame to the packet
       if (amountToSendFromStream.greaterThan(0)) {
@@ -1004,7 +1004,7 @@ export class Connection extends EventEmitter {
     const maxBytesRemoteConnectionCanReceive = this.remoteMaxOffset - this.getOutgoingOffsets().currentOffset
     if (bytesLeftInPacket > maxBytesRemoteConnectionCanReceive) {
       const outgoingMaxOffset = this.getOutgoingOffsets().maxOffset
-      this.log.debug(`peer is blocking us from sending more data. they will only accept up to offset: ${this.remoteMaxOffset}, but we want to send up to: ${outgoingMaxOffset}`)
+      this.log.debug('peer is blocking us from sending more data. they will only accept up to offset: %d, but we want to send up to: %d', this.remoteMaxOffset, outgoingMaxOffset)
       requestPacket.frames.push(new ConnectionDataBlockedFrame(outgoingMaxOffset))
       bytesLeftInPacket = maxBytesRemoteConnectionCanReceive
     }
@@ -1018,7 +1018,7 @@ export class Connection extends EventEmitter {
       const { data, offset } = stream._getAvailableDataToSend(bytesLeftInPacket - 20)
       if (data && data.length > 0) {
         const streamDataFrame = new StreamDataFrame(stream.id, offset, data)
-        this.log.trace(`sending ${data.length} bytes from stream ${stream.id}`)
+        this.log.trace('sending %d bytes from stream %d', data.length, stream.id)
         bytesLeftInPacket -= streamDataFrame.byteLength()
         requestPacket.frames.push(streamDataFrame)
       }
@@ -1026,7 +1026,7 @@ export class Connection extends EventEmitter {
       // Inform remote which streams are blocked
       const maxOutgoingOffset = stream._isDataBlocked()
       if (maxOutgoingOffset) {
-        this.log.trace(`telling remote that stream ${stream.id} is blocked and has more data to send`)
+        this.log.trace('telling remote that stream %d is blocked and has more data to send', stream.id)
         requestPacket.frames.push(new StreamDataBlockedFrame(stream.id, maxOutgoingOffset))
       }
     }
@@ -1089,13 +1089,13 @@ export class Connection extends EventEmitter {
             newTestMax = minLong(
               checkedAdd(this.testMaximumPacketAmount, additiveIncrease).sum,
               this.maximumPacketAmount)
-            this.log.trace(`last packet amount was successful (max packet amount: ${this.maximumPacketAmount}), raising packet amount from ${this.testMaximumPacketAmount} to: ${newTestMax}`)
+            this.log.trace('last packet amount was successful (max packet amount: %s), raising packet amount from %s to: %s', this.maximumPacketAmount, this.testMaximumPacketAmount, newTestMax)
           } else {
             // Increase by 2 times in this case since we do not know the max packet amount
             newTestMax = checkedMultiply(
               this.testMaximumPacketAmount,
               Long.fromNumber(2, true)).product
-            this.log.trace(`last packet amount was successful, unknown max packet amount, raising packet amount from: ${this.testMaximumPacketAmount} to: ${newTestMax}`)
+            this.log.trace('last packet amount was successful, unknown max packet amount, raising packet amount from: %s to: %s', this.testMaximumPacketAmount, newTestMax)
           }
           this.testMaximumPacketAmount = newTestMax
         }
@@ -1114,7 +1114,7 @@ export class Connection extends EventEmitter {
       try {
         return this.sendTestPacket(Long.fromNumber(amount, true))
       } catch (err) {
-        this.log.error(`Error sending test packet for amount ${amount}:`, err)
+        this.log.error('Error sending test packet for amount %d: %s', amount, err)
         return null
       }
     }))
@@ -1130,7 +1130,7 @@ export class Connection extends EventEmitter {
             Long.fromNumber(sourceAmount, true),
             maximumAmount,
             receivedAmount)
-          this.log.debug(`sending test packet of ${testPacketAmounts[index]} resulted in F08 error that told us maximum packet amount is ${maximumPacketAmount}`)
+          this.log.debug('sending test packet of %d resulted in F08 error that told us maximum packet amount is %s', testPacketAmounts[index], maximumPacketAmount)
           return maximumPacketAmount
         } catch (err) {
           return Long.MAX_UNSIGNED_VALUE
@@ -1151,7 +1151,7 @@ export class Connection extends EventEmitter {
       if (result && (result as Packet).prepareAmount) {
         const prepareAmount = (result as Packet).prepareAmount
         const exchangeRate = new Rational(prepareAmount, Long.fromNumber(sourceAmount, true), true)
-        this.log.debug(`sending test packet of ${sourceAmount} delivered ${prepareAmount} (exchange rate: ${exchangeRate})`)
+        this.log.debug('sending test packet of %d delivered %s (exchange rate: %s)', sourceAmount, prepareAmount, exchangeRate)
         if (countDigits(prepareAmount) >= maxDigits) {
           return {
             maxDigits: countDigits(prepareAmount),
@@ -1187,12 +1187,12 @@ export class Connection extends EventEmitter {
       this.maximumPacketAmount = minLongs(maxPacketAmounts.concat(this.maximumPacketAmount))
       this.testMaximumPacketAmount = this.maximumPacketAmount
       if (this.maximumPacketAmount.equals(0)) {
-        this.log.error(`cannot send anything through this path. the maximum packet amount is 0`)
+        this.log.error('cannot send anything through this path. the maximum packet amount is 0')
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
 
       if (maxDigits >= this.minExchangeRatePrecision) {
-        this.log.debug(`determined exchange rate to be ${exchangeRate} with ${maxDigits} digits precision`)
+        this.log.debug('determined exchange rate to be %s with %d digits precision', exchangeRate, maxDigits)
         this.exchangeRate = exchangeRate
         return
       }
@@ -1209,13 +1209,13 @@ export class Connection extends EventEmitter {
           return minLong(min, Long.fromNumber(error.sourceAmount, true))
         }, Long.MAX_UNSIGNED_VALUE)
         const reducedPacketAmount = smallestPacketAmount.subtract(smallestPacketAmount.divide(3))
-        this.log.debug(`got Txx error(s), waiting ${retryDelay}ms and reducing packet amount to ${reducedPacketAmount} before sending another test packet`)
+        this.log.debug('got Txx error(s), waiting %dms and reducing packet amount to %s before sending another test packet', retryDelay, reducedPacketAmount)
         testPacketAmounts = [...testPacketAmounts, reducedPacketAmount]
         await new Promise((resolve, reject) => setTimeout(resolve, retryDelay))
         retryDelay *= RETRY_DELAY_INCREASE_FACTOR
       }
 
-      this.log.debug(`retry with packet amounts ${testPacketAmounts}`)
+      this.log.debug('retry with packet amounts %j', testPacketAmounts)
     }
 
     throw new Error(`Unable to establish connection, no packets meeting the minimum exchange precision of ${this.minExchangeRatePrecision} digits made it through the path.`)
@@ -1229,7 +1229,7 @@ export class Connection extends EventEmitter {
     // Set packet number to correlate response with request
     const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
 
-    this.log.trace(`sending test packet ${requestPacket.sequence} for amount: ${amount}. timeout: ${timeout}`)
+    this.log.trace('sending test packet %s for amount: %s. timeout: %d', requestPacket.sequence, amount, timeout)
 
     if (!this.remoteKnowsOurAccount) {
       // TODO attach a token to the account?
@@ -1248,7 +1248,7 @@ export class Connection extends EventEmitter {
     /* tslint:disable-next-line:no-unnecessary-type-assertion */
     const responseData = await (new Promise(async (resolve, reject) => {
       const timer = setTimeout(() => {
-        this.log.error(`test packet ${requestPacket.sequence} timed out before we got a response`)
+        this.log.error('test packet %s timed out before we got a response', requestPacket.sequence)
         resolve(null)
       }, timeout)
       const result = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
@@ -1270,15 +1270,15 @@ export class Connection extends EventEmitter {
 
       // Ensure the response corresponds to the request
       if (!responsePacket.sequence.equals(requestPacket.sequence)) {
-        this.log.error(`response packet sequence does not match the request packet. expected sequence: ${requestPacket.sequence}, got response packet:`, JSON.stringify(responsePacket))
+        this.log.error('response packet sequence does not match the request packet. expected sequence: %s, got response packet: %j', requestPacket.sequence, responsePacket)
         throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${requestPacket.sequence}`)
       }
       if (responsePacket.ilpPacketType !== responseData[0]) {
-        this.log.error(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
+        this.log.error('response packet was on wrong ILP packet type. expected ILP packet type: %d, got: %j', responseData[0], responsePacket)
         throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
       }
     } else {
-      this.log.debug(`test packet ${requestPacket.sequence} was rejected with a ${ilpReject.code} triggered by ${ilpReject.triggeredBy} error${ilpReject.message ? ' with the message: "' + ilpReject.message + '"' : ''}`)
+      this.log.debug('test packet %s was rejected with a %s triggered by %s error%s', requestPacket.sequence, ilpReject.code, ilpReject.triggeredBy, ilpReject.message ? ' with the message: "' + ilpReject.message + '"' : '')
     }
 
     if (responsePacket) {
@@ -1326,7 +1326,7 @@ export class Connection extends EventEmitter {
       }
       await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
     } catch (err) {
-      this.log.error(`error while trying to inform peer that connection is closing, but closing anyway`, err)
+      this.log.error('error while trying to inform peer that connection is closing, but closing anyway', err)
     }
     this.remoteClosed = true
   }
@@ -1337,7 +1337,7 @@ export class Connection extends EventEmitter {
    * It also ensures that responses are valid and match the outgoing request.
    */
   protected async sendPacket (packet: Packet, sourceAmount: Long, unfulfillable = false): Promise<Packet | void> {
-    this.log.trace(`sending packet ${packet.sequence} with source amount: ${sourceAmount}: ${JSON.stringify(packet)})`)
+    this.log.trace('sending packet %s with source amount: %s: %j', packet.sequence, sourceAmount, packet)
     const data = await packet.serializeAndEncrypt(this._pskKey, (this.enablePadding ? MAX_DATA_SIZE : undefined))
 
     let fulfillment: Buffer | undefined
@@ -1370,14 +1370,14 @@ export class Connection extends EventEmitter {
         throw new Error(`Invalid response packet type: ${responseData[0]}`)
       }
     } catch (err) {
-      this.log.error(`got invalid response from sending packet ${packet.sequence}:`, err, responseData.toString('hex'))
+      this.log.error('got invalid response from sending packet %s: %s %h', packet.sequence, err, responseData)
       throw new Error(`Invalid response when sending packet ${packet.sequence}: ${err.message}`)
     }
 
     // Handle fulfillment
     if (fulfillment && isFulfill(response)) {
       if (!(await cryptoHelper.hash(response.fulfillment)).equals(executionCondition)) {
-        this.log.error(`got invalid fulfillment for packet ${packet.sequence}: ${response.fulfillment.toString('hex')}. expected: ${fulfillment.toString('hex')} for condition: ${executionCondition.toString('hex')}`)
+        this.log.error('got invalid fulfillment for packet %s: %h. expected: %h for condition: %h', packet.sequence, response.fulfillment, fulfillment, executionCondition)
         throw new Error(`Got invalid fulfillment for packet ${packet.sequence}. Actual: ${response.fulfillment.toString('hex')}, expected: ${fulfillment.toString('hex')}`)
       }
     } else {
@@ -1400,22 +1400,22 @@ export class Connection extends EventEmitter {
     try {
       responsePacket = await Packet.decryptAndDeserialize(this._pskKey, response.data)
     } catch (err) {
-      this.log.error(`unable to decrypt and parse response data:`, err, response.data.toString('hex'))
+      this.log.error('unable to decrypt and parse response data: %s %h', err)
       // TODO should we continue processing anyway? what if it was fulfilled?
       throw new Error('Unable to decrypt and parse response data: ' + err.message)
     }
 
     // Ensure the response corresponds to the request
     if (!responsePacket.sequence.equals(packet.sequence)) {
-      this.log.error(`response packet sequence does not match the request packet. expected sequence: ${packet.sequence}, got response packet:`, JSON.stringify(responsePacket))
+      this.log.error('response packet sequence does not match the request packet. expected sequence: %s, got response packet: %j', packet.sequence, responsePacket)
       throw new Error(`Response packet sequence does not correspond to the request. Actual: ${responsePacket.sequence}, expected: ${packet.sequence}`)
     }
     if (responsePacket.ilpPacketType !== responseData[0]) {
-      this.log.error(`response packet was on wrong ILP packet type. expected ILP packet type: ${responseData[0]}, got:`, JSON.stringify(responsePacket))
+      this.log.error('response packet was on wrong ILP packet type. expected ILP packet type: %d, got: %j', responseData[0], responsePacket)
       throw new Error(`Response says it should be on an ILP packet of type: ${responsePacket.ilpPacketType} but it was carried on an ILP packet of type: ${responseData[0]}`)
     }
 
-    this.log.debug(`got response to packet: ${packet.sequence}: ${JSON.stringify(responsePacket)}`)
+    this.log.debug('got response to packet: %s: %j', packet.sequence, responsePacket)
 
     return responsePacket
   }
@@ -1425,7 +1425,7 @@ export class Connection extends EventEmitter {
    * @private
    */
   protected undoRejectedPacket (requestPacket: Packet) {
-    this.log.debug(`packet ${requestPacket.sequence} was rejected`)
+    this.log.debug('packet %s was rejected', requestPacket.sequence)
 
     // TODO resend control frames
     for (let frame of requestPacket.frames) {
@@ -1450,7 +1450,7 @@ export class Connection extends EventEmitter {
    * @private
    */
   protected async handleConnectorError (reject: IlpPacket.IlpReject, amountSent: Long) {
-    this.log.debug(`handling reject triggered by: ${reject.triggeredBy} error: ${reject.code} message: ${reject.message} data: ${reject.data}`)
+    this.log.debug('handling reject triggered by: %s error: %s message: %s data: %s', reject.triggeredBy, reject.code, reject.message, reject.data)
     if (reject.code === 'F08') {
       let receivedAmount: Long | undefined
       let maximumAmount: Long | undefined
@@ -1464,7 +1464,7 @@ export class Connection extends EventEmitter {
       }
       if (receivedAmount && maximumAmount && receivedAmount.greaterThan(maximumAmount)) {
         const newMaximum = multiplyDivideFloor(amountSent, maximumAmount, receivedAmount)
-        this.log.trace(`reducing maximum packet amount from ${this.maximumPacketAmount} to ${newMaximum}`)
+        this.log.trace('reducing maximum packet amount from %s to %s', this.maximumPacketAmount, newMaximum)
         this.maximumPacketAmount = newMaximum
         this.testMaximumPacketAmount = newMaximum
       } else {
@@ -1473,7 +1473,7 @@ export class Connection extends EventEmitter {
         this.testMaximumPacketAmount = this.maximumPacketAmount.divide(2)
       }
       if (this.maximumPacketAmount.equals(0)) {
-        this.log.error(`cannot send anything through this path. the maximum packet amount is 0`)
+        this.log.error('cannot send anything through this path. the maximum packet amount is 0')
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
     } else if (reject.code[0] === 'T') {
@@ -1485,16 +1485,16 @@ export class Connection extends EventEmitter {
         const minPacketAmount = minLong(amountSent, this.testMaximumPacketAmount)
         const newTestAmount = minPacketAmount.subtract(minPacketAmount.divide(3))
         this.testMaximumPacketAmount = maxLong(Long.fromNumber(2, true), newTestAmount) // don't let it go to zero, set to 2 so that the other side gets at least 1 after the exchange rate is taken into account
-        this.log.warn(`got T04: Insufficient Liquidity error triggered by: ${reject.triggeredBy}. reducing the packet amount to ${this.testMaximumPacketAmount}`)
+        this.log.warn('got T04: Insufficient Liquidity error triggered by: %s reducing the packet amount to %s', reject.triggeredBy, this.testMaximumPacketAmount)
       }
 
       // TODO should we reduce the packet amount on other TXX errors too?
-      this.log.warn(`got ${reject.code} temporary error triggered by: ${reject.triggeredBy}. waiting ${this.retryDelay}ms before trying again`)
+      this.log.warn('got %s temporary error triggered by: %s. waiting %dms before trying again', reject.code, reject.triggeredBy, this.retryDelay)
       const delay = this.retryDelay
       this.retryDelay = Math.min(this.retryDelay * 2, RETRY_DELAY_MAX)
       await new Promise((resolve, reject) => setTimeout(resolve, delay))
     } else {
-      this.log.error(`unexpected error. code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}, data: ${reject.data.toString('hex')}`)
+      this.log.error('unexpected error. code: %s, triggered by: %s, message: %s, data: %h', reject.code, reject.triggeredBy, reject.message, reject.data)
       throw new Error(`Unexpected error while sending packet. Code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}`)
     }
   }
@@ -1504,7 +1504,7 @@ export class Connection extends EventEmitter {
       args.unshift(event)
       this.emit.apply(this, args)
     } catch (err) {
-      this.log.debug(`error in ${event} handler:`, err)
+      this.log.debug('error in %s handler: %s', event, err)
     }
   }
 
@@ -1542,7 +1542,7 @@ export class Connection extends EventEmitter {
   }
 
   protected removeStreamRecord (stream: DataAndMoneyStream) {
-    this.log.debug(`removing record of stream ${stream.id}`)
+    this.log.debug('removing record of stream %d', stream.id)
     this.streams.delete(stream.id)
     this.closedStreams[stream.id] = true
     if (!stream._sentEnd) {
@@ -1563,7 +1563,7 @@ export class Connection extends EventEmitter {
     if (typeof this.idleTimer.unref === 'function') {
       this.idleTimer.unref()
     }
-    this.log.trace(`(re)starting idle timeout for ${this.idleTimeout}ms from now`)
+    this.log.trace('(re)starting idle timeout for %dms from now', this.idleTimeout)
   }
 
   private testIdle (): void {

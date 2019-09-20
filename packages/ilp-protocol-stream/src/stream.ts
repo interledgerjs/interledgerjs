@@ -213,10 +213,10 @@ export class DataAndMoneyStream extends Duplex {
     }
     const sendMax = longFromValue(limit, true)
     if (this._totalSent.greaterThan(sendMax)) {
-      this.log.debug(`cannot set sendMax to ${sendMax} because we have already sent: ${this._totalSent}`)
+      this.log.debug('cannot set sendMax to %s because we have already sent: %s', sendMax, this._totalSent)
       throw new Error(`Cannot set sendMax lower than the totalSent`)
     }
-    this.log.debug(`setting sendMax to ${sendMax}`)
+    this.log.debug('setting sendMax to %s', sendMax)
     this._sendMax = sendMax
     this.emit('_maybe_start_send_loop')
   }
@@ -238,14 +238,14 @@ export class DataAndMoneyStream extends Duplex {
     }
     const receiveMax = longFromValue(limit, true)
     if (this._totalReceived.greaterThan(receiveMax)) {
-      this.log.debug(`cannot set receiveMax to ${receiveMax} because we have already received: ${this._totalReceived}`)
+      this.log.debug('cannot set receiveMax to %s because we have already received: %s', receiveMax, this._totalReceived)
       throw new Error('Cannot set receiveMax lower than the totalReceived')
     }
     if (this._receiveMax.greaterThan(receiveMax)) {
-      this.log.debug(`cannot set receiveMax to ${receiveMax} because the current limit is: ${this._receiveMax}`)
+      this.log.debug('cannot set receiveMax to %s because the current limit is: %s', receiveMax, this._receiveMax)
       throw new Error('Cannot decrease the receiveMax')
     }
-    this.log.debug(`setting receiveMax to ${receiveMax}`)
+    this.log.debug('setting receiveMax to %s', receiveMax)
     this._receiveMax = receiveMax
     this.emit('_maybe_start_send_loop')
   }
@@ -260,7 +260,7 @@ export class DataAndMoneyStream extends Duplex {
     const limit = longFromValue(_limit, true)
     const timeout = (opts && opts.timeout) || DEFAULT_TIMEOUT
     if (this._totalSent.greaterThanOrEqual(limit)) {
-      this.log.debug(`already sent ${this._totalSent}, not sending any more`)
+      this.log.debug('already sent %s, not sending any more', this._totalSent)
       return Promise.resolve()
     }
 
@@ -279,7 +279,7 @@ export class DataAndMoneyStream extends Duplex {
         if ((self._totalSent.greaterThanOrEqual(limit))) {
           resolve()
         } else {
-          self.log.debug(`Stream was closed before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`)
+          self.log.debug('Stream was closed before the desired amount was sent (target: %s, totalSent: %s)', limit, self._totalSent)
           reject(new Error(`Stream was closed before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`))
         }
       }
@@ -315,7 +315,7 @@ export class DataAndMoneyStream extends Duplex {
     const limit = longFromValue(_limit, true)
     const timeout = (opts && opts.timeout) || DEFAULT_TIMEOUT
     if (this._totalReceived.greaterThanOrEqual(limit)) {
-      this.log.debug(`already received ${this._totalReceived}, not waiting for more`)
+      this.log.debug('already received %s, not waiting for more', this._totalReceived)
       return Promise.resolve()
     }
 
@@ -334,7 +334,7 @@ export class DataAndMoneyStream extends Duplex {
         if (self._totalReceived.greaterThanOrEqual(limit)) {
           resolve()
         } else {
-          self.log.debug(`Stream was closed before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`)
+          self.log.debug('Stream was closed before the desired amount was received (target: %s, totalReceived: %s)', limit, self._totalReceived)
           reject(new Error(`Stream was closed before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`))
         }
       }
@@ -380,7 +380,7 @@ export class DataAndMoneyStream extends Duplex {
   _addToIncoming (amount: Long): void {
     // If this overflows, it will als be caught (and handled) at the connection level.
     this._totalReceived = checkedAdd(this._totalReceived, amount).sum
-    this.log.trace(`received ${amount} (totalReceived: ${this._totalReceived})`)
+    this.log.trace('received %s (totalReceived: %s)', amount, this._totalReceived)
     this.emit('money', amount.toString())
   }
 
@@ -411,7 +411,7 @@ export class DataAndMoneyStream extends Duplex {
     if (amountToHold.greaterThan(0)) {
       this._outgoingHeldAmount = this._outgoingHeldAmount.add(amountToHold)
       this.holds[holdId] = amountToHold
-      this.log.trace(`holding outgoing balance. holdId: ${holdId}, amount: ${amountToHold}`)
+      this.log.trace('holding outgoing balance. holdId: %s, amount: %s', holdId, amountToHold)
     }
     return amountToHold
   }
@@ -429,7 +429,7 @@ export class DataAndMoneyStream extends Duplex {
     this._outgoingHeldAmount = this._outgoingHeldAmount.subtract(amount)
     this._totalSent = this._totalSent.add(amount)
     delete this.holds[holdId]
-    this.log.trace(`executed holdId: ${holdId} for: ${amount}`)
+    this.log.trace('executed holdId: %s for: %s', holdId, amount)
     this.emit('outgoing_money', amount.toString())
 
     if (this._totalSent.greaterThanOrEqual(this._sendMax)) {
@@ -448,7 +448,7 @@ export class DataAndMoneyStream extends Duplex {
       return
     }
     const amount = this.holds[holdId]
-    this.log.trace(`cancelled holdId: ${holdId} for: ${amount}`)
+    this.log.trace('cancelled holdId: %s for: %s', holdId, amount)
     this._outgoingHeldAmount = this._outgoingHeldAmount.subtract(amount)
     delete this.holds[holdId]
   }
@@ -467,7 +467,7 @@ export class DataAndMoneyStream extends Duplex {
     }
     const finish = (err?: Error) => {
       if (err) {
-        this.log.debug(`error waiting for money to be sent:`, err)
+        this.log.debug('error waiting for money to be sent:', err)
       }
       this.log.info('stream ended')
       this.closed = true
@@ -529,7 +529,7 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _write (chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
-    this.log.trace(`${chunk.length} bytes written to the outgoing data queue`)
+    this.log.trace('%d bytes written to the outgoing data queue', chunk.length)
     this._outgoingData.push(chunk, callback)
     this.emit('_maybe_start_send_loop')
   }
@@ -541,7 +541,7 @@ export class DataAndMoneyStream extends Duplex {
   _writev (chunks: { chunk: Buffer, encoding: string }[], callback: (...args: any[]) => void): void {
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]
-      this.log.trace(`${chunk.chunk.length} bytes written to the outgoing data queue`)
+      this.log.trace('%d bytes written to the outgoing data queue', chunk.chunk.length)
       // Only call the callback when the last chunk has been sent out
       if (i === chunks.length - 1) {
         this._outgoingData.push(chunk.chunk, callback)
@@ -606,7 +606,7 @@ export class DataAndMoneyStream extends Duplex {
     const data = this._outgoingData.read(maxBytes)
     if (data && data.length > 0) {
       this.outgoingOffset += data.length
-      this.log.trace(`${data.length} bytes taken from the outgoing data queue`)
+      this.log.trace('%d bytes taken from the outgoing data queue', data.length)
     }
     return { data, offset }
   }
@@ -616,7 +616,7 @@ export class DataAndMoneyStream extends Duplex {
    * @private
    */
   _resendOutgoingData (data: Buffer, offset: number) {
-    this.log.trace(`re-queuing ${data.length} bytes of data starting at offset ${offset}`)
+    this.log.trace('re-queuing %d bytes of data starting at offset %d', data.length, offset)
     this._outgoingDataToRetry.push({ data, offset })
   }
 
@@ -684,7 +684,7 @@ export class DataAndMoneyStream extends Duplex {
       args.unshift(event)
       this.emit.apply(this, args)
     } catch (err) {
-      this.log.debug(`error in ${event} handler:`, err)
+      this.log.debug('error in %s handler: %s', event, err)
     }
   }
 }
