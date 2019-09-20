@@ -15,6 +15,22 @@ export class Logger {
   }
 }
 
-export function createLogger (namespace: string) {
+export const formatters = debug.formatters
+
+const createLogger = function (namespace: string) {
   return new Logger(namespace)
+} as ModuleExport
+
+interface ModuleExport {
+  (namespace: string): Logger
+  default: ModuleExport
+  Logger: Function
+  formatters: debug.IFormatters
 }
+
+createLogger.default = createLogger
+createLogger.Logger = Logger
+createLogger.formatters = debug.formatters
+export default createLogger
+
+module.exports = createLogger
