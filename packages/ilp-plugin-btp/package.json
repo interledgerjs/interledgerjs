@@ -5,8 +5,8 @@
   "main": "index.js",
   "types": "build/index.d.ts",
   "browser": {
-    "crypto": "./src/browser/crypto.ts",
-    "ws": "./src/browser/ws.ts"
+    "crypto": "./build/browser/crypto.js",
+    "ws": "./build/browser/ws.js"
   },
   "files": [
     "build/**/*"
