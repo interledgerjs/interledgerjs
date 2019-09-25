@@ -151,7 +151,7 @@ export class WebSocketReconnector extends EventEmitter2 {
    * between reconnect to clean up old listeners.
    */
   private _reconnect (codeOrError: number | Error) {
-    debug.debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._intervals[this._tries]}}`)
+    debug.debug(`websocket disconnected with ${codeOrError}; reconnect in ${this._intervals[this._tries]}`)
     this._connected = false
     this._instance.removeAllListeners()
     this._openTimer = setTimeout(() => {

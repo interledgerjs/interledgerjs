@@ -6,7 +6,6 @@ import * as http from 'http'
 import * as https from 'https'
 import { WebSocketReconnector, WebSocketConstructor } from './ws-reconnect'
 import { EventEmitter2, Listener } from 'eventemitter2'
-import { URL } from 'url'
 import { protocolDataToIlpAndCustom, ilpAndCustomToProtocolData } from './protocol-data-converter'
 
 const BtpPacket = require('btp-packet')
