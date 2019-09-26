@@ -227,9 +227,9 @@ describe('Server', function () {
     })
 
     it('should remove the record of closed connections', async function () {
-      assert.equal(Object.keys(this.server['connections']).length, 1)
+      assert.equal(Object.keys(this.server['pool']['activeConnections']).length, 1)
       await this.serverConn.destroy()
-      assert.equal(Object.keys(this.server['connections']).length, 0)
+      assert.equal(Object.keys(this.server['pool']['activeConnections']).length, 0)
     })
   })
 })

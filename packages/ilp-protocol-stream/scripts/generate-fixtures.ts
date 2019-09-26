@@ -1,4 +1,5 @@
 import * as Long from 'long'
+import * as IlpPacket from 'ilp-packet'
 import * as Packet from '../src/packet'
 
 const NUMBERS = [
@@ -109,7 +110,7 @@ const variants = Array.prototype.concat.apply([], [
 const fixtures = variants.map(function (params: any) {
   const packetOptions: {
     sequence: string,
-    packetType: Packet.IlpPacketType,
+    packetType: IlpPacket.Type,
     amount: string,
     frames: Packet.Frame[]
   } = {

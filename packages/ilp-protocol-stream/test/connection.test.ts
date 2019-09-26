@@ -1166,7 +1166,7 @@ describe('Connection', function () {
       assert.calledOnce(spy1)
       assert.equal(spy1.args[0][0].message, 'Total received exceeded MaxUint64')
       assert.calledOnce(spy2)
-      assert.equal(spy2.args[0][0].message, 'Remote connection error. Code: InternalError, message: Total received exceeded MaxUint64')
+      assert.equal(spy2.args[0][0].message, 'Unexpected error while sending packet. Code: F00, triggered by: test.peerA, message: Total received exceeded MaxUint64')
     })
   })
 

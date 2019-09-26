@@ -5,7 +5,9 @@
   "main": "dist/src/index.js",
   "browser": {
     "./dist/src/util/crypto_node.js": "./dist/src/util/crypto_browser.js",
-    "./src/util/crypto_node.ts": "./src/util/crypto_browser.ts"
+    "./src/util/crypto_node.ts": "./src/util/crypto_browser.ts",
+    "./dist/src/pool.js": false,
+    "./src/pool.ts": false
   },
   "types": "src/index.d.ts",
   "files": [
@@ -15,8 +17,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "build-webpack": "webpack --progress",
-    "prepare": "npm run build && npm run build-webpack",
+    "prepare": "npm run build",
     "lint": "tslint --project .",
     "test": "TS_NODE_PROJECT='./tsconfig.test.json' mocha",
     "test-cover": "nyc --extension .ts mocha",
@@ -39,7 +40,7 @@
     "url": "git+https://github.com/interledgerjs/ilp-protocol-stream.git"
   },
   "dependencies": {
-    "@types/node": "^10.12.2",
+    "@types/node": "^12.7.5",
     "ilp-logger": "^1.2.1",
     "ilp-packet": "^3.0.9",
     "ilp-protocol-ildcp": "^2.0.2",
@@ -61,8 +62,8 @@
     "codecov": "^3.0.2",
     "gh-pages": "^2.0.0",
     "ilp-plugin": "^3.2.1",
-    "ilp-plugin-btp": "^1.3.11",
-    "ilp-plugin-mini-accounts": "^4.1.0",
+    "ilp-plugin-btp": "^1.4.1",
+    "ilp-plugin-mini-accounts": "^4.2.0",
     "mocha": "^5.1.1",
     "mocha-typescript": "^1.1.14",
     "nyc": "^13.1.0",
@@ -74,7 +75,7 @@
     "tslint": "^5.10.0",
     "tslint-config-standard": "^8.0.0",
     "typedoc": "^0.13.0",
-    "typescript": "^3.0.1",
+    "typescript": "^3.6.0",
     "webpack": "^4.39.3",
     "webpack-cli": "^3.3.7"
   },

@@ -2,14 +2,11 @@
 
 const IlpPluginBtp = require('ilp-plugin-btp')
 const { createConnection, Connection } = require('../..')
-const { WebSocketPolyfill } = require('./ws')
 
 // Use a wrapper function, because for some reason attaching `Client` to `window`
 // loses the constructor so the test can't use it.
 async function makeStreamClient (btpOpts, opts) {
-  const clientPlugin = new IlpPluginBtp(btpOpts, {
-    WebSocket: WebSocketPolyfill
-  })
+  const clientPlugin = new IlpPluginBtp(btpOpts)
   return await createConnection({
     plugin: clientPlugin,
     destinationAccount: opts.destinationAccount,

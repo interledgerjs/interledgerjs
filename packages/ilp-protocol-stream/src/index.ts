@@ -5,6 +5,7 @@ import createLogger from 'ilp-logger'
 import './util/formatters'
 import * as cryptoHelper from './crypto'
 import { buildConnection, Connection, ConnectionOpts } from './connection'
+import { ServerConnectionPool } from './pool'
 import { Plugin } from './util/plugin-interface'
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9~_-]+$/
@@ -95,20 +96,17 @@ export class Server extends EventEmitter {
   protected serverAccount: string
   protected serverAssetCode: string
   protected serverAssetScale: number
-  protected connections: { [key: string]: Connection | Promise<Connection> }
-  protected closedConnections: { [key: string]: boolean }
   protected log: any
   protected enablePadding?: boolean
   protected connected: boolean
   protected connectionOpts: ConnectionOpts
+  private pool: ServerConnectionPool
 
   constructor (opts: ServerOpts) {
     super()
     this.serverSecret = opts.serverSecret || cryptoHelper.randomBytes(32)
     this.plugin = opts.plugin
     this.log = createLogger('ilp-protocol-stream:Server')
-    this.connections = {}
-    this.closedConnections = {}
     this.connectionOpts = Object.assign({}, opts, {
       serverSecret: undefined
     }) as ConnectionOpts
@@ -139,18 +137,23 @@ export class Server extends EventEmitter {
     this.serverAssetCode = assetCode
     this.serverAssetScale = assetScale
     this.connected = true
+    this.pool = new ServerConnectionPool(this.serverSecret, {
+      ...this.connectionOpts,
+      isServer: true,
+      plugin: this.plugin,
+      sourceAccount: this.serverAccount,
+      assetCode: this.serverAssetCode,
+      assetScale: this.serverAssetScale
+    }, (connection: Connection) => {
+      this.emit('connection', connection)
+    })
   }
 
   /**
    * End all connections and disconnect the plugin
    */
   async close (): Promise<void> {
-    await Promise.all(Object.keys(this.connections).map((id: string) => {
-      const connection = this.connections[id]
-      // TODO does this handle pending connections properly?
-      return connection instanceof Connection ? connection.end() : Promise.resolve()
-    }))
-
+    await this.pool.close()
     this.plugin.deregisterDataHandler()
     await this.plugin.disconnect()
     this.emit('_close')
@@ -250,71 +253,13 @@ export class Server extends EventEmitter {
       }
       const connectionId = localAddressParts[0]
 
-      if (this.closedConnections[connectionId]) {
-        this.log.debug('got packet for connection that was already closed: %s', connectionId)
-        // See "Why no error message here?" note above
-        throw new IlpPacket.Errors.UnreachableError('')
-      }
-
-      // TODO refactor into ConnectionManager or ConnectionPool or …?
-
-      let connection = this.connections[connectionId]
-      if (connection instanceof Promise) {
-        connection = await connection
-      } else if (!connection) {
-        const connectionPromise: Promise<Connection> = (async () => {
-          let sharedSecret
-          try {
-            const token = Buffer.from(connectionId, 'ascii')
-            sharedSecret = await cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
-            // TODO just pass this into the connection?
-            const pskKey = await cryptoHelper.generatePskEncryptionKey(sharedSecret)
-            await cryptoHelper.decrypt(pskKey, prepare.data)
-          } catch (err) {
-            this.log.error('got prepare for an address and token that we did not generate: %s', prepare.destination)
-            // See "Why no error message here?" note above
-            throw new IlpPacket.Errors.UnreachableError('')
-          }
-
-          // If we get here, that means it was a token + sharedSecret we created
-          const connectionTag = (connectionId.indexOf('~') !== -1 ? connectionId.slice(connectionId.indexOf('~') + 1) : undefined)
-          const conn = await buildConnection({
-            ...this.connectionOpts,
-            sourceAccount: this.serverAccount,
-            assetCode: this.serverAssetCode,
-            assetScale: this.serverAssetScale,
-            sharedSecret,
-            isServer: true,
-            connectionTag,
-            plugin: this.plugin
-          })
-          this.log.debug('got incoming packet for new connection: %s%s', connectionId, (connectionTag ? ' (connectionTag: ' + connectionTag + ')' : ''))
-          try {
-            this.emit('connection', conn)
-          } catch (err) {
-            this.log.error('error in connection event handler:', err)
-          }
-
-          conn.once('close', () => {
-            delete this.connections[connectionId]
-            this.closedConnections[connectionId] = true
-          })
-          return conn
-        })()
-        connectionPromise.catch(() => {
-          delete this.connections[connectionId]
+      const connection = await this.pool.getConnection(connectionId, prepare)
+        .catch((_err: Error) => {
+          // See "Why no error message here?" note above
+          throw new IlpPacket.Errors.UnreachableError('')
         })
-        this.connections[connectionId] = connectionPromise
-        connection = await connectionPromise
-        this.connections[connectionId] = connection
-
-        // Wait for the next tick of the event loop before handling the prepare
-        await new Promise((resolve, reject) => setImmediate(resolve))
-      }
-
       const fulfill = await connection.handlePrepare(prepare)
       return IlpPacket.serializeIlpFulfill(fulfill)
-
     } catch (err) {
       if (!err.ilpErrorCode) {
         this.log.error('error handling prepare:', err)

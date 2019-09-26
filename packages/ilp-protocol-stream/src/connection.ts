@@ -1582,7 +1582,8 @@ export class Connection extends EventEmitter {
   private addTotalReceived (value: Long): void {
     const result = checkedAdd(this._totalReceived, value)
     if (result.overflow) {
-      const err = new Error('Total received exceeded MaxUint64')
+      const err = new IlpPacket.Errors.BadRequestError('Total received exceeded MaxUint64')
+      err['ilpErrorMessage'] = err.message
       /* tslint:disable-next-line:no-floating-promises */
       this.destroy(err)
       throw err
@@ -1594,7 +1595,8 @@ export class Connection extends EventEmitter {
   private addTotalSent (value: Long): void {
     const result = checkedAdd(this._totalSent, value)
     if (result.overflow) {
-      const err = new Error('Total sent exceeded MaxUint64')
+      const err = new IlpPacket.Errors.BadRequestError('Total sent exceeded MaxUint64')
+      err['ilpErrorMessage'] = err.message
       /* tslint:disable-next-line:no-floating-promises */
       this.destroy(err)
       throw err
@@ -1606,7 +1608,8 @@ export class Connection extends EventEmitter {
   private addTotalDelivered (value: Long): void {
     const result = checkedAdd(this._totalDelivered, value)
     if (result.overflow) {
-      const err = new Error('Total delivered exceeded MaxUint64')
+      const err = new IlpPacket.Errors.BadRequestError('Total delivered exceeded MaxUint64')
+      err['ilpErrorMessage'] = err.message
       /* tslint:disable-next-line:no-floating-promises */
       this.destroy(err)
       throw err

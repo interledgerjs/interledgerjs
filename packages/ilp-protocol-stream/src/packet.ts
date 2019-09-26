@@ -1,4 +1,5 @@
 import { Reader, Writer, WriterInterface, Predictor } from 'oer-utils'
+import * as IlpPacket from 'ilp-packet'
 import * as Long from 'long'
 import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
 import { LongValue, longFromValue } from './util/long'
@@ -7,13 +8,10 @@ const VERSION = Long.fromNumber(1, true)
 
 const ZERO_BYTES = Buffer.alloc(32)
 
-/**
- * ILPv4 Packet Type Identifiers
- */
-export enum IlpPacketType {
-  Prepare = 12,
-  Fulfill = 13,
-  Reject = 14
+export const IlpPacketType = {
+  Prepare: IlpPacket.Type.TYPE_ILP_PREPARE,
+  Fulfill: IlpPacket.Type.TYPE_ILP_FULFILL,
+  Reject: IlpPacket.Type.TYPE_ILP_REJECT
 }
 
 /**
@@ -79,13 +77,13 @@ export type Frame =
  */
 export class Packet {
   sequence: Long
-  ilpPacketType: IlpPacketType
+  ilpPacketType: IlpPacket.Type
   prepareAmount: Long
   frames: Frame[]
 
   constructor (
     sequence: LongValue,
-    ilpPacketType: IlpPacketType,
+    ilpPacketType: IlpPacket.Type,
     packetAmount: LongValue = Long.UZERO,
     frames: Frame[] = []
   ) {
