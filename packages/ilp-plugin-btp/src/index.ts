@@ -36,6 +36,14 @@ const namesToCodes = {
   'InsufficientBalanceError': 'F08'
 }
 
+const toBrowserSafeURL = (btpUrl: string): URL => {
+  if (!btpUrl.startsWith('btp+')) {
+    throw new Error('server must start with "btp+". server=' + btpUrl)
+  }
+
+  return new URL(btpUrl.substring(4))
+}
+
 /**
  * Returns BTP error code as defined by the BTP ASN.1 spec.
  */
@@ -246,13 +254,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     }
 
     if (this._server) {
-      const parsedBtpUri = new URL(this._server)
+      const parsedBtpUri = toBrowserSafeURL(this._server)
       const parsedAccount = parsedBtpUri.username
       const parsedToken = parsedBtpUri.password
-
-      if (!parsedBtpUri.protocol.startsWith('btp+')) {
-        throw new Error('server must start with "btp+". server=' + this._server)
-      }
 
       if ((parsedAccount || parsedToken) && (options.btpAccount || options.btpToken)) {
         throw new Error('account/token must be passed in via constructor or uri, but not both')
@@ -386,7 +390,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
     /* Client logic. */
     if (this._server) {
-      const parsedBtpUri = new URL(this._server)
+      const parsedBtpUri = toBrowserSafeURL(this._server)
       const account = this._btpAccount || ''
       const token = this._btpToken || ''
 
@@ -428,9 +432,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       // of removing the 'user@pass:' part from parsedBtpUri.toString()!
       parsedBtpUri.username = ''
       parsedBtpUri.password = ''
-      const wsUri = parsedBtpUri.toString().substring('btp+'.length)
 
-      await this._ws.open(wsUri)
+      await this._ws.open(parsedBtpUri.toString())
 
       this._ws.on('close', () => this._emitDisconnect())
       this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
