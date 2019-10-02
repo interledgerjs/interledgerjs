@@ -503,7 +503,7 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.on('error', spy)
       clientStream.setSendMax(100)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve, 0))
 
       const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
         new StreamMoneyFrame(clientStream.id, 1)
@@ -527,7 +527,7 @@ describe('DataAndMoneyStream', function () {
       // Send a small amount to open the stream on the other side
       const clientStream = this.clientConn.createStream()
       clientStream.write('hello')
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve, 10))
 
       const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
         new StreamDataFrame(clientStream.id, 5, Buffer.from('blah'))

@@ -459,12 +459,6 @@ export class DataAndMoneyStream extends Duplex {
    */
   _final (callback: (...args: any[]) => void): void {
     this.log.info('stream is closing')
-    // TODO should we emit the event (or return a promise that resolves)
-    // after we're done sending all the queued data and money?
-    if (!this._sentEnd && !this._remoteSentEnd) {
-      this.log.trace('starting another send loop to tell the peer the stream was closed')
-      this.emit('_maybe_start_send_loop')
-    }
     const finish = (err?: Error) => {
       if (err) {
         this.log.debug('error waiting for money to be sent:', err)

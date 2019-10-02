@@ -1431,10 +1431,12 @@ export class Connection extends EventEmitter {
     for (let frame of requestPacket.frames) {
       switch (frame.type) {
         case FrameType.StreamMoney:
-          this.streams.get(frame.streamId.toNumber())!._cancelHold(requestPacket.sequence.toString())
+          const stream1 = this.streams.get(frame.streamId.toNumber())
+          if (stream1) stream1._cancelHold(requestPacket.sequence.toString())
           break
         case FrameType.StreamData:
-          this.streams.get(frame.streamId.toNumber())!._resendOutgoingData(frame.data, frame.offset.toNumber())
+          const stream2 = this.streams.get(frame.streamId.toNumber())
+          if (stream2) stream2._resendOutgoingData(frame.data, frame.offset.toNumber())
           break
         case FrameType.StreamClose:
           this.queuedFrames.push(frame)
@@ -1551,6 +1553,7 @@ export class Connection extends EventEmitter {
         ? new StreamCloseFrame(stream.id, ErrorCode.ApplicationError, stream._errorMessage)
         : new StreamCloseFrame(stream.id, ErrorCode.NoError, ''))
       this.queuedFrames.push(streamEndFrame)
+      setImmediate(() => this.startSendLoop())
     }
   }
 

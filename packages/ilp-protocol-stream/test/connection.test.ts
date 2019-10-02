@@ -181,6 +181,7 @@ describe('Connection', function () {
       await new Promise(setImmediate)
       await this.clientConn.end()
       await new Promise(setImmediate)
+      await new Promise(setImmediate)
 
       assert.calledOnce(clientSpy.stream1.finish)
       assert.calledOnce(clientSpy.stream1.end)
@@ -1003,15 +1004,18 @@ describe('Connection', function () {
       clientStream.setReceiveMax(10000)
       await clientStream.sendTotal(2000)
 
-      // Server Sends 111
-      assert.equal(this.clientConn.totalReceived, 222)
-      assert.equal(this.serverConn.totalDelivered, 222)
-      assert.equal(this.serverConn.totalSent, 111)
-
       // Client Sends 2000
       assert.equal(this.serverConn.totalReceived, 1000)
       assert.equal(this.clientConn.totalDelivered, 1000)
       assert.equal(this.clientConn.totalSent, 2000)
+
+      // Wait for the return payment.
+      await new Promise(setImmediate)
+
+      // Server Sends 111
+      assert.equal(this.clientConn.totalReceived, 222)
+      assert.equal(this.serverConn.totalDelivered, 222)
+      assert.equal(this.serverConn.totalSent, 111)
 
       // Check Minimum Exchange Rates
       assert.equal(this.serverConn.minimumAcceptableExchangeRate, 1.98)
@@ -1290,7 +1294,7 @@ describe('Connection', function () {
 
       await clientStream.sendTotal(sendTotal)
       await clientStream.end()
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve, 10))
       assert.calledOnce(spy)
     })
 
@@ -1634,6 +1638,7 @@ describe('Connection', function () {
 
       await new Promise(setImmediate)
       assert.isTrue(this.serverConn['streams'].has(1))
+      await new Promise(setImmediate)
       await new Promise(setImmediate)
 
       assert.isFalse(this.clientConn['streams'].has(1))
