@@ -15,7 +15,6 @@ export class ServerConnectionPool {
   private serverSecret: Buffer
   private connectionOpts: ConnectionOptions
   private onConnection: ConnectionEvent
-  private log: any
   private activeConnections: { [id: string]: Connection }
   private pendingConnections: { [id: string]: Promise<Connection> }
   private closedConnections: Set<string>
@@ -43,7 +42,7 @@ export class ServerConnectionPool {
     prepare: IlpPacket.IlpPrepare
   ): Promise<Connection> {
     if (this.closedConnections.has(id)) {
-      this.log.debug('got packet for connection that was already closed: %s', id)
+      log.debug('got packet for connection that was already closed: %s', id)
       throw new Error('connection already closed')
     }
 
