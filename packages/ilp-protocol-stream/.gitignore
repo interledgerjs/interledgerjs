@@ -5,6 +5,7 @@ node_modules
 **/*.d.ts
 !example.js
 !typedoc.js
+!scripts/example-web.js
 !scripts/publish-docs.js
 !test/browser/*.js
 coverage
