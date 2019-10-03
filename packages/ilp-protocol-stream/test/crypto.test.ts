@@ -8,7 +8,7 @@ if (typeof describe === 'function') {
   })
 }
 
-export function runCryptoTests (args: {describe: any, it: any}) {
+export function runCryptoTests (args: {describe: Mocha.SuiteFunction, it: Mocha.TestFunction}) {
   const { describe, it } = args
 
   describe('generateToken', function () {
@@ -27,7 +27,7 @@ export function runCryptoTests (args: {describe: any, it: any}) {
   })
 
   describe('generateRandomCondition', function () {
-    it('generates a random 32-bit condition', function () {
+    it('generates a random 32-byte condition', function () {
       assert.equal(helpers.generateRandomCondition().length, 32)
     })
   })

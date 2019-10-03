@@ -73,7 +73,7 @@ describe('Puppeteer', function () {
           btpToken: 'secret'
         }, opts)
       } catch (err) {
-        console.error("uncaught error:", err.stack)
+        console.error('uncaught error:', err.stack)
         throw err
       }
     }, {

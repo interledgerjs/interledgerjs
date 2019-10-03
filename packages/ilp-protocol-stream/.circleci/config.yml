@@ -1,17 +1,8 @@
 version: 2
-aliases:
-  # From https://circleci.com/orbs/registry/orb/threetreeslight/puppeteer
-  - &install-puppeteer |
-    sudo apt-get install -yq \
-    gconf-service libasound2 libatk1.0-0 libatk-bridge2.0-0 libc6 libcairo2 libcups2 libdbus-1-3 \
-    libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 \
-    libpango-1.0-0 libpangocairo-1.0-0 libstdc++6 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 libxcursor1 \
-    libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates \
-    fonts-liberation libappindicator1 libnss3 lsb-release xdg-utils wget
 jobs:
   build_node_v10:
     docker:
-      - image: circleci/node:10
+      - image: circleci/node:10-browsers
     working_directory: ~/repo
     steps:
       - checkout
@@ -21,7 +12,6 @@ jobs:
           - v10-dependencies-{{ checksum "package.json" }}
           # fallback to using the latest cache if no exact match is found
           - v10-dependencies-
-      - run: *install-puppeteer
       - run: npm install
       - save_cache:
           paths:
@@ -33,7 +23,7 @@ jobs:
 
   build_node_v12:
     docker:
-      - image: circleci/node:12
+      - image: circleci/node:12-browsers
     working_directory: ~/repo_v12
     steps:
       - checkout
@@ -43,7 +33,6 @@ jobs:
           - v12-dependencies-{{ checksum "package.json" }}
           # fallback to using the latest cache if no exact match is found
           - v12-dependencies-
-      - run: *install-puppeteer
       - run: npm install
       - save_cache:
           paths:
