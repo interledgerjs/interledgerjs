@@ -1631,4 +1631,23 @@ describe('Connection', function () {
       assert.isFalse(this.serverConn['streams'].has(1))
     })
   })
+
+  describe('Maximum packet count handling', function () {
+    it('destroys the connection when 2^31 packets are sent', async function () {
+      const clientStream = this.clientConn.createStream()
+      const clientSpy = sinon.spy()
+      const serverSpy = sinon.spy()
+      this.clientConn.on('error', clientSpy)
+      this.serverConn.on('error', serverSpy)
+
+      this.clientConn['nextPacketSequence'] = 2 ** 31
+      clientStream.write('hello')
+      await new Promise(setImmediate)
+
+      assert.calledOnce(clientSpy)
+      assert.calledOnce(serverSpy)
+      assert.equal(clientSpy.args[0][0].message, 'Connection exceeded maximum number of packets')
+      assert.equal(serverSpy.args[0][0].message, 'Remote connection error. Code: InternalError, message: Connection exceeded maximum number of packets')
+    })
+  })
 })

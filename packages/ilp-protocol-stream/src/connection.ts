@@ -918,7 +918,7 @@ export class Connection extends EventEmitter {
     let amountToSend = Long.UZERO
 
     // Set packet number to correlate response with request
-    const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
+    const requestPacket = new Packet(this.getNextPacketSequence(), IlpPacketType.Prepare)
 
     // TODO make sure these aren't too big
     requestPacket.frames = this.queuedFrames
@@ -1107,6 +1107,7 @@ export class Connection extends EventEmitter {
       }
     }
   }
+
   /**
    * (Internal) Send volly of test packests to find the exchange rate, its precision, and potential other amounts to try.
    * @private
@@ -1229,7 +1230,7 @@ export class Connection extends EventEmitter {
    */
   protected async sendTestPacket (amount: Long, timeout = DEFAULT_PACKET_TIMEOUT): Promise<Packet | IlpPacket.IlpReject | null> {
     // Set packet number to correlate response with request
-    const requestPacket = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare)
+    const requestPacket = new Packet(this.getNextPacketSequence(), IlpPacketType.Prepare)
 
     this.log.trace('sending test packet %s for amount: %s. timeout: %d', requestPacket.sequence, amount, timeout)
 
@@ -1314,7 +1315,7 @@ export class Connection extends EventEmitter {
       errorMessage = ''
     }
 
-    const packet = new Packet(this.nextPacketSequence, IlpPacketType.Prepare, 0, [
+    const packet = new Packet(this.nextPacketSequence++, IlpPacketType.Prepare, 0, [
       new ConnectionCloseFrame(errorCode, errorMessage)
     ])
 
@@ -1621,6 +1622,17 @@ export class Connection extends EventEmitter {
     } else {
       this._totalDelivered = result.sum
     }
+  }
+
+  private getNextPacketSequence (): number {
+    const sequence = this.nextPacketSequence++
+    if (sequence >= 2 ** 31) {
+      // Destroy the connection when too many packets are sent (see https://github.com/interledger/rfcs/blob/master/0029-stream/0029-stream.md#513-maximum-number-of-packets-per-connection).
+      //
+      // Throwing here will abort the current send and `destroy()` the connection.
+      throw new ConnectionError('Connection exceeded maximum number of packets', ErrorCode.InternalError)
+    }
+    return sequence
   }
 }
 
