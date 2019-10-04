@@ -2,8 +2,7 @@
 > Debug Logging utility for Interledger modules
 
 [![NPM Package](https://img.shields.io/npm/v/ilp-logger.svg?style=flat)](https://npmjs.org/package/ilp-logger)
-[![CircleCI](https://circleci.com/gh/interledgerjs/ilp-logger.svg?style=shield)](https://circleci.com/gh/interledgerjs/ilp-logger)
-[![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com) [![Greenkeeper badge](https://badges.greenkeeper.io/interledgerjs/ilp-logger.svg)](https://greenkeeper.io/)
+[![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
 
 ## Usage
 
