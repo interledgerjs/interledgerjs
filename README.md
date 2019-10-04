@@ -1,5 +1,5 @@
 # Interledger.JS Monorepo
-
+[![](https://github.com/adrianhopebailie/interledgerjs/workflows/Build-Publish/badge.svg)](https://github.com/adrianhopebailie/interledgerjs/actions)
 > This is a WIP and will ultimately replace a number of stand-alone modules
 
 ## Background

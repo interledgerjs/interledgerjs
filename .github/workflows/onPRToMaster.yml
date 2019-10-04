@@ -1,9 +1,9 @@
-name: Build-Publish
+name: OnPRToMaster
 
-on: 
-  push:
-    paths-ignore:
-      - '**.md'
+on:
+  pull_request:
+    branches:
+    - master
 
 jobs:
   build:
@@ -30,21 +30,3 @@ jobs:
         yarn cover
       env:
         CI: true
-
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/bin/filter@master
-        with:
-          args: branch master
-      - uses: actions/setup-node@v1
-        with:
-          node-version: 12
-          registry-url: https://registry.npmjs.org/
-      - name: Publish
-        run: echo TODO enable publishing
-        shell: bash
-        env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
