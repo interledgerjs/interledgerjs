@@ -1,15 +1,9 @@
 # OER Utils
 
-[![Greenkeeper badge](https://badges.greenkeeper.io/interledgerjs/oer-utils.svg)](https://greenkeeper.io/)
-
-[![npm][npm-image]][npm-url] [![circle][circle-image]][circle-url] [![codecov][codecov-image]][codecov-url]
+[![npm][npm-image]][npm-url]
 
 [npm-image]: https://img.shields.io/npm/v/oer-utils.svg?style=flat
 [npm-url]: https://npmjs.org/package/oer-utils
-[circle-image]: https://circleci.com/gh/interledgerjs/oer-utils.svg?style=shield
-[circle-url]: https://circleci.com/gh/interledgerjs/oer-utils
-[codecov-image]: https://codecov.io/gh/interledgerjs/oer-utils/branch/master/graph/badge.svg
-[codecov-url]: https://codecov.io/gh/interledgerjs/oer-utils
 
 > Collection of tools for OER parsing and serialization
 
