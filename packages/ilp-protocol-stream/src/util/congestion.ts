@@ -12,15 +12,23 @@ import {
 
 const log = createLogger('ilp-protocol-stream:Congestion')
 
+interface CongestionOptions {
+  /** Maximum amount per packet, even if F08 reports larger */
+  maximumPacketAmount?: Long
+}
+
 export class CongestionController {
   /** Used to probe for the Maximum Packet Amount if the connectors don't tell us directly */
   private _testMaximumPacketAmount: Long
   /** The path's Maximum Packet Amount, discovered through F08 errors */
   private _maximumPacketAmount: Long
+  /** The sender-chosen maximum packet amount. */
+  private _fixedPacketAmount: Long
 
-  constructor () {
+  constructor (opts: CongestionOptions) {
     this._testMaximumPacketAmount = Long.MAX_UNSIGNED_VALUE
     this._maximumPacketAmount = Long.MAX_UNSIGNED_VALUE
+    this._fixedPacketAmount = opts.maximumPacketAmount || Long.MAX_UNSIGNED_VALUE
   }
 
   get testMaximumPacketAmount (): Long {
@@ -28,7 +36,7 @@ export class CongestionController {
   }
 
   get maximumPacketAmount (): Long {
-    return this._maximumPacketAmount
+    return minLong(this._maximumPacketAmount, this._fixedPacketAmount)
   }
 
   setMaximumAmounts (amount: Long) {
@@ -37,22 +45,23 @@ export class CongestionController {
   }
 
   onFulfill (amountSent: Long) {
+    const maximumPacketAmount = this.maximumPacketAmount
     const shouldRaiseLimit = amountSent.equals(this._testMaximumPacketAmount)
-      && this._testMaximumPacketAmount.lessThan(this._maximumPacketAmount)
+      && this._testMaximumPacketAmount.lessThan(maximumPacketAmount)
     if (!shouldRaiseLimit) return
     // If we're trying to pinpoint the Maximum Packet Amount, raise
     // the limit because we know that the testMaximumPacketAmount works
 
     let newTestMax
     const isMaxPacketAmountKnown =
-      this._maximumPacketAmount.notEquals(Long.MAX_UNSIGNED_VALUE)
+      maximumPacketAmount.notEquals(Long.MAX_UNSIGNED_VALUE)
     if (isMaxPacketAmountKnown) {
       // Take the `max packet amount / 10` and then add it to the last test packet amount for an additive increase.
-      const additiveIncrease = this._maximumPacketAmount.divide(10)
+      const additiveIncrease = maximumPacketAmount.divide(10)
       newTestMax = minLong(
         checkedAdd(this._testMaximumPacketAmount, additiveIncrease).sum,
-        this._maximumPacketAmount)
-      log.trace('last packet amount was successful (max packet amount: %s), raising packet amount from %s to: %s', this._maximumPacketAmount, this._testMaximumPacketAmount, newTestMax)
+        maximumPacketAmount)
+      log.trace('last packet amount was successful (max packet amount: %s), raising packet amount from %s to: %s', maximumPacketAmount, this._testMaximumPacketAmount, newTestMax)
     } else {
       // Increase by 2 times in this case since we do not know the max packet amount
       newTestMax = checkedMultiply(
@@ -84,9 +93,9 @@ export class CongestionController {
     } else {
       // Connector didn't include amounts
       this._maximumPacketAmount = amountSent.subtract(1)
-      this._testMaximumPacketAmount = this._maximumPacketAmount.divide(2)
+      this._testMaximumPacketAmount = this.maximumPacketAmount.divide(2)
     }
-    return this._maximumPacketAmount
+    return this.maximumPacketAmount
   }
 
   onInsufficientLiquidityError (reject: IlpPacket.IlpReject, amountSent: Long) {

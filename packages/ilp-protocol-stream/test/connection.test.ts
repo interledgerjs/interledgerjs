@@ -1172,6 +1172,17 @@ describe('Connection', function () {
       assert.calledOnce(spy2)
       assert.equal(spy2.args[0][0].message, 'Unexpected error while sending packet. Code: F00, triggered by: test.peerA, message: Total received exceeded MaxUint64')
     })
+
+    it('supports a fixed maximumPacketAmount', async function () {
+      const serverPromise = this.server.acceptConnection()
+      const clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin,
+        maximumPacketAmount: '5'
+      })
+      const _serverConn = await serverPromise
+      assert.equal(clientConn['congestion'].maximumPacketAmount.toString(), '5')
+    })
   })
 
   describe('Error Handling', function () {

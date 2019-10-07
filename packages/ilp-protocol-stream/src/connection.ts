@@ -69,11 +69,16 @@ export interface ConnectionOpts {
   /** Maximum number of streams the other entity can have open at once. Defaults to 10 */
   maxRemoteStreams?: number,
   /** Number of bytes each connection can have in the buffer. Defaults to 65534 */
-  connectionBufferSize?: number
+  connectionBufferSize?: number,
   /** Minimum Precision to use when determining the exchange rate */
-  minExchangeRatePrecision?: number
+  minExchangeRatePrecision?: number,
   /** Inactivity timeout (milliseconds) */
-  idleTimeout?: number
+  idleTimeout?: number,
+  /**
+   * Fixed maximum packet amount. When set, the minimum of this setting and the path's
+   * discovered maximum amount is used.
+   */
+  maximumPacketAmount?: string,
 }
 
 export interface BuildConnectionOpts extends ConnectionOpts {
@@ -186,10 +191,15 @@ export class Connection extends EventEmitter {
     this.nextStreamId = (this.isServer ? 2 : 1)
     this.log = createLogger(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
+    this.connected = false
     this.closed = true
     this.queuedFrames = []
 
-    this.congestion = new CongestionController()
+    this.congestion = new CongestionController({
+      maximumPacketAmount: opts.maximumPacketAmount === undefined
+        ? undefined
+        : Long.fromString(opts.maximumPacketAmount, true)
+    })
     this.retryDelay = RETRY_DELAY_START
 
     this.remoteClosed = false
@@ -1155,7 +1165,7 @@ export class Connection extends EventEmitter {
     }
 
     let retryDelay = RETRY_DELAY_START
-    let testPacketAmounts = [1, 1000, 1000000, 1000000000, 1000000000000] // 1, 10^3, 10^6, 10^9, 10^12
+    let testPacketAmounts = [1, 1e3, 1e6, 1e9, 1e12]
     let attempts = 0
 
     // set a max attempts in case F08 & TXX errors keep occurring
