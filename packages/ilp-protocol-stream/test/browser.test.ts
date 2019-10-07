@@ -61,7 +61,7 @@ describe('Puppeteer', function () {
       path: path.resolve(__dirname, '../dist/test/browser/bundle.js')
     })
 
-    const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
+    const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
     await this.page.evaluate(async (opts: {
       port: number,
       destinationAccount: string,

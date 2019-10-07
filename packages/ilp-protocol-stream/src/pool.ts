@@ -96,7 +96,7 @@ export class ServerConnectionPool {
   ): Promise<Buffer> {
     try {
       const token = Buffer.from(id, 'ascii')
-      const sharedSecret = await cryptoHelper.generateSharedSecretFromToken(
+      const sharedSecret = cryptoHelper.generateSharedSecretFromToken(
         this.serverSecret, token)
       // TODO just pass this into the connection?
       const pskKey = await cryptoHelper.generatePskEncryptionKey(sharedSecret)

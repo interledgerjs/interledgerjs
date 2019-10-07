@@ -17,15 +17,6 @@ export function runCryptoTests (args: {describe: Mocha.SuiteFunction, it: Mocha.
     })
   })
 
-  describe('generateSharedSecretFromToken', function () {
-    it('generates the expected secret', async function () {
-      const seed = Buffer.alloc(32)
-      const gotSecret = await helpers.generateSharedSecretFromToken(seed, Buffer.from('foo bar'))
-      const wantSecret = Buffer.from('ImTMJmMhjK4VSEyhjCUwlUnatWGB+Pm/UMOrbE6ieWE=', 'base64')
-      assert.deepEqual(gotSecret, wantSecret)
-    })
-  })
-
   describe('generateRandomCondition', function () {
     it('generates a random 32-byte condition', function () {
       assert.equal(helpers.generateRandomCondition().length, 32)

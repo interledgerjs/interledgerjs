@@ -24,7 +24,7 @@ describe('DataAndMoneyStream', function () {
     })
     await this.server.listen()
 
-    const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
+    const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
     this.destinationAccount = destinationAccount
     this.sharedSecret = sharedSecret
 

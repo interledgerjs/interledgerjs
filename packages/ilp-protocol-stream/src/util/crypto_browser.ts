@@ -127,3 +127,9 @@ export function randomBytes (size: number): Buffer {
   const randValues = crypto.getRandomValues(randArray)
   return Buffer.from(randValues)
 }
+
+// Dummy function to make typescript happy. This function is only ever used by
+// the server, which is not included in the browser build.
+export function generateSharedSecretFromToken (seed: Buffer, token: Buffer): Buffer {
+  throw new Error('unreachable')
+}

@@ -33,7 +33,7 @@ async function run () {
 
   // These would need to be passed from the server to the client using
   // some encrypted communication channel (not provided by STREAM)
-  const { destinationAccount, sharedSecret } = await server.generateAddressAndSecret()
+  const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
   console.log(`server generated ILP address (${destinationAccount}) and shared secret (${sharedSecret.toString('hex')}) for client`)
 
   const clientPlugin = createPlugin()

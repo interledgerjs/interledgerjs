@@ -7,7 +7,9 @@
     "./dist/src/util/crypto_node.js": "./dist/src/util/crypto_browser.js",
     "./src/util/crypto_node.ts": "./src/util/crypto_browser.ts",
     "./dist/src/pool.js": false,
-    "./src/pool.ts": false
+    "./src/pool.ts": false,
+    "./dist/src/server.js": false,
+    "./src/server.ts": false
   },
   "types": "src/index.d.ts",
   "files": [

@@ -54,7 +54,7 @@ describe('Server', function () {
       })
 
       try {
-        await server.generateAddressAndSecret()
+        server.generateAddressAndSecret()
       } catch (err) {
         assert.equal(err.message, 'Server must be connected to generate address and secret')
         return
@@ -65,7 +65,7 @@ describe('Server', function () {
     it('should return a destinationAccount and sharedSecret', async function () {
       await this.server.listen()
 
-      const result = await this.server.generateAddressAndSecret()
+      const result = this.server.generateAddressAndSecret()
       assert(Buffer.isBuffer(result.sharedSecret))
       assert.lengthOf(result.sharedSecret, 32)
       assert.typeOf(result.destinationAccount, 'string')
@@ -73,7 +73,7 @@ describe('Server', function () {
 
     it('should accept connections created without connectionTags', async function () {
       await this.server.listen()
-      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       const connectionPromise = this.server.acceptConnection()
 
       const clientConn = await createConnection({
@@ -88,7 +88,7 @@ describe('Server', function () {
     it('should accept a connectionTag and attach it to the incoming connection', async function () {
       await this.server.listen()
       const connectionTag = 'hello-there_123'
-      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret(connectionTag)
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionTag)
       const connectionPromise = this.server.acceptConnection()
 
       const clientConn = await createConnection({
@@ -104,7 +104,7 @@ describe('Server', function () {
     it('should reject the connection if the connectionTag is modified', async function () {
       await this.server.listen()
       const connectionName = 'hello-there_123'
-      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret(connectionName)
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionName)
 
       const spy = sinon.spy()
       this.server.on('connection', spy)
@@ -129,7 +129,7 @@ describe('Server', function () {
     it('should throw an error if the connectionTag includes characters that cannot go into an ILP address', async function () {
       await this.server.listen()
       try {
-        await this.server.generateAddressAndSecret('invalid\n')
+        this.server.generateAddressAndSecret('invalid\n')
       } catch (err) {
         assert.equal(err.message, 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", "-", and "~"')
         return
@@ -157,7 +157,7 @@ describe('Server', function () {
       })
 
       const clientConn = await createConnection({
-        ...await this.server.generateAddressAndSecret(),
+        ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
 
@@ -189,7 +189,7 @@ describe('Server', function () {
       })
 
       await createConnection({
-        ...await this.server.generateAddressAndSecret(),
+        ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
     })
@@ -203,7 +203,7 @@ describe('Server', function () {
       })
       await this.server.listen()
 
-      const { destinationAccount, sharedSecret } = await this.server.generateAddressAndSecret()
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       this.destinationAccount = destinationAccount
       this.sharedSecret = sharedSecret
 

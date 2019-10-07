@@ -5,6 +5,7 @@ const HASH_ALGORITHM = 'sha256'
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm'
 const IV_LENGTH = 12
 const AUTH_TAG_LENGTH = 16
+const SHARED_SECRET_GENERATION_STRING = Buffer.from('ilp_stream_shared_secret', 'utf8')
 
 export const randomBytes = crypto.randomBytes
 
@@ -43,7 +44,17 @@ export async function decrypt (pskEncryptionKey: Buffer, data: Buffer): Promise<
 }
 
 export async function hmac (key: Buffer, message: Buffer): Promise<Buffer> {
+  return Promise.resolve(hmacSync(key, message))
+}
+
+function hmacSync (key: Buffer, message: Buffer): Buffer {
   const h = crypto.createHmac(HASH_ALGORITHM, key)
   h.update(message)
-  return Promise.resolve(h.digest())
+  return h.digest()
+}
+
+export function generateSharedSecretFromToken (seed: Buffer, token: Buffer): Buffer {
+  const keygen = hmacSync(seed, SHARED_SECRET_GENERATION_STRING)
+  const sharedSecret = hmacSync(keygen, token)
+  return sharedSecret
 }

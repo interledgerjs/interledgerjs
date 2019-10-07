@@ -14,7 +14,7 @@ The protocol allows a "client" and "server" to establish a bidirectional connect
 
 ## Install
 
-Requires Node >= v8.10.
+Requires Node >= v8.10. Alternatively, `ilp-protocol-stream` will run in the browser via webpack, but only as client.
 
 ```sh
 npm install ilp-protocol-stream
@@ -72,7 +72,7 @@ async function run () {
   })
 
   // These need to be passed to the client through an authenticated communication channel
-  const { destinationAccount, sharedSecret } = await server.generateAddressAndSecret()
+  const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
 
   server.on('connection', (connection) => {
     connection.on('stream', (stream) => {
