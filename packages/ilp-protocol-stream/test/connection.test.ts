@@ -1043,7 +1043,7 @@ describe('Connection', function () {
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin
       })
-      assert.equal(clientConn['maximumPacketAmount'].toString(), '1500')
+      assert.equal(clientConn['congestion'].maximumPacketAmount.toString(), '1500')
     })
 
     it.skip('should keep reducing the packet amount if there are multiple connectors with progressively smaller maximums', async function () {

@@ -26,6 +26,7 @@ import {
   StreamMoneyBlockedFrame
 } from './packet'
 import { Reader } from 'oer-utils'
+import { CongestionController } from './util/congestion'
 import { Plugin } from './util/plugin-interface'
 import {
   LongValue,
@@ -136,10 +137,7 @@ export class Connection extends EventEmitter {
   protected maxStreamId: number
   protected log: any
   protected sending: boolean
-  /** Used to probe for the Maximum Packet Amount if the connectors don't tell us directly */
-  protected testMaximumPacketAmount: Long
-  /** The path's Maximum Packet Amount, discovered through F08 errors */
-  protected maximumPacketAmount: Long
+  protected congestion: CongestionController
   protected minExchangeRatePrecision: number
   protected closed: boolean
   protected exchangeRate?: Rational
@@ -191,8 +189,7 @@ export class Connection extends EventEmitter {
     this.closed = true
     this.queuedFrames = []
 
-    this.maximumPacketAmount = Long.MAX_UNSIGNED_VALUE
-    this.testMaximumPacketAmount = Long.MAX_UNSIGNED_VALUE
+    this.congestion = new CongestionController()
     this.retryDelay = RETRY_DELAY_START
 
     this.remoteClosed = false
@@ -942,7 +939,7 @@ export class Connection extends EventEmitter {
     }
 
     // Determine how much to send based on amount frames and path maximum packet amount
-    let maxAmountFromNextStream = this.testMaximumPacketAmount
+    let maxAmountFromNextStream = this.congestion.testMaximumPacketAmount
     if (this.exchangeRate && this.exchangeRate.greaterThanOne()) {
       // Ensure that the packet's PrepareAmount will never be larger than MAX_UNSIGNED_VALUE.
       maxAmountFromNextStream = minLong(
@@ -1079,28 +1076,7 @@ export class Connection extends EventEmitter {
         // Update stats based on amount sent
         this.addTotalDelivered(responsePacket.prepareAmount)
         this.addTotalSent(amountToSend)
-
-        // If we're trying to pinpoint the Maximum Packet Amount, raise
-        // the limit because we know that the testMaximumPacketAmount works
-        if (amountToSend.equals(this.testMaximumPacketAmount)
-            && this.testMaximumPacketAmount.lessThan(this.maximumPacketAmount)) {
-          let newTestMax
-          if (this.maximumPacketAmount.notEquals(Long.MAX_UNSIGNED_VALUE)) {
-            // Take the max packet amount / 10 and then add it to the last test packet amount for an additive increase
-            const additiveIncrease = this.maximumPacketAmount.divide(10)
-            newTestMax = minLong(
-              checkedAdd(this.testMaximumPacketAmount, additiveIncrease).sum,
-              this.maximumPacketAmount)
-            this.log.trace('last packet amount was successful (max packet amount: %s), raising packet amount from %s to: %s', this.maximumPacketAmount, this.testMaximumPacketAmount, newTestMax)
-          } else {
-            // Increase by 2 times in this case since we do not know the max packet amount
-            newTestMax = checkedMultiply(
-              this.testMaximumPacketAmount,
-              Long.fromNumber(2, true)).product
-            this.log.trace('last packet amount was successful, unknown max packet amount, raising packet amount from: %s to: %s', this.testMaximumPacketAmount, newTestMax)
-          }
-          this.testMaximumPacketAmount = newTestMax
-        }
+        this.congestion.onFulfill(amountToSend)
 
         // Reset the retry delay
         this.retryDelay = RETRY_DELAY_START
@@ -1187,9 +1163,8 @@ export class Connection extends EventEmitter {
       attempts++
       const { maxDigits, exchangeRate, maxPacketAmounts, packetErrors } = await this.sendTestPacketVolley(testPacketAmounts)
 
-      this.maximumPacketAmount = minLongs(maxPacketAmounts.concat(this.maximumPacketAmount))
-      this.testMaximumPacketAmount = this.maximumPacketAmount
-      if (this.maximumPacketAmount.equals(0)) {
+      this.congestion.setMaximumAmounts(minLongs(maxPacketAmounts.concat(this.congestion.maximumPacketAmount)))
+      if (this.congestion.maximumPacketAmount.equals(0)) {
         this.log.error('cannot send anything through this path. the maximum packet amount is 0')
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
@@ -1457,40 +1432,14 @@ export class Connection extends EventEmitter {
   protected async handleConnectorError (reject: IlpPacket.IlpReject, amountSent: Long) {
     this.log.debug('handling reject triggered by: %s error: %s message: %s data: %s', reject.triggeredBy, reject.code, reject.message, reject.data)
     if (reject.code === 'F08') {
-      let receivedAmount: Long | undefined
-      let maximumAmount: Long | undefined
-      try {
-        const reader = Reader.from(reject.data)
-        receivedAmount = reader.readUInt64Long()
-        maximumAmount = reader.readUInt64Long()
-      } catch (err) {
-        receivedAmount = undefined
-        maximumAmount = undefined
-      }
-      if (receivedAmount && maximumAmount && receivedAmount.greaterThan(maximumAmount)) {
-        const newMaximum = multiplyDivideFloor(amountSent, maximumAmount, receivedAmount)
-        this.log.trace('reducing maximum packet amount from %s to %s', this.maximumPacketAmount, newMaximum)
-        this.maximumPacketAmount = newMaximum
-        this.testMaximumPacketAmount = newMaximum
-      } else {
-        // Connector didn't include amounts
-        this.maximumPacketAmount = amountSent.subtract(1)
-        this.testMaximumPacketAmount = this.maximumPacketAmount.divide(2)
-      }
-      if (this.maximumPacketAmount.equals(0)) {
+      const maximumPacketAmount = this.congestion.onAmountTooLargeError(reject, amountSent)
+      if (maximumPacketAmount.equals(0)) {
         this.log.error('cannot send anything through this path. the maximum packet amount is 0')
         throw new Error('Cannot send. Path has a Maximum Packet Amount of 0')
       }
     } else if (reject.code[0] === 'T') {
       if (reject.code === 'T04') {
-        // TODO add more sophisticated logic for handling bandwidth-related connector errors
-        // we should really be keeping track of the amount sent within a given window of time
-        // and figuring out the max amount per window. this logic is just a stand in to fix
-        // infinite retries when it runs into this type of error
-        const minPacketAmount = minLong(amountSent, this.testMaximumPacketAmount)
-        const newTestAmount = minPacketAmount.subtract(minPacketAmount.divide(3))
-        this.testMaximumPacketAmount = maxLong(Long.fromNumber(2, true), newTestAmount) // don't let it go to zero, set to 2 so that the other side gets at least 1 after the exchange rate is taken into account
-        this.log.warn('got T04: Insufficient Liquidity error triggered by: %s reducing the packet amount to %s', reject.triggeredBy, this.testMaximumPacketAmount)
+        this.congestion.onInsufficientLiquidityError(reject, amountSent)
       }
 
       // TODO should we reduce the packet amount on other TXX errors too?
