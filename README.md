@@ -39,7 +39,21 @@ If you are interested in contributing, please read the [contributing guidelines]
 
 ## Note to maintainers: Versioning
 
-Independent versioning is used for this project and releases can only be made from `master`.
-The following steps are used to create a release:
-  1. Make sure you are up to date with master.
-  2. Run `lerna version` and follow the command prompts. This will commit the package version changes and create the necessary tags - all of which will be pushed to master.
+Independent versioning is used for this project and releases can only be made from `master`. You will need to set the `GH_TOKEN` env variable to your 
+personal [github access token](https://github.com/settings/tokens). Please make sure that you are up to date with master and that the tests and linting pass. Then use the following to create a release: 
+```sh
+# On master
+GH_TOKEN=<github-token> lerna version --conventional-commits- -create-release github
+``` 
+and follow the command prompts. This will commit the package version changes and create the necessary tags - all of which will be pushed to master. It will also create changelogs and official github releases.
+
+If you want to release an `alpha` then run
+```sh
+# On master
+GH_TOKEN=<github-token> lerna version --conventional-commits --conventional-prerelease --create-release github
+```
+This will append `-alpha.<alpha-version>` to the release name. The alpha release can be graduated (`1.0.1-alpha.1` => `1.0.1`) by running
+```sh
+# On master
+GH_TOKEN=<github-token> lerna version --conventional-commits --conventional-graduate --create-release github
+```
