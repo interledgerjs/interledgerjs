@@ -39,3 +39,4 @@ jobs:
         yarn publish:release
       env:
         CI: true
+        CODECOV_TOKEN: ${{secrets.codecov_token}}
