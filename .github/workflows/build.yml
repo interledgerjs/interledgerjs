@@ -1,6 +1,11 @@
-name: OnPRToMaster
+name: build
 
-on:
+on: 
+  push:
+    paths-ignore:
+      - '**.md'
+    branches-ignore:
+    - 'master'
   pull_request:
     branches:
     - master
