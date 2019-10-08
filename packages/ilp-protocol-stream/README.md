@@ -14,7 +14,7 @@ The protocol allows a "client" and "server" to establish a bidirectional connect
 
 ## Install
 
-Requires Node >= v8.10. Alternatively, `ilp-protocol-stream` will run in the browser via webpack, but only as client.
+Requires Node >=10. Alternatively, `ilp-protocol-stream` will run in the browser via webpack, but only as client.
 
 ```sh
 npm install ilp-protocol-stream

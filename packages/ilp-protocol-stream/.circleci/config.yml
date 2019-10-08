@@ -49,9 +49,9 @@ jobs:
       # Download and cache dependencies
       - restore_cache:
           keys:
-          - v1-dependencies-{{ checksum "package.json" }}
+          - v10-dependencies-{{ checksum "package.json" }}
           # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
+          - v10-dependencies-
       - add_ssh_keys
       - run: npm run publish-docs
 
@@ -64,9 +64,9 @@ jobs:
       # Download and cache dependencies
       - restore_cache:
           keys:
-          - v1-dependencies-{{ checksum "package.json" }}
+          - v10-dependencies-{{ checksum "package.json" }}
           # fallback to using the latest cache if no exact match is found
-          - v1-dependencies-
+          - v10-dependencies-
       - run: mv npmrc-env .npmrc
       - run:
           name: Publish to NPM (only if a new version has been tagged)

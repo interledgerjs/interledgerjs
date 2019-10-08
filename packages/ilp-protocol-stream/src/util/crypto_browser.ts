@@ -18,9 +18,7 @@ class KeyCache {
 
   cleanup () {
     const now = Date.now()
-    for (const entry of this.cache) {
-      const cacheData = entry[0]
-      const cacheEntry = entry[1]
+    for (const [cacheData, cacheEntry] of this.cache) {
       if (now - cacheEntry.accessTime > CACHE_EXPIRY) {
         this.cache.delete(cacheData)
       }
@@ -131,5 +129,5 @@ export function randomBytes (size: number): Buffer {
 // Dummy function to make typescript happy. This function is only ever used by
 // the server, which is not included in the browser build.
 export function generateSharedSecretFromToken (seed: Buffer, token: Buffer): Buffer {
-  throw new Error('unreachable')
+  throw new Error('unreachable in browser')
 }
