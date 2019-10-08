@@ -43,7 +43,7 @@ Independent versioning is used for this project and releases can only be made fr
 personal [github access token](https://github.com/settings/tokens). Please make sure that you are up to date with master and that the tests and linting pass. Then use the following to create a release: 
 ```sh
 # On master
-GH_TOKEN=<github-token> lerna version --conventional-commits- -create-release github
+GH_TOKEN=<github-token> lerna version --conventional-commits --create-release github
 ``` 
 and follow the command prompts. This will commit the package version changes and create the necessary tags - all of which will be pushed to master. It will also create changelogs and official github releases.
 
