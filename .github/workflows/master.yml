@@ -1,0 +1,41 @@
+name: master
+
+on: 
+  push:
+    branches:
+    - master
+    paths-ignore:
+      - '**.md'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [10.x, 12.x]
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        node-version: ${{ matrix.node-version }}
+    - name: Use yarn
+      uses: Borales/actions-yarn@master
+    - name: Authenticate with registry
+      run: echo "//registry.npmjs.org/:_authToken=$NPM_AUTH_TOKEN" > $GITHUB_WORKSPACE/.npmrc
+      shell: bash
+      env:
+        NPM_AUTH_TOKEN: ${{secrets.npm_token}}
+    - name: yarn install, lint, build, test, codecov and publish
+      run: |
+        yarn install
+        yarn lint:all
+        yarn build
+        yarn cover
+        yarn codecov
+        yarn publish:release
+      env:
+        CI: true
