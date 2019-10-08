@@ -43,8 +43,14 @@ jobs:
         with:
           node-version: 12
           registry-url: https://registry.npmjs.org/
-      - name: Publish
-        run: echo TODO enable publishing
+      - name: Authenticate with registry
+        run: echo "//registry.npmjs.org/:_authToken=$NPM_AUTH_TOKEN" > $GITHUB_WORKSPACE/.npmrc
         shell: bash
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NPM_AUTH_TOKEN: ${{secrets.npm_token}}
+      - name: Use yarn
+        uses: Borales/actions-yarn@master
+      - name: Publish
+        run: yarn publish:release
+        env:
+          CI: true
