@@ -2,6 +2,8 @@ name: Build-Publish
 
 on: 
   push:
+    branches:
+    - master
     paths-ignore:
       - '**.md'
 
@@ -36,9 +38,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/bin/filter@master
-        with:
-          args: branch master
       - uses: actions/setup-node@v1
         with:
           node-version: 12
