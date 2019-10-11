@@ -11,7 +11,7 @@
     "./dist/src/server.js": false,
     "./src/server.ts": false
   },
-  "types": "src/index.d.ts",
+  "types": "dist/src/index.d.ts",
   "files": [
     "dist/**/*.js",
     "dist/**/*.js.map",
