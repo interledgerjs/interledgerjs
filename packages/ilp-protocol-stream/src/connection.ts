@@ -950,11 +950,11 @@ export class Connection extends EventEmitter {
 
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromNextStream = this.congestion.testMaximumPacketAmount
-    if (this.exchangeRate && this.exchangeRate.greaterThanOne()) {
+    if (this.exchangeRate!.greaterThanOne()) {
       // Ensure that the packet's PrepareAmount will never be larger than MAX_UNSIGNED_VALUE.
       maxAmountFromNextStream = minLong(
         maxAmountFromNextStream,
-        this.exchangeRate.reciprocal()
+        this.exchangeRate!.reciprocal()
           .multiplyByLong(Long.MAX_UNSIGNED_VALUE))
     }
     const streamsSentFrom = []
@@ -966,14 +966,12 @@ export class Connection extends EventEmitter {
       // Determine how much to send from this stream based on how much it has available
       // and how much the receiver side of this stream can receive
       let amountToSendFromStream = minLong(stream._getAmountAvailableToSend(), maxAmountFromNextStream)
-      if (this.exchangeRate) {
-        const maxDestinationAmount = checkedSubtract(stream._remoteReceiveMax, stream._remoteReceived).difference
-        const maxSourceAmount = this.exchangeRate.reciprocal()
-          .multiplyByLongCeil(maxDestinationAmount)
-        if (maxSourceAmount.lessThan(amountToSendFromStream)) {
-          this.log.trace('stream %d could send %s but that would be more than the receiver says they can receive, so we\'ll send %s instead', stream.id, amountToSendFromStream, maxSourceAmount)
-          amountToSendFromStream = maxSourceAmount
-        }
+      const maxDestinationAmount = checkedSubtract(stream._remoteReceiveMax, stream._remoteReceived).difference
+      const maxSourceAmount = this.exchangeRate!.reciprocal()
+        .multiplyByLongCeil(maxDestinationAmount)
+      if (maxSourceAmount.lessThan(amountToSendFromStream)) {
+        this.log.trace('stream %d could send %s but that would be more than the receiver says they can receive, so we\'ll send %s instead', stream.id, amountToSendFromStream, maxSourceAmount)
+        amountToSendFromStream = maxSourceAmount
       }
       this.log.trace('amount to send from stream %d: %s, exchange rate: %s, remote total received: %s, remote receive max: %s', stream.id, amountToSendFromStream, this.exchangeRate, stream._remoteReceived, stream._remoteReceiveMax)
 
@@ -1059,13 +1057,11 @@ export class Connection extends EventEmitter {
     }
 
     // Set minimum destination amount
-    if (this.exchangeRate) {
-      const minimumDestinationAmount =
-        this.slippage.complement().multiplyByLong(
-          this.exchangeRate.multiplyByLong(amountToSend))
-      if (minimumDestinationAmount.greaterThan(0)) {
-        requestPacket.prepareAmount = minimumDestinationAmount
-      }
+    const minimumDestinationAmount =
+      this.slippage.complement().multiplyByLong(
+        this.exchangeRate!.multiplyByLong(amountToSend))
+    if (minimumDestinationAmount.greaterThan(0)) {
+      requestPacket.prepareAmount = minimumDestinationAmount
     }
 
     const responsePacket = await this.sendPacket(requestPacket, amountToSend, false)
