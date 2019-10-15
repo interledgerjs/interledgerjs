@@ -77,6 +77,7 @@ export default class Rational {
     return multiplyDivideCeil(value, this.a, this.b)
   }
 
+  // TODO prevent overflows by reducing fraction when necessary
   multiplyByRational (other: Rational): Rational {
     return new Rational(
       this.a.multiply(other.a),

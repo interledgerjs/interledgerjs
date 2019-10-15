@@ -1027,6 +1027,35 @@ describe('Connection', function () {
     })
   })
 
+  describe('Fixed Exchange Rate', function () {
+    beforeEach(async function () {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      const connectionPromise = this.server.acceptConnection()
+      this.clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        exchangeRate: 0.001,
+        slippage: 0,
+        plugin: this.clientPlugin
+      })
+      this.serverConn = await connectionPromise
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(1e6)
+      })
+    })
+
+    it('sets the minimumAcceptableExchangeRate', function () {
+      assert.equal(this.clientConn.minimumAcceptableExchangeRate, '0.001')
+    })
+
+    it('sends money', async function () {
+      const stream = this.clientConn.createStream()
+      await stream.sendTotal(123)
+      assert.equal(this.clientConn.totalSent, '123')
+      // 0.5 is the true exchange rate.
+      assert.equal(this.serverConn.totalReceived, Math.floor(123 * 0.5).toString())
+    })
+  })
+
   describe('Maximum Packet Amount Handling', function () {
     beforeEach(async function () {
       this.clientPlugin.deregisterDataHandler()

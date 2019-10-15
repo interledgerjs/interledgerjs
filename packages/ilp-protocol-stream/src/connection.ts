@@ -79,6 +79,14 @@ export interface ConnectionOpts {
    * discovered maximum amount is used.
    */
   maximumPacketAmount?: string,
+  /**
+   * Fixed exchange rate. When set, the connection skips the packet volley step.
+   * Note that the minimum acceptable exchange rate is usually smaller than this
+   * (depending on the slippage).
+   *
+   * This option should usually be used in concert with `ConnectionOpts.maximumPacketAmount`.
+   */
+  exchangeRate?: number,
 }
 
 export interface BuildConnectionOpts extends ConnectionOpts {
@@ -144,6 +152,8 @@ export class Connection extends EventEmitter {
   protected sending: boolean
   protected congestion: CongestionController
   protected minExchangeRatePrecision: number
+  // TODO maybe replace connected,closed,remoteClosed with a state enum
+  protected connected: boolean
   protected closed: boolean
   protected exchangeRate?: Rational
   protected retryDelay: number
@@ -181,6 +191,9 @@ export class Connection extends EventEmitter {
     this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
     this.maxBufferedData = opts.connectionBufferSize || MAX_DATA_SIZE * 2
     this.minExchangeRatePrecision = opts.minExchangeRatePrecision || DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION
+    this.exchangeRate = opts.exchangeRate === undefined
+      ? undefined
+      : Rational.fromNumber(opts.exchangeRate, true)
     this.idleTimeout = opts.idleTimeout || DEFAULT_IDLE_TIMEOUT
     this.lastActive = new Date()
 
@@ -884,17 +897,9 @@ export class Connection extends EventEmitter {
 
     try {
       while (this.sending) {
-        // Send a test packet first to determine the exchange rate
-        if (!this.exchangeRate) {
-          this.log.trace('determining exchange rate')
-          await this.determineExchangeRate()
-
-          if (this.exchangeRate) {
-            this.safeEmit('connect')
-            this.log.trace('connected')
-          } else {
-            this.log.error('unable to determine exchange rate')
-          }
+        if (!this.connected) {
+          await this.setupExchangeRate()
+          this.connected = true
         } else {
           // TODO Send multiple packets at the same time (don't await promise)
           // TODO Figure out if we need to wait before sending the next one
@@ -924,11 +929,8 @@ export class Connection extends EventEmitter {
     this.log.trace('loadAndSendPacket')
     let amountToSend = Long.UZERO
 
-    // Set packet number to correlate response with request
-    const requestPacket = new Packet(this.getNextPacketSequence(), IlpPacketType.Prepare)
-
-    // TODO make sure these aren't too big
-    requestPacket.frames = this.queuedFrames
+    // TODO make sure the queued frames aren't too big
+    const requestPacket = new Packet(this.getNextPacketSequence(), IlpPacketType.Prepare, undefined, this.queuedFrames)
     this.queuedFrames = []
 
     // Send control frames
@@ -1148,6 +1150,24 @@ export class Connection extends EventEmitter {
       return { maxDigits, exchangeRate, packetErrors }
     }, { maxDigits: 0, exchangeRate: Rational.UZERO, packetErrors: [] })
     return { maxDigits, exchangeRate, maxPacketAmounts, packetErrors }
+  }
+
+  protected async setupExchangeRate (): Promise<void> {
+    if (this.exchangeRate) {
+      // The exchangeRate is fixed, so send a single packet (containing a
+      // ConnectionNewAddressFrame and ConnectionAssetDetailsFrame) to make sure
+      // that the connection is valid. This doesn't guarantee that money can be
+      // sent at the fixed exchange rate.
+      const res = await this.sendTestPacket(Long.UZERO)
+      if (!this.remoteKnowsOurAccount) {
+        throw new Error('probe packet failed')
+      }
+    } else {
+      this.log.trace('determining exchange rate')
+      await this.determineExchangeRate()
+    }
+    this.safeEmit('connect')
+    this.log.trace('connected')
   }
 
   /**
