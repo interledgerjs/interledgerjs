@@ -145,7 +145,7 @@ export class Connection extends EventEmitter {
 
   protected nextPacketSequence: number
   protected streams: Map<number, DataAndMoneyStream>
-  protected closedStreams: { [id: number]: boolean }
+  protected closedStreams: Set<number>
   protected nextStreamId: number
   protected maxStreamId: number
   protected log: any
@@ -200,7 +200,7 @@ export class Connection extends EventEmitter {
     this.nextPacketSequence = 1
     // TODO should streams be a Map or just an object?
     this.streams = new Map()
-    this.closedStreams = {}
+    this.closedStreams = new Set()
     this.nextStreamId = (this.isServer ? 2 : 1)
     this.log = createLogger(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
     this.sending = false
@@ -501,7 +501,7 @@ export class Connection extends EventEmitter {
         const streamId = frame.streamId.toNumber()
 
         // Check if the stream was already closed
-        if (this.closedStreams[streamId]) {
+        if (this.closedStreams.has(streamId)) {
           this.log.trace('got packet with frame for stream %d, which was already closed', streamId)
 
           // Don't bother sending an error frame back unless they've actually sent money or data
@@ -792,7 +792,7 @@ export class Connection extends EventEmitter {
    * and if it looks good, emit the 'stream' event
    */
   protected handleNewStream (streamId: number): void {
-    if (this.streams.has(streamId) || this.closedStreams[streamId]) {
+    if (this.streams.has(streamId) || this.closedStreams.has(streamId)) {
       return
     }
 
@@ -1524,7 +1524,7 @@ export class Connection extends EventEmitter {
   protected removeStreamRecord (stream: DataAndMoneyStream) {
     this.log.debug('removing record of stream %d', stream.id)
     this.streams.delete(stream.id)
-    this.closedStreams[stream.id] = true
+    this.closedStreams.add(stream.id)
     if (!stream._sentEnd) {
       stream._sentEnd = true
       const streamEndFrame = (stream._errorMessage
