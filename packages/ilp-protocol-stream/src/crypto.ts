@@ -1,12 +1,12 @@
-// When webpacked, "crypto_node" is replaced with "crypto_browser".
-import { hmac, randomBytes } from './util/crypto_node'
+// When webpacked, "crypto-node" is replaced with "crypto-browser".
+import { hmac, randomBytes } from './util/crypto-node'
 export {
   decrypt,
   encrypt,
   generateSharedSecretFromToken, // only in node, not browser
   hash,
   randomBytes
-} from './util/crypto_node'
+} from './util/crypto-node'
 
 const TOKEN_LENGTH = 18
 const ENCRYPTION_KEY_STRING = Buffer.from('ilp_stream_encryption', 'utf8')

@@ -1,5 +1,5 @@
 // This file uses Puppeteer+Webpack to build & test the browser version of
-// ilp-protocol-stream. The main point is to exercise `src/util/crypto_browser`,
+// ilp-protocol-stream. The main point is to exercise `src/util/crypto-browser`,
 // since every thing else is the same as in Node.
 
 import * as assert from 'assert'

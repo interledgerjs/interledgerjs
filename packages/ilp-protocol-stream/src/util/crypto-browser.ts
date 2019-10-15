@@ -12,7 +12,7 @@ const CACHE_EXPIRY = 30000
 
 // Cache keys so that `subtle.importKey` doesn't need to be called for every operation.
 // It would be nicer to just store the `CryptoKey`s on the stream `Connection`, but
-// that's tricky since this file takes the place of `crypto_node.ts`.
+// that's tricky since this file takes the place of `crypto-node.ts`.
 class KeyCache {
   private cache: Map<Buffer, CacheEntry> = new Map()
 
