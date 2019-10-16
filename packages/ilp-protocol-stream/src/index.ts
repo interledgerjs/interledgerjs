@@ -4,8 +4,7 @@ import * as IlpPacket from 'ilp-packet'
 import createLogger from 'ilp-logger'
 import './util/formatters'
 import * as cryptoHelper from './crypto'
-import { buildConnection, Connection, ConnectionOpts } from './connection'
-import { ServerConnectionPool } from './pool'
+import { Connection, ConnectionOpts } from './connection'
 import { Plugin } from './util/plugin-interface'
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9~_-]+$/
@@ -29,7 +28,7 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
   await plugin.connect()
   const log = createLogger('ilp-protocol-stream:Client')
   const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(plugin.sendData.bind(plugin))
-  const connection = await buildConnection({
+  const connection = await Connection.build({
     ...opts,
     sourceAccount: clientAddress,
     assetCode,

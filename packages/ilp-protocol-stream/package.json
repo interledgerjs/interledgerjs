@@ -13,9 +13,9 @@
   },
   "types": "dist/src/index.d.ts",
   "files": [
-    "dist/**/*.js",
-    "dist/**/*.js.map",
-    "dist/**/*.d.ts"
+    "dist/src/**/*.js",
+    "dist/src/**/*.js.map",
+    "dist/src/**/*.d.ts"
   ],
   "scripts": {
     "build": "tsc",
@@ -42,7 +42,7 @@
     "url": "git+https://github.com/interledgerjs/ilp-protocol-stream.git"
   },
   "dependencies": {
-    "@types/node": "^12.7.5",
+    "@types/node": "^10.14.22",
     "ilp-logger": "^1.2.1",
     "ilp-packet": "^3.0.9",
     "ilp-protocol-ildcp": "^2.0.2",

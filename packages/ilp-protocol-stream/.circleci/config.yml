@@ -17,7 +17,7 @@ jobs:
           paths:
             - node_modules
           key: v10-dependencies-{{ checksum "package.json" }}
-      - run: npm test
+      - run: npm run test-cover
       - run: npm run lint
       - run: npm run codecov
 
@@ -38,7 +38,7 @@ jobs:
           paths:
             - node_modules
           key: v12-dependencies-{{ checksum "package.json" }}
-      - run: npm test
+      - run: npm run test-cover
 
   publish_docs:
     docker:

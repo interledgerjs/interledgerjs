@@ -53,13 +53,7 @@ describe('Server', function () {
         plugin: this.serverPlugin
       })
 
-      try {
-        server.generateAddressAndSecret()
-      } catch (err) {
-        assert.equal(err.message, 'Server must be connected to generate address and secret')
-        return
-      }
-      assert(false)
+      assert.throws(() => server.generateAddressAndSecret(), 'Server must be connected to generate address and secret')
     })
 
     it('should return a destinationAccount and sharedSecret', async function () {
@@ -128,13 +122,7 @@ describe('Server', function () {
 
     it('should throw an error if the connectionTag includes characters that cannot go into an ILP address', async function () {
       await this.server.listen()
-      try {
-        this.server.generateAddressAndSecret('invalid\n')
-      } catch (err) {
-        assert.equal(err.message, 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", "-", and "~"')
-        return
-      }
-      assert(false)
+      assert.throws(() => this.server.generateAddressAndSecret('invalid\n'), 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", "-", and "~"')
     })
   })
 

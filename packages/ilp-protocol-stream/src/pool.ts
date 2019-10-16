@@ -1,6 +1,6 @@
 import createLogger from 'ilp-logger'
 import * as IlpPacket from 'ilp-packet'
-import { buildConnection, Connection, FullConnectionOpts } from './connection'
+import { Connection, BuildConnectionOpts } from './connection'
 import * as cryptoHelper from './crypto'
 
 const log = createLogger('ilp-protocol-stream:Pool')
@@ -9,7 +9,7 @@ interface ConnectionEvent {
   (connection: Connection): void
 }
 
-type ConnectionOptions = Omit<FullConnectionOpts, 'sharedSecret'>
+type ConnectionOptions = Omit<BuildConnectionOpts, 'sharedSecret'>
 
 export class ServerConnectionPool {
   private serverSecret: Buffer
@@ -56,7 +56,7 @@ export class ServerConnectionPool {
       // If we get here, that means it was a token + sharedSecret we created
       const tilde = id.indexOf('~')
       const connectionTag = tilde !== -1 ? id.slice(tilde + 1) : undefined
-      const conn = await buildConnection({
+      const conn = await Connection.build({
         ...this.connectionOpts,
         sharedSecret,
         connectionTag

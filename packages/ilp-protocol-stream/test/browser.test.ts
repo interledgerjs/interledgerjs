@@ -22,7 +22,7 @@ const BTP_SERVER_OPTS = {
 describe('Puppeteer', function () {
   before(async function () {
     // Webpack can take >2s.
-    this.timeout(5000)
+    this.timeout(1e4)
     await buildClientBundle()
     this.browser = await puppeteer.launch()
   })
@@ -43,6 +43,7 @@ describe('Puppeteer', function () {
   })
 
   beforeEach('Set up client', async function () {
+    this.timeout(1e4)
     this.page = await this.browser.newPage()
     this.page.on('error', (err: Error) => {
       console.log('puppeteer_error:', err.stack)

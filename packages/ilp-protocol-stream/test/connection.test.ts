@@ -594,7 +594,7 @@ describe('Connection', function () {
         plugin: this.clientPlugin
       })
       const exchangeRateWithSlippage = (0.5 * (1 - slippage)).toString()
-      assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage) 
+      assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage)
     })
 
     it('should apply slippage to the exchange rate when explicitly specified', async function () {
@@ -605,7 +605,7 @@ describe('Connection', function () {
         slippage
       })
       const exchangeRateWithSlippage = (0.5 * (1 - slippage)).toString()
-      assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage) 
+      assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage)
     })
 
     it('should determine the exchange rate if it gets F08 which can be used for a valid exchange rate', async function () {
@@ -620,7 +620,7 @@ describe('Connection', function () {
       const connection = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        slippage: 0 
+        slippage: 0
       })
       assert.equal(connection.minimumAcceptableExchangeRate, '0.001')
 
@@ -1400,22 +1400,16 @@ describe('Connection', function () {
     it('should close the connection if the peer uses the wrong numbered stream ID', async function () {
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       const clientPlugin = this.clientPlugin
-      class BadConnection extends Connection {
-        constructor() {
-          super({
-            plugin: clientPlugin,
-            destinationAccount,
-            sourceAccount: 'test.peerB',
-            assetCode: 'ABC',
-            assetScale: 2,
-            sharedSecret,
-            isServer: false
-          })
-          this.nextStreamId = 2
-        }
-      }
-      const clientConn = new BadConnection()
-      await clientConn._setupKeys()
+      const clientConn = await Connection.build({
+        plugin: clientPlugin,
+        destinationAccount,
+        sourceAccount: 'test.peerB',
+        assetCode: 'ABC',
+        assetScale: 2,
+        sharedSecret,
+        isServer: false
+      })
+      clientConn['nextStreamId'] = 2
       const done = new Promise((resolve) => {
         clientConn.on('error', (err: Error) => {
           assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
@@ -1441,26 +1435,18 @@ describe('Connection', function () {
         serverConn.on('error', (err: Error) => { })
       })
       const clientPlugin = this.clientPlugin
-      class BadConnection extends Connection {
-        remoteMaxStreamId: number
-
-        constructor() {
-          super({
-            plugin: clientPlugin,
-            destinationAccount,
-            sourceAccount: 'test.peerB',
-            assetCode: 'ABC',
-            assetScale: 2,
-            sharedSecret,
-            isServer: false
-          })
-        }
-      }
-      const clientConn = new BadConnection()
-      await clientConn._setupKeys()
+      const clientConn = await Connection.build({
+        plugin: clientPlugin,
+        destinationAccount,
+        sourceAccount: 'test.peerB',
+        assetCode: 'ABC',
+        assetScale: 2,
+        sharedSecret,
+        isServer: false
+      })
       clientConn.on('error', spy)
       await clientConn.connect()
-      clientConn.remoteMaxStreamId = 100
+      clientConn['remoteMaxStreamId'] = 100
       const streams = [
         clientConn.createStream(),
         clientConn.createStream(),
