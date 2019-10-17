@@ -510,8 +510,13 @@ export class Connection extends EventEmitter {
           }
 
           // Respond with a StreamClose frame (unless there is already one queued)
-          const framesToSend = responseFrames.concat(this.queuedFrames)
-          const includesStreamClose = framesToSend.find((frame) => frame.type === FrameType.StreamClose && frame.streamId.equals(streamId))
+          const testStreamClose = (frame: Frame): boolean => {
+            return frame.type === FrameType.StreamClose
+                && frame.streamId.equals(streamId)
+          }
+          const includesStreamClose
+            = responseFrames.find(testStreamClose)
+            || this.queuedFrames.find(testStreamClose)
           if (!includesStreamClose) {
             responseFrames.push(new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed'))
           }
