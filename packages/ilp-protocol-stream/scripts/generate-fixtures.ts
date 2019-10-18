@@ -34,10 +34,6 @@ const variants = Array.prototype.concat.apply([], [
     frame: new Packet.ConnectionCloseFrame(0x01, 'fail')
   },
   {
-    name: 'frame:connection_new_address:empty',
-    frame: new Packet.ConnectionNewAddressFrame('')
-  },
-  {
     name: 'frame:connection_new_address',
     frame: new Packet.ConnectionNewAddressFrame('example.alice')
   },
