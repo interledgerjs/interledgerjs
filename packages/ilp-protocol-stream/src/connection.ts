@@ -75,14 +75,14 @@ export interface ConnectionOpts {
   /** Inactivity timeout (milliseconds) */
   idleTimeout?: number,
   /**
-   * Fixed maximum packet amount. When set, the minimum of this setting and the path's
-   * discovered maximum amount is used.
+   * Fixed maximum packet amount. When set, the connection's maximum packet amount
+   * is the minimum of this setting and the path's discovered maximum amount.
    */
   maximumPacketAmount?: string,
   /**
    * Fixed exchange rate. When set, the connection skips the packet volley step.
-   * Note that the minimum acceptable exchange rate is usually smaller than this
-   * (depending on the slippage).
+   * Note that the minimum acceptable exchange rate is usually slightly lower than
+   * this (depending on the connection's slippage).
    *
    * This option should usually be used in concert with `ConnectionOpts.maximumPacketAmount`.
    */
@@ -1163,7 +1163,7 @@ export class Connection extends EventEmitter {
       // ConnectionNewAddressFrame and ConnectionAssetDetailsFrame) to make sure
       // that the connection is valid. This doesn't guarantee that money can be
       // sent at the fixed exchange rate.
-      const res = await this.sendTestPacket(Long.UZERO)
+      const _res = await this.sendTestPacket(Long.UZERO)
       if (!this.remoteKnowsOurAccount) {
         throw new Error('probe packet failed')
       }
