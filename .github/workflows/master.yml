@@ -48,6 +48,7 @@ jobs:
       with:
         cmd: codecov
       env:
+        CI: true
         CODECOV_TOKEN: ${{secrets.codecov_token}}
     - name: publish
       uses: borales/actions-yarn@v2.0.0
