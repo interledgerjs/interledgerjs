@@ -35,3 +35,4 @@ jobs:
         yarn cover
       env:
         CI: true
+        
