@@ -37,7 +37,8 @@ yarn test
 
 If you are interested in contributing, please read the [contributing guidelines](./CONTRIBUTING.md).
 
-## Note to maintainers: Versioning
+## Note to maintainers: 
+### Versioning
 
 Independent versioning is used for this project and releases can only be made from `master`. You will need to set the `GH_TOKEN` env variable to your 
 personal [github access token](https://github.com/settings/tokens). Please make sure that you are up to date with master and that the tests and linting pass. Then use the following to create a release: 
@@ -57,3 +58,45 @@ This will append `-alpha.<alpha-version>` to the release name. The alpha release
 # On master
 GH_TOKEN=<github-token> lerna version --conventional-commits --conventional-graduate --create-release github
 ```
+
+### Importing legacy modules
+
+This process preserves the commit history of the legacy modules.  
+
+```sh
+git clone git@github.com:adrianhopebailie/interledgerjs.git
+git clone git@github.com:interledgerjs/legacy-module.git
+cd legacy-module
+git pull
+cd ../interledgerjs
+lerna import ../legacy-module --dest=packages --preserve-commit --flatten
+```
+
+Place a `tsconfig.build.json` file in the root of the newly imported module
+```js
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "baseUrl": ".",
+    "rootDir": "src",
+    "outDir": "dist",
+    "tsBuildInfoFile": "./dist/tsconfig.build.tsbuildinfo"
+  },
+  "include": [
+    "src"
+  ]
+}
+
+```
+
+Please update the `package.json` file in the newly imported module to have the following scripts that will be called from the CI:
+```js
+{
+  "build": "tsc -p tsconfig.build.json",
+  "cover": "...",
+  "codecov": "codecov --root=../../ -f coverage/*.json -F <flagname>"
+}
+```
+
+The `cover` script should run the tests with code coverage and output the coverage results in a format that can be uploaded to codecov. The `flagname` will be used by codecov to track coverage per package. Please make sure it matches the regex `^[a-z0-9_]{1,45}$`.
