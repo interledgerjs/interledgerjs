@@ -27,14 +27,31 @@ jobs:
       shell: bash
       env:
         NPM_AUTH_TOKEN: ${{secrets.npm_token}}
-    - name: yarn install, lint, build, test, codecov and publish
-      run: |
-        yarn install
-        yarn lint:all
-        yarn build
-        yarn cover
-        yarn codecov
-        yarn publish:release
+    - name: install 
+      uses: borales/actions-yarn@v2.0.0
+      with:
+        cmd: install
+    - name: lint
+      uses: borales/actions-yarn@v2.0.0
+      with:
+        cmd: lint:all
+    - name: build
+      uses: borales/actions-yarn@v2.0.0
+      with:
+        cmd: build
+    - name: test
+      uses: borales/actions-yarn@v2.0.0
+      with:
+        cmd: cover
+    - name: upload code coverage
+      uses: borales/actions-yarn@v2.0.0
+      with:
+        cmd: codecov
+      env:
+        CODECOV_TOKEN: ${{secrets.codecov_token}}
+    - name: publish
+      uses: borales/actions-yarn@v2.0.0
+      with:
+        cmd: publish:release
       env:
         CI: true
-        CODECOV_TOKEN: ${{secrets.codecov_token}}
