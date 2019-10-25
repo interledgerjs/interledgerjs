@@ -20,8 +20,6 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - name: Use yarn
-      uses: Borales/actions-yarn@master
     - name: Authenticate with registry
       run: echo "//registry.npmjs.org/:_authToken=$NPM_AUTH_TOKEN" > $GITHUB_WORKSPACE/.npmrc
       shell: bash
@@ -43,16 +41,10 @@ jobs:
       uses: borales/actions-yarn@v2.0.0
       with:
         cmd: cover
-    - name: upload code coverage
-      uses: borales/actions-yarn@v2.0.0
-      with:
-        cmd: codecov
+    - name: upload code coverage and publish
+      run: |
+        yarn codecov
+        yarn publish:release
       env:
         CI: true
         CODECOV_TOKEN: ${{secrets.codecov_token}}
-    - name: publish
-      uses: borales/actions-yarn@v2.0.0
-      with:
-        cmd: publish:release
-      env:
-        CI: true
