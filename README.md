@@ -59,20 +59,17 @@ This will append `-alpha.<alpha-version>` to the release name. The alpha release
 GH_TOKEN=<github-token> lerna version --conventional-commits --conventional-graduate --create-release github
 ```
 
-### Importing legacy modules
-
-This process preserves the commit history of the legacy modules.  
-
-```sh
-git clone git@github.com:adrianhopebailie/interledgerjs.git
-git clone git@github.com:interledgerjs/legacy-module.git
-cd legacy-module
-git pull
-cd ../interledgerjs
-lerna import ../legacy-module --dest=packages --preserve-commit --flatten
+### Adding new packages
+All source code is expected to be TypeScript and is placed in the `src` folder. Tests are put in the `test` folder.
+The NPM package will not contain any TypeScript files (`*.ts`) but will have typings and source maps. A typical project should have the following structure:
+```
+|-- src
+|-- test
+|-- package.json
+|-- tsconfig.build.json
 ```
 
-Place a `tsconfig.build.json` file in the root of the newly imported module
+The `tsconfig.build.json` file should have the following
 ```js
 {
   "extends": "../../tsconfig.json",
@@ -87,16 +84,59 @@ Place a `tsconfig.build.json` file in the root of the newly imported module
     "src"
   ]
 }
-
 ```
 
-Please update the `package.json` file in the newly imported module to have the following scripts that will be called from the CI:
+ The `package.json` file should specify the following
 ```js
 {
+  "name": "<package-name>",
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  }
+}
+```
+
+In the `scripts` section of the `package.json`, be sure to have `build`, `cover` (which runs tests with coverage) and `codecov`. These will be called from the CI pipeline. Please use the following as a guideline:
+```js
+"scripts": {
   "build": "tsc -p tsconfig.build.json",
   "cover": "...",
   "codecov": "codecov --root=../../ -f coverage/*.json -F <flagname>"
 }
 ```
-
 The `cover` script should run the tests with code coverage and output the coverage results in a format that can be uploaded to codecov. The `flagname` will be used by codecov to track coverage per package. Please make sure it matches the regex `^[a-z0-9_]{1,45}$`.
+
+### Importing legacy modules
+
+This process preserves the commit history of the legacy modules.  
+
+```sh
+git clone git@github.com:adrianhopebailie/interledgerjs.git
+git clone git@github.com:interledgerjs/legacy-module.git
+cd legacy-module
+git pull
+cd ../interledgerjs
+lerna import ../legacy-module --dest=packages --preserve-commit --flatten
+```
+
+You then need to replace the `tsconfig.json` file with the `tsconfig.build.json` and update the `package.json` as described above.
+
+### Dependencies
+We keep devDependencies that are shared across all packages in the root `package.json` file. Dependencies can be added to individual packages using Lerna
+```sh
+lerna add <package to install> --scope=<package-name>
+
+# Add dev dependency
+lerna add <package to install> --scope=<package-name> --dev
+```
+
+### Running script commands
+Script commands such as `test` and `lint` can be run from the root of the project by running 
+```sh
+# All tests in all packages
+lerna run test
+
+#Scoping to a package
+lerna run test --scope=<package-name>
+```
