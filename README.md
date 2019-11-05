@@ -12,6 +12,7 @@ For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the co
   2. [ilp-packet](./packages/ilp-packet/README.md)
   3. [ilp-protocol-ccp](./packages/ilp-protocol-ccp/README.md)
   4. [ilp-protocol-ildcp](./packages/ilp-protocol-ildcp/README.md)
+  5. [ilp-spsp-payout](./packages/ilp-spsp-payout/README.md)
   5. [oer-utils](./packages/oer-utils/README.md)
 
 ## Installation
