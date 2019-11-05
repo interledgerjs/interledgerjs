@@ -1,4 +1,4 @@
-/* eslint-disable no-explicit-any */
+/* eslint-disable */
 import { createConnection, Connection, DataAndMoneyStream } from 'ilp-protocol-stream'
 import { URL } from 'url'
 import axios from 'axios'
