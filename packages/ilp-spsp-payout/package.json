@@ -1,0 +1,30 @@
+{
+  "name": "ilp-spsp-payout",
+  "version": "1.0.0",
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
+  "description": "Payout utility for SPSP servers",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.js.map",
+    "dist/**/*.d.ts"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "clean": "rimraf .nyc_output/* dist/* coverage/*",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "mocha --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
+    "cover": "nyc --extension .ts --reporter=json --reporter=html --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register mocha test/*.spec.ts",
+    "codecov": "codecov --root=../../ -f coverage/*.json -F ilp_spsp_payout"
+  },
+  "dependencies": {
+    "axios": "^0.19.0",
+    "ilp-plugin": "^3.3.1",
+    "ilp-protocol-stream": "^1.8.9",
+    "typescript": "^3.5.2"
+  }
+}
