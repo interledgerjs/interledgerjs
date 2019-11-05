@@ -18,3 +18,5 @@ const { Payout } = require('ilps-spsp-payout')
 const payer = new Payout()
 payer.send('$twitter.xrptipbot.com/androswong418', 100000)
 ```
+
+Note: To send payments locally a live moneyd instance must be running on your machine. For more instructions please visit https://github.com/interledgerjs/moneyd
