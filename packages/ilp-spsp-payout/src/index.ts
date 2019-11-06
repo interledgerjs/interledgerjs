@@ -4,7 +4,7 @@ import makePlugin = require('ilp-plugin')
 
 const CLEANUP_TIMEOUT = 30 * 1000
 
-class Payout {
+export class Payout {
   private payouts: {
     [pointer: string]: {
       connection: PayoutConnection,
@@ -71,5 +71,3 @@ class Payout {
     }, duration)
   }
 }
-
-export default Payout
