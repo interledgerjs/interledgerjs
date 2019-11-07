@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-use-before-define */
 import { createConnection, Connection, DataAndMoneyStream } from 'ilp-protocol-stream'
 import { URL } from 'url'
 import axios from 'axios'

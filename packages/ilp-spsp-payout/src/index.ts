@@ -1,6 +1,7 @@
 /* eslint-disable no-console */
+/* eslint-disable @typescript-eslint/no-var-requires */
 import { PayoutConnection } from './lib/PayoutConnection'
-import makePlugin = require('ilp-plugin')
+const makePlugin = require('ilp-plugin')
 
 const CLEANUP_TIMEOUT = 30 * 1000
 

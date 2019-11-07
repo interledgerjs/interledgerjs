@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "axios": "^0.19.0",
-    "ilp-plugin": "^3.3.1",
     "ilp-protocol-stream": "^1.8.9"
   }
 }
