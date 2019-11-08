@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.3.0-alpha.1](https://github.com/interledgerjs/interledgerjs/compare/ilp-logger@1.3.0-alpha.0...ilp-logger@1.3.0-alpha.1) (2019-11-08)
+
+**Note:** Version bump only for package ilp-logger
+
+
+
+
+
 # 1.3.0-alpha.0 (2019-10-08)
 
 

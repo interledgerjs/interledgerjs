@@ -1,6 +1,6 @@
 {
   "name": "ilp-plugin",
-  "version": "3.3.1",
+  "version": "3.4.0",
   "description": "> A generic handle to ILP",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,7 @@
     "codecov": "codecov --root=../../ -f coverage/*.json -F ilp_plugin"
   },
   "dependencies": {
-    "ilp-logger": "^1.3.0-alpha.0",
+    "ilp-logger": "^1.3.0-alpha.1",
     "ilp-plugin-btp": "^1.2.1"
   }
 }
