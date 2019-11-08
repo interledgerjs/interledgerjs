@@ -20,7 +20,7 @@ const generateCredentials = (opts?: any) => {
   return { server: `btp+ws://${name}:${secret}@localhost:7768` }
 }
 
-export const createPlugin = (opts?: any) => {
+export const pluginFromEnvironment = (opts?: any) => {
   const module = process.env.ILP_PLUGIN || 'ilp-plugin-btp'
   const credentials = generateCredentials(opts)
 
@@ -29,5 +29,3 @@ export const createPlugin = (opts?: any) => {
   const Plugin = require(module)
   return new Plugin(credentials)
 }
-
-module.exports = createPlugin

@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { PayoutConnection } from './lib/PayoutConnection'
-const makeILPPlugin = require('ilp-plugin')
+import { pluginFromEnvironment as makeILPPlugin } from 'ilp-plugin'
 
 const CLEANUP_TIMEOUT = 30 * 1000
 
@@ -15,7 +15,7 @@ export class Payout {
     }
   }
 
-  constructor (makePlugin: any) {
+  constructor (makePlugin?: any) {
     this.createPlugin = makePlugin || makeILPPlugin
     this.payouts = {}
   }
