@@ -10,9 +10,11 @@ Interledger.JS has a long history of modules that have been added as experiments
 For [a while](https://forum.interledger.org/t/interledgerjs-monorepo/318) the community has been keen to put many of the core modules into a single monorepo. The current packages included are:
   1. [ilp-logger](./packages/ilp-logger/README.md)
   2. [ilp-packet](./packages/ilp-packet/README.md)
-  3. [ilp-protocol-ccp](./packages/ilp-protocol-ccp/README.md)
-  4. [ilp-protocol-ildcp](./packages/ilp-protocol-ildcp/README.md)
-  5. [oer-utils](./packages/oer-utils/README.md)
+  3. [ilp-plugin](./packages/ilp-plugin/README.md)
+  4. [ilp-protocol-ccp](./packages/ilp-protocol-ccp/README.md)
+  5. [ilp-protocol-ildcp](./packages/ilp-protocol-ildcp/README.md)
+  6. [ilp-spsp-payout](./packages/ilp-spsp-payout/README.md)
+  7. [oer-utils](./packages/oer-utils/README.md)
 
 ## Installation
 The monorepo is set up to use lerna and yarn workspaces. To get started run the following:

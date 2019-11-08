@@ -16,7 +16,9 @@
       "ilp-packet" : ["packages/ilp-packet/src"],
       "ilp-logger" : ["packages/ilp-logger/src"],
       "ilp-protocol-ildcp" : ["packages/ilp-protocol-ildcp/src"],
-      "ilp-protocol-ccp" : ["packages/ilp-protocol-ccp/src"]
+      "ilp-protocol-ccp" : ["packages/ilp-protocol-ccp/src"],
+      "ilp-plugin": ["packages/ilp-plugin/src"],
+      "ilp-spsp-payout": ["packages/ilp-spsp-payout/src"]
     }
   },
   "exclude": [
