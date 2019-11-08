@@ -13,7 +13,7 @@ npm install ilp-spsp-payout
 ### Send Payments
 
 ```js
-const { Payout } = require('ilps-spsp-payout')
+const { Payout } = require('ilp-spsp-payout')
 
 const payer = new Payout()
 payer.send('$twitter.xrptipbot.com/androswong418', 100000)

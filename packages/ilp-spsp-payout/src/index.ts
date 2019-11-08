@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { PayoutConnection } from './lib/PayoutConnection'
-const makePlugin = require('ilp-plugin')
+const makeILPPlugin = require('ilp-plugin')
 
 const CLEANUP_TIMEOUT = 30 * 1000
 
 export class Payout {
+  private createPlugin: Function
   private payouts: {
     [pointer: string]: {
       connection: PayoutConnection,
@@ -14,7 +15,8 @@ export class Payout {
     }
   }
 
-  constructor () {
+  constructor (makePlugin: any) {
+    this.createPlugin = makePlugin || makeILPPlugin
     this.payouts = {}
   }
 
@@ -27,7 +29,7 @@ export class Payout {
       this.payouts[paymentPointer] = {
         connection: new PayoutConnection({
           pointer: paymentPointer,
-          plugin: makePlugin()
+          plugin: this.createPlugin()
         }),
         lastSent: Date.now(),
         timer: this.makeTimer(paymentPointer, CLEANUP_TIMEOUT)
