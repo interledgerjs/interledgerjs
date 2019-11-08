@@ -1,12 +1,16 @@
 /* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/no-var-requires */
 import { PayoutConnection } from './lib/PayoutConnection'
-import { pluginFromEnvironment as makeILPPlugin } from 'ilp-plugin'
+import { pluginFromEnvironment as makeIlpPlugin, Plugin } from 'ilp-plugin'
 
 const CLEANUP_TIMEOUT = 30 * 1000
 
+interface PayoutOpts {
+  makePlugin?: () => Plugin
+}
+
 export class Payout {
-  private createPlugin: Function
+  private createPlugin: () => Plugin
   private payouts: {
     [pointer: string]: {
       connection: PayoutConnection,
@@ -15,8 +19,12 @@ export class Payout {
     }
   }
 
-  constructor (makePlugin?: any) {
-    this.createPlugin = makePlugin || makeILPPlugin
+  constructor (opts?: PayoutOpts) {
+    if (opts && opts.makePlugin) {
+      this.createPlugin = opts.makePlugin
+    } else {
+      this.createPlugin = makeIlpPlugin
+    }
     this.payouts = {}
   }
 
