@@ -7,10 +7,12 @@ const CLEANUP_TIMEOUT = 30 * 1000
 
 interface PayoutOpts {
   makePlugin?: () => Plugin
+  slippage?: number
 }
 
 export class Payout {
   private createPlugin: () => Plugin
+  private slippage: number
   private payouts: {
     [pointer: string]: {
       connection: PayoutConnection,
@@ -26,6 +28,7 @@ export class Payout {
       this.createPlugin = makeIlpPlugin
     }
     this.payouts = {}
+    this.slippage = opts && opts.slippage
   }
 
   getPayout (paymentPointer: string) {
@@ -37,7 +40,8 @@ export class Payout {
       this.payouts[paymentPointer] = {
         connection: new PayoutConnection({
           pointer: paymentPointer,
-          plugin: this.createPlugin()
+          plugin: this.createPlugin(),
+          slippage: this.slippage
         }),
         lastSent: Date.now(),
         timer: this.makeTimer(paymentPointer, CLEANUP_TIMEOUT)

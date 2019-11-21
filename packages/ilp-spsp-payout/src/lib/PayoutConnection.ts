@@ -29,6 +29,7 @@ export class PayoutConnection {
   private spspUrl: string
   private connection?: Connection
   private stream?: DataAndMoneyStream
+  private slippage?: number
   private plugin: any
 
   private state = State.DISCONNECTED
@@ -38,10 +39,11 @@ export class PayoutConnection {
   private sent = 0
   private totalStreamAmount = 0
 
-  constructor ({ pointer, plugin }: { pointer: string, plugin: any }) {
+  constructor ({ pointer, plugin, slippage }: { pointer: string, plugin: any, slippage: number }) {
     this.pointer = pointer
     this.spspUrl = resolvePaymentPointer(pointer)
     this.plugin = plugin
+    this.slippage = slippage
   }
 
   getDebugInfo () {
@@ -116,6 +118,7 @@ export class PayoutConnection {
     this.trySending()
       .catch(() => {
         // TODO: backoff
+        this.setState(State.DISCONNECTED)
         setTimeout(() => {
           this.safeTrySending()
         }, 2000)
@@ -132,6 +135,7 @@ export class PayoutConnection {
     const spspParams = await this.spspQuery()
     const connection = await createConnection({
       plugin: this.plugin,
+      ...(this.slippage && { slippage: this.slippage }),
       ...spspParams
     })
 
@@ -161,6 +165,7 @@ export class PayoutConnection {
 
         if (!appliedSent) {
           this.sent += this.totalStreamAmount
+          appliedSent = true
         }
 
         if (this.getSendMax() > 0) {
