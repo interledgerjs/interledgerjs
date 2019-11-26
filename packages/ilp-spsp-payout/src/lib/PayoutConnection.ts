@@ -37,7 +37,6 @@ export class PayoutConnection {
 
   private target = 0
   private sent = 0
-  private totalStreamAmount = 0
 
   constructor ({ pointer, plugin, slippage }: { pointer: string, plugin: any, slippage?: number }) {
     this.pointer = pointer
@@ -51,7 +50,7 @@ export class PayoutConnection {
       state: this.state,
       target: this.target,
       sent: this.sent,
-      streamSent: this.totalStreamAmount,
+      currentStreamTotalSent: this.stream && this.stream.totalSent,
       pointer: this.pointer
     }
   }
@@ -152,7 +151,7 @@ export class PayoutConnection {
     }
 
     let appliedSent = false
-    this.totalStreamAmount = 0
+    let totalStreamAmount = 0
     const cleanUp = () => {
       setImmediate(() => {
         this.setState(State.DISCONNECTED)
@@ -164,7 +163,7 @@ export class PayoutConnection {
         connection.removeListener('error', onError)
 
         if (!appliedSent) {
-          this.sent += this.totalStreamAmount
+          this.sent += totalStreamAmount
           appliedSent = true
         }
 
@@ -177,8 +176,8 @@ export class PayoutConnection {
     const onClose = () => cleanUp()
     const onError = () => cleanUp()
     const onOutgoingMoney = (amount: string) => {
-      this.totalStreamAmount += Number(amount)
-      if (this.totalStreamAmount + this.sent === this.target) {
+      totalStreamAmount += Number(amount)
+      if (totalStreamAmount + this.sent === this.target) {
         this.setState(State.IDLE)
       }
     }
