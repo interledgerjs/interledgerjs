@@ -177,7 +177,7 @@ export class PayoutConnection {
     const onError = () => cleanUp()
     const onOutgoingMoney = (amount: string) => {
       totalStreamAmount += Number(amount)
-      if (totalStreamAmount + this.sent === this.target) {
+      if (totalStreamAmount + this.sent >= this.target) {
         this.setState(State.IDLE)
       }
     }
