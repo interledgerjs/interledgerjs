@@ -39,7 +39,7 @@ export class PayoutConnection {
   private sent = 0
   private totalStreamAmount = 0
 
-  constructor ({ pointer, plugin, slippage }: { pointer: string, plugin: any, slippage: number }) {
+  constructor ({ pointer, plugin, slippage }: { pointer: string, plugin: any, slippage?: number }) {
     this.pointer = pointer
     this.spspUrl = resolvePaymentPointer(pointer)
     this.plugin = plugin
