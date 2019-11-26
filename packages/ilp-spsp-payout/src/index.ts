@@ -12,7 +12,7 @@ interface PayoutOpts {
 
 export class Payout {
   private createPlugin: () => Plugin
-  private slippage: number
+  private slippage?: number
   private payouts: {
     [pointer: string]: {
       connection: PayoutConnection,
