@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.4.1](https://github.com/interledgerjs/interledgerjs/compare/ilp-plugin@3.4.0...ilp-plugin@3.4.1) (2019-12-03)
+
+
+### Bug Fixes
+
+* **ilp-plugin:** export default ([#6](https://github.com/interledgerjs/interledgerjs/issues/6)) ([89261e7](https://github.com/interledgerjs/interledgerjs/commit/89261e7))
+
+
+
+
+
 # 3.4.0 (2019-11-08)
 
 
