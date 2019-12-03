@@ -40,3 +40,7 @@ export const pluginFromEnvironment = (opts?: any): Plugin => {
   const Plugin = require(module)
   return new Plugin(credentials)
 }
+
+pluginFromEnvironment.default = pluginFromEnvironment
+export default pluginFromEnvironment
+module.exports = pluginFromEnvironment
