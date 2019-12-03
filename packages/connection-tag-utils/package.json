@@ -19,7 +19,7 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "mocha --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
     "cover": "nyc --extension .ts --reporter=json --reporter=html --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register mocha test/*.spec.ts",
-    "codecov": "codecov --root=../../ -f coverage/*.json -F connection-tag-utils"
+    "codecov": "codecov --root=../../ -f coverage/*.json -F connection_tag_utils"
   },
   "dependencies": {
     "base64url": "^3.0.1"
