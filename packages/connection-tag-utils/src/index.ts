@@ -1,5 +1,5 @@
-import * as crypto from 'crypto'
 import base64url from 'base64url'
+import * as crypto from 'crypto'
 
 export type Key = string | Buffer
 
