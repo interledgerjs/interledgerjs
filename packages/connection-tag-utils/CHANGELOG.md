@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.0.0](https://github.com/interledgerjs/interledgerjs/compare/@interledger/connection-tag-utils@0.1.0...@interledger/connection-tag-utils@1.0.0) (2019-12-05)
+
+
+### chore
+
+* add connection-tag-utils to tsconfig paths ([cce01bd](https://github.com/interledgerjs/interledgerjs/commit/cce01bd))
+
+
+### BREAKING CHANGES
+
+* add breaking so connection-tag-utils is bumped to 1
+
+
+
+
+
 # 0.1.0 (2019-12-04)
 
 
