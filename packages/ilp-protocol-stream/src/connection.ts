@@ -112,6 +112,12 @@ export class ConnectionError extends Error {
   }
 }
 
+enum RemoteState {
+  Init,
+  Connected,
+  Closed
+}
+
 /**
  * Class representing the connection between a [`Client`]{@link createConnection} and a [`Server`]{@link Server}.
  * A single connection can be used to send or receive on [Streams]{@link DataAndMoneyStream}.
@@ -152,14 +158,13 @@ export class Connection extends EventEmitter {
   protected sending: boolean
   protected congestion: CongestionController
   protected minExchangeRatePrecision: number
-  // TODO maybe replace connected,closed,remoteClosed with a state enum
   protected connected: boolean
   protected closed: boolean
   protected exchangeRate?: Rational
   protected retryDelay: number
   protected queuedFrames: Frame[]
 
-  protected remoteClosed: boolean
+  protected remoteState: RemoteState = RemoteState.Init
   protected remoteMaxStreamId: number
   protected remoteKnowsOurAccount: boolean
 
@@ -215,7 +220,6 @@ export class Connection extends EventEmitter {
     })
     this.retryDelay = RETRY_DELAY_START
 
-    this.remoteClosed = false
     this.remoteKnowsOurAccount = this.isServer
     this.remoteMaxStreamId = DEFAULT_MAX_REMOTE_STREAMS * 2
 
@@ -615,7 +619,7 @@ export class Connection extends EventEmitter {
     }
 
     // Tell peer about closed streams and how much each stream can receive
-    if (!this.closed && !this.remoteClosed) {
+    if (!this.closed && this.remoteState !== RemoteState.Closed) {
       for (let [_, stream] of this.streams) {
         if (!stream.isOpen() && !stream._remoteClosed) {
           this.log.trace('telling other side that stream %d is closed', stream.id)
@@ -676,7 +680,7 @@ export class Connection extends EventEmitter {
           // TODO end the connection in some other way
           this.sending = false
           this.closed = true
-          this.remoteClosed = true
+          this.remoteState = RemoteState.Closed
           if (frame.errorCode === ErrorCode.NoError) {
             this.log.info('remote closed connection')
             /* tslint:disable-next-line:no-floating-promises */
@@ -887,7 +891,7 @@ export class Connection extends EventEmitter {
     if (this.sending) {
       return
     }
-    if (this.remoteClosed) {
+    if (this.remoteState === RemoteState.Closed) {
       this.log.debug('remote connection is already closed, not starting another loop')
       this.safeEmit('_send_loop_finished')
       return
@@ -938,6 +942,10 @@ export class Connection extends EventEmitter {
     const requestPacket = new Packet(this.getNextPacketSequence(), IlpPacketType.Prepare, undefined, this.queuedFrames)
     this.queuedFrames = []
 
+    // This is usually handled by the first test packet, but when the exchange rate
+    // is fixed it happens here instead.
+    this.maybePushAccountFrames(requestPacket)
+
     // Send control frames
     // TODO only send the max amount when it changes
     for (let [_, stream] of this.streams) {
@@ -946,13 +954,14 @@ export class Connection extends EventEmitter {
         requestPacket.frames.push(new StreamMaxDataFrame(stream.id, stream._getIncomingOffsets().maxAcceptable))
       }
     }
-    if (this.closed && !this.remoteClosed) {
+
+    if (this.closed && this.remoteState === RemoteState.Connected) {
       // TODO how do we know if there was an error?
       this.log.trace('sending connection close frame')
       requestPacket.frames.push(new ConnectionCloseFrame(ErrorCode.NoError, ''))
       // TODO don't put any more frames because the connection is closed
       // TODO only mark this as closed once we confirm that with the receiver
-      this.remoteClosed = true
+      this.remoteState = RemoteState.Closed
     }
 
     // Determine how much to send based on amount frames and path maximum packet amount
@@ -1074,6 +1083,10 @@ export class Connection extends EventEmitter {
     const responsePacket = await this.sendPacket(requestPacket, amountToSend, false)
 
     if (responsePacket) {
+      if (this.remoteState === RemoteState.Init) {
+        this.remoteState = RemoteState.Connected
+      }
+      this.remoteKnowsOurAccount = true
       this.handleControlFrames(responsePacket.frames)
 
       // Track the exchange rate for the last packet (whether it was fulfilled or rejected)
@@ -1158,21 +1171,16 @@ export class Connection extends EventEmitter {
   }
 
   protected async setupExchangeRate (): Promise<void> {
-    if (this.exchangeRate) {
-      // The exchangeRate is fixed, so send a single packet (containing a
-      // ConnectionNewAddressFrame and ConnectionAssetDetailsFrame) to make sure
-      // that the connection is valid. This doesn't guarantee that money can be
-      // sent at the fixed exchange rate.
-      const _res = await this.sendTestPacket(Long.UZERO)
-      if (!this.remoteKnowsOurAccount) {
-        throw new Error('probe packet failed')
-      }
-    } else {
+    if (!this.exchangeRate) {
       this.log.trace('determining exchange rate')
       await this.determineExchangeRate()
     }
-    this.safeEmit('connect')
-    this.log.trace('connected')
+    // 'connect' is not emitted immediately because `connect()` needs to be listening,
+    // and when `exchangeRate` is fixed it isn't yet.
+    process.nextTick(() => {
+      this.safeEmit('connect')
+      this.log.trace('connected')
+    })
   }
 
   /**
@@ -1240,11 +1248,7 @@ export class Connection extends EventEmitter {
 
     this.log.trace('sending test packet %s for amount: %s. timeout: %d', requestPacket.sequence, amount, timeout)
 
-    if (!this.remoteKnowsOurAccount) {
-      // TODO attach a token to the account?
-      requestPacket.frames.push(new ConnectionNewAddressFrame(this._sourceAccount))
-      requestPacket.frames.push(new ConnectionAssetDetailsFrame(this._sourceAssetCode, this._sourceAssetScale))
-    }
+    this.maybePushAccountFrames(requestPacket)
 
     const prepare = {
       destination: this._destinationAccount!,
@@ -1303,7 +1307,7 @@ export class Connection extends EventEmitter {
    * Send a ConnectionClose frame to the other side
    */
   protected async sendConnectionClose (err?: ConnectionError | Error): Promise<void> {
-    if (this.remoteClosed) {
+    if (this.remoteState === RemoteState.Closed) {
       this.log.debug('not sending connection error because remote is already closed')
       return
     }
@@ -1337,7 +1341,7 @@ export class Connection extends EventEmitter {
     } catch (err) {
       this.log.error('error while trying to inform peer that connection is closing, but closing anyway', err)
     }
-    this.remoteClosed = true
+    this.remoteState = RemoteState.Closed
   }
 
   /**
@@ -1461,7 +1465,7 @@ export class Connection extends EventEmitter {
    * @private
    */
   protected async handleConnectorError (reject: IlpPacket.IlpReject, amountSent: Long) {
-    this.log.debug('handling reject triggered by: %s error: %s message: %s data: %s', reject.triggeredBy, reject.code, reject.message, reject.data)
+    this.log.debug('handling reject triggered by: %s error: %s message: %s data: %h', reject.triggeredBy, reject.code, reject.message, reject.data)
     if (reject.code === 'F08') {
       const maximumPacketAmount = this.congestion.onAmountTooLargeError(reject, amountSent)
       if (maximumPacketAmount.equals(0)) {
@@ -1613,6 +1617,14 @@ export class Connection extends EventEmitter {
       throw new ConnectionError('Connection exceeded maximum number of packets', ErrorCode.InternalError)
     }
     return sequence
+  }
+
+  private maybePushAccountFrames (requestPacket: Packet) {
+    if (!this.remoteKnowsOurAccount) {
+      // TODO attach a token to the account?
+      requestPacket.frames.push(new ConnectionNewAddressFrame(this._sourceAccount))
+      requestPacket.frames.push(new ConnectionAssetDetailsFrame(this._sourceAssetCode, this._sourceAssetScale))
+    }
   }
 }
 
