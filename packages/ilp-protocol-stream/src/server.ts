@@ -46,7 +46,9 @@ export class Server extends EventEmitter {
   }
 
   /**
-   * Event fired when a new [`Connection`]{@link Connection} is received
+   * Event fired when a new [`Connection`]{@link Connection} is received.
+   * The connection event handler should immediately (synchronously) add a
+   * `"stream"` event handler to ensure no incoming streams are ignored.
    * @event connection
    * @type {Connection}
    */
