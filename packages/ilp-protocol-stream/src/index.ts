@@ -27,7 +27,10 @@ export async function createConnection (opts: CreateConnectionOpts): Promise<Con
   const plugin = opts.plugin
   await plugin.connect()
   const log = createLogger('ilp-protocol-stream:Client')
-  const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(plugin.sendData.bind(plugin))
+  const { clientAddress, assetCode, assetScale } =
+    await ILDCP.fetch(plugin.sendData.bind(plugin), {
+      expiresAt: opts.getExpiry && opts.getExpiry('peer.config')
+    })
   const connection = await Connection.build({
     ...opts,
     sourceAccount: clientAddress,

@@ -87,6 +87,11 @@ export interface ConnectionOpts {
    * This option should usually be used in concert with `ConnectionOpts.maximumPacketAmount`.
    */
   exchangeRate?: number,
+  /**
+   * Returns the expiry to use for an ILP Prepare to the specified destination.
+   * When omitted, use a timeout of 30 seconds.
+   */
+  getExpiry?: (destination: string) => Date,
 }
 
 export interface BuildConnectionOpts extends ConnectionOpts {
@@ -116,6 +121,10 @@ enum RemoteState {
   Init,
   Connected,
   Closed
+}
+
+function defaultGetExpiry (): Date {
+  return new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
 }
 
 /**
@@ -174,6 +183,7 @@ export class Connection extends EventEmitter {
   protected _totalSent: Long
   protected _totalDelivered: Long
   protected _lastPacketExchangeRate: Rational
+  protected getExpiry: (destination: string) => Date
 
   constructor (opts: NewConnectionOpts) {
     super()
@@ -199,6 +209,7 @@ export class Connection extends EventEmitter {
     this.exchangeRate = opts.exchangeRate === undefined
       ? undefined
       : Rational.fromNumber(opts.exchangeRate, true)
+    this.getExpiry = opts.getExpiry || defaultGetExpiry
     this.idleTimeout = opts.idleTimeout || DEFAULT_IDLE_TIMEOUT
     this.lastActive = new Date()
 
@@ -1255,7 +1266,7 @@ export class Connection extends EventEmitter {
       amount: amount.toString(),
       data: await requestPacket.serializeAndEncrypt(this._pskKey),
       executionCondition: cryptoHelper.generateRandomCondition(),
-      expiresAt: new Date(Date.now() + timeout)
+      expiresAt: this.getExpiry(this._destinationAccount!)
     }
 
     /* tslint:disable-next-line:no-unnecessary-type-assertion */
@@ -1335,7 +1346,7 @@ export class Connection extends EventEmitter {
         amount: '0',
         data: await packet.serializeAndEncrypt(this._pskKey),
         executionCondition: cryptoHelper.generateRandomCondition(),
-        expiresAt: new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
+        expiresAt: this.getExpiry(this._destinationAccount!)
       }
       await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
     } catch (err) {
@@ -1367,7 +1378,7 @@ export class Connection extends EventEmitter {
       amount: sourceAmount.toString(),
       data,
       executionCondition,
-      expiresAt: new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
+      expiresAt: this.getExpiry(this._destinationAccount!)
     }
 
     const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))

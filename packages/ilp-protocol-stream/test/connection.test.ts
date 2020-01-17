@@ -1214,6 +1214,35 @@ describe('Connection', function () {
     })
   })
 
+  describe('Custom Expiry', function () {
+    beforeEach(async function () {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      this.expiry = new Date(Date.now() + 1234)
+      const connectionPromise = this.server.acceptConnection()
+      this.clientConn = await createConnection({
+        ...this.server.generateAddressAndSecret(),
+        getExpiry: (destination: string) => this.expiry,
+        plugin: this.clientPlugin
+      })
+      this.serverConn = await connectionPromise
+      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(1e6)
+      })
+    })
+
+    it('uses getExpiry to compute expiresAt', async function () {
+      const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
+      this.clientPlugin.sendData = (data: Buffer) => {
+        const prepare = IlpPacket.deserializeIlpPrepare(data)
+        assert.deepEqual(prepare.expiresAt, this.expiry)
+        return realSendData(data)
+      }
+
+      const stream = this.clientConn.createStream()
+      await stream.sendTotal(123)
+    })
+  })
+
   describe('Error Handling', function () {
     it('should emit an error and reject all flushed promises if a packet is rejected with an unexpected final error code', async function () {
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
