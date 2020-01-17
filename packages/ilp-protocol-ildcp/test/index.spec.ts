@@ -27,7 +27,10 @@ describe('ILDCP', function () {
     it('should deserialize an IL-DCP request', async function () {
       const request = Buffer.from('0c460000000000000000323031353036313630303031303030303066687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f29250b706565722e636f6e66696700', 'hex')
 
-      assert.deepEqual(ILDCP.deserializeIldcpRequest(request), {})
+      assert.deepEqual(ILDCP.deserializeIldcpRequest(request), {
+        expiresAt: new Date(1434412860000),
+        data: Buffer.alloc(0)
+      })
     })
 
     it('should fail to parse an IL-DCP request with the wrong destination', async function () {
@@ -56,6 +59,12 @@ describe('ILDCP', function () {
 
     it('should serialize an IL-DCP request', async function () {
       assert.equal(ILDCP.serializeIldcpRequest({}).toString('hex'), '0c460000000000000000323031353036313630303031303030303066687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f29250b706565722e636f6e66696700')
+    })
+
+    it('supports an custom expiresAt', function () {
+      const expiresAt = new Date(START_DATE + 1234)
+      const request = ILDCP.serializeIldcpRequest({ expiresAt })
+      assert.deepEqual(IlpPacket.deserializeIlpPrepare(request).expiresAt, expiresAt)
     })
   })
 
@@ -142,6 +151,23 @@ describe('ILDCP', function () {
         ILDCP.fetch(sendData),
         'IL-DCP error, unable to retrieve client configuration.'
       )
+    })
+
+    it('supports an custom expiresAt', async function () {
+      const sendData = sinon.stub()
+        .withArgs(sinon.match.instanceOf(Buffer))
+        .resolves(Buffer.from('0d350000000000000000000000000000000000000000000000000000000000000000140e6578616d706c652e636c69656e740d0358414d', 'hex'))
+
+      const expiresAt = new Date(START_DATE + 1234)
+      const response = await ILDCP.fetch(sendData, { expiresAt })
+
+      assert.deepEqual(response, {
+        clientAddress: 'example.client',
+        assetScale: 13,
+        assetCode: 'XAM'
+      })
+      sinon.assert.calledOnce(sendData)
+      sinon.assert.calledWithExactly(sendData, sinonMatchBuffer('0c460000000000000000323031353036313630303030303132333466687aadf862bd776c8fc18b8e9f8e20089714856ee233b3902a591d0d5f29250b706565722e636f6e66696700'))
     })
   })
 

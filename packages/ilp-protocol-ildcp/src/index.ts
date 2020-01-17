@@ -8,6 +8,7 @@ const PEER_PROTOCOL_CONDITION = Buffer.from('Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCp
 const PEER_PROTOCOL_EXPIRY_DURATION = 60000
 
 export interface IldcpRequest {
+  expiresAt?: Date
   data?: Buffer
 }
 
@@ -32,7 +33,10 @@ const deserializeIldcpRequest = (request: Buffer): IldcpRequest => {
     throw new Error('IL-DCP request packet is expired.')
   }
 
-  return {}
+  return {
+    expiresAt: ilp.expiresAt,
+    data: ilp.data
+  }
 }
 
 const serializeIldcpRequest = (request: IldcpRequest): Buffer => {
@@ -40,7 +44,7 @@ const serializeIldcpRequest = (request: IldcpRequest): Buffer => {
     amount: '0',
     destination: ILDCP_DESTINATION,
     executionCondition: PEER_PROTOCOL_CONDITION,
-    expiresAt: new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
+    expiresAt: request.expiresAt || new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
     data: request.data || Buffer.alloc(0)
   })
 }
@@ -89,14 +93,11 @@ const serializeIldcpResponse = (response: IldcpResponse): Buffer => {
   })
 }
 
-const fetch = async (sendData: (data: Buffer) => Promise<Buffer>): Promise<IldcpResponse> => {
-  const data = await sendData(IlpPacket.serializeIlpPrepare({
-    amount: '0',
-    executionCondition: PEER_PROTOCOL_CONDITION,
-    expiresAt: new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
-    destination: 'peer.config',
-    data: Buffer.alloc(0)
-  }))
+const fetch = async (
+  sendData: (data: Buffer) => Promise<Buffer>,
+  request?: IldcpRequest
+): Promise<IldcpResponse> => {
+  const data = await sendData(serializeIldcpRequest(request || {}))
 
   if (data[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
     const { triggeredBy, message } = IlpPacket.deserializeIlpReject(data)

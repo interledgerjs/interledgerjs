@@ -29,7 +29,7 @@ Script commands such as `test` and `lint` can be run from the root of the projec
 yarn test
 
 #Scoping to a package
-yarn test --scope=packages/<package-name>
+yarn test --scope=<package-name>
 ```
 
 or in the package directory
