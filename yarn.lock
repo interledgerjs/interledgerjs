@@ -3272,7 +3272,7 @@ ilp-logger@^1.1.3:
     debug "^4.1.0"
     supports-color "^5.5.0"
 
-ilp-packet@^3.0.7, ilp-packet@^3.0.9:
+ilp-packet@^3.0.7:
   version "3.0.9"
   resolved "https://registry.yarnpkg.com/ilp-packet/-/ilp-packet-3.0.9.tgz#ff3d619bba0c069f540b9e57a91a5afbf5d42af6"
   integrity sha512-tw4uuLQDIJSMFLmNSbQ1ImeW/Yfb3p+naVJe3ghdPwJQWT3Qd48ghAYyz5oo8Oa3evw6TBipNIV0iO+Mz5Zy+g==
@@ -3293,15 +3293,6 @@ ilp-plugin-btp@^1.2.1:
     eventemitter2 "^5.0.0"
     ilp-logger "^1.1.3"
     ws "^6.0.0"
-
-ilp-protocol-ildcp@^2.0.0:
-  version "2.0.2"
-  resolved "https://registry.yarnpkg.com/ilp-protocol-ildcp/-/ilp-protocol-ildcp-2.0.2.tgz#7b3dffefb0797f7c7c589cc0c61355938145fe65"
-  integrity sha512-imKeesH2+nNRTohfAjNmcesvD72hgtdlvHtrqPNqx+rtTsnhNIWfpBHEKjKWavDvZNmteuxjM7uEnc0gHF+gpw==
-  dependencies:
-    debug "^3.1.0"
-    ilp-packet "^3.0.9"
-    oer-utils "^5.0.1"
 
 ilp-protocol-stream@^1.8.9:
   version "1.8.9"
@@ -4811,7 +4802,7 @@ oer-utils@^4.0.0:
   dependencies:
     bignumber.js "^7.2.1"
 
-oer-utils@^5.0.0, oer-utils@^5.0.1:
+oer-utils@^5.0.0:
   version "5.0.1"
   resolved "https://registry.yarnpkg.com/oer-utils/-/oer-utils-5.0.1.tgz#f52fba7eb550948d2dd6a5462e249f59f97b708d"
   integrity sha512-/+b8EC7RsNBkK+0weoUD55dKa5K2kUAIMM6KY62ssOtu7EyCcqi7idOesaXoUZEYezeZrvu09MOuias/RWVubw==
