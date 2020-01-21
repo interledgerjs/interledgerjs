@@ -8,3 +8,4 @@ packages/*/test/*.d.ts
 lerna-debug.log
 npm-debug.log
 yarn-error.log
+.npmrc
