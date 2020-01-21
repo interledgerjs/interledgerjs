@@ -45,7 +45,7 @@
     "@types/node": "^10.14.22",
     "ilp-logger": "^1.2.1",
     "ilp-packet": "^3.0.9",
-    "ilp-protocol-ildcp": "^2.0.2",
+    "ilp-protocol-ildcp": "^2.1.4",
     "long": "^4.0.0",
     "oer-utils": "^5.0.1"
   },
