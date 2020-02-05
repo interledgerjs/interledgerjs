@@ -42,6 +42,7 @@ import {
 } from './util/long'
 import * as Long from 'long'
 import Rational from './util/rational'
+import { v4 as uuid } from 'uuid'
 
 const RETRY_DELAY_START = 100
 const RETRY_DELAY_MAX = 43200000 // 12 hours should be long enough
@@ -138,6 +139,7 @@ export class Connection extends EventEmitter {
   /** Application identifier for a certain connection */
   readonly connectionTag?: string
 
+  protected connectionId: string
   protected plugin: Plugin
   protected _sourceAccount: string
   protected _sourceAssetCode: string
@@ -187,6 +189,7 @@ export class Connection extends EventEmitter {
 
   constructor (opts: NewConnectionOpts) {
     super()
+    this.connectionId = uuid()
     this.plugin = opts.plugin
     this._sourceAccount = opts.sourceAccount
     this._sourceAssetCode = opts.assetCode
@@ -218,7 +221,7 @@ export class Connection extends EventEmitter {
     this.streams = new Map()
     this.closedStreams = new Set()
     this.nextStreamId = (this.isServer ? 2 : 1)
-    this.log = createLogger(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection`)
+    this.log = createLogger(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection:${this.connectionId}`)
     this.sending = false
     this.connected = false
     this.closed = true
@@ -376,7 +379,8 @@ export class Connection extends EventEmitter {
     // TODO should this inform the other side?
     const stream = new DataAndMoneyStream({
       id: this.nextStreamId,
-      isServer: this.isServer
+      isServer: this.isServer,
+      connectionId: this.connectionId
     })
     this.streams.set(this.nextStreamId, stream)
     this.log.debug('created stream: %d', this.nextStreamId)
@@ -850,7 +854,8 @@ export class Connection extends EventEmitter {
     this.log.info('got new stream: %d', streamId)
     const stream = new DataAndMoneyStream({
       id: streamId,
-      isServer: this.isServer
+      isServer: this.isServer,
+      connectionId: this.connectionId
     })
     this.streams.set(streamId, stream)
 

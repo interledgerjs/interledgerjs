@@ -18,7 +18,8 @@ const MAX_REMOTE_RECEIVE = Long.MAX_UNSIGNED_VALUE
 
 export interface StreamOpts {
   id: number,
-  isServer: boolean
+  isServer: boolean,
+  connectionId: string
 }
 
 export interface SendOpts {
@@ -78,7 +79,7 @@ export class DataAndMoneyStream extends Duplex {
     super({ allowHalfOpen: false })
     this.id = opts.id
     this.isServer = opts.isServer
-    this.log = createLogger(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Stream:${this.id}`)
+    this.log = createLogger(`ilp-protocol-stream:${this.isServer ? 'Server' : 'Client'}:Connection:${opts.connectionId}:Stream:${this.id}`)
     this.log.info('new stream created')
 
     this._totalSent = Long.UZERO
