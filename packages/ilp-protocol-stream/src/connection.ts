@@ -1500,7 +1500,10 @@ export class Connection extends EventEmitter {
       await new Promise((resolve, reject) => setTimeout(resolve, delay))
     } else {
       this.log.error('unexpected error. code: %s, triggered by: %s, message: %s, data: %h', reject.code, reject.triggeredBy, reject.message, reject.data)
-      throw new Error(`Unexpected error while sending packet. Code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}`)
+      // This error will terminate the connection and bubble out to the caller.
+      const error = new Error(`Unexpected error while sending packet. Code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}`)
+      error['ilpReject'] = reject
+      throw error
     }
   }
 
