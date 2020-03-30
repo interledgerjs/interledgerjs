@@ -23,7 +23,7 @@
     "lint": "tslint --project .",
     "test": "TS_NODE_PROJECT='./tsconfig.test.json' mocha",
     "test-cover": "TS_NODE_PROJECT='./tsconfig.test.json' nyc --extension .ts mocha",
-    "doc": "typedoc --options typedoc.js src/index.ts src/connection.ts src/stream.ts",
+    "doc": "typedoc --options typedoc.js src/index.ts src/connection.ts src/stream.ts --theme node_modules/typedoc-neo-theme/bin/default",
     "publish-docs": "npm run doc && node scripts/publish-docs.js",
     "codecov": "codecov"
   },
@@ -79,6 +79,7 @@
     "tslint": "^5.10.0",
     "tslint-config-standard": "^8.0.0",
     "typedoc": "^0.15.0",
+    "typedoc-neo-theme": "^1.0.7",
     "typescript": "^3.6.0",
     "webpack": "^4.39.3",
     "webpack-cli": "^3.3.7"
