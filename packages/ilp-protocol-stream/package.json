@@ -70,7 +70,7 @@
     "ilp-plugin-mini-accounts": "^4.2.0",
     "mocha": "^5.1.1",
     "mocha-typescript": "^1.1.14",
-    "nyc": "^13.1.0",
+    "nyc": "^15.0.0",
     "puppeteer": "^1.19.0",
     "sinon": "^6.0.1",
     "source-map-support": "^0.5.6",

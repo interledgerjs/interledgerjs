@@ -1,13 +1,8 @@
-import { EventEmitter } from 'events'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import * as IlpPacket from 'ilp-packet'
 import createLogger from 'ilp-logger'
 import './util/formatters'
-import * as cryptoHelper from './crypto'
 import { Connection, ConnectionOpts } from './connection'
-import { Plugin } from './util/plugin-interface'
-
-const CONNECTION_ID_REGEX = /^[a-zA-Z0-9~_-]+$/
 
 export { Connection } from './connection'
 export { DataAndMoneyStream } from './stream'

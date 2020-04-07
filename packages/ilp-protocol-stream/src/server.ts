@@ -8,9 +8,16 @@ import { ServerConnectionPool } from './pool'
 import { Plugin } from './util/plugin-interface'
 
 const CONNECTION_ID_REGEX = /^[a-zA-Z0-9~_-]+$/
+const DEFAULT_DISCONNECT_DELAY = 100
 
 export interface ServerOpts extends ConnectionOpts {
   serverSecret?: Buffer
+
+  /**
+   * Number of milliseconds to wait between closing the server and disconnecting
+   * the plugin so packets may be safely returned
+   */
+  disconnectDelay?: number
 }
 
 /**
@@ -32,6 +39,8 @@ export class Server extends EventEmitter {
   protected enablePadding?: boolean
   protected connected: boolean
   protected connectionOpts: ConnectionOpts
+  protected pendingRequests: Promise<any> = Promise.resolve()
+  protected disconnectDelay: number
   private pool: ServerConnectionPool
 
   constructor (opts: ServerOpts) {
@@ -42,6 +51,7 @@ export class Server extends EventEmitter {
     this.connectionOpts = Object.assign({}, opts, {
       serverSecret: undefined
     }) as ConnectionOpts
+    this.disconnectDelay = opts.disconnectDelay || DEFAULT_DISCONNECT_DELAY
     this.connected = false
   }
 
@@ -64,7 +74,12 @@ export class Server extends EventEmitter {
     if (this.connected && this.plugin.isConnected()) {
       return
     }
-    this.plugin.registerDataHandler(this.handleData.bind(this))
+    this.plugin.registerDataHandler(data => {
+      this.emit('_incoming_prepare')
+      const request = this.handleData(data)
+      this.pendingRequests = this.pendingRequests.then(() => request.finally())
+      return request
+    })
     await this.plugin.connect()
     const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(this.plugin.sendData.bind(this.plugin))
     this.serverAccount = clientAddress
@@ -87,9 +102,28 @@ export class Server extends EventEmitter {
    * End all connections and disconnect the plugin
    */
   async close (): Promise<void> {
+    // Stop handling new requests, and return T99 while the connection is closing.
+    // If an F02 unreachable was returned on new packets: clients would immediately destroy the connection
+    // If an F99 was returned on on new packets: clients would retry with no backoff
+    this.plugin.deregisterDataHandler()
+    this.plugin.registerDataHandler(async () => IlpPacket.serializeIlpReject({
+      code: IlpPacket.Errors.codes.T99_APPLICATION_ERROR,
+      triggeredBy: this.serverAccount,
+      message: 'Shutting down server',
+      data: Buffer.alloc(0)
+    }))
+
+    // Wait for in-progress requests to finish so all Fulfills are returned
+    await this.pendingRequests
+    // Allow the plugin time to send the reply packets back before disconnecting it
+    await new Promise(r => setTimeout(r, this.disconnectDelay))
+
+    // Gracefully close the connection and all streams
     await this.pool.close()
+
     this.plugin.deregisterDataHandler()
     await this.plugin.disconnect()
+
     this.emit('_close')
     this.connected = false
   }

@@ -88,7 +88,15 @@ export default class MockPlugin extends EventEmitter {
   }
 
   registerDataHandler (handler: DataHandler): void {
-    this.dataHandler = handler
+    this.dataHandler = async (data: Buffer) => {
+      const reply = await handler(data)
+      if (this.connected) {
+        return reply
+      } else {
+        // Emulate a disconnected plugin by failing to return the data after it's disconnected
+        throw new Error('Not connected')
+      }
+    }
   }
 
   deregisterDataHandler (): void {

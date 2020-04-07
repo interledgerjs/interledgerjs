@@ -1,5 +1,4 @@
 import { EventEmitter } from 'events'
-import * as assert from 'assert'
 import createLogger from 'ilp-logger'
 import { DataAndMoneyStream } from './stream'
 import * as IlpPacket from 'ilp-packet'
@@ -29,15 +28,12 @@ import { Reader } from 'oer-utils'
 import { CongestionController } from './util/congestion'
 import { Plugin } from './util/plugin-interface'
 import {
-  LongValue,
-  longFromValue,
   maxLong,
   minLong,
   minLongs,
   countDigits,
   checkedAdd,
   checkedSubtract,
-  checkedMultiply,
   multiplyDivideFloor
 } from './util/long'
 import * as Long from 'long'
@@ -55,6 +51,8 @@ const DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION = 3
 const TEST_PACKET_MAX_ATTEMPTS = 20
 
 export interface ConnectionOpts {
+  /** Token in the ILP address uniquely identifying this connection */
+  connectionId?: string,
   /** Ledger plugin (V2) */
   plugin: Plugin,
   /** ILP Address of the remote entity */
@@ -93,6 +91,17 @@ export interface ConnectionOpts {
    * When omitted, use a timeout of 30 seconds.
    */
   getExpiry?: (destination: string) => Date,
+  /**
+   * Callback for the consumer to perform accounting and choose to fulfill an incoming ILP Prepare,
+   * given the amount received, a unique identifier for the packet, and `connectionTag`.
+   *
+   * If the returned Promise is resolved, the ILP Prepare will be fulfilled; if it is rejected,
+   * the ILP Prepare will be rejected. The ILP Fulfill will be immediately sent back after
+   * the Promise is resolved.
+   *
+   * Note: a misbehaving sender can trigger duplicate packetIds, which should be ignored and rejected.
+   */
+  shouldFulfill?: (packetAmount: Long, packetId: Buffer, connectionTag?: string) => Promise<void>,
 }
 
 export interface BuildConnectionOpts extends ConnectionOpts {
@@ -181,15 +190,21 @@ export class Connection extends EventEmitter {
 
   // TODO use longs for byte offsets
   protected remoteMaxOffset: number
+  protected _incomingHold: Long
   protected _totalReceived: Long
   protected _totalSent: Long
   protected _totalDelivered: Long
   protected _lastPacketExchangeRate: Rational
   protected getExpiry: (destination: string) => Date
+  protected shouldFulfill?: (packetAmount: Long, packetId: Buffer, connectionTag?: string) => Promise<void>
 
   constructor (opts: NewConnectionOpts) {
     super()
-    this.connectionId = uuid()
+
+    // Use the same connectionId for logging on both client & server
+    const lastAddressSegment = opts.destinationAccount ? opts.destinationAccount.split('.').slice(-1)[0] : undefined
+    this.connectionId = (opts.connectionId || lastAddressSegment || uuid()).replace(/[-_]/g, '').slice(0, 8)
+
     this.plugin = opts.plugin
     this._sourceAccount = opts.sourceAccount
     this._sourceAssetCode = opts.assetCode
@@ -213,6 +228,7 @@ export class Connection extends EventEmitter {
       ? undefined
       : Rational.fromNumber(opts.exchangeRate, true)
     this.getExpiry = opts.getExpiry || defaultGetExpiry
+    this.shouldFulfill = opts.shouldFulfill
     this.idleTimeout = opts.idleTimeout || DEFAULT_IDLE_TIMEOUT
     this.lastActive = new Date()
 
@@ -239,6 +255,7 @@ export class Connection extends EventEmitter {
 
     this.remoteMaxOffset = this.maxBufferedData
 
+    this._incomingHold = Long.UZERO
     this._totalReceived = Long.UZERO
     this._totalSent = Long.UZERO
     this._totalDelivered = Long.UZERO
@@ -476,7 +493,8 @@ export class Connection extends EventEmitter {
 
   /**
    * (Internal) Handle incoming ILP Prepare packets.
-   * This will automatically fulfill all valid and expected Prepare packets.
+   * This will automatically fulfill all valid and expected Prepare packets, or
+   * defer to custom application logic using the `shouldFulfill` callback, if provided.
    * It passes the incoming money and/or data to the relevant streams.
    * @private
    */
@@ -628,9 +646,16 @@ export class Connection extends EventEmitter {
       }
     }
 
-    // Add incoming amounts to each stream
-    for (let { stream, amount } of amountsToReceive) {
-      stream._addToIncoming(amount)
+    this.addIncomingHold(incomingAmount)
+
+    // Allow consumer to choose to fulfill each packet and/or perform other logic before fulfilling
+    if (this.shouldFulfill && incomingAmount.greaterThan(0)) {
+      const packetId = await cryptoHelper.generateIncomingPacketId(this.sharedSecret, requestPacket.sequence)
+      await this.shouldFulfill(incomingAmount, packetId, this.connectionTag).catch(async err => {
+        this.removeIncomingHold(incomingAmount)
+        this.log.debug('application declined to fulfill packet %s:', requestPacket.sequence, err)
+        await throwFinalApplicationError()
+      })
     }
 
     // Tell peer about closed streams and how much each stream can receive
@@ -655,12 +680,18 @@ export class Connection extends EventEmitter {
       }
     }
 
+    // Add incoming amounts to each stream
+    for (let { stream, amount } of amountsToReceive) {
+      stream._addToIncoming(amount)
+    }
+
     // TODO make sure the queued frames aren't too big
     responseFrames = responseFrames.concat(this.queuedFrames)
     this.queuedFrames = []
 
     // Return fulfillment and response packet
     const responsePacket = new Packet(requestPacket.sequence, IlpPacketType.Fulfill, incomingAmount, responseFrames)
+    this.removeIncomingHold(incomingAmount)
     this.addTotalReceived(incomingAmount)
     this.log.trace('fulfilling prepare with fulfillment: %h and response packet: %j', fulfillment, responsePacket)
     return {
@@ -1588,8 +1619,10 @@ export class Connection extends EventEmitter {
 
   private bumpIdle (): void { this.lastActive = new Date() }
 
-  private addTotalReceived (value: Long): void {
-    const result = checkedAdd(this._totalReceived, value)
+  private addIncomingHold (value: Long): void {
+    let result = checkedAdd(this._totalReceived, this._incomingHold)
+    result = checkedAdd(result.sum, value)
+
     if (result.overflow) {
       const err = new IlpPacket.Errors.BadRequestError('Total received exceeded MaxUint64')
       err['ilpErrorMessage'] = err.message
@@ -1597,8 +1630,20 @@ export class Connection extends EventEmitter {
       this.destroy(err)
       throw err
     } else {
-      this._totalReceived = result.sum
+      this._incomingHold = result.sum
     }
+  }
+
+  private removeIncomingHold (value: Long): void {
+    // As long as this is called after `addIncomingHold` for the same amount,
+    // this should never underflow
+    this._incomingHold = checkedSubtract(this._incomingHold, value).difference
+  }
+
+  private addTotalReceived (value: Long): void {
+    // As long as this is called after `addIncomingHold` for the same amount,
+    // this should never overflow
+    this._totalReceived = checkedAdd(this._totalReceived, value).sum
   }
 
   private addTotalSent (value: Long): void {

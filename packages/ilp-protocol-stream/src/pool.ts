@@ -59,7 +59,8 @@ export class ServerConnectionPool {
       const conn = await Connection.build({
         ...this.connectionOpts,
         sharedSecret,
-        connectionTag
+        connectionTag,
+        connectionId: id
       })
       log.debug('got incoming packet for new connection: %s%s', id, (connectionTag ? ' (connectionTag: ' + connectionTag + ')' : ''))
       try {
