@@ -29,5 +29,9 @@
   "dependencies": {
     "ilp-packet": "^3.1.0-alpha.0",
     "oer-utils": "^5.1.0-alpha.0"
+  },
+  "devDependencies": {
+    "eslint-config-prettier": "^6.10.0",
+    "eslint-plugin-prettier": "^3.1.2"
   }
 }

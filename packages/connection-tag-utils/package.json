@@ -23,5 +23,9 @@
   },
   "dependencies": {
     "base64url": "^3.0.1"
+  },
+  "devDependencies": {
+    "eslint-config-prettier": "^6.10.0",
+    "eslint-plugin-prettier": "^3.1.2"
   }
 }
