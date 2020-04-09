@@ -63,29 +63,27 @@ export class PacingController implements StreamController {
     this.inFlightPackets.set(sequence, Date.now())
   }
 
-  applyFulfill({ sequence }: StreamReply) {
-    this.updateAverageRoundTripTime(sequence)
-    this.inFlightPackets.delete(sequence)
+  applyFulfill(reply: StreamReply) {
+    this.updateAverageRoundTripTime(reply)
   }
 
-  applyReject({ sequence, isAuthentic }: StreamReply) {
-    // Only update the RTT if we know the request got to the recipient
-    if (isAuthentic) {
-      this.updateAverageRoundTripTime(sequence)
-    }
-
-    this.inFlightPackets.delete(sequence)
-
+  applyReject(reply: StreamReply) {
+    this.updateAverageRoundTripTime(reply)
     // TODO Back-off in time on T05 errors? Or other errors, e.g. T00?
   }
 
-  private updateAverageRoundTripTime(sequence: number) {
-    const startTime = this.inFlightPackets.get(sequence)
-    if (startTime) {
-      const roundTripTime = Math.max(Date.now() - startTime, 0)
-      this.averageRoundTrip =
-        this.averageRoundTrip * ROUND_TRIP_AVERAGE_WEIGHT +
-        roundTripTime * (1 - ROUND_TRIP_AVERAGE_WEIGHT)
+  private updateAverageRoundTripTime({ isAuthentic, sequence }: StreamReply) {
+    // Only update the RTT if we know the request got to the recipient
+    if (isAuthentic) {
+      const startTime = this.inFlightPackets.get(sequence)
+      if (startTime) {
+        const roundTripTime = Math.max(Date.now() - startTime, 0)
+        this.averageRoundTrip =
+          this.averageRoundTrip * ROUND_TRIP_AVERAGE_WEIGHT +
+          roundTripTime * (1 - ROUND_TRIP_AVERAGE_WEIGHT)
+      }
     }
+
+    this.inFlightPackets.delete(sequence)
   }
 }
