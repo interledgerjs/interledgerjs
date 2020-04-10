@@ -12,7 +12,7 @@ export class PendingRequestTracker implements StreamController {
   private readonly inFlightPackets: Map<number, PromiseResolver> = new Map()
 
   /** Returns array of in-flight request Promises that resolve when each finishes */
-  public getPendingRequests(): Promise<void>[] {
+  getPendingRequests(): Promise<void>[] {
     return [...this.inFlightPackets.values()].map(r => r.promise)
   }
 
@@ -29,10 +29,7 @@ export class PendingRequestTracker implements StreamController {
   }
 
   private completeRequest(sequence: number) {
-    const resolver = this.inFlightPackets.get(sequence)
-    if (resolver) {
-      resolver.resolve()
-      this.inFlightPackets.delete(sequence)
-    }
+    this.inFlightPackets.get(sequence)?.resolve()
+    this.inFlightPackets.delete(sequence)
   }
 }
