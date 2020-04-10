@@ -5,23 +5,40 @@ import {
   IlpReply,
   isFulfill,
   serializeIlpPrepare,
-  serializeIlpReject
+  serializeIlpReject,
+  deserializeIlpPrepare
 } from 'ilp-packet'
 import {
   generateFulfillment,
   generateRandomCondition,
   hash
 } from 'ilp-protocol-stream/dist/src/crypto'
-import { Frame, IlpPacketType, Packet } from 'ilp-protocol-stream/dist/src/packet'
-import { StreamController, StreamRequest, isReplyController } from './controllers'
+import {
+  Frame,
+  IlpPacketType,
+  Packet,
+  ConnectionCloseFrame,
+  ErrorCode
+} from 'ilp-protocol-stream/dist/src/packet'
+import {
+  StreamController,
+  StreamRequest,
+  isReplyController,
+  StreamRequestBuilder
+} from './controllers'
 import { timeout, Integer, toBigNumber, toLong } from './utils'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
+import { DataHandler } from '@kincaidoneil/ilp-connector/dist/types/plugin'
+import { Logger } from 'ilp-logger'
+import { SequenceController } from './controllers/sequence'
+import { FailureController } from './controllers/failure'
 
 /** TODO */
 export interface StreamConnection {
+  readonly log: Logger
   readonly destinationAddress: string
   readonly plugin: Plugin
-  readonly pskKey: Buffer
+  readonly pskKey: Buffer // TODO Rename pskKey to... Preshared Key? psk key is weird
   readonly fulfillmentKey: Buffer
   readonly getExpiry: (destination: string) => Date
 }
@@ -67,18 +84,17 @@ export const ILP_ERROR_CODES = {
 }
 
 /** Create an empty ILP Reject from an error code */
-const createReject = (code: string): IlpReject => ({
+const createReject = (code: string, message = ''): IlpReject => ({
   code,
-  message: '',
+  message,
   triggeredBy: '',
   data: Buffer.alloc(0)
 })
 
 /** Generic application error */
-const APPLICATION_ERROR_REJECT = serializeIlpReject(createReject('F99'))
-
-/** Data handler that rejects all incoming packets without causing the recipient to fail */
-export const DEFAULT_DATA_HANDLER = async () => APPLICATION_ERROR_REJECT
+const APPLICATION_ERROR_REJECT = serializeIlpReject(
+  createReject(Errors.codes.F99_APPLICATION_ERROR)
+)
 
 /** Send an ILP Prepare over STREAM, validate the reply, and apply the corresponding Fulfill/Reject to each controller */
 export const sendPacket = async (
@@ -217,5 +233,63 @@ export const sendPacket = async (
         reject: reply
       })
     )
+  }
+}
+
+/** Send a packet with a `ConnectionClose` frame to the receiver. */
+export const sendConnectionClose = async (
+  connection: StreamConnection,
+  sequenceController: SequenceController
+) => {
+  // Create request with `ConnectionClose` frame and correct sequence (amounts default to 0)
+  const builder = new StreamRequestBuilder(connection.log)
+  sequenceController.nextState(builder)
+  const request = builder.addFrames(new ConnectionCloseFrame(ErrorCode.NoError, '')).build()
+
+  await sendPacket(connection, [], request)
+}
+
+/**
+ * Handle incoming packets from the receiver. Since this can't receive any incoming money or data,
+ * always reject them. If applicable, send an authenticated STREAM reply in accordance with the RFC.
+ */
+export const createRejectHandler = (
+  { pskKey, log }: StreamConnection,
+  failureController: FailureController
+): DataHandler => async data => {
+  try {
+    const prepare = deserializeIlpPrepare(data)
+    const streamRequest = await Packet.decryptAndDeserialize(pskKey, prepare.data)
+
+    if (streamRequest.ilpPacketType !== IlpPacketType.Prepare) {
+      return APPLICATION_ERROR_REJECT
+    }
+
+    log.warn(
+      'got incoming Prepare for %s. rejecting with F99: cannot receive incoming money or data. sequence: %s, frames: %j',
+      prepare.amount,
+      streamRequest.sequence,
+      streamRequest.frames
+    )
+
+    // In case the server closed the stream/connection, end the payment
+    failureController.handleRemoteClose(streamRequest.frames, log.extend('incoming'))
+
+    const streamReply = new Packet(
+      streamRequest.sequence,
+      IlpPacketType.Reject,
+      prepare.amount
+      // No frames should be necessary.
+      // The frames sent on the first packet told the receiver we can't receive money or data
+    )
+
+    return serializeIlpReject({
+      code: Errors.codes.F99_APPLICATION_ERROR,
+      triggeredBy: '',
+      message: '',
+      data: await streamReply.serializeAndEncrypt(pskKey)
+    })
+  } catch (err) {
+    return APPLICATION_ERROR_REJECT
   }
 }

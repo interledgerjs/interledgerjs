@@ -22,7 +22,13 @@ import { PacingController } from './controllers/pacer'
 import { PendingRequestTracker } from './controllers/pending-requests'
 import { SequenceController } from './controllers/sequence'
 import { SourceAmountTracker } from './controllers/source-tracker'
-import { DEFAULT_DATA_HANDLER, getDefaultExpiry, sendPacket, StreamConnection } from './send-packet'
+import {
+  getDefaultExpiry,
+  sendPacket,
+  StreamConnection,
+  createRejectHandler,
+  sendConnectionClose
+} from './send-packet'
 import { getConnectionId, Integer, timeout, Rational } from './utils'
 
 // TODO Implement quoting flow
@@ -44,6 +50,7 @@ export interface PayOptions {
 }
 
 export interface StreamReceipt {
+  state: 'success' | 'error'
   amountToSend?: BigNumber
   amountSent: BigNumber
   amountInFlight: BigNumber
@@ -68,18 +75,16 @@ export enum PaymentState {
 }
 
 export const pay = async (options: PayOptions): Promise<StreamReceipt> => {
+  const log = createLogger(`ilp-pay:payment:${getConnectionId(options.destinationAddress)}`)
+
   const connection: StreamConnection = {
+    log,
     destinationAddress: options.destinationAddress,
     plugin: options.plugin,
     pskKey: await generatePskEncryptionKey(options.sharedSecret),
     fulfillmentKey: await generateFulfillmentKey(options.sharedSecret),
     getExpiry: options.getExpiry || getDefaultExpiry
   }
-
-  connection.plugin.registerDataHandler(DEFAULT_DATA_HANDLER)
-  await connection.plugin.connect()
-
-  const log = createLogger(`ilp-pay:payment:${getConnectionId(options.destinationAddress)}`)
 
   const rateController = new ExchangeRateController(options.exchangeRate as Rational)
   const sourceTracker = new SourceAmountTracker(Maybe.fromNullable(options.amountToSend as Integer)) // TODO no cast
@@ -102,6 +107,12 @@ export const pay = async (options: PayOptions): Promise<StreamReceipt> => {
     rateController,
     options.exchangeRate as Rational // TODO no cast
   )
+
+  // Reject all incoming packets, but ACK incoming STREAM packets and handle connection closes
+  connection.plugin.deregisterDataHandler()
+  connection.plugin.registerDataHandler(createRejectHandler(connection, failureController))
+
+  await connection.plugin.connect()
 
   // TODO After quoting flow is implemented, add `AssetDetailsController` here, too
   const controllers: StreamController[] = [
@@ -129,30 +140,32 @@ export const pay = async (options: PayOptions): Promise<StreamReceipt> => {
 
     switch (nextState) {
       case PaymentState.SendMoney:
-        // `nextState` and `applyPrepare` run synchronously
         controllers.filter(isPrepareController).forEach(c => c.applyPrepare(request))
         sendPacket(connection, controllers, request)
         continue sendLoop
 
+      // Wait 5ms or for any pending request to finish before trying to send more money
       case PaymentState.Wait:
         await timeout(5, Promise.race(pendingTracker.getPendingRequests()))
         continue sendLoop
 
       case PaymentState.End:
-        // TODO Should this send a `ConnectionClose` frame? (Server destroys connection after idle timer)
-        await Promise.all(pendingTracker.getPendingRequests())
+        await Promise.all([
+          sendConnectionClose(connection, sequenceController),
+          ...pendingTracker.getPendingRequests()
+        ])
         break sendLoop
     }
   }
 
+  connection.plugin.deregisterDataHandler()
   await connection.plugin
     .disconnect()
     .then(() => log.debug('plugin disconnected'))
     .catch((err: Error) => log.error('error disconnecting plugin:', err))
 
   return {
-    // TODO Add success/failure to this output (did it deliver the target with no remaining in flight?)
-
+    state: 'success', // TODO Add this functionality
     // Source amounts
     amountToSend: options.amountToSend,
     amountInFlight: sourceTracker.getAmountInFlight(),
