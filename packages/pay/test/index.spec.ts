@@ -316,9 +316,7 @@ test('ends payment if receiver closes the connection', async t => {
       stream.setReceiveMax(Long.MAX_UNSIGNED_VALUE)
 
       // End the connection after 1 second
-      setTimeout(() => {
-        connection.end()
-      }, 1000)
+      setTimeout(() => connection.end(), 1000)
     })
   })
 

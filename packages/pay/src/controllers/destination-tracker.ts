@@ -216,11 +216,17 @@ export class DestinationAmountTracker implements StreamController {
           frame.totalReceived
         )
 
+        // TODO There's a race condition here where when packets are received out-of-order,
+        //      receiveMax can be updated, then the fulfill could double count some packets.
+        //      I should track the sequence of in-flight packets and sequence of latest
+        //      StreamMaxMoney frame so it correctly fast-forwards
+
         // TODO Remove casts!
-        const totalReceived = toBigNumber(frame.totalReceived) as Integer
+        // const totalReceived = toBigNumber(frame.totalReceived) as Integer
         const receiveMax = toBigNumber(frame.receiveMax) as Integer
 
-        this.amountDelivered = BigNumber.max(this.amountDelivered, totalReceived) as Integer
+        // this.amountDelivered = BigNumber.max(this.amountDelivered, totalReceived) as Integer
+        // this.remoteReceived = BigNumber.max(this.remoteReceived, totalReceived) as Integer
         this.remoteReceiveMax = max([receiveMax, this.remoteReceiveMax.unwrapOr(SAFE_ZERO)])
       })
   }

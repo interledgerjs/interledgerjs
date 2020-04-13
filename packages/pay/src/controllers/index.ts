@@ -92,7 +92,7 @@ export class StreamRequestBuilder {
 
   setSequence(sequence: number): this {
     this.sequence = sequence
-    this.log = this.log.extend(`request:${sequence.toString()}`)
+    this.log = this.log.extend(`outgoing:${sequence.toString()}`)
     return this
   }
 

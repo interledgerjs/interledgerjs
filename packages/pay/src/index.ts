@@ -30,6 +30,7 @@ import {
   sendConnectionClose
 } from './send-packet'
 import { getConnectionId, Integer, timeout, Rational } from './utils'
+import { AssetDetailsController } from './controllers/asset-details'
 
 // TODO Implement quoting flow
 // TODO Change to normalized units with decimal point
@@ -86,6 +87,7 @@ export const pay = async (options: PayOptions): Promise<StreamReceipt> => {
     getExpiry: options.getExpiry || getDefaultExpiry
   }
 
+  const assetDetails = new AssetDetailsController(options.sourceAddress) // TODO Remove/move to quoting flow
   const rateController = new ExchangeRateController(options.exchangeRate as Rational)
   const sourceTracker = new SourceAmountTracker(Maybe.fromNullable(options.amountToSend as Integer)) // TODO no cast
   const destinationTracker = new DestinationAmountTracker(
@@ -121,6 +123,7 @@ export const pay = async (options: PayOptions): Promise<StreamReceipt> => {
     pacingController,
     congestionController, // TODO Unnecessary when applying prepare?
     pendingTracker,
+    assetDetails,
     sourceTracker, // Source & destination trackers before amount strategy in case we're blocked from sending money
     destinationTracker,
     amountStrategy,
