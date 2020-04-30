@@ -510,15 +510,19 @@ describe('Connection', function () {
 
   describe('Sending Money', function () {
     it('should send money', async function () {
-      const spy = sinon.spy()
+      const moneyEventSpy = sinon.spy()
+      const handleDataSpy = sinon.spy(this.serverPlugin, 'dataHandler')
       this.serverConn.on('stream', (moneyStream: DataAndMoneyStream) => {
-        moneyStream.on('money', spy)
+        moneyStream.on('money', moneyEventSpy)
       })
       const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(117)
 
-      assert.calledOnce(spy)
-      assert.calledWith(spy, '58')
+      assert.calledOnce(moneyEventSpy)
+      assert.calledWith(moneyEventSpy, '58')
+
+      // 2nd arg passed to `money` event handler should be the same ILP Prepare received by the plugin
+      assert.deepEqual(moneyEventSpy.getCall(0).args[1], IlpPacket.deserializeIlpPrepare(handleDataSpy.getCall(0).args[0]))
     })
   })
 

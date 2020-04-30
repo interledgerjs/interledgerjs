@@ -11,6 +11,7 @@ import {
   checkedAdd,
   checkedSubtract
 } from './util/long'
+import { IlpPrepare } from 'ilp-packet'
 
 const DEFAULT_TIMEOUT = 60000
 
@@ -378,11 +379,11 @@ export class DataAndMoneyStream extends Duplex {
    * (Used by the Connection class but not meant to be part of the public API)
    * @private
    */
-  _addToIncoming (amount: Long): void {
+  _addToIncoming (amount: Long, prepare: IlpPrepare): void {
     // If this overflows, it will als be caught (and handled) at the connection level.
     this._totalReceived = checkedAdd(this._totalReceived, amount).sum
     this.log.trace('received %s (totalReceived: %s)', amount, this._totalReceived)
-    this.emit('money', amount.toString())
+    this.emit('money', amount.toString(), prepare)
   }
 
   /**

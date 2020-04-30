@@ -682,7 +682,7 @@ export class Connection extends EventEmitter {
 
     // Add incoming amounts to each stream
     for (let { stream, amount } of amountsToReceive) {
-      stream._addToIncoming(amount)
+      stream._addToIncoming(amount, prepare)
     }
 
     // TODO make sure the queued frames aren't too big
