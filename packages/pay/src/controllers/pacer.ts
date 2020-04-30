@@ -1,5 +1,4 @@
-import { PaymentState } from '..'
-import { StreamController, StreamReply, StreamRequest } from '.'
+import { StreamController, StreamReply, StreamRequest, isAuthentic, SendState } from '.'
 
 /** Maximum number of packets to send at one time before a Fulfill or Reject is received */
 const MAX_INFLIGHT_PACKETS = 20
@@ -47,16 +46,16 @@ export class PacingController implements StreamController {
   nextState() {
     const exceedsMaxInFlight = this.inFlightPackets.size + 1 > MAX_INFLIGHT_PACKETS
     if (exceedsMaxInFlight) {
-      return PaymentState.Wait
+      return SendState.Wait
     }
 
     const delayDuration = this.getPacketFrequency()
     const lastPacketSentTime = Math.max(...this.inFlightPackets.values())
     if (lastPacketSentTime + delayDuration > Date.now()) {
-      return PaymentState.Wait
+      return SendState.Wait
     }
 
-    return PaymentState.SendMoney
+    return SendState.Ready
   }
 
   applyPrepare({ sequence }: StreamRequest) {
@@ -72,10 +71,10 @@ export class PacingController implements StreamController {
     // TODO Back-off in time on T05 errors? Or other errors, e.g. T00?
   }
 
-  private updateAverageRoundTripTime({ isAuthentic, sequence }: StreamReply) {
+  private updateAverageRoundTripTime(reply: StreamReply) {
     // Only update the RTT if we know the request got to the recipient
-    if (isAuthentic) {
-      const startTime = this.inFlightPackets.get(sequence)
+    if (isAuthentic(reply)) {
+      const startTime = this.inFlightPackets.get(reply.sequence)
       if (startTime) {
         const roundTripTime = Math.max(Date.now() - startTime, 0)
         this.averageRoundTrip =
@@ -84,6 +83,6 @@ export class PacingController implements StreamController {
       }
     }
 
-    this.inFlightPackets.delete(sequence)
+    this.inFlightPackets.delete(reply.sequence)
   }
 }

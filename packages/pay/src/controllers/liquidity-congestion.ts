@@ -4,13 +4,14 @@ import BigNumber from 'bignumber.js'
 import { Maybe } from 'true-myth'
 import { Integer, Rational, add, divide, multiply, floor, SAFE_ZERO } from '../utils'
 import { PacingController } from './pacer'
+import { ControllerMap } from './'
 
 enum PacketType {
   Fulfill,
   LiquidityError
 }
 
-export class SimpleCongestionController implements StreamController {
+export class CongestionController implements StreamController {
   /**
    * Fulfilled and rejected packets in window, sorted oldest to newest.
    * An epoch contains the last n fulfilled packets, all all T04 insufficient
@@ -23,8 +24,8 @@ export class SimpleCongestionController implements StreamController {
   }[] = []
   private pacer: PacingController
 
-  constructor(pacer: PacingController) {
-    this.pacer = pacer
+  constructor(controllers: ControllerMap) {
+    this.pacer = controllers.get(PacingController)
   }
 
   public getPacketAmount(): Maybe<Integer> {

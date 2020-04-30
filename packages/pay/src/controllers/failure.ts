@@ -1,7 +1,14 @@
-import { PaymentState } from '../'
-import { StreamReject, StreamController, StreamRequestBuilder, StreamReply } from '.'
+import {
+  StreamReject,
+  StreamController,
+  StreamRequestBuilder,
+  StreamReply,
+  StreamRequest,
+  isFulfillable,
+  SendState
+} from '.'
 import { Errors } from 'ilp-packet'
-import { ILP_ERROR_CODES } from '../send-packet'
+import { ILP_ERROR_CODES } from '../utils'
 import {
   ConnectionCloseFrame,
   FrameType,
@@ -17,28 +24,38 @@ export class FailureController implements StreamController {
   /** Number of milliseconds since the last Fulfill was received before the payment should fail */
   private static MAX_DURATION_SINCE_LAST_FULFILL = 10000
 
-  /** UNIX timestamp when the last Fulfill was received */
-  private lastFulfillTime = Date.now()
+  /** UNIX timestamp when the last Fulfill was received. Begins when the first fulfillable Prepare is sent */
+  private lastFulfillTime?: number
 
   /** Should the payment end immediatey due to a terminal error? */
   private terminalFailure = false
 
   nextState({ log }: StreamRequestBuilder) {
     if (this.terminalFailure) {
-      return PaymentState.End
+      return SendState.End
     }
 
-    const deadline = this.lastFulfillTime + FailureController.MAX_DURATION_SINCE_LAST_FULFILL
-    if (Date.now() > deadline) {
-      log.error(
-        'ending payment: no Fulfill received before idle deadline. last fulfill: %s, deadline: %s',
-        this.lastFulfillTime,
-        deadline
-      )
-      return PaymentState.End
+    if (this.lastFulfillTime) {
+      const deadline = this.lastFulfillTime + FailureController.MAX_DURATION_SINCE_LAST_FULFILL
+      if (Date.now() > deadline) {
+        log.error(
+          'ending payment: no Fulfill received before idle deadline. last fulfill: %s, deadline: %s',
+          this.lastFulfillTime,
+          deadline
+        )
+        return SendState.End
+      }
     }
 
-    return PaymentState.SendMoney
+    return SendState.Ready
+  }
+
+  applyPrepare(request: StreamRequest) {
+    if (isFulfillable(request)) {
+      // After first fulfillable packet is sent, begin the timer
+      // (So the rate probe doesn't end the payment)
+      this.lastFulfillTime = Date.now()
+    }
   }
 
   applyFulfill({ responseFrames, log }: StreamReply) {
