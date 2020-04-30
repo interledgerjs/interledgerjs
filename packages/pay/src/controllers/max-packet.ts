@@ -2,17 +2,7 @@ import { Reader } from 'oer-utils'
 import { StreamController, StreamReject, StreamRequest } from './'
 import { toBigNumber, Integer } from '../utils'
 import BigNumber from 'bignumber.js'
-import { Maybe } from 'true-myth'
-
-/**
- * TODO Changes from `ilp-protocol-stream`
- * 1. Instead of doubling an unknown max packet amount on fulfill
- *    (which may trigger an F08 again!), this uses a binary search to
- *    precisely determine the unknown max packet amount.
- * 2. Also, the liquidity congestion controller logic is now separate
- *    from the F08/path max packet amount logic.
- * 3. More precisely defined state machine
- */
+import { Errors } from 'ilp-packet'
 
 /** How the maximum packet amount is known or discovered */
 enum MaxPacketState {
@@ -54,20 +44,27 @@ export class MaxPacketAmountController implements StreamController {
   // TODO If not provided a precise max packet amount/using a probe amount,
   //      this may screw up logic in AmountStrategy that estimates the number of remaining packets
 
+  // TODO Change this to "lower" and "upper" bound max packet amounts?
+
   /**
-   * Return the max packet amount per F08 errors, or `Nothing` if it's unknown.
+   * Return the max packet amount per F08 errors.
    * Note: this amount can be 0
    */
-  public getMaxPacketAmount(): Maybe<Integer> {
+  public getMaxPacketAmount(): Integer | undefined {
     switch (this.state.type) {
       case MaxPacketState.PreciseMax:
-        return Maybe.just(this.state.maxPacketAmount)
+        return this.state.maxPacketAmount
 
       case MaxPacketState.DiscoveredMax:
-        return Maybe.just(this.state.probeAmount)
+        return this.state.probeAmount
+    }
+  }
 
-      case MaxPacketState.UnknownMax:
-        return Maybe.nothing()
+  public getUpperMaxPacketAmount(): Integer | undefined {
+    switch (this.state.type) {
+      case MaxPacketState.PreciseMax:
+      case MaxPacketState.DiscoveredMax:
+        return this.state.maxPacketAmount
     }
   }
 
@@ -76,17 +73,27 @@ export class MaxPacketAmountController implements StreamController {
     if (this.state.type === MaxPacketState.DiscoveredMax) {
       const { probeAmount, maxPacketAmount } = this.state
 
+      if (sourceAmount.isGreaterThanOrEqualTo(maxPacketAmount)) {
+        log.debug('discovered precise max packet amount using binary search: %s', maxPacketAmount)
+        this.state = {
+          type: MaxPacketState.PreciseMax,
+          maxPacketAmount
+        }
+        return
+      }
+
       // Increase probe amount by half the difference between the known max packet amount and *this packet amount*
       const increment = maxPacketAmount
         .minus(sourceAmount)
         .dividedBy(2)
-        .integerValue(BigNumber.ROUND_DOWN) as Integer // TODO No cast
+        .integerValue(BigNumber.ROUND_CEIL) as Integer // TODO No cast
       const newProbeAmount = probeAmount.plus(increment) as Integer // TODO No cast
 
-      // Ensure the new probe amount is within the range (probeAmount, maxPacketAmount)
+      // Ensure the probe amount only increases, up to the max packet amount:
+      // new probe amount should be within the range (oldProbeAmount, maxPacketAmount]
       if (
         !newProbeAmount.isGreaterThan(probeAmount) ||
-        !newProbeAmount.isLessThan(maxPacketAmount)
+        !newProbeAmount.isLessThanOrEqualTo(maxPacketAmount)
       ) {
         return
       }
@@ -101,7 +108,7 @@ export class MaxPacketAmountController implements StreamController {
   }
 
   applyReject({ sourceAmount, reject, log }: StreamReject) {
-    if (reject.code !== 'F08') {
+    if (reject.code !== Errors.codes.F08_AMOUNT_TOO_LARGE) {
       return
     }
 
@@ -115,10 +122,10 @@ export class MaxPacketAmountController implements StreamController {
         return
       }
 
-      const newMax = sourceAmount
-        .times(remoteMaximum)
-        .dividedBy(remoteReceived)
-        .integerValue(BigNumber.ROUND_CEIL) as Integer // TODO No cast
+      const exchangeRate = remoteReceived.dividedBy(sourceAmount)
+      const newMax = remoteMaximum
+        .dividedBy(exchangeRate) // Convert max packet amount into source units
+        .integerValue(BigNumber.ROUND_DOWN) as Integer
 
       switch (this.state.type) {
         case MaxPacketState.PreciseMax:
