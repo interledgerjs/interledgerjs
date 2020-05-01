@@ -5,7 +5,7 @@
 ### Fixed Delivery Payment
 
 ```js
-import { quote } from '@interledger/pay`
+import { quote } from '@interledger/pay'
 
 const { pay, cancel, ...details } = await quote({
   plugin,

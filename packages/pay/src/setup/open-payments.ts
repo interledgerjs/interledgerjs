@@ -45,7 +45,7 @@ const isValidOpenPaymentsInvoiceDetails = (o: any): o is OpenPaymentsInvoiceDeta
   isValidU64(o.received) &&
   typeof o.expiresAt === 'string' &&
   isValidIsoDate(o.expiresAt) &&
-  typeof o.description === 'string'
+  typeof o.description === 'string' // TODO Should this be optional?
 
 interface OpenPaymentsInvoiceCredentials {
   ilpAddress: IlpAddress

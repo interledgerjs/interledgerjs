@@ -3,8 +3,6 @@
 import BigNumber from 'bignumber.js'
 import Long from 'long'
 import uuid from 'uuid/v4'
-import { Maybe } from 'true-myth'
-import { Matcher } from 'true-myth/maybe'
 import { Errors, IlpReject, serializeIlpReject } from 'ilp-packet'
 
 export const getConnectionId = (destinationAddress: string) =>
@@ -89,65 +87,65 @@ export const isRational = (n: BigNumber): n is Rational =>
 
 export const isInteger = (n: BigNumber): n is Integer => isRational(n) && n.isInteger()
 
-export const stringify: Matcher<BigNumber, string> = {
-  Just: n => n.toString(),
-  Nothing: () => 'N/A'
-}
+// export const stringify: Matcher<BigNumber, string> = {
+//   Just: n => n.toString(),
+//   Nothing: () => 'N/A'
+// }
 
 // (o: Maybe<BigNumber>): string => o.map(n => n.toString()).unwrapOr('N/A')
 
 /** Safe division. If dividing by 0, return `Nothing`. */
 // export const divide = (a: Rational) => (b: Rational): Maybe<Rational> =>
 //   b.isZero() ? Maybe.nothing() : Maybe.just(a.dividedBy(b) as Rational)
-export const divide = (a: Rational) => (b: Rational): Maybe<Rational> =>
-  b.isZero() ? Maybe.nothing() : Maybe.just(a.dividedBy(b) as Rational)
+// export const divide = (a: Rational) => (b: Rational): Maybe<Rational> =>
+//   b.isZero() ? Maybe.nothing() : Maybe.just(a.dividedBy(b) as Rational)
 
-export const ceil = (n: Rational) => n.integerValue(BigNumber.ROUND_CEIL) as Integer
+// export const ceil = (n: Rational) => n.integerValue(BigNumber.ROUND_CEIL) as Integer
 
-export const floor = (n: Rational) => n.integerValue(BigNumber.ROUND_DOWN) as Integer
+// export const floor = (n: Rational) => n.integerValue(BigNumber.ROUND_DOWN) as Integer
 
-/** Safe modulo operation. If dividing by 0, return `Nothing`. */
-export const modulo = (a: Integer) => (b: Integer): Maybe<Integer> =>
-  b.isZero() ? Maybe.nothing() : Maybe.just(a.modulo(b) as Integer)
+// /** Safe modulo operation. If dividing by 0, return `Nothing`. */
+// export const modulo = (a: Integer) => (b: Integer): Maybe<Integer> =>
+//   b.isZero() ? Maybe.nothing() : Maybe.just(a.modulo(b) as Integer)
 
-// export const add = (a: Rational) => (b: Rational) => a.plus(b) as Rational
-export const add = (a: Integer) => (b: Integer) => a.plus(b) as Integer
-export const add1 = (n: Integer) => n.plus(1) as Integer
+// // export const add = (a: Rational) => (b: Rational) => a.plus(b) as Rational
+// export const add = (a: Integer) => (b: Integer) => a.plus(b) as Integer
+// export const add1 = (n: Integer) => n.plus(1) as Integer
 
-/** Subtract b from a. If difference is less than 0, `Nothing`. */
-export const subtract = <T extends Rational>(a: T) => (b: T): Maybe<T> =>
-  b.isGreaterThan(a) ? Maybe.nothing() : Maybe.just(a.minus(b) as T)
+// /** Subtract b from a. If difference is less than 0, `Nothing`. */
+// export const subtract = <T extends Rational>(a: T) => (b: T): Maybe<T> =>
+//   b.isGreaterThan(a) ? Maybe.nothing() : Maybe.just(a.minus(b) as T)
 
-export const multiply = (a: Rational) => (b: Rational) => a.times(b) as Rational
-export const multiplyInt = (a: Integer) => (b: Integer) => a.times(b) as Integer
+// export const multiply = (a: Rational) => (b: Rational) => a.times(b) as Rational
+// export const multiplyInt = (a: Integer) => (b: Integer) => a.times(b) as Integer
 
-export const max = <T extends Rational>(amounts: T[]): Maybe<T> =>
-  amounts.length === 0 ? Maybe.nothing() : Maybe.just(BigNumber.max(...amounts) as T)
+// export const max = <T extends Rational>(amounts: T[]): Maybe<T> =>
+//   amounts.length === 0 ? Maybe.nothing() : Maybe.just(BigNumber.max(...amounts) as T)
 
-/** Maximum of all given `Just` values, or `Nothing` if no values are `Just`. */
-export const maybeMax = (...amounts: Maybe<Integer>[]): Maybe<Integer> =>
-  amounts.length === 0
-    ? Maybe.nothing()
-    : Maybe.all(...amounts.filter(Maybe.isJust)).map(
-        justAmounts => BigNumber.max(...justAmounts) as Integer
-      )
+// /** Maximum of all given `Just` values, or `Nothing` if no values are `Just`. */
+// export const maybeMax = (...amounts: Maybe<Integer>[]): Maybe<Integer> =>
+//   amounts.length === 0
+//     ? Maybe.nothing()
+//     : Maybe.all(...amounts.filter(Maybe.isJust)).map(
+//         justAmounts => BigNumber.max(...justAmounts) as Integer
+//       )
 
-/** Minimum of all the given `Just` values, or `Nothing` if no values are `Just`. */
-export const maybeMin = (...amounts: Maybe<Integer>[]): Maybe<Integer> =>
-  amounts.length === 0
-    ? Maybe.nothing()
-    : Maybe.all(...amounts.filter(Maybe.isJust)).map(
-        justAmounts => BigNumber.min(...justAmounts) as Integer
-      )
+// /** Minimum of all the given `Just` values, or `Nothing` if no values are `Just`. */
+// export const maybeMin = (...amounts: Maybe<Integer>[]): Maybe<Integer> =>
+//   amounts.length === 0
+//     ? Maybe.nothing()
+//     : Maybe.all(...amounts.filter(Maybe.isJust)).map(
+//         justAmounts => BigNumber.min(...justAmounts) as Integer
+//       )
 
-export const min = <T extends Rational>(amounts: T[]): Maybe<T> =>
-  amounts.length === 0 ? Maybe.nothing() : Maybe.just(BigNumber.min(...amounts) as T)
+// export const min = <T extends Rational>(amounts: T[]): Maybe<T> =>
+//   amounts.length === 0 ? Maybe.nothing() : Maybe.just(BigNumber.min(...amounts) as T)
 
-export const equals = (a: BigNumber) => (b: BigNumber): boolean => a.isEqualTo(b)
+// export const equals = (a: BigNumber) => (b: BigNumber): boolean => a.isEqualTo(b)
 
-export const greaterThan = (a: BigNumber) => (b: BigNumber): boolean => a.isGreaterThan(b)
+// export const greaterThan = (a: BigNumber) => (b: BigNumber): boolean => a.isGreaterThan(b)
 
-export const lessThan = (a: BigNumber) => (b: BigNumber): boolean => a.isLessThan(b)
+// export const lessThan = (a: BigNumber) => (b: BigNumber): boolean => a.isLessThan(b)
 
 export const SAFE_ZERO = new BigNumber(0) as Integer
 
@@ -184,139 +182,133 @@ export const MAX_UINT64 = new BigNumber('18446744073709551615') as Integer
 export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const spread = <T extends (...args: any[]) => any>(f: T) => (
-  args: Parameters<T>
-): ReturnType<T> => f(...args)
+// export const spread = <T extends (...args: any[]) => any>(f: T) => (
+//   args: Parameters<T>
+// ): ReturnType<T> => f(...args)
 
-export class Int {
-  value: bigint
+// export class Int {
+//   value: bigint
 
-  constructor(n: bigint) {
-    if (n < 0) {
-      // TODO How should this work?
-      throw new Error('Cannot use negative numbers')
-    }
+//   constructor(n: bigint) {
+//     if (n < 0) {
+//       // TODO How should this work?
+//       throw new Error('Cannot use negative numbers')
+//     }
 
-    // TODO Check against NaN? BigInt throws if it's NaN
+//     // TODO Check against NaN? BigInt throws if it's NaN
 
-    this.value = n // TODO
-  }
-
-  static from(o: BigNumber | string | number | Long): Int {
-    if (BigNumber.isBigNumber(o)) {
-      return new Int(BigInt(o.toFixed())) // TODO This MUST be rounded first!
-    } else if (typeof o === 'string' || typeof o === 'number') {
-      return new Int(BigInt(o))
-    } else {
-      return o.lessThanOrEqual(Number.MAX_SAFE_INTEGER)
-        ? new Int(BigInt(o.toNumber()))
-        : new Int(BigInt(o.toString()))
-    }
-  }
-
-  plus(n: Int): Int {
-    return new Int(this.value + n.value)
-  }
-
-  // TODO Require predicate -> SafeSubtraction?
-
-  minus(n: Int): Int | undefined {
-    if (this.value >= n.value) {
-      return new Int(this.value - n.value)
-    }
-  }
-
-  // TODO Add multiply & divide functions with rationals + floor & ceiling
-
-  times(n: Int): Int {
-    return new Int(this.value * n.value)
-  }
-
-  // multiplyFloor(n: BigNumber): Int {
-  // TODO How to implement?
-  // this.value * n.floor() ?
-  // }
-
-  // multiplyCeil(n: BigNumber): Int {
-  // TODO How to implement?
-  // this.value * n.ceil() ?
-  // }
-
-  dividedBy(n: Int): Int | undefined {
-    if (!n.isEqualTo(new Int(BigInt(0)))) {
-      return new Int(this.value / n.value)
-    }
-  }
-
-  // TODO I don't think this is correct? Is a / ceil(b) === ceil(a / b) ?
-  divideCeil(n: BigNumber): Int | undefined {
-    if (n.isGreaterThan(0) && n.isFinite()) {
-      const d = Int.from(n)
-      const r = this.value % d.value
-      return r === BigInt(0)
-        ? new Int(this.value / d.value)
-        : new Int(this.value / d.value).plus(new Int(BigInt(1)))
-    }
-  }
-
-  divideFloor(n: BigNumber): Int | undefined {
-    if (n.isGreaterThan(0) && n.isFinite()) {
-      return new Int(this.value / Int.from(n).value)
-    }
-  }
-
-  // isPositive(): PositiveInt {
-  //   // TODO Type signature for positive int?
-  // }
-
-  isEqualTo(n: Int): boolean {
-    return this.value === n.value
-  }
-
-  isGreaterThan(n: Int): boolean {
-    return this.value > n.value
-  }
-
-  isGreaterThanOrEqualTo(n: Int): boolean {
-    return this.value >= n.value
-  }
-
-  isLessThan(n: Int): boolean {
-    return this.value < n.value
-  }
-
-  isLessThanOrEqualTo(n: Int): boolean {
-    return this.value <= n.value
-  }
-
-  orLessor(n?: Int): Int {
-    return !n || this.value <= n.value ? this : n
-  }
-
-  orGreater(n?: Int): Int {
-    return !n || this.value >= n.value ? this : n
-  }
-
-  filter(pred: (n: this) => boolean): Int | undefined {
-    if (pred(this)) {
-      return this
-    }
-  }
-
-  toString() {
-    return this.value.toString()
-  }
-
-  toLong(): Long {
-    // TODO How to make this more performant?
-    return Long.fromString(this.value.toString())
-  }
-}
-
-// export class Rational {
-//   static from() {
-//     // TODO Support from number for multiply/divide by constant?
+//     this.value = n // TODO
 //   }
 
-//   // TODO How do I actually want to use this?
+//   static from(o: BigNumber | string | number | Long): Int {
+//     if (BigNumber.isBigNumber(o)) {
+//       return new Int(BigInt(o.toFixed())) // TODO This MUST be rounded first!
+//     } else if (typeof o === 'string' || typeof o === 'number') {
+//       return new Int(BigInt(o))
+//     } else {
+//       return o.lessThanOrEqual(Number.MAX_SAFE_INTEGER)
+//         ? new Int(BigInt(o.toNumber()))
+//         : new Int(BigInt(o.toString()))
+//     }
+//   }
+
+//   plus(n: Int): Int {
+//     return new Int(this.value + n.value)
+//   }
+
+//   // TODO Require predicate -> SafeSubtraction?
+
+//   minus(n: Int): Int | undefined {
+//     if (this.value >= n.value) {
+//       return new Int(this.value - n.value)
+//     }
+//   }
+
+//   // TODO Add multiply & divide functions with rationals + floor & ceiling
+
+//   times(n: Int): Int {
+//     return new Int(this.value * n.value)
+//   }
+
+//   // multiplyFloor(n: BigNumber): Int {
+//   // TODO How to implement?
+//   // this.value * n.floor() ?
+//   // }
+
+//   // multiplyCeil(n: BigNumber): Int {
+//   // TODO How to implement?
+//   // this.value * n.ceil() ?
+//   // }
+
+//   dividedBy(n: Int): Int | undefined {
+//     if (!n.isEqualTo(new Int(BigInt(0)))) {
+//       return new Int(this.value / n.value)
+//     }
+//   }
+
+//   // TODO I don't think this is correct? Is a / ceil(b) === ceil(a / b) ?
+//   divideCeil(n: BigNumber): Int | undefined {
+//     if (n.isGreaterThan(0) && n.isFinite()) {
+//       const d = Int.from(n)
+//       const r = this.value % d.value
+//       return r === BigInt(0)
+//         ? new Int(this.value / d.value)
+//         : new Int(this.value / d.value).plus(new Int(BigInt(1)))
+//     }
+//   }
+
+//   divideFloor(n: BigNumber): Int | undefined {
+//     if (n.isGreaterThan(0) && n.isFinite()) {
+//       return new Int(this.value / Int.from(n).value)
+//     }
+//   }
+
+//   // isPositive(): PositiveInt {
+//   //   // TODO Type signature for positive int?
+//   // }
+
+//   isEqualTo(n: Int): boolean {
+//     return this.value === n.value
+//   }
+
+//   isGreaterThan(n: Int): boolean {
+//     return this.value > n.value
+//   }
+
+//   isGreaterThanOrEqualTo(n: Int): boolean {
+//     return this.value >= n.value
+//   }
+
+//   isLessThan(n: Int): boolean {
+//     return this.value < n.value
+//   }
+
+//   isLessThanOrEqualTo(n: Int): boolean {
+//     return this.value <= n.value
+//   }
+
+//   orLessor(n?: Int): Int {
+//     return !n || this.value <= n.value ? this : n
+//   }
+
+//   orGreater(n?: Int): Int {
+//     return !n || this.value >= n.value ? this : n
+//   }
+
+//   filter(pred: (n: this) => boolean): Int | undefined {
+//     if (pred(this)) {
+//       return this
+//     }
+//   }
+
+//   toString() {
+//     return this.value.toString()
+//   }
+
+//   toLong(): Long {
+//     // TODO How to make this more performant?
+//     return Long.fromString(this.value.toString())
+//   }
 // }
+
+// export class Ratio {}

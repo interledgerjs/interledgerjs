@@ -6,7 +6,7 @@ import BigNumber from 'bignumber.js'
  * a price in the same base asset
  */
 export interface AssetPrices {
-  [assetCode: string]: ValidRate
+  [assetCode: string]: number
 }
 
 /** Function fetch asset prices relative to the same base currency */

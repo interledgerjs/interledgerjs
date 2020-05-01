@@ -1,6 +1,5 @@
 import { createApp } from '@kincaidoneil/ilp-connector'
 import RateBackend from '@kincaidoneil/ilp-connector/dist/services/rate-backend'
-import test from 'ava'
 import BigNumber from 'bignumber.js'
 import { Connection, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
 import Long from 'long'
@@ -10,8 +9,9 @@ import { MirrorPlugin } from './plugin'
 import { fetchCoinCapRates } from '../src/rates/coincap'
 import { getRate } from '../src/rates'
 import { quote } from '../src'
+import { test, expect } from '@jest/globals'
 
-test('completes source amount payment with max packet amount', async t => {
+test('completes source amount payment with max packet amount', async () => {
   const alice1 = new MirrorPlugin()
   const alice2 = new MirrorPlugin()
   alice1.linkTo(alice2)
@@ -80,22 +80,24 @@ test('completes source amount payment with max packet amount', async t => {
     slippage: 0.015
   })
 
-  t.is(quoteDetails.sourceAccount.assetCode, 'USD')
-  t.is(quoteDetails.sourceAccount.assetScale, 6)
-  t.is(quoteDetails.sourceAccount.ilpAddress, 'test.larry.alice')
-  t.is(quoteDetails.destinationAccount.assetCode, 'XRP')
-  t.is(quoteDetails.destinationAccount.assetScale, 9)
-  t.is(quoteDetails.destinationAccount.ilpAddress, destinationAddress)
-  t.deepEqual(quoteDetails.maxSourceAmount, amountToSend)
+  expect(quoteDetails.sourceAccount.assetCode).toBe('USD')
+  expect(quoteDetails.sourceAccount.assetScale).toBe(6)
+  expect(quoteDetails.sourceAccount.ilpAddress).toBe('test.larry.alice')
+  expect(quoteDetails.destinationAccount.assetCode).toBe('XRP')
+  expect(quoteDetails.destinationAccount.assetScale).toBe(9)
+  expect(quoteDetails.destinationAccount.ilpAddress).toBe(destinationAddress)
+  expect(quoteDetails.maxSourceAmount).toEqual(amountToSend)
 
   const receipt = await pay()
 
   // TODO What should I check the delivered amount against?
 
   const serverConnection = await connectionPromise
-  t.deepEqual(new BigNumber(serverConnection.totalReceived), receipt.amountDelivered.shiftedBy(9))
-  t.deepEqual(receipt.amountSent, amountToSend)
-  t.deepEqual(receipt.amountInFlight, new BigNumber(0))
+  expect(new BigNumber(serverConnection.totalReceived)).toEqual(
+    receipt.amountDelivered.shiftedBy(9)
+  )
+  expect(receipt.amountSent).toEqual(amountToSend)
+  expect(receipt.amountInFlight).toEqual(new BigNumber(0))
 
   // Interval in `deduplicate` middleware continues running unless the plugins are manually removed
   await app.removePlugin('alice', alice2)
@@ -103,9 +105,9 @@ test('completes source amount payment with max packet amount', async t => {
 
   await app.shutdown()
   await streamServer.close()
-})
+}, 10000)
 
-test('delivers fixed destination amount with max packet amount', async t => {
+test('delivers fixed destination amount with max packet amount', async () => {
   const alice1 = new MirrorPlugin()
   const alice2 = new MirrorPlugin()
   alice1.linkTo(alice2)
@@ -153,11 +155,12 @@ test('delivers fixed destination amount with max packet amount', async t => {
     plugin: bob2
   })
 
+  // TODO Hardcode this... non determinism is not great
   const amountToDeliver = getRate('USD', 0, 'BTC', 0, prices)
     ?.times(10)
     .decimalPlaces(8)
   if (!amountToDeliver) {
-    return t.fail()
+    return Promise.reject()
   }
 
   const connectionPromise = streamServer.acceptConnection()
@@ -184,10 +187,11 @@ test('delivers fixed destination amount with max packet amount', async t => {
   const receipt = await pay()
 
   const serverConnection = await connectionPromise
-  t.deepEqual(new BigNumber(serverConnection.totalReceived), amountToDeliver.shiftedBy(8))
-  t.deepEqual(receipt.amountDelivered, amountToDeliver)
-  t.deepEqual(receipt.amountInFlight, new BigNumber(0))
-  t.true(receipt.amountSent.isLessThanOrEqualTo(quoteDetails.maxSourceAmount))
+  const totalReceived = new BigNumber(serverConnection.totalReceived)
+  expect(totalReceived).toEqual(amountToDeliver.shiftedBy(8))
+  expect(receipt.amountDelivered).toEqual(amountToDeliver)
+  expect(receipt.amountInFlight).toEqual(new BigNumber(0))
+  expect(receipt.amountSent.isLessThanOrEqualTo(quoteDetails.maxSourceAmount))
 
   // Interval in `deduplicate` middleware continues running unless the plugins are manually removed
   await app.removePlugin('alice', alice2)
@@ -195,9 +199,9 @@ test('delivers fixed destination amount with max packet amount', async t => {
 
   await app.shutdown()
   await streamServer.close()
-})
+}, 10000)
 
-test('ends payment if receiver closes the stream', async t => {
+test('ends payment if receiver closes the stream', async () => {
   const alice1 = new MirrorPlugin()
   const alice2 = new MirrorPlugin()
   alice1.linkTo(alice2)
@@ -264,9 +268,9 @@ test('ends payment if receiver closes the stream', async t => {
   })
   const receipt = await pay()
 
-  t.deepEqual(receipt.amountSent, new BigNumber(0.2)) // Only $0.20 was received
-  t.deepEqual(receipt.amountDelivered, new BigNumber(0.2)) // Only $0.20 was received
-  t.deepEqual(receipt.amountInFlight, new BigNumber(0))
+  expect(receipt.amountSent).toEqual(new BigNumber(0.2)) // Only $0.20 was received
+  expect(receipt.amountDelivered).toEqual(new BigNumber(0.2)) // Only $0.20 was received
+  expect(receipt.amountInFlight).toEqual(new BigNumber(0))
 
   // Interval in `deduplicate` middleware continues running unless the plugins are manually removed
   await app.removePlugin('alice', alice2)
@@ -276,7 +280,7 @@ test('ends payment if receiver closes the stream', async t => {
   await streamServer.close()
 })
 
-test('ends payment if receiver closes the connection', async t => {
+test('ends payment if receiver closes the connection', async () => {
   const alice1 = new MirrorPlugin()
   const alice2 = new MirrorPlugin()
   alice1.linkTo(alice2)
@@ -338,19 +342,19 @@ test('ends payment if receiver closes the connection', async t => {
 
   // End the connection after 1 second
   const serverConnection = await connectionPromise
-  setTimeout(() => serverConnection.end(), 1000)
+  setTimeout(() => serverConnection.end(), 500)
 
   const receipt = await pay()
 
-  t.true(receipt.amountSent.isGreaterThan(1))
-  t.true(receipt.amountSent.isLessThan(100))
-  t.deepEqual(receipt.amountSent, receipt.amountDelivered)
-  t.deepEqual(receipt.amountInFlight, new BigNumber(0))
+  expect(receipt.amountSent.isGreaterThan(1))
+  expect(receipt.amountSent.isLessThan(100))
+  expect(receipt.amountSent).toEqual(receipt.amountDelivered)
+  expect(receipt.amountInFlight).toEqual(new BigNumber(0))
 
   // Interval in `deduplicate` middleware continues running unless the plugins are manually removed
   await app.removePlugin('alice', alice2)
   await app.removePlugin('bob', bob1)
 
   await app.shutdown()
-  await streamServer.close()
-})
+  // await streamServer.close()
+}, 10000)

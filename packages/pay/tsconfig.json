@@ -8,7 +8,8 @@
     "strict": true,
     "pretty": true,
     "esModuleInterop": true,
-    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
+    "target": "ES2018",
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
   },
   "include": ["src", "test"]
 }

@@ -3,7 +3,7 @@ import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { ControllerMap } from './controllers'
 import { AccountController, AccountDetails } from './controllers/asset-details'
 import { PendingRequestTracker } from './controllers/pending-requests'
-import { getRate } from './rates'
+import { getRate, AssetPrices } from './rates'
 import { fetchCoinCapRates } from './rates/coincap'
 import { Integer, isInteger } from './utils'
 import { query, isStreamCredentials } from './setup/spsp'
@@ -14,7 +14,6 @@ import { ExchangeRateController } from './controllers/exchange-rate'
 import { SequenceController } from './controllers/sequence'
 import { PacingController } from './controllers/pacer'
 import { FailureController } from './controllers/failure'
-import { CongestionController } from './controllers/liquidity-congestion'
 import { MaxPacketAmountController } from './controllers/max-packet'
 import { createConnection } from './connection'
 import { RateProbe } from './controllers/rate-probe'
@@ -41,6 +40,10 @@ export interface PaymentOptions {
   slippage?: number
   /** Callback to get the packet expiration timestamp */
   getExpiry?: (destination: string) => Date
+  /** Set of asset codes -> prices in a standardized asset, to pull external rates */
+  prices?: {
+    [assetCode: string]: number
+  }
 }
 
 export interface Quote {
@@ -200,7 +203,6 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
     // Fail-fast if destination asset detail conflict
     .set(AccountController, new AccountController(sourceAccount, destinationAddress))
     .set(PacingController, new PacingController())
-    .set(CongestionController, new CongestionController(controllers))
     .set(MaxPacketAmountController, new MaxPacketAmountController())
     .set(AmountController, new AmountController(controllers))
     .set(ExchangeRateController, new ExchangeRateController())
@@ -273,10 +275,12 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
   controllers.get(RateProbe).disable()
 
   // Pull exchange rate from external API to determine the minimum exchange rate
-  const prices = await fetchCoinCapRates().catch(async () => {
-    await connection.close()
-    throw PaymentError.ExternalRateUnavailable
-  })
+  const prices =
+    options.prices ??
+    (await fetchCoinCapRates().catch(async () => {
+      await connection.close()
+      throw PaymentError.ExternalRateUnavailable
+    }))
 
   const destinationAccount = controllers.get(AccountController).getDestinationAccount()
   if (!destinationAccount) {
