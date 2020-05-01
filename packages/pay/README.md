@@ -2,30 +2,78 @@
 
 > Send payments over Interledger
 
-[WIP]
+### Fixed Delivery Payment
 
 ```js
-import { quote, pay } from '@interledger/pay'
+import { quote } from '@interledger/pay`
 
-const params = await quote('$rafiki.money/invoices/2ca39a18', plugin)
-console.log(params)
+const { pay, cancel, ...details } = await quote({
+  plugin,
+  paymentPointer: '$rafiki.money/p/example',
+  amountToDeliver: '0.0234',
+  destinationAssetCode: 'XYZ',
+  destinationAssetScale: 4
+})
+console.log(details)
 // {
-//   amountToSend: '3.45063',
-//   sourceAssetCode: 'USD',
-//   amountToDeliver: '3.1388',
-//   destinationAssetCode: 'EUR',
-//   minExchangeRate: '0.905',
-//   estimatedExchangeRate: '0.91',
-//   ...
+//   estimatedExchangeRate: [BigNumber(1.2339), BigNumber(1.23423)],
+//   minExchangeRate: BigNumber(1.21),
+//   sourceAccount: {
+//     ilpAddress: 'test.rafiki.us1.users.example',
+//     assetCode: 'ABC',
+//     assetScale: 6
+//   },
+//   destinationAccount: {
+//     ilpAddress: 'test.xpring.hermes.23r8gdsb_72badfnm',
+//     assetCode: 'XYZ',
+//     assetScale: 4
+//   }
 // }
 
-const receipt = await pay(params)
+// Choose to execute the payment...
+const receipt = await pay()
 console.log(receipt)
 // {
-//    status: 'success',
-//    amountDelivered: '3.1388',
-//    amountSent: '3.43014',
-//    amountInFlight: '0',
+//    amountSent: BigNumber(0.000191),
+//    amountInFlight: BigNumber(0),
+//    amountDelivered: BigNumber(0.0234),
 //    ...
 // }
+
+// ...or decline: disconnect and close the connection
+await cancel()
 ```
+
+### Fixed Source Amount Payment
+
+```js
+import { quote } from '@interledger/pay'
+
+const { pay } = await quote({
+  plugin,
+  paymentPointer: '$rafiki.money/p/example',
+  amountToSend: '3.14159'
+})
+
+const receipt = await pay()
+```
+
+### Error Handling
+
+If quoting fails, it will reject the Promise with a variant of the `PaymentError` enum. For example:
+
+```js
+import { quote, PaymentError } from '@interledger/pay'
+
+try {
+  await quote({ ... })
+} catch (err) {
+  if (err === PaymentError.InvalidPaymentPointer) {
+    console.log('Payment pointer is invalid!')
+  }
+
+  // ...
+}
+```
+
+Similarily, if an error was encountered during the payment itself, it will include an `error` property on the receipt which is a `PaymentError` variant.
