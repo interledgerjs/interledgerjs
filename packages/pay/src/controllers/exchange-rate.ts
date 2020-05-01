@@ -1,32 +1,57 @@
 import BigNumber from 'bignumber.js'
-import { Maybe } from 'true-myth'
 import { StreamController, StreamReply } from '.'
-import { Integer, Rational, divide, add1, floor, ceil, multiply, subtract } from '../utils'
+import { Integer, Rational } from '../utils'
+import { PaymentError } from '..'
 
 // TODO How should the realized rate change over time? How should old data points be invalidated?
 
 /** Compute the realized exchange rate from Fulfills and probed rate from Rejects */
 export class ExchangeRateController implements StreamController {
+  private static DEFAULT_SLIPPAGE = 0.01
+
   /** Real exchnage rate determined from the recipient */
-  private exchangeRate: Maybe<{
-    /** Real exchange rate MUST be less than this (exclusive) */
-    upperBound: Rational
-    /** Real exchange rate MUST be greater than or equal to this (inclusive) */
-    lowerBound: Rational
-  }> = Maybe.nothing()
-
-  private minExchangeRate: Rational
-
-  constructor(minExchangeRate: Rational) {
-    this.minExchangeRate = minExchangeRate
+  private exchangeRate?: {
+    /** Real exchange rate MUST be less than this ratio (exclusive): sent, received, rate */
+    upperBound: [Integer, Integer, Rational]
+    /** Real exchange rate MUST be greater than or equal to this ratio (inclusive): sent, received, rate */
+    lowerBound: [Integer, Integer, Rational]
   }
 
-  getRateUpperBound(): Rational {
-    return this.exchangeRate.get('upperBound').unwrapOr(this.minExchangeRate)
+  private packetAmounts: Map<string, Integer> = new Map()
+
+  private minExchangeRate?: Rational
+
+  setMinExchangeRate(
+    exchangeRate: Rational,
+    slippage = ExchangeRateController.DEFAULT_SLIPPAGE
+  ): Rational | PaymentError {
+    if (slippage === 1 || exchangeRate.isZero()) {
+      return new BigNumber(0) as Rational
+    }
+
+    if (slippage < 0 || slippage > 1 || Number.isNaN(slippage)) {
+      return PaymentError.InvalidSlippage
+    }
+
+    const minExchangeRate = exchangeRate.times(1 - slippage) as Rational
+    if (this.getRateLowerBound()?.isGreaterThanOrEqualTo(minExchangeRate)) {
+      this.minExchangeRate = minExchangeRate
+      return minExchangeRate
+    } else {
+      return PaymentError.InsufficientExchangeRate
+    }
   }
 
-  getRateLowerBound(): Rational {
-    return this.exchangeRate.get('lowerBound').unwrapOr(this.minExchangeRate)
+  getMinExchangeRate(): Rational | undefined {
+    return this.minExchangeRate
+  }
+
+  getRateUpperBound(): Rational | undefined {
+    return this.exchangeRate?.upperBound[2]
+  }
+
+  getRateLowerBound(): Rational | undefined {
+    return this.exchangeRate?.lowerBound[2]
   }
 
   applyFulfill({ sourceAmount, minDestinationAmount, destinationAmount }: StreamReply) {
@@ -40,157 +65,128 @@ export class ExchangeRateController implements StreamController {
   }
 
   applyReject({ sourceAmount, destinationAmount }: StreamReply) {
-    // No authentic reply if no destination amount
-    if (!destinationAmount) {
-      return
+    if (destinationAmount) {
+      this.updateRate(sourceAmount, destinationAmount)
     }
-
-    this.updateRate(sourceAmount, destinationAmount)
   }
 
   private updateRate(sourceAmount: Integer, receivedAmount: Integer) {
     // Since intermediaries floor packet amounts, the exchange rate cannot be precisely computed:
-    // it's only known with some margin however. However, as we send packets of different sizes,
+    // it's only known with some margin however. However, as we send packets of varying sizes,
     // the upper and lower bounds should converge closer and closer to the real exchange rate.
 
     // Prevent divide-by-0 errors
+    // Sending 0... is not useful
     if (sourceAmount.isZero()) {
       return
     }
 
+    const previousReceivedAmount = this.packetAmounts.get(sourceAmount.toString())
+    if (previousReceivedAmount && !previousReceivedAmount.isEqualTo(receivedAmount)) {
+      // If the delivery amount is different, reset the entire exchange rate
+      delete this.exchangeRate
+    }
+
+    this.packetAmounts.set(sourceAmount.toString(), receivedAmount)
+
+    // TODO Replace BigNumber with Ratio and remove this roudning mode nonsense once and for all?
+
+    BigNumber.set({ ROUNDING_MODE: BigNumber.ROUND_CEIL }) // Otherwise some inequalities won't work
     const packetRateUpperBound = receivedAmount.plus(1).dividedBy(sourceAmount) as Rational
+
+    BigNumber.set({ ROUNDING_MODE: BigNumber.ROUND_CEIL })
     const packetRateLowerBound = receivedAmount.dividedBy(sourceAmount) as Rational
 
-    this.exchangeRate = Maybe.just(
-      this.exchangeRate.match({
-        // Set the initial exchange rate
-        Nothing: () => ({
-          upperBound: packetRateUpperBound,
-          lowerBound: packetRateLowerBound
-        }),
-        Just: existingRate => {
-          // If the new exchange rate fluctuated and is "out of bounds," reset it
-          const isOutOfBounds =
-            packetRateUpperBound.isLessThan(existingRate.lowerBound) ||
-            packetRateLowerBound.isGreaterThan(existingRate.upperBound)
-          if (isOutOfBounds) {
-            return {
-              upperBound: packetRateUpperBound,
-              lowerBound: packetRateLowerBound
-            }
-          }
+    BigNumber.set({ ROUNDING_MODE: BigNumber.ROUND_HALF_UP }) // Reset to default rounding mode
 
-          // Otherwise, continue narrowing the bounds of the exchange rate
-          return {
-            upperBound: BigNumber.min(existingRate.upperBound, packetRateUpperBound) as Rational,
-            lowerBound: BigNumber.max(existingRate.lowerBound, packetRateLowerBound) as Rational
-          }
+    if (!this.exchangeRate) {
+      // Set the initial exchange rate
+      this.exchangeRate = {
+        upperBound: [sourceAmount, receivedAmount, packetRateUpperBound],
+        lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound]
+      }
+    } else {
+      // If the new exchange rate fluctuated and is "out of bounds," reset it
+      const isOutOfBounds =
+        packetRateUpperBound.isLessThan(this.exchangeRate.lowerBound[2]) ||
+        packetRateLowerBound.isGreaterThanOrEqualTo(this.exchangeRate.upperBound[2])
+      if (isOutOfBounds) {
+        this.exchangeRate = {
+          upperBound: [sourceAmount, receivedAmount, packetRateUpperBound],
+          lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound]
         }
-      })
-    )
-  }
-
-  // TODO This is still confusing/needs more clarity
-
-  /** Estimate the maximum source amount that delivers the given destination amount */
-  estimateMaxSourceAmount(
-    amountToDeliver: Maybe<Integer>,
-    exchangeRate: Maybe<Rational>
-  ): Maybe<Integer> {
-    return amountToDeliver
-      .map(add1)
-      .map(divide)
-      .ap(exchangeRate)
-      .chain(n => n)
-      .map(floor)
-  }
-
-  /** Estimate the minimum source amount that delivers the given destination amount */
-  estimateMinSourceAmount(
-    amountToDeliver: Maybe<Integer>,
-    exchangeRate: Maybe<Rational>
-  ): Maybe<Integer> {
-    return amountToDeliver
-      .map(divide)
-      .ap(exchangeRate)
-      .chain(n => n)
-      .map(ceil)
-  }
-
-  /** Estimate the amount delivered by the given source amount */
-  estimateDestinationAmount(amountToSend: Maybe<Integer>, exchangeRate: Maybe<Rational>) {
-    return amountToSend
-      .map(multiply)
-      .ap(exchangeRate)
-      .map(floor)
-  }
-
-  // TODO It's possible the lower bound rate is less than the minimum rate... how to handle this?
-
-  /** Compute difference between the lowest real rate and minimum exchange rate. */
-  private getExchangeRateMarginOfError(): Maybe<Rational> {
-    return Maybe.just(this.getRateLowerBound())
-      .map(subtract)
-      .ap(Maybe.just(this.minExchangeRate))
-      .chain(n => n)
+      } else {
+        // Otherwise, continue narrowing the bounds of the exchange rate
+        this.exchangeRate = {
+          upperBound: this.exchangeRate.upperBound[2].isLessThan(packetRateUpperBound)
+            ? this.exchangeRate.upperBound
+            : [sourceAmount, receivedAmount.plus(1) as Integer, packetRateUpperBound],
+          lowerBound: this.exchangeRate.lowerBound[2].isGreaterThan(packetRateLowerBound)
+            ? this.exchangeRate.lowerBound
+            : [sourceAmount, receivedAmount, packetRateLowerBound]
+        }
+      }
+    }
   }
 
   /**
-   * Compute the minimum destination amount such that are no rounding errors.
-   * Given the exchange rate is estimated correctly, all source amounts greater than
-   * this should deliver their minimum destination amount based on the minimum
-   * exchange rate. Amounts less than this *may* deliver at least the minimum,
-   * but as amounts get smaller, the probability of failure due to rounding errors
-   * increases.
-   *
-   * The less the exchange rate, the less the destination amount, so use the lower
-   * bound rate to compute this floor.
+   * Estimate the source amount that delivers the given destination amount.
+   * (1) Low-end estimate: lowest source amount that *may* deliver the given destination
+   *     amount (TODO won't overdeliver, but may underdeliver?).
+   * (2) High-end estimate: lowest source amount that *must* deliver at least the given
+   *     destination amount (TODO may overdeliver, won't underdeliver?).
    */
-  getDestinationRoundingErrorFloor(): Maybe<Integer> {
-    // Convert the minimum source amount into its corresponding minimum destination amount.
-    return this.estimateDestinationAmount(
-      this.getSourceRoundingErrorFloor(),
-      Maybe.just(this.getRateLowerBound())
-    )
+  estimateSourceAmount(amountToDeliver: Integer): [Integer, Integer] | undefined {
+    if (
+      !this.exchangeRate ||
+      // Ensure denominator is not 0
+      this.exchangeRate.upperBound[1].isZero() ||
+      this.exchangeRate.lowerBound[1].isZero()
+    ) {
+      return
+    }
+
+    const sourceAmount = amountToDeliver
+      .times(this.exchangeRate.upperBound[0])
+      .dividedBy(this.exchangeRate.upperBound[1])
+    const lowEndSource = sourceAmount.isInteger()
+      ? sourceAmount.plus(1)
+      : sourceAmount.integerValue(BigNumber.ROUND_CEIL)
+
+    const highEndSource = amountToDeliver
+      .times(this.exchangeRate.lowerBound[0])
+      .dividedBy(this.exchangeRate.lowerBound[1])
+      .integerValue(BigNumber.ROUND_CEIL)
+
+    return [lowEndSource as Integer, highEndSource as Integer]
   }
 
-  /** TODO Add description here */
-  getSourceRoundingErrorFloor(): Maybe<Integer> {
-    // What source amount will deliver at least 1 unit given the rate is this margin of error?
+  /** TODO Explain differences between the two estimates */
+  estimateDestinationAmount(amountToSend: Integer): [Integer, Integer] | undefined {
+    if (
+      !this.exchangeRate ||
+      // Ensure denominator is 0
+      this.exchangeRate.upperBound[0].isZero() ||
+      this.exchangeRate.lowerBound[0].isZero()
+    ) {
+      return
+    }
 
-    // Put another way, all amounts >= this source amount should deliver money without failing
-    // due to rounding. If they fail due to an exchange rate error, it will be because the real
-    // exchange rate turned out to be too low, and not because of an off-by-1 rounding error.
+    const lowEndDestination = amountToSend
+      .times(this.exchangeRate.lowerBound[1])
+      .dividedBy(this.exchangeRate.lowerBound[0])
+      .integerValue(BigNumber.ROUND_DOWN)
 
-    // Amounts less than this *may* deliver money without failing due to rounding, but as amounts
-    // get smaller, the probability of failure due to rounding errors increases.
+    // Since upper bound exchange rate is exclusive:
+    // If source amount converts exactly to an integer, destination amount MUST be 1 below
+    // If source amount doesn't convert precisely, we can't narrow it any better than that amount ¯\_(ツ)_/¯
+    const destinationAmount = amountToSend
+      .times(this.exchangeRate.upperBound[1])
+      .dividedBy(this.exchangeRate.upperBound[0])
+    const highEndDestination = destinationAmount.isInteger()
+      ? BigNumber.max(0, destinationAmount.minus(1))
+      : destinationAmount.integerValue(BigNumber.ROUND_DOWN)
 
-    return this.estimateMinSourceAmount(
-      Maybe.just(new BigNumber(1) as Integer),
-      this.getExchangeRateMarginOfError().or(
-        // TODO If there's no realized exchange rate yet,
-        // default to 1% of the minimum exchange rate
-        Maybe.just(this.minExchangeRate.times(0.01) as Rational)
-      )
-    )
-  }
-
-  // TODO Should these methods be removed?
-
-  estimateHighEndSourceAmount(destinationAmount: Maybe<Integer>): Maybe<Integer> {
-    return destinationAmount
-      .map(add1)
-      .map(divide)
-      .ap(Maybe.just(this.getRateLowerBound()))
-      .chain(n => n)
-      .map(floor)
-  }
-
-  estimateLowEndSourceAmount(destinationAmount: Maybe<Integer>): Maybe<Integer> {
-    return destinationAmount
-      .map(divide)
-      .ap(Maybe.just(this.getRateUpperBound()))
-      .chain(n => n)
-      .map(ceil)
+    return [lowEndDestination as Integer, highEndDestination as Integer]
   }
 }
