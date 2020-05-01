@@ -351,7 +351,7 @@ export class AmountController implements StreamController {
     this.updateReceiveMax(reply)
   }
 
-  private updateReceiveMax({ sequence, responseFrames, log }: StreamReply) {
+  private updateReceiveMax({ responseFrames, log }: StreamReply) {
     responseFrames
       ?.filter((frame): frame is StreamMaxMoneyFrame => frame.type === FrameType.StreamMaxMoney)
       .filter(frame => frame.streamId.equals(DEFAULT_STREAM_ID))
@@ -370,24 +370,30 @@ export class AmountController implements StreamController {
           return
         }
 
-        // "Fast-forward" the total received if it's not synchronized with the recipient
-        // This case occurs if an intermediary or the recipient dropped a Fulfill, causing them to lose money
-        const oldestInFlightPacket = Math.min(sequence, ...this.inFlightAmounts.keys())
-        // Only fast-forward in response to the oldest in-flight packet: return packets received out-of-order could overcount the delivered amount
-        const isOldestInFlight = oldestInFlightPacket === sequence
-        if (isOldestInFlight) {
-          if (totalReceived.isGreaterThan(this.amountDelivered)) {
-            log.warn(
-              'fast forwarding total delivered from %s to %s. other nodes in path may have lost money',
-              this.amountDelivered,
-              totalReceived
-            )
-            this.amountDelivered = totalReceived
-          }
+        // TODO There's still a race condition: remote receives seq 5, then seq 4.
+        //      Thus, seq 4 includes greater totalDelivered. But, on return side,
+        //      seq 4 gets delivered before seq 5, so we set to the higher
+        //      delivered amount, then add seq 5. Basically, you don't know what order
+        //      the packets will get delivered to the remote...
 
-          // If totalReceived is less than the amount we know we delivered, we shouldn't do anything,
-          // since Rust and Java return `StreamMaxMoney` frames with totalReceived of 0
-        }
+        // // "Fast-forward" the total received if it's not synchronized with the recipient
+        // // This case occurs if an intermediary or the recipient dropped a Fulfill, causing them to lose money
+        // const oldestInFlightPacket = Math.min(sequence, ...this.inFlightAmounts.keys())
+        // // Only fast-forward in response to the oldest in-flight packet: return packets received out-of-order could overcount the delivered amount
+        // const isOldestInFlight = oldestInFlightPacket === sequence
+        // if (isOldestInFlight) {
+        //   if (totalReceived.isGreaterThan(this.amountDelivered)) {
+        //     log.warn(
+        //       'fast forwarding total delivered from %s to %s. other nodes in path may have lost money',
+        //       this.amountDelivered,
+        //       totalReceived
+        //     )
+        //     this.amountDelivered = totalReceived
+        //   }
+
+        //   // If totalReceived is less than the amount we know we delivered, we shouldn't do anything,
+        //   // since Rust and Java return `StreamMaxMoney` frames with totalReceived of 0
+        // }
 
         // Remote receive max can only increase
         this.remoteReceiveMax = this.remoteReceiveMax
