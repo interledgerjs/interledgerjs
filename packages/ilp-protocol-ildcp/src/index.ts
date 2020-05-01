@@ -4,7 +4,10 @@ const debug = require('debug')('ilp-protocol-ildcp')
 
 const ILDCP_DESTINATION = 'peer.config'
 const PEER_PROTOCOL_FULFILLMENT = Buffer.alloc(32)
-const PEER_PROTOCOL_CONDITION = Buffer.from('Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=', 'base64')
+const PEER_PROTOCOL_CONDITION = Buffer.from(
+  'Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=',
+  'base64'
+)
 const PEER_PROTOCOL_EXPIRY_DURATION = 60000
 
 export interface IldcpRequest {
@@ -13,8 +16,8 @@ export interface IldcpRequest {
 }
 
 export interface IldcpResponse {
-  clientAddress: string,
-  assetScale: number,
+  clientAddress: string
+  assetScale: number
   assetCode: string
 }
 
@@ -110,14 +113,19 @@ const fetch = async (
 
   const { clientAddress, assetScale, assetCode } = deserializeIldcpResponse(data)
 
-  debug('received client info. clientAddress=%s assetScale=%s assetCode=%s', clientAddress, assetScale, assetCode)
+  debug(
+    'received client info. clientAddress=%s assetScale=%s assetCode=%s',
+    clientAddress,
+    assetScale,
+    assetCode
+  )
 
   return { clientAddress, assetScale, assetCode }
 }
 
 export interface ServeSettings {
-  requestPacket: Buffer,
-  handler: (request: IldcpRequest) => Promise<IldcpResponse>,
+  requestPacket: Buffer
+  handler: (request: IldcpRequest) => Promise<IldcpResponse>
   serverAddress: string
 }
 
@@ -133,12 +141,12 @@ const serve = async ({ requestPacket, handler, serverAddress }: ServeSettings): 
 
     return serializeIldcpResponse(info)
   } catch (err) {
-    const errInfo = (err && typeof err === 'object' && err.stack) ? err.stack : err
+    const errInfo = err && typeof err === 'object' && err.stack ? err.stack : err
     debug('error while handling ildcp request. error=%s', errInfo)
 
     return IlpPacket.serializeIlpReject({
       code: 'F00',
-      message: (err && typeof err === 'object' && err.message) ? err.message : 'unexpected error.',
+      message: err && typeof err === 'object' && err.message ? err.message : 'unexpected error.',
       triggeredBy: serverAddress,
       data: Buffer.alloc(0)
     })

@@ -5,14 +5,14 @@ import { URL } from 'url'
 const log = require('ilp-logger')('ilp-plugin')
 
 export interface Plugin {
-  connect (params?: any): Promise<void>;
-  disconnect (params?: any): Promise<void>;
-  sendData (data: Buffer): Promise<Buffer>;
-  sendMoney (amount: string): Promise<void>;
-  registerDataHandler: (handler: (data: Buffer) => Promise<Buffer>) => void;
-  deregisterDataHandler: () => void;
-  registerMoneyHandler: (handler: (amount: string) => Promise<void>) => void;
-  deregisterMoneyHandler: () => void;
+  connect(params?: any): Promise<void>
+  disconnect(params?: any): Promise<void>
+  sendData(data: Buffer): Promise<Buffer>
+  sendMoney(amount: string): Promise<void>
+  registerDataHandler: (handler: (data: Buffer) => Promise<Buffer>) => void
+  deregisterDataHandler: () => void
+  registerMoneyHandler: (handler: (amount: string) => Promise<void>) => void
+  deregisterMoneyHandler: () => void
 }
 
 const generateCredentials = (opts?: any) => {
@@ -31,7 +31,7 @@ const generateCredentials = (opts?: any) => {
   return { server: `btp+ws://${name}:${secret}@localhost:7768` }
 }
 
-export const pluginFromEnvironment = function (opts?: any): Plugin {
+export const pluginFromEnvironment = function(opts?: any): Plugin {
   const module = process.env.ILP_PLUGIN || 'ilp-plugin-btp'
   const credentials = generateCredentials(opts)
 

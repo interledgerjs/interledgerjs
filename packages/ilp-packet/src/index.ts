@@ -1,9 +1,5 @@
 import { Predictor, Reader, Writer } from 'oer-utils'
-import {
-  dateToInterledgerTime,
-  interledgerTimeToDate,
-  INTERLEDGER_TIME_LENGTH
-} from './utils/date'
+import { dateToInterledgerTime, interledgerTimeToDate, INTERLEDGER_TIME_LENGTH } from './utils/date'
 import * as assert from 'assert'
 import * as errors from './errors'
 export const Errors = errors
@@ -15,8 +11,8 @@ export enum Type {
 }
 
 export interface IlpErrorClass {
-  message: string,
-  ilpErrorCode?: string,
+  message: string
+  ilpErrorCode?: string
   ilpErrorData?: Buffer
 }
 
@@ -28,32 +24,40 @@ export const deserializeEnvelope = (binary: Buffer) => {
   return { type, contents }
 }
 
-export type IlpPacket = {
-  type: Type.TYPE_ILP_PREPARE,
-  typeString?: 'ilp_prepare',
-  data: IlpPrepare
-} | {
-  type: Type.TYPE_ILP_FULFILL,
-  typeString?: 'ilp_fulfill',
-  data: IlpFulfill
-} | {
-  type: Type.TYPE_ILP_REJECT,
-  typeString?: 'ilp_reject',
-  data: IlpReject
-}
+export type IlpPacket =
+  | {
+      type: Type.TYPE_ILP_PREPARE
+      typeString?: 'ilp_prepare'
+      data: IlpPrepare
+    }
+  | {
+      type: Type.TYPE_ILP_FULFILL
+      typeString?: 'ilp_fulfill'
+      data: IlpFulfill
+    }
+  | {
+      type: Type.TYPE_ILP_REJECT
+      typeString?: 'ilp_reject'
+      data: IlpReject
+    }
 
 export interface IlpPrepare {
-  amount: string,
-  executionCondition: Buffer,
-  expiresAt: Date,
-  destination: string,
+  amount: string
+  executionCondition: Buffer
+  expiresAt: Date
+  destination: string
   data: Buffer
 }
 
 export const serializeIlpPrepare = (json: IlpPrepare) => {
-  assert(json.amount && typeof (json as Partial<IlpPrepare>).amount === 'string', 'amount must be a string')
-  assert(Buffer.isBuffer(json.executionCondition) &&
-    json.executionCondition.length === 32, 'executionCondition must be a 32-byte buffer')
+  assert(
+    json.amount && typeof (json as Partial<IlpPrepare>).amount === 'string',
+    'amount must be a string'
+  )
+  assert(
+    Buffer.isBuffer(json.executionCondition) && json.executionCondition.length === 32,
+    'executionCondition must be a 32-byte buffer'
+  )
   assert(json.expiresAt && json.expiresAt instanceof Date, 'expiresAt must be a Date')
   assert(typeof (json as Partial<IlpPrepare>).destination === 'string', 'destination is required')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
@@ -106,33 +110,38 @@ export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
 }
 
 export interface IlpFulfill {
-  fulfillment: Buffer,
+  fulfillment: Buffer
   data: Buffer
 }
 
-export function isPrepare (packet: IlpAny): packet is IlpPrepare {
-  return typeof packet['amount'] === 'string' &&
+export function isPrepare(packet: IlpAny): packet is IlpPrepare {
+  return (
+    typeof packet['amount'] === 'string' &&
     typeof packet['expiresAt'] !== 'undefined' &&
     typeof packet['destination'] === 'string' &&
     Buffer.isBuffer(packet['executionCondition']) &&
     Buffer.isBuffer(packet['data'])
+  )
 }
 
-export function isFulfill (packet: IlpAny): packet is IlpFulfill {
-  return Buffer.isBuffer(packet['fulfillment']) &&
-    Buffer.isBuffer(packet['data'])
+export function isFulfill(packet: IlpAny): packet is IlpFulfill {
+  return Buffer.isBuffer(packet['fulfillment']) && Buffer.isBuffer(packet['data'])
 }
 
-export function isReject (packet: IlpAny): packet is IlpReject {
-  return typeof packet['code'] === 'string' &&
+export function isReject(packet: IlpAny): packet is IlpReject {
+  return (
+    typeof packet['code'] === 'string' &&
     typeof packet['triggeredBy'] === 'string' &&
     typeof packet['message'] === 'string' &&
     Buffer.isBuffer(packet['data'])
+  )
 }
 
 export const serializeIlpFulfill = (json: IlpFulfill) => {
-  assert(Buffer.isBuffer(json.fulfillment) &&
-    json.fulfillment.length === 32, 'fulfillment must be a 32-byte buffer')
+  assert(
+    Buffer.isBuffer(json.fulfillment) && json.fulfillment.length === 32,
+    'fulfillment must be a 32-byte buffer'
+  )
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
 
   const contentSize = 32 + Predictor.measureVarOctetString(json.data.length)
@@ -168,17 +177,23 @@ export const deserializeIlpFulfill = (binary: Buffer): IlpFulfill => {
 const ILP_ERROR_CODE_LENGTH = 3
 
 export interface IlpReject {
-  code: string,
-  triggeredBy: string,
-  message: string,
+  code: string
+  triggeredBy: string
+  message: string
   data: Buffer
 }
 
 const EMPTY_BUFFER = Buffer.alloc(0)
 
 export const serializeIlpReject = (json: IlpReject) => {
-  assert(json.code && typeof (json as Partial<IlpReject>).code === 'string', 'code must be a string')
-  assert(typeof (json as Partial<IlpReject>).triggeredBy === 'string', 'triggeredBy must be a string')
+  assert(
+    json.code && typeof (json as Partial<IlpReject>).code === 'string',
+    'code must be a string'
+  )
+  assert(
+    typeof (json as Partial<IlpReject>).triggeredBy === 'string',
+    'triggeredBy must be a string'
+  )
   assert(typeof (json as Partial<IlpReject>).message === 'string', 'message must be a string')
   assert(!json.data || Buffer.isBuffer(json.data), 'data must be a buffer')
 
@@ -192,7 +207,8 @@ export const serializeIlpReject = (json: IlpReject) => {
   const message = Buffer.from(json.message, 'utf8')
   const data = json.data || EMPTY_BUFFER
 
-  const contentSize = ILP_ERROR_CODE_LENGTH +
+  const contentSize =
+    ILP_ERROR_CODE_LENGTH +
     Predictor.measureVarOctetString(triggeredBy.length) +
     Predictor.measureVarOctetString(message.length) +
     Predictor.measureVarOctetString(data.length)
@@ -233,10 +249,14 @@ export const deserializeIlpReject = (binary: Buffer): IlpReject => {
 
 export const serializeIlpPacket = (obj: IlpPacket) => {
   switch (obj.type) {
-    case Type.TYPE_ILP_PREPARE: return serializeIlpPrepare(obj.data)
-    case Type.TYPE_ILP_FULFILL: return serializeIlpFulfill(obj.data)
-    case Type.TYPE_ILP_REJECT: return serializeIlpReject(obj.data)
-    default: throw new Error('Object has invalid type')
+    case Type.TYPE_ILP_PREPARE:
+      return serializeIlpPrepare(obj.data)
+    case Type.TYPE_ILP_FULFILL:
+      return serializeIlpFulfill(obj.data)
+    case Type.TYPE_ILP_REJECT:
+      return serializeIlpReject(obj.data)
+    default:
+      throw new Error('Object has invalid type')
   }
 }
 
@@ -270,11 +290,11 @@ export type IlpAny = IlpPrepare | IlpFulfill | IlpReject
 
 export type IlpReply = IlpFulfill | IlpReject
 
-export function deserializeIlpReply (data: Buffer): IlpReply {
+export function deserializeIlpReply(data: Buffer): IlpReply {
   return deserializeIlpPacket(data).data as IlpReply
 }
 
-export function serializeIlpReply (packet: IlpReply): Buffer {
+export function serializeIlpReply(packet: IlpReply): Buffer {
   return isFulfill(packet) ? serializeIlpFulfill(packet) : serializeIlpReject(packet)
 }
 

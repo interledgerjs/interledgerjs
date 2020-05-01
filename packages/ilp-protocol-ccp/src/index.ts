@@ -1,11 +1,21 @@
-import { IlpPrepare, deserializeIlpPrepare, serializeIlpPrepare, IlpFulfill, serializeIlpFulfill, deserializeIlpFulfill } from 'ilp-packet'
+import {
+  IlpPrepare,
+  deserializeIlpPrepare,
+  serializeIlpPrepare,
+  IlpFulfill,
+  serializeIlpFulfill,
+  deserializeIlpFulfill
+} from 'ilp-packet'
 import { Reader, Writer } from 'oer-utils'
 import { readUuid, writeUuid } from './uuid'
 
 export const CCP_CONTROL_DESTINATION = 'peer.route.control'
 export const CCP_UPDATE_DESTINATION = 'peer.route.update'
 export const PEER_PROTOCOL_FULFILLMENT = Buffer.alloc(32)
-export const PEER_PROTOCOL_CONDITION = Buffer.from('Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=', 'base64')
+export const PEER_PROTOCOL_CONDITION = Buffer.from(
+  'Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=',
+  'base64'
+)
 const PEER_PROTOCOL_EXPIRY_DURATION = 60000
 
 export enum Mode {
@@ -27,8 +37,7 @@ export interface CcpRouteControlResponse {
 }
 
 // Well-known route property IDs
-export enum PropId {
-}
+export enum PropId {}
 
 export interface CcpRoutePropCommon {
   isOptional: boolean
@@ -50,8 +59,7 @@ export interface CcpRoutePropString extends CcpRoutePropCommon {
 
 export type CcpRouteProp =
   // Generic props
-  CcpRoutePropBuffer |
-  CcpRoutePropString
+  CcpRoutePropBuffer | CcpRoutePropString
 
 export interface CcpRoute {
   prefix: string

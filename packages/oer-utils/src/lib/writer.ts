@@ -47,18 +47,19 @@ class Writer implements WriterInterface {
   /**
    * @param value Optional. Either a Buffer to use, or a capacity to allocate. If an explicit capacity or buffer is passed, the writer will throw if more bytes are written.
    */
-  constructor (value?: number | Buffer) {
+  constructor(value?: number | Buffer) {
     if (Buffer.isBuffer(value)) {
       this.buffer = value
       this.strict = true
-    } else { // capacity
+    } else {
+      // capacity
       this.buffer = Buffer.alloc(value || 0)
       this.strict = typeof value === 'number'
     }
     this._offset = 0
   }
 
-  get length (): number {
+  get length(): number {
     return this._offset
   }
 
@@ -68,7 +69,7 @@ class Writer implements WriterInterface {
    * @param {number | string | Long} value Value to write. Must be in range for the given length.
    * @param length Number of bytes to encode this value as.
    */
-  writeUInt (_value: LongValue, length: number): void {
+  writeUInt(_value: LongValue, length: number): void {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
@@ -105,7 +106,7 @@ class Writer implements WriterInterface {
    * @param {number | string | Long} value Value to write. Must be in range for the given length.
    * @param length Number of bytes to encode this value as.
    */
-  writeInt (_value: LongValue, length: number): void {
+  writeInt(_value: LongValue, length: number): void {
     if (!isInteger(_value)) {
       throw new Error('Int must be an integer')
     } else if (length <= 0) {
@@ -144,7 +145,7 @@ class Writer implements WriterInterface {
    *
    * @param {number | string | Long | Buffer} value Integer to represent.
    */
-  writeVarUInt (_value: LongValue | Buffer): void {
+  writeVarUInt(_value: LongValue | Buffer): void {
     if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -175,7 +176,7 @@ class Writer implements WriterInterface {
    *
    * @param {number | string | Long | Buffer} value Integer to represent.
    */
-  writeVarInt (_value: LongValue | Buffer): void {
+  writeVarInt(_value: LongValue | Buffer): void {
     if (Buffer.isBuffer(_value)) {
       // If the integer was already passed as a buffer, we can just treat it as
       // an octet string.
@@ -211,10 +212,15 @@ class Writer implements WriterInterface {
    * @param buffer Data to write.
    * @param length Length of data according to the format.
    */
-  writeOctetString (buffer: Buffer, length: number): void {
+  writeOctetString(buffer: Buffer, length: number): void {
     if (buffer.length !== length) {
-      throw new Error('Incorrect length for octet string (actual: ' +
-        buffer.length + ', expected: ' + length + ')')
+      throw new Error(
+        'Incorrect length for octet string (actual: ' +
+          buffer.length +
+          ', expected: ' +
+          length +
+          ')'
+      )
     }
     this.write(buffer)
   }
@@ -226,7 +232,7 @@ class Writer implements WriterInterface {
    *
    * @param buffer Contents of the octet string.
    */
-  writeVarOctetString (buffer: Buffer): void {
+  writeVarOctetString(buffer: Buffer): void {
     if (Buffer.isBuffer(buffer)) {
       this._writeLengthPrefix(buffer.length)
       this.write(buffer)
@@ -245,7 +251,7 @@ class Writer implements WriterInterface {
    *
    * @param length Length of the octet string.
    */
-  createVarOctetString (length: number): Writer {
+  createVarOctetString(length: number): Writer {
     if (length < 0) {
       throw new Error('length must be non-negative')
     }
@@ -255,7 +261,7 @@ class Writer implements WriterInterface {
     return new Writer(slice)
   }
 
-  private _writeLengthPrefix (length: number): void {
+  private _writeLengthPrefix(length: number): void {
     const MSB = 0x80
     if (length <= 127) {
       // For buffers shorter than 128 bytes, we simply prefix the length as a
@@ -280,7 +286,7 @@ class Writer implements WriterInterface {
    *
    * @param buffer Bytes to write.
    */
-  write (buffer: Buffer): void {
+  write(buffer: Buffer): void {
     const offset = this.advance(buffer.length)
     buffer.copy(this.buffer, offset)
   }
@@ -289,7 +295,7 @@ class Writer implements WriterInterface {
    * Returns the buffer containing the serialized data that was written using
    * this writer.
    */
-  getBuffer (): Buffer {
+  getBuffer(): Buffer {
     // ST: The following debug statement is very useful, so I finally decided to
     // commit it...
     // console.log(this.components.map((x) => x.toString('hex')).join(' '))
@@ -301,7 +307,7 @@ class Writer implements WriterInterface {
    * Ensure that the buffer has the capacity to fit `advanceBy` bytes, reallocating
    * a larger buffer if necessary.
    */
-  private advance (advanceBy: number): number {
+  private advance(advanceBy: number): number {
     const srcOffset = this._offset
     const minCapacity = srcOffset + advanceBy
     if (minCapacity <= this.buffer.length) {
@@ -328,46 +334,46 @@ class Writer implements WriterInterface {
 }
 
 interface Writer {
-  writeUInt8 (value: LongValue): undefined
-  writeUInt16 (value: LongValue): undefined
-  writeUInt32 (value: LongValue): undefined
-  writeUInt64 (value: LongValue): undefined
-  writeInt8 (value: LongValue): undefined
-  writeInt16 (value: LongValue): undefined
-  writeInt32 (value: LongValue): undefined
-  writeInt64 (value: LongValue): undefined
+  writeUInt8(value: LongValue): undefined
+  writeUInt16(value: LongValue): undefined
+  writeUInt32(value: LongValue): undefined
+  writeUInt64(value: LongValue): undefined
+  writeInt8(value: LongValue): undefined
+  writeInt16(value: LongValue): undefined
+  writeInt32(value: LongValue): undefined
+  writeInt64(value: LongValue): undefined
 }
 
 // Create write(U)Int{8,16,32,64} shortcuts
-[1, 2, 4, 8].forEach((bytes) => {
-  Writer.prototype['writeUInt' + bytes * 8] = function (value: number) {
+;[1, 2, 4, 8].forEach(bytes => {
+  Writer.prototype['writeUInt' + bytes * 8] = function(value: number) {
     this.writeUInt(value, bytes)
   }
 
-  Writer.prototype['writeInt' + bytes * 8] = function (value: number) {
+  Writer.prototype['writeInt' + bytes * 8] = function(value: number) {
     this.writeInt(value, bytes)
   }
 })
 
 export interface WriterInterface {
   readonly length: number
-  writeUInt (_value: LongValue, length: number): void
-  writeInt (_value: LongValue, length: number): void
-  writeVarUInt (_value: LongValue | Buffer): void
-  writeVarInt (_value: LongValue | Buffer): void
-  writeOctetString (buffer: Buffer, length: number): void
-  writeVarOctetString (buffer: Buffer): void
-  createVarOctetString (length: number): WriterInterface
-  write (buffer: Buffer): void
+  writeUInt(_value: LongValue, length: number): void
+  writeInt(_value: LongValue, length: number): void
+  writeVarUInt(_value: LongValue | Buffer): void
+  writeVarInt(_value: LongValue | Buffer): void
+  writeOctetString(buffer: Buffer, length: number): void
+  writeVarOctetString(buffer: Buffer): void
+  createVarOctetString(length: number): WriterInterface
+  write(buffer: Buffer): void
 
-  writeUInt8 (value: LongValue): undefined
-  writeUInt16 (value: LongValue): undefined
-  writeUInt32 (value: LongValue): undefined
-  writeUInt64 (value: LongValue): undefined
-  writeInt8 (value: LongValue): undefined
-  writeInt16 (value: LongValue): undefined
-  writeInt32 (value: LongValue): undefined
-  writeInt64 (value: LongValue): undefined
+  writeUInt8(value: LongValue): undefined
+  writeUInt16(value: LongValue): undefined
+  writeUInt32(value: LongValue): undefined
+  writeUInt64(value: LongValue): undefined
+  writeInt8(value: LongValue): undefined
+  writeInt16(value: LongValue): undefined
+  writeInt32(value: LongValue): undefined
+  writeInt64(value: LongValue): undefined
 }
 
 export default Writer

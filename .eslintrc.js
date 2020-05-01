@@ -7,7 +7,7 @@ module.exports = {
     "plugin:prettier/recommended" // Enables eslint-plugin-prettier and eslint-config-prettier. This will display prettier errors as ESLint errors. Make sure this is always the last configuration in the extends array.
     // TODO Add back Standard?
   ],
-  plugins: ['@typescript-eslint'],
+  plugins: ['@typescript-eslint', 'jest'],
   env: {
     es6: true,
     node: true,
@@ -19,7 +19,6 @@ module.exports = {
     project: './tsconfig.json'
   },
   rules: {
-    // '@typescript-eslint/indent': ['error', 2],
     '@typescript-eslint/explicit-function-return-type': ['off'],
     '@typescript-eslint/explicit-member-accessibility': ['off'],
     '@typescript-eslint/no-empty-interface': ['off'],
