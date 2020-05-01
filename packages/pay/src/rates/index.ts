@@ -1,5 +1,4 @@
-import { Maybe } from 'true-myth'
-import { Brand } from 'src/utils'
+import { Brand, Rational } from 'src/utils'
 import BigNumber from 'bignumber.js'
 
 /**
@@ -35,19 +34,19 @@ export const getRate = (
   destinationAssetCode: string,
   destinationAssetScale: number,
   prices: AssetPrices
-): Maybe<ValidRate> => {
+): Rational | undefined => {
   let rate = 1
 
   // Only fetch the price if the assets are different -- otherwise rate is 1!
   if (sourceAssetCode !== destinationAssetCode) {
     const sourceAssetPrice = prices[sourceAssetCode]
     if (!sourceAssetPrice) {
-      return Maybe.nothing()
+      return
     }
 
     const destinationAssetPrice = prices[destinationAssetCode]
     if (!destinationAssetPrice) {
-      return Maybe.nothing()
+      return
     }
 
     rate = sourceAssetPrice / destinationAssetPrice
@@ -59,13 +58,13 @@ export const getRate = (
 
   // If any asset price is 0, rate will be Infinity
   if (!isValidRate(scaledRate)) {
-    return Maybe.nothing()
+    return
   }
 
-  return Maybe.just(scaledRate)
+  // TODO Add validation when constructing the `Rational` directly
+  return new BigNumber(scaledRate) as Rational
 }
 
-// TODO Should this also round?
 export const convert = (
   sourceAmount: BigNumber.Value,
   sourceAssetCode: string,
@@ -73,7 +72,7 @@ export const convert = (
   destinationAssetScale: number,
   prices: AssetPrices,
   roundingMode: typeof BigNumber.ROUND_DOWN | typeof BigNumber.ROUND_CEIL
-): Maybe<BigNumber> =>
-  getRate(sourceAssetCode, 0, destinationAssetCode, destinationAssetScale, prices).map(rate =>
-    new BigNumber(sourceAmount).times(rate).integerValue(roundingMode)
-  )
+): BigNumber | undefined =>
+  getRate(sourceAssetCode, 0, destinationAssetCode, destinationAssetScale, prices)
+    ?.times(sourceAmount)
+    .integerValue(roundingMode)

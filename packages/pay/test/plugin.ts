@@ -5,7 +5,7 @@ import {
 } from '@kincaidoneil/ilp-connector/dist/types/plugin'
 import { EventEmitter } from 'events'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { sleep } from '../../src/utils'
+import { sleep } from '../src/utils'
 
 // TODO Normal distribution
 // TODO Cite this: https://stackoverflow.com/questions/25582882/javascript-math-random-normal-distribution-gaussian-bell-curve

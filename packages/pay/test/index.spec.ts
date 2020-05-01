@@ -5,11 +5,11 @@ import BigNumber from 'bignumber.js'
 import { Connection, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
 import Long from 'long'
 import reduct from 'reduct'
-import { pay } from '../src/index'
-import { CustomBackend } from './mocks/rate-backend'
-import { MirrorPlugin } from './mocks/plugin'
+import { CustomBackend } from './rate-backend'
+import { MirrorPlugin } from './plugin'
 import { fetchCoinCapRates } from '../src/rates/coincap'
-import { getRate, convert } from '../src/rates'
+import { getRate } from '../src/rates'
+import { quote } from '../src'
 
 test('completes source amount payment with max packet amount', async t => {
   const alice1 = new MirrorPlugin()
@@ -59,7 +59,7 @@ test('completes source amount payment with max packet amount', async t => {
     plugin: bob2
   })
 
-  const serverConnection = streamServer.acceptConnection()
+  const connectionPromise = streamServer.acceptConnection()
   streamServer.on('connection', (connection: Connection) => {
     connection.on('stream', (stream: DataAndMoneyStream) => {
       stream.setReceiveMax(Long.MAX_UNSIGNED_VALUE)
@@ -71,23 +71,29 @@ test('completes source amount payment with max packet amount', async t => {
     destinationAccount: destinationAddress
   } = streamServer.generateAddressAndSecret()
 
-  const rate = getRate('USD', 6, 'XRP', 9, prices).unsafelyUnwrap()
-  const amountToSend = new BigNumber(1004270) // $1.00427
-
-  const receipt = await pay({
+  const amountToSend = new BigNumber(1.00427)
+  const { pay, ...quoteDetails } = await quote({
     amountToSend,
-    sourceAddress: 'test.larry.alice',
-    sourceAssetCode: 'USD',
-    sourceAssetScale: 6,
-    destinationAssetCode: 'XRP',
-    destinationAssetScale: 9,
     destinationAddress,
     sharedSecret,
-    exchangeRate: new BigNumber(rate * 0.985), // 1.5% allowed slippage
-    plugin: alice1
+    plugin: alice1,
+    slippage: 0.015
   })
 
-  t.is((await serverConnection).totalReceived, receipt.amountDelivered.toFixed())
+  t.is(quoteDetails.sourceAccount.assetCode, 'USD')
+  t.is(quoteDetails.sourceAccount.assetScale, 6)
+  t.is(quoteDetails.sourceAccount.ilpAddress, 'test.larry.alice')
+  t.is(quoteDetails.destinationAccount.assetCode, 'XRP')
+  t.is(quoteDetails.destinationAccount.assetScale, 9)
+  t.is(quoteDetails.destinationAccount.ilpAddress, destinationAddress)
+  t.deepEqual(quoteDetails.maxSourceAmount, amountToSend)
+
+  const receipt = await pay()
+
+  // TODO What should I check the delivered amount against?
+
+  const serverConnection = await connectionPromise
+  t.deepEqual(new BigNumber(serverConnection.totalReceived), receipt.amountDelivered.shiftedBy(9))
   t.deepEqual(receipt.amountSent, amountToSend)
   t.deepEqual(receipt.amountInFlight, new BigNumber(0))
 
@@ -147,16 +153,17 @@ test('delivers fixed destination amount with max packet amount', async t => {
     plugin: bob2
   })
 
-  const rate = getRate('ETH', 9, 'BTC', 8, prices).unsafelyUnwrap()
-  // prettier-ignore
-  const maxSourceAmount = convert(11, 'USD', 'ETH', 9, prices, BigNumber.ROUND_CEIL).unsafelyUnwrap()
-  // prettier-ignore
-  const amountToDeliver = convert(10, 'USD', 'BTC', 8, prices, BigNumber.ROUND_CEIL).unsafelyUnwrap()
+  const amountToDeliver = getRate('USD', 0, 'BTC', 0, prices)
+    ?.times(10)
+    .decimalPlaces(8)
+  if (!amountToDeliver) {
+    return t.fail()
+  }
 
-  const serverConnection = streamServer.acceptConnection()
+  const connectionPromise = streamServer.acceptConnection()
   streamServer.on('connection', (connection: Connection) => {
     connection.on('stream', (stream: DataAndMoneyStream) => {
-      stream.setReceiveMax(amountToDeliver.toString())
+      stream.setReceiveMax(amountToDeliver.shiftedBy(8).toString())
     })
   })
 
@@ -165,23 +172,22 @@ test('delivers fixed destination amount with max packet amount', async t => {
     destinationAccount: destinationAddress
   } = streamServer.generateAddressAndSecret()
 
-  const receipt = await pay({
-    amountToSend: maxSourceAmount,
+  const { pay, ...quoteDetails } = await quote({
     amountToDeliver,
-    sourceAddress: 'test.larry.alice',
-    sourceAssetCode: 'ETH',
-    sourceAssetScale: 9,
     destinationAssetCode: 'BTC',
     destinationAssetScale: 8,
     destinationAddress,
     sharedSecret,
-    exchangeRate: new BigNumber(rate * 0.985), // 1.5% allowed spread
+    slippage: 0.015,
     plugin: alice1
   })
+  const receipt = await pay()
 
-  t.is((await serverConnection).totalReceived, amountToDeliver.toFixed())
+  const serverConnection = await connectionPromise
+  t.deepEqual(new BigNumber(serverConnection.totalReceived), amountToDeliver.shiftedBy(8))
   t.deepEqual(receipt.amountDelivered, amountToDeliver)
   t.deepEqual(receipt.amountInFlight, new BigNumber(0))
+  t.true(receipt.amountSent.isLessThanOrEqualTo(quoteDetails.maxSourceAmount))
 
   // Interval in `deduplicate` middleware continues running unless the plugins are manually removed
   await app.removePlugin('alice', alice2)
@@ -249,21 +255,17 @@ test('ends payment if receiver closes the stream', async t => {
   // Since we're sending $100,000, test will fail due to timeout
   // if the connection isn't closed quickly
 
-  const receipt = await pay({
+  const { pay } = await quote({
     amountToSend: new BigNumber(10000000),
-    sourceAddress: 'test.larry.alice',
-    sourceAssetCode: 'USD',
-    sourceAssetScale: 2,
-    destinationAssetCode: 'USD',
-    destinationAssetScale: 2,
     destinationAddress,
     sharedSecret,
-    exchangeRate: new BigNumber(1),
+    slippage: 0,
     plugin: alice1
   })
+  const receipt = await pay()
 
-  t.deepEqual(receipt.amountSent, new BigNumber(20)) // Only $0.20 was received
-  t.deepEqual(receipt.amountDelivered, new BigNumber(20)) // Only $0.20 was received
+  t.deepEqual(receipt.amountSent, new BigNumber(0.2)) // Only $0.20 was received
+  t.deepEqual(receipt.amountDelivered, new BigNumber(0.2)) // Only $0.20 was received
   t.deepEqual(receipt.amountInFlight, new BigNumber(0))
 
   // Interval in `deduplicate` middleware continues running unless the plugins are manually removed
@@ -311,12 +313,10 @@ test('ends payment if receiver closes the connection', async t => {
     plugin: bob2
   })
 
+  const connectionPromise = streamServer.acceptConnection()
   streamServer.on('connection', (connection: Connection) => {
     connection.on('stream', (stream: DataAndMoneyStream) => {
       stream.setReceiveMax(Long.MAX_UNSIGNED_VALUE)
-
-      // End the connection after 1 second
-      setTimeout(() => connection.end(), 1000)
     })
   })
 
@@ -328,18 +328,19 @@ test('ends payment if receiver closes the connection', async t => {
   // Since we're sending such a large payment, test will fail due to timeout
   // if the payment doesn't end promptly
 
-  const receipt = await pay({
+  const { pay } = await quote({
     amountToSend: new BigNumber(100000000000),
-    sourceAddress: 'test.larry.alice',
-    sourceAssetCode: 'ABC',
-    sourceAssetScale: 0,
-    destinationAssetCode: 'ABC',
-    destinationAssetScale: 0,
     destinationAddress,
     sharedSecret,
-    exchangeRate: new BigNumber(1),
+    slippage: 0,
     plugin: alice1
   })
+
+  // End the connection after 1 second
+  const serverConnection = await connectionPromise
+  setTimeout(() => serverConnection.end(), 1000)
+
+  const receipt = await pay()
 
   t.true(receipt.amountSent.isGreaterThan(1))
   t.true(receipt.amountSent.isLessThan(100))
