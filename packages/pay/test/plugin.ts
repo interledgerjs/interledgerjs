@@ -6,6 +6,7 @@ import {
 import { EventEmitter } from 'events'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { sleep } from '../src/utils'
+import { serializeIlpReject, Errors } from 'ilp-packet'
 
 // TODO Normal distribution
 // TODO Cite this: https://stackoverflow.com/questions/25582882/javascript-math-random-normal-distribution-gaussian-bell-curve
@@ -22,9 +23,13 @@ const getRandomFloat = (min: number, max: number): number => {
   return num
 }
 
-const defaultDataHandler = () => {
-  throw new Error('No data handler registered')
-}
+const defaultDataHandler = async () =>
+  serializeIlpReject({
+    code: Errors.codes.F02_UNREACHABLE,
+    message: '',
+    triggeredBy: '',
+    data: Buffer.alloc(0)
+  })
 
 const defaultMoneyHandler = () => {
   throw new Error('No money handler registered')
