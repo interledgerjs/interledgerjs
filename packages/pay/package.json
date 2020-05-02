@@ -33,16 +33,11 @@
     "uuid": "^7.0.2"
   },
   "devDependencies": {
-    "@babel/core": "^7.9.6",
-    "@babel/preset-env": "^7.9.6",
-    "@babel/preset-typescript": "^7.9.0",
     "@kincaidoneil/ilp-connector": "^23.2.0",
     "@types/lodash": "^4.14.150",
     "@types/long": "^4.0.1",
     "@types/rgrove__parse-xml": "^1.1.0",
     "@types/uuid": "^7.0.2",
-    "babel-jest": "^25.5.1",
-    "jest": "^25.5.3",
     "reduct": "^3.3.1"
   }
 }

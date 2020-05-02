@@ -15,7 +15,7 @@ module.exports = {
   // cacheDirectory: "/tmp/jest_rs",
 
   // Automatically clear mock calls and instances between every test
-  clearMocks: true,
+  // clearMocks: true,
 
   // Indicates whether the coverage information should be collected while executing the test
   // collectCoverage: false,
@@ -24,7 +24,7 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!**/node_modules/**',
-    // Exclude in-progress functionality
+    // Exclude WIP functionality
     '!src/setup/open-payments.ts',
     '!src/rates/ecb.ts',
     '!src/controllers/liquidity-congestion.ts'
