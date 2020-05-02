@@ -19,7 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "jest",
     "cover": "jest --coverage",
-    "codecov": "codecov --root=../../ -f coverage/*.json -F <flagname>"
+    "codecov": "codecov --root=../../ -f coverage/*.json -F pay"
   },
   "dependencies": {
     "@rgrove/parse-xml": "^2.0.2",
