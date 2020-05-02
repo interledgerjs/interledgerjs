@@ -74,16 +74,12 @@
     "all": true
   },
   "devDependencies": {
-    "@babel/core": "^7.9.6",
-    "@babel/preset-env": "^7.9.6",
-    "@babel/preset-typescript": "^7.9.0",
     "@types/chai": "^4.1.7",
     "@types/chai-as-promised": "^7.1.0",
     "@types/long": "^4.0.0",
     "@types/sinon": "^7.0.13",
     "@typescript-eslint/eslint-plugin": "^1.11.0",
     "@typescript-eslint/parser": "^1.11.0",
-    "babel-jest": "^25.5.1",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "codecov": "^3.5.0",
@@ -109,6 +105,7 @@
     "rimraf": "^2.6.3",
     "sinon": "^7.3.2",
     "source-map-support": "^0.5.12",
+    "ts-jest": "^25.4.0",
     "ts-node": "^8.3.0",
     "typescript": "^3.5.2"
   }
