@@ -77,12 +77,12 @@ const LONG_VAR_INT_SIZES: LongSizeRange[] = new Array(8)
 for (let i = 0; i < 8; i++) {
   LONG_VAR_UINT_SIZES[i] = {
     max: Long.MAX_UNSIGNED_VALUE.shiftRightUnsigned(64 - 8 * (i + 1)),
-    bytes: i + 1
+    bytes: i + 1,
   }
   LONG_VAR_INT_SIZES[i] = {
     min: Long.MIN_VALUE.shiftRight(64 - 8 * (i + 1)),
     max: Long.MAX_VALUE.shiftRight(64 - 8 * (i + 1)),
-    bytes: i + 1
+    bytes: i + 1,
   }
 }
 
@@ -153,10 +153,10 @@ interface NumberSizeRange {
 
 function makeNumberRanges(ranges: LongSizeRange[]): NumberSizeRange[] {
   return ranges
-    .filter(range => range.bytes <= MAX_SAFE_BYTES)
-    .map(range => ({
+    .filter((range) => range.bytes <= MAX_SAFE_BYTES)
+    .map((range) => ({
       min: range.min && range.min.toNumber(),
       max: range.max.toNumber(),
-      bytes: range.bytes
+      bytes: range.bytes,
     }))
 }

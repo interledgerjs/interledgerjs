@@ -19,14 +19,14 @@ class BaseError extends Error {
     Object.defineProperty(this, 'message', {
       configurable: true,
       enumerable: false,
-      value: message
+      value: message,
     })
 
     // Set this.name
     Object.defineProperty(this, 'name', {
       configurable: true,
       enumerable: false,
-      value: this.constructor.name
+      value: this.constructor.name,
     })
 
     // Set this.stack

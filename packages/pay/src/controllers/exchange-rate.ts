@@ -103,7 +103,7 @@ export class ExchangeRateController implements StreamController {
       // Set the initial exchange rate
       this.exchangeRate = {
         upperBound: [sourceAmount, receivedAmount, packetRateUpperBound],
-        lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound]
+        lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound],
       }
     } else {
       // If the new exchange rate fluctuated and is "out of bounds," reset it
@@ -113,7 +113,7 @@ export class ExchangeRateController implements StreamController {
       if (isOutOfBounds) {
         this.exchangeRate = {
           upperBound: [sourceAmount, receivedAmount, packetRateUpperBound],
-          lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound]
+          lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound],
         }
       } else {
         // Otherwise, continue narrowing the bounds of the exchange rate
@@ -123,7 +123,7 @@ export class ExchangeRateController implements StreamController {
             : [sourceAmount, receivedAmount.plus(1) as Integer, packetRateUpperBound],
           lowerBound: this.exchangeRate.lowerBound[2].isGreaterThan(packetRateLowerBound)
             ? this.exchangeRate.lowerBound
-            : [sourceAmount, receivedAmount, packetRateLowerBound]
+            : [sourceAmount, receivedAmount, packetRateLowerBound],
         }
       }
     }

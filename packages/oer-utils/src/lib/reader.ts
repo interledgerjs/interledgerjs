@@ -598,31 +598,31 @@ interface Reader {
 }
 
 // Create {read,peek,skip}UInt{8,16,32}{,Number,Long} shortcuts
-;['read', 'peek', 'skip'].forEach(verb => {
-  ;[1, 2, 4, 8].forEach(bytes => {
-    Reader.prototype[verb + 'UInt' + bytes * 8] = function() {
+;['read', 'peek', 'skip'].forEach((verb) => {
+  ;[1, 2, 4, 8].forEach((bytes) => {
+    Reader.prototype[verb + 'UInt' + bytes * 8] = function () {
       return this[verb + 'UInt'](bytes)
     }
 
-    Reader.prototype[verb + 'Int' + bytes * 8] = function() {
+    Reader.prototype[verb + 'Int' + bytes * 8] = function () {
       return this[verb + 'Int'](bytes)
     }
 
     // No point if having typed skips
     if (verb !== 'skip') {
-      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Number'] = function() {
+      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Number'] = function () {
         return this[verb + 'UIntNumber'](bytes)
       }
 
-      Reader.prototype[verb + 'Int' + bytes * 8 + 'Number'] = function() {
+      Reader.prototype[verb + 'Int' + bytes * 8 + 'Number'] = function () {
         return this[verb + 'IntNumber'](bytes)
       }
 
-      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Long'] = function() {
+      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Long'] = function () {
         return this[verb + 'UIntLong'](bytes)
       }
 
-      Reader.prototype[verb + 'Int' + bytes * 8 + 'Long'] = function() {
+      Reader.prototype[verb + 'Int' + bytes * 8 + 'Long'] = function () {
         return this[verb + 'IntLong'](bytes)
       }
     }

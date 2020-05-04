@@ -6,7 +6,7 @@ import {
   SendState,
   StreamReject,
   StreamRequest,
-  StreamReply
+  StreamReply,
 } from '.'
 import { Integer } from '../utils'
 import BigNumber from 'bignumber.js'
@@ -38,8 +38,8 @@ export class RateProbe implements StreamController {
     1e3,
     1e2,
     1e1,
-    1
-  ].map(n => new BigNumber(n))
+    1,
+  ].map((n) => new BigNumber(n))
   private inFlight = new Set<number>()
 
   constructor(controllers: ControllerMap) {

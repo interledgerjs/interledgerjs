@@ -41,7 +41,7 @@ export enum SendState {
   /** Temporarily pause sending money until any request finishes or some time elapses */
   Wait = 'wait',
   /** Stop the payment */
-  End = 'end'
+  End = 'end',
 }
 
 /**
@@ -120,7 +120,7 @@ export class StreamRequestBuilder {
       sequence: this.sequence,
       sourceAmount: this.sourceAmount,
       minDestinationAmount: this.minDestinationAmount,
-      requestFrames: this.requestFrames
+      requestFrames: this.requestFrames,
     }
   }
 }

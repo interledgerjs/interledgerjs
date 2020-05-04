@@ -7,7 +7,7 @@ import {
   getLongIntBufferSize,
   getLongUIntBufferSize,
   getIntBufferSize,
-  getUIntBufferSize
+  getUIntBufferSize,
 } from './util'
 import * as Long from 'long'
 
@@ -28,7 +28,7 @@ class Writer implements WriterInterface {
     3: 0xffffff,
     4: 0xffffffff,
     5: 0xffffffffff,
-    6: 0xffffffffffff
+    6: 0xffffffffffff,
   }
 
   static INT_RANGES = {
@@ -37,7 +37,7 @@ class Writer implements WriterInterface {
     3: [-0x800000, 0x7fffff],
     4: [-0x80000000, 0x7fffffff],
     5: [-0x8000000000, 0x7fffffffff],
-    6: [-0x800000000000, 0x7fffffffffff]
+    6: [-0x800000000000, 0x7fffffffffff],
   }
 
   private buffer: Buffer
@@ -345,12 +345,12 @@ interface Writer {
 }
 
 // Create write(U)Int{8,16,32,64} shortcuts
-;[1, 2, 4, 8].forEach(bytes => {
-  Writer.prototype['writeUInt' + bytes * 8] = function(value: number) {
+;[1, 2, 4, 8].forEach((bytes) => {
+  Writer.prototype['writeUInt' + bytes * 8] = function (value: number) {
     this.writeUInt(value, bytes)
   }
 
-  Writer.prototype['writeInt' + bytes * 8] = function(value: number) {
+  Writer.prototype['writeInt' + bytes * 8] = function (value: number) {
     this.writeInt(value, bytes)
   }
 })

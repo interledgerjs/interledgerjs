@@ -14,7 +14,7 @@ enum MaxPacketState {
    */
   DiscoveredMax,
   /** No F08 errors have been encountered yet */
-  UnknownMax
+  UnknownMax,
 }
 
 /** Max packet amount state and how it was discovered */
@@ -38,7 +38,7 @@ type MaxPacketAmount =
 /** Controller to limit packet amount based on F08 errors */
 export class MaxPacketAmountController implements StreamController {
   private state: MaxPacketAmount = {
-    type: MaxPacketState.UnknownMax
+    type: MaxPacketState.UnknownMax,
   }
 
   // TODO If not provided a precise max packet amount/using a probe amount,
@@ -77,7 +77,7 @@ export class MaxPacketAmountController implements StreamController {
         log.debug('discovered precise max packet amount using binary search: %s', maxPacketAmount)
         this.state = {
           type: MaxPacketState.PreciseMax,
-          maxPacketAmount
+          maxPacketAmount,
         }
         return
       }
@@ -142,7 +142,7 @@ export class MaxPacketAmountController implements StreamController {
           )
           this.state = {
             type: MaxPacketState.PreciseMax,
-            maxPacketAmount: newMax
+            maxPacketAmount: newMax,
           }
           break
 
@@ -150,7 +150,7 @@ export class MaxPacketAmountController implements StreamController {
           log.debug('handling F08. setting initial max packet amount to %s', newMax)
           this.state = {
             type: MaxPacketState.PreciseMax,
-            maxPacketAmount: newMax
+            maxPacketAmount: newMax,
           }
       }
     } catch (err) {
@@ -176,7 +176,7 @@ export class MaxPacketAmountController implements StreamController {
           this.state = {
             type: MaxPacketState.DiscoveredMax,
             maxPacketAmount: newMax,
-            probeAmount
+            probeAmount,
           }
           break
 
@@ -189,7 +189,7 @@ export class MaxPacketAmountController implements StreamController {
           this.state = {
             type: MaxPacketState.DiscoveredMax,
             maxPacketAmount: newMax,
-            probeAmount
+            probeAmount,
           }
       }
     }

@@ -5,7 +5,7 @@ import {
   isValidIlpAddress,
   isSharedSecretBase64,
   parsePaymentPointer,
-  isSharedSecretBuffer
+  isSharedSecretBuffer,
 } from './shared'
 import { PaymentError } from '..'
 
@@ -40,8 +40,8 @@ export const query = async (paymentPointer: string): Promise<StreamCredentials> 
   return axios
     .get(spspUrl, {
       headers: {
-        Accept: 'application/spsp4+json'
-      }
+        Accept: 'application/spsp4+json',
+      },
     })
     .catch(() => {
       throw PaymentError.SpspQueryFailed
@@ -50,7 +50,7 @@ export const query = async (paymentPointer: string): Promise<StreamCredentials> 
       if (isValidSpspResponse(data)) {
         return {
           destinationAddress: data.destination_account,
-          sharedSecret: Buffer.from(data.shared_secret, 'base64')
+          sharedSecret: Buffer.from(data.shared_secret, 'base64'),
         }
       } else {
         throw PaymentError.SpspQueryFailed

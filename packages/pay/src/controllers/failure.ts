@@ -5,7 +5,7 @@ import {
   StreamReply,
   StreamRequest,
   isFulfillable,
-  SendState
+  SendState,
 } from '.'
 import { Errors } from 'ilp-packet'
 import { ILP_ERROR_CODES } from '../utils'
@@ -14,7 +14,7 @@ import {
   FrameType,
   ErrorCode,
   StreamCloseFrame,
-  Frame
+  Frame,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { DEFAULT_STREAM_ID } from './amount'
 import { Logger } from 'ilp-logger'

@@ -21,7 +21,7 @@ export enum State {
   DISCONNECTED,
   CONNECTING,
   IDLE,
-  SENDING
+  SENDING,
 }
 
 export class PayoutConnection {
@@ -51,7 +51,7 @@ export class PayoutConnection {
       target: this.target,
       sent: this.sent,
       currentStreamTotalSent: this.stream && this.stream.totalSent,
-      pointer: this.pointer
+      pointer: this.pointer,
     }
   }
 
@@ -87,13 +87,13 @@ export class PayoutConnection {
       url: this.spspUrl,
       method: 'GET',
       headers: {
-        accept: 'application/spsp4+json'
-      }
+        accept: 'application/spsp4+json',
+      },
     })
 
     return {
       destinationAccount: data.destination_account,
-      sharedSecret: Buffer.from(data.shared_secret, 'base64')
+      sharedSecret: Buffer.from(data.shared_secret, 'base64'),
     }
   }
 
@@ -131,7 +131,7 @@ export class PayoutConnection {
     const connection = await createConnection({
       plugin: this.plugin,
       ...(this.slippage && { slippage: this.slippage }),
-      ...spspParams
+      ...spspParams,
     })
 
     const stream = connection.createStream()

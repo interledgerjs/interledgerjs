@@ -5,7 +5,7 @@ import {
   FrameType,
   StreamMaxMoneyFrame,
   ConnectionMaxDataFrame,
-  ConnectionMaxStreamIdFrame
+  ConnectionMaxStreamIdFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { DEFAULT_STREAM_ID } from './amount'
 import { AssetScale, isValidAssetScale } from '../setup/open-payments'
@@ -46,7 +46,7 @@ export class AccountController implements StreamController {
     if (this.destinationAsset) {
       return {
         ilpAddress: this.destinationAddress,
-        ...this.destinationAsset
+        ...this.destinationAsset,
       }
     }
   }
@@ -54,7 +54,7 @@ export class AccountController implements StreamController {
   setDestinationAsset(assetCode: string, assetScale: AssetScale) {
     this.destinationAsset = {
       assetCode,
-      assetScale
+      assetScale,
     }
   }
 
@@ -115,7 +115,7 @@ export class AccountController implements StreamController {
     if (!this.destinationAsset) {
       this.destinationAsset = {
         assetCode,
-        assetScale
+        assetScale,
       }
     }
     // If the destination asset details changed, end the payment

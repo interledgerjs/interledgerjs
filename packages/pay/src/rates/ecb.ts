@@ -17,7 +17,7 @@ const isValidTimestamp = (node: NodeBase): boolean =>
   (isElement(node) &&
     !!node.attributes.time &&
     new Date(node.attributes.time).getTime() > minimumUpdatedTimestamp) ||
-  ((isElement(node) || isDocument(node)) && node.children.map(isValidTimestamp).some(a => a))
+  ((isElement(node) || isDocument(node)) && node.children.map(isValidTimestamp).some((a) => a))
 
 const parsePairs = (node: NodeBase): AssetPrices => {
   if (isElement(node) && hasCurrencyPair(node)) {

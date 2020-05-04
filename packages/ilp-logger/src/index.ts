@@ -23,7 +23,7 @@ export class Logger {
 
 export const formatters = debug.formatters
 
-const createLogger = function(namespace: string) {
+const createLogger = function (namespace: string) {
   return new Logger(namespace)
 } as ModuleExport
 

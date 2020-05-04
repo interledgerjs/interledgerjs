@@ -7,21 +7,21 @@ import {
   isFulfill,
   isReject,
   serializeIlpPrepare,
-  serializeIlpReject
+  serializeIlpReject,
 } from 'ilp-packet'
 import {
   generateFulfillment,
   generateFulfillmentKey,
   generatePskEncryptionKey,
   generateRandomCondition,
-  hash
+  hash,
 } from 'ilp-protocol-stream/dist/src/crypto'
 import {
   ConnectionCloseFrame,
   ErrorCode,
   Frame,
   IlpPacketType,
-  Packet
+  Packet,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { PaymentError } from '.'
@@ -32,7 +32,7 @@ import {
   StreamReply,
   StreamRequest,
   StreamRequestBuilder,
-  isFulfillable
+  isFulfillable,
 } from './controllers'
 import { FailureController } from './controllers/failure'
 import { PendingRequestTracker } from './controllers/pending-requests'
@@ -47,7 +47,7 @@ import {
   APPLICATION_ERROR_REJECT,
   MIN_MESSAGE_WINDOW,
   createReject,
-  ILP_ERROR_CODES
+  ILP_ERROR_CODES,
 } from './utils'
 
 /** Serialize & send, and receive & authenticate all ILP and STREAM packets */
@@ -76,7 +76,7 @@ export const createConnection = async (
 
   // Reject all incoming packets, but ACK incoming STREAM packets and handle connection closes
   plugin.deregisterDataHandler()
-  plugin.registerDataHandler(async data => {
+  plugin.registerDataHandler(async (data) => {
     try {
       const prepare = deserializeIlpPrepare(data)
       const streamRequest = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
@@ -102,7 +102,7 @@ export const createConnection = async (
         code: Errors.codes.F99_APPLICATION_ERROR,
         triggeredBy: '',
         message: '',
-        data: await streamReply.serializeAndEncrypt(encryptionKey)
+        data: await streamReply.serializeAndEncrypt(encryptionKey),
       })
     } catch (err) {
       return APPLICATION_ERROR_REJECT
@@ -118,19 +118,19 @@ export const createConnection = async (
         const builder = new StreamRequestBuilder(log)
         const state =
           [...controllers.values()]
-            .map(c => c.nextState?.(builder) ?? SendState.Ready)
-            .find(s => s !== SendState.Ready) ?? SendState.Ready
+            .map((c) => c.nextState?.(builder) ?? SendState.Ready)
+            .find((s) => s !== SendState.Ready) ?? SendState.Ready
         const request = builder.build()
 
         const pendingRequests = controllers.get(PendingRequestTracker).getPendingRequests()
 
         switch (state) {
           case SendState.Ready:
-            controllers.forEach(c => c.applyPrepare?.(request))
-            this.sendRequest(request).then(reply => {
+            controllers.forEach((c) => c.applyPrepare?.(request))
+            this.sendRequest(request).then((reply) => {
               'reject' in reply
-                ? controllers.forEach(c => c.applyReject?.(reply))
-                : controllers.forEach(c => c.applyFulfill?.(reply))
+                ? controllers.forEach((c) => c.applyReject?.(reply))
+                : controllers.forEach((c) => c.applyFulfill?.(reply))
             })
             continue
 
@@ -188,7 +188,7 @@ export const createConnection = async (
         amount: sourceAmount.toString(),
         executionCondition,
         expiresAt,
-        data
+        data,
       })
 
       // Send the packet!
@@ -197,11 +197,11 @@ export const createConnection = async (
         plugin.sendData(preparePacket).then(deserializeIlpReply),
         createReject(Errors.codes.R00_TRANSFER_TIMED_OUT)
       )
-        .catch(err => {
+        .catch((err) => {
           log.error('failed to send Prepare:', err)
           return createReject(Errors.codes.T00_INTERNAL_ERROR)
         })
-        .then(ilpReply => {
+        .then((ilpReply) => {
           if (!isFulfill(ilpReply) || !fulfillment || ilpReply.fulfillment.equals(fulfillment)) {
             return ilpReply
           }
@@ -261,12 +261,12 @@ export const createConnection = async (
       const parsedReply = {
         ...request,
         responseFrames,
-        destinationAmount
+        destinationAmount,
       }
       return isReject(ilpReply)
         ? {
             ...parsedReply,
-            reject: ilpReply
+            reject: ilpReply,
           }
         : parsedReply
     },
@@ -285,7 +285,7 @@ export const createConnection = async (
         .disconnect()
         .then(() => log.debug('plugin disconnected'))
         .catch((err: Error) => log.error('error disconnecting plugin:', err))
-    }
+    },
   }
 
   return connection

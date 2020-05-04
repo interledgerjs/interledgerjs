@@ -41,10 +41,10 @@ export class Payout {
         connection: new PayoutConnection({
           pointer: paymentPointer,
           plugin: this.createPlugin(),
-          slippage: this.slippage
+          slippage: this.slippage,
         }),
         lastSent: Date.now(),
-        timer: this.makeTimer(paymentPointer, CLEANUP_TIMEOUT)
+        timer: this.makeTimer(paymentPointer, CLEANUP_TIMEOUT),
       }
     } else {
       this.payouts[paymentPointer].lastSent = Date.now()

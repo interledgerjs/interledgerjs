@@ -42,12 +42,12 @@ const parseResponse = ({ data }: AxiosResponse<any>): AssetPrices => {
     .map((pair): [string, number] => [pair.symbol, +(pair.priceUsd || pair.rateUsd || NaN)])
     .filter((pair): pair is [string, ValidRate] => isValidRate(pair[1]))
     .map(([symbol, price]) => ({
-      [symbol]: price
+      [symbol]: price,
     }))
     .reduce((acc, cur) => ({ ...acc, ...cur }))
 }
 
 export const fetchCoinCapRates: FetchPrices = async () => ({
   ...parseResponse(await axios.get(COINCAP_ASSETS_URL)),
-  ...parseResponse(await axios.get(COINCAP_RATES_URL))
+  ...parseResponse(await axios.get(COINCAP_RATES_URL)),
 })

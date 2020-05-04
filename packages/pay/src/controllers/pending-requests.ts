@@ -2,7 +2,7 @@ import { StreamRequest, StreamController } from '.'
 
 class PromiseResolver {
   public resolve = () => {}
-  public readonly promise = new Promise<void>(resolve => {
+  public readonly promise = new Promise<void>((resolve) => {
     this.resolve = resolve
   })
 }
@@ -13,7 +13,7 @@ export class PendingRequestTracker implements StreamController {
 
   /** Returns array of in-flight request Promises that resolve when each finishes */
   getPendingRequests(): Promise<void>[] {
-    return [...this.inFlightPackets.values()].map(r => r.promise)
+    return [...this.inFlightPackets.values()].map((r) => r.promise)
   }
 
   applyPrepare({ sequence }: StreamRequest) {

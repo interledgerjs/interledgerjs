@@ -22,7 +22,7 @@ export const codes = {
   R00_TRANSFER_TIMED_OUT: 'R00',
   R01_INSUFFICIENT_SOURCE_AMOUNT: 'R01',
   R02_INSUFFICIENT_TIMEOUT: 'R02',
-  R99_APPLICATION_ERROR: 'R99'
+  R99_APPLICATION_ERROR: 'R99',
 }
 
 export class BadRequestError extends BaseError {

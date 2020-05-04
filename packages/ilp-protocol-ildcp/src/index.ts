@@ -38,7 +38,7 @@ const deserializeIldcpRequest = (request: Buffer): IldcpRequest => {
 
   return {
     expiresAt: ilp.expiresAt,
-    data: ilp.data
+    data: ilp.data,
   }
 }
 
@@ -48,7 +48,7 @@ const serializeIldcpRequest = (request: IldcpRequest): Buffer => {
     destination: ILDCP_DESTINATION,
     executionCondition: PEER_PROTOCOL_CONDITION,
     expiresAt: request.expiresAt || new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
-    data: request.data || Buffer.alloc(0)
+    data: request.data || Buffer.alloc(0),
   })
 }
 
@@ -92,7 +92,7 @@ const serializeIldcpResponse = (response: IldcpResponse): Buffer => {
 
   return IlpPacket.serializeIlpFulfill({
     fulfillment: PEER_PROTOCOL_FULFILLMENT,
-    data: writer.getBuffer()
+    data: writer.getBuffer(),
   })
 }
 
@@ -148,7 +148,7 @@ const serve = async ({ requestPacket, handler, serverAddress }: ServeSettings): 
       code: 'F00',
       message: err && typeof err === 'object' && err.message ? err.message : 'unexpected error.',
       triggeredBy: serverAddress,
-      data: Buffer.alloc(0)
+      data: Buffer.alloc(0),
     })
   }
 }
@@ -159,5 +159,5 @@ export {
   deserializeIldcpResponse,
   serializeIldcpResponse,
   fetch,
-  serve
+  serve,
 }

@@ -7,7 +7,7 @@ export const Errors = errors
 export enum Type {
   TYPE_ILP_PREPARE = 12,
   TYPE_ILP_FULFILL = 13,
-  TYPE_ILP_REJECT = 14
+  TYPE_ILP_REJECT = 14,
 }
 
 export interface IlpErrorClass {
@@ -105,7 +105,7 @@ export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
     executionCondition,
     expiresAt,
     destination,
-    data
+    data,
   }
 }
 
@@ -170,7 +170,7 @@ export const deserializeIlpFulfill = (binary: Buffer): IlpFulfill => {
 
   return {
     fulfillment,
-    data
+    data,
   }
 }
 
@@ -243,7 +243,7 @@ export const deserializeIlpReject = (binary: Buffer): IlpReject => {
     code,
     triggeredBy,
     message,
-    data
+    data,
   }
 }
 
@@ -265,19 +265,19 @@ export const deserializeIlpPacket = (binary: Buffer): IlpPacket => {
     return {
       type: binary[0],
       typeString: 'ilp_prepare',
-      data: deserializeIlpPrepare(binary)
+      data: deserializeIlpPrepare(binary),
     }
   } else if (binary[0] === Type.TYPE_ILP_FULFILL) {
     return {
       type: binary[0],
       typeString: 'ilp_fulfill',
-      data: deserializeIlpFulfill(binary)
+      data: deserializeIlpFulfill(binary),
     }
   } else if (binary[0] === Type.TYPE_ILP_REJECT) {
     return {
       type: binary[0],
       typeString: 'ilp_reject',
-      data: deserializeIlpReject(binary)
+      data: deserializeIlpReject(binary),
     }
   } else {
     throw new Error('Packet has invalid type')
@@ -303,7 +303,7 @@ export const errorToReject = (address: string, error: IlpErrorClass): Buffer => 
     code: error.ilpErrorCode || 'F00',
     triggeredBy: address,
     message: error.message || '',
-    data: error.ilpErrorData || Buffer.alloc(0)
+    data: error.ilpErrorData || Buffer.alloc(0),
   })
 }
 
@@ -312,6 +312,6 @@ export const errorToIlpReject = (address: string, error: IlpErrorClass): IlpReje
     code: error.ilpErrorCode || 'F00',
     triggeredBy: address,
     message: error.message || '',
-    data: error.ilpErrorData || Buffer.alloc(0)
+    data: error.ilpErrorData || Buffer.alloc(0),
   }
 }
