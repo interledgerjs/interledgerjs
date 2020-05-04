@@ -52,21 +52,27 @@ export enum SendState {
 export interface StreamController {
   /**
    * Signal if sending should continue and iteratively compose the next packet.
-   * - Any controller can choose to immediately end the entire STREAM payment,
-   *   or choose to wait before sending the next packet.
+   * - Any controller can choose to immediately end the entire STREAM payment
+   *   with an error, or choose to wait before sending the next packet.
    * - Note: the packet may not be sent if other controllers decline, so don't apply side effects.
-   * @param prepare Amounts and metadata for a proposed ILP Prepare to send over STREAM
+   * @param builder Builder to construct the next ILP Prepare and STREAM request
    */
-  nextState?(request: StreamRequestBuilder): SendState | PaymentError
+  nextState?(builder: StreamRequestBuilder): SendState | PaymentError
   /**
    * Apply side effects before sending an ILP Prepare over STREAM.
    * Called synchronously with `nextState` and `applyPrepare` for all controllers
-   * @param prepare Finalized amounts and data of the ILP Prepare
+   * @param request Finalized amounts and data of the ILP Prepare
    */
   applyPrepare?(request: StreamRequest): void
-  /** Apply side effects from an ILP Fulfill or ILP Reject received over STREAM */
+  /**
+   * Apply side effects from an ILP Fulfill or ILP Reject received over STREAM
+   * @param reply Parsed amounts and data of the ILP Fulfill and STREAM reply
+   */
   applyFulfill?(reply: StreamReply): void
-  /** Apply side effects from an ILP Reject received over STREAM*/
+  /**
+   * Apply side effects from an ILP Reject received over STREAM
+   * @param reply Parsed amounts and data of the ILP Reject and STREAM reply
+   */
   applyReject?(reply: StreamReject): void
 }
 

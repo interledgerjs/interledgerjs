@@ -1,4 +1,4 @@
-# @interledger/pay
+## `@interledger/pay`
 
 > Send payments over Interledger
 
@@ -16,15 +16,16 @@ const { pay, cancel, ...details } = await quote({
 })
 console.log(details)
 // {
+//   maxSourceAmount: BigNumber(0.000198),
 //   estimatedExchangeRate: [BigNumber(1.2339), BigNumber(1.23423)],
 //   minExchangeRate: BigNumber(1.21),
 //   sourceAccount: {
-//     ilpAddress: 'test.rafiki.us1.users.example',
+//     ilpAddress: 'test.xpring.hermes.23r8gdsb_72badfnm',
 //     assetCode: 'ABC',
 //     assetScale: 6
 //   },
 //   destinationAccount: {
-//     ilpAddress: 'test.xpring.hermes.23r8gdsb_72badfnm',
+//     ilpAddress: 'test.rafiki.us1.users.example',
 //     assetCode: 'XYZ',
 //     assetScale: 4
 //   }
@@ -49,7 +50,7 @@ await cancel()
 ```js
 import { quote } from '@interledger/pay'
 
-const { pay } = await quote({
+const { pay, ...details } = await quote({
   plugin,
   paymentPointer: '$rafiki.money/p/example',
   amountToSend: '3.14159'
