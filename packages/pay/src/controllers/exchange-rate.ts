@@ -9,7 +9,7 @@ import { PaymentError } from '..'
 export class ExchangeRateController implements StreamController {
   private static DEFAULT_SLIPPAGE = 0.01
 
-  /** Real exchnage rate determined from the recipient */
+  /** Real exchange rate determined from the recipient */
   private exchangeRate?: {
     /** Real exchange rate MUST be less than this ratio (exclusive): sent, received, rate */
     upperBound: [Integer, Integer, Rational]
@@ -89,7 +89,7 @@ export class ExchangeRateController implements StreamController {
 
     this.packetAmounts.set(sourceAmount.toString(), receivedAmount)
 
-    // TODO Replace BigNumber with Ratio and remove this roudning mode nonsense once and for all?
+    // TODO Replace BigNumber with Ratio and remove this rounding mode nonsense once and for all?
 
     BigNumber.set({ ROUNDING_MODE: BigNumber.ROUND_CEIL }) // Otherwise some inequalities won't work
     const packetRateUpperBound = receivedAmount.plus(1).dividedBy(sourceAmount) as Rational

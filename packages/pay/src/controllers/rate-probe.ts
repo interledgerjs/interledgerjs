@@ -52,7 +52,7 @@ export class RateProbe implements StreamController {
     }
 
     if (this.deadline && Date.now() > this.deadline) {
-      return PaymentError.RateProbeTimeout
+      return PaymentError.RateProbeFailed
     }
 
     // Apply the actual test packet amount, if we have one available

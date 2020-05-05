@@ -5,14 +5,14 @@ import {
   StreamRequest,
   StreamReply,
   isFulfillable,
-  SendState
+  SendState,
 } from '.'
 import { Integer, SAFE_ZERO, toBigNumber } from '../utils'
 import BigNumber from 'bignumber.js'
 import {
   StreamMaxMoneyFrame,
   FrameType,
-  StreamMoneyFrame
+  StreamMoneyFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
 import Long from 'long'
 import { MaxPacketAmountController } from './max-packet'
@@ -24,7 +24,7 @@ export const DEFAULT_STREAM_ID = Long.fromNumber(1, true)
 
 export enum PaymentType {
   FixedSend,
-  FixedDelivery
+  FixedDelivery,
 }
 
 export type PaymentTarget =
@@ -35,6 +35,7 @@ export type PaymentTarget =
   | {
       type: PaymentType.FixedDelivery
       amountToDeliver: Integer
+      // TODO Also track the max source amount that was provided here and ensure it's always less than that?
     }
 
 export class AmountController implements StreamController {
@@ -76,14 +77,14 @@ export class AmountController implements StreamController {
         this.amountSent,
         this.target?.amountToSend
       )
-      return SendState.End // TODO Replace with `PaymentError`
+      return PaymentError.OverpaidFixedSend
     }
 
     const paidFixedSend =
       this.amountSent.isEqualTo(this.target.amountToSend) && this.getAmountInFlight().isZero()
     if (paidFixedSend) {
       log.debug('payment complete: paid fixed source amount. sent %s', this.amountSent)
-      return SendState.End // TODO Replace with `PaymentError`
+      return SendState.End
     }
 
     // TODO Compare estimated remaining to deliver vs receive max?
@@ -154,10 +155,8 @@ export class AmountController implements StreamController {
         this.amountDelivered,
         this.target.amountToDeliver
       )
-      return SendState.End // TODO Replace with `PaymentError`
+      return PaymentError.OverpaidFixedDelivery
     }
-
-    // TODO What should happen if remainingToDeliver=0 but inFlight>0 ?
 
     // TODO Rather, should this check if destination amount inflight is 0?
     const paidFixedDelivery = remainingToDeliver.isZero() && this.getAmountInFlight().isZero()
@@ -166,7 +165,7 @@ export class AmountController implements StreamController {
         'payment complete: paid fixed destination amount. delivered %s',
         this.amountDelivered
       )
-      return SendState.End // TODO Replace with `PaymentError`
+      return SendState.End
     }
 
     // // Is the recipient's advertised `receiveMax` less than the fixed destination amount?
@@ -179,7 +178,7 @@ export class AmountController implements StreamController {
         this.target.amountToDeliver,
         this.remoteReceiveMax
       )
-      return SendState.End // TODO Replace with `PaymentError`
+      return PaymentError.IncompatibleReceiveMax
     }
 
     // Estimate the current amount in-flight that might get delivered to the recipient
@@ -200,7 +199,6 @@ export class AmountController implements StreamController {
     const availableToDeliver = remainingToDeliver.minus(highEndAmountInFlight)
     const isBlocked = availableToDeliver.isLessThanOrEqualTo(0)
     if (isBlocked) {
-      // TODO
       return SendState.Wait
     }
 
@@ -222,7 +220,7 @@ export class AmountController implements StreamController {
     const destinationAmountCeilings = [
       availableToDeliver,
       pathMaxPacketAmount,
-      dustPreventionCeiling
+      dustPreventionCeiling,
     ]
     const targetDestinationAmount = BigNumber.min(
       ...destinationAmountCeilings.filter(BigNumber.isBigNumber) // Note: BigNumber.min -> NaN if any parameter is `undefined`
@@ -291,7 +289,7 @@ export class AmountController implements StreamController {
   }
 
   applyPrepare(request: StreamRequest) {
-    const { sequence, sourceAmount, minDestinationAmount, log } = request
+    const { sequence, sourceAmount, minDestinationAmount } = request
     if (isFulfillable(request)) {
       this.inFlightAmounts.set(sequence, [sourceAmount, minDestinationAmount])
     }
@@ -354,8 +352,8 @@ export class AmountController implements StreamController {
   private updateReceiveMax({ responseFrames, log }: StreamReply) {
     responseFrames
       ?.filter((frame): frame is StreamMaxMoneyFrame => frame.type === FrameType.StreamMaxMoney)
-      .filter(frame => frame.streamId.equals(DEFAULT_STREAM_ID))
-      .forEach(frame => {
+      .filter((frame) => frame.streamId.equals(DEFAULT_STREAM_ID))
+      .forEach((frame) => {
         log.trace(
           'recipient told us this stream can receive up to: %s and has received: %s so far',
           frame.receiveMax,
@@ -412,7 +410,7 @@ export class AmountController implements StreamController {
     return {
       amountSent: this.amountSent.shiftedBy(-sourceScale),
       amountInFlight: this.getAmountInFlight().shiftedBy(-sourceScale),
-      amountDelivered: this.amountDelivered.shiftedBy(-destinationScale)
+      amountDelivered: this.amountDelivered.shiftedBy(-destinationScale),
     }
   }
 

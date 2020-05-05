@@ -33,7 +33,7 @@ test('completes source amount payment with max packet amount', async () => {
       ilpAddress: 'test.larry',
       spread: 0.014, // 1.4% slippage
       backendConfig: {
-        prices
+        prices,
       },
       accounts: {
         alice: {
@@ -41,22 +41,22 @@ test('completes source amount payment with max packet amount', async () => {
           plugin: alice2,
           assetCode: 'USD',
           assetScale: 6,
-          maxPacketAmount: '5454'
+          maxPacketAmount: '5454',
         },
         bob: {
           relation: 'child',
           plugin: bob1,
           assetCode: 'XRP',
-          assetScale: 9
-        }
-      }
+          assetScale: 9,
+        },
+      },
     },
     deps
   )
   await app.listen()
 
   const streamServer = await createServer({
-    plugin: bob2
+    plugin: bob2,
   })
 
   const connectionPromise = streamServer.acceptConnection()
@@ -68,7 +68,7 @@ test('completes source amount payment with max packet amount', async () => {
 
   const {
     sharedSecret,
-    destinationAccount: destinationAddress
+    destinationAccount: destinationAddress,
   } = streamServer.generateAddressAndSecret()
 
   const amountToSend = new BigNumber(1.00427)
@@ -77,7 +77,7 @@ test('completes source amount payment with max packet amount', async () => {
     destinationAddress,
     sharedSecret,
     plugin: alice1,
-    slippage: 0.015
+    slippage: 0.015,
   })
 
   expect(quoteDetails.sourceAccount.assetCode).toBe('USD')
@@ -129,7 +129,7 @@ test('delivers fixed destination amount with max packet amount', async () => {
       ilpAddress: 'test.larry',
       spread: 0.01, // 1% spread
       backendConfig: {
-        prices
+        prices,
       },
       accounts: {
         alice: {
@@ -137,28 +137,26 @@ test('delivers fixed destination amount with max packet amount', async () => {
           plugin: alice2,
           assetCode: 'ETH',
           assetScale: 9,
-          maxPacketAmount: '899898'
+          maxPacketAmount: '899898',
         },
         bob: {
           relation: 'child',
           plugin: bob1,
           assetCode: 'BTC',
-          assetScale: 8
-        }
-      }
+          assetScale: 8,
+        },
+      },
     },
     deps
   )
   await app.listen()
 
   const streamServer = await createServer({
-    plugin: bob2
+    plugin: bob2,
   })
 
   // TODO Hardcode this... non determinism is not great
-  const amountToDeliver = getRate('USD', 0, 'BTC', 0, prices)
-    ?.times(10)
-    .decimalPlaces(8)
+  const amountToDeliver = getRate('USD', 0, 'BTC', 0, prices)?.times(10).decimalPlaces(8)
   if (!amountToDeliver) {
     return Promise.reject()
   }
@@ -172,7 +170,7 @@ test('delivers fixed destination amount with max packet amount', async () => {
 
   const {
     sharedSecret,
-    destinationAccount: destinationAddress
+    destinationAccount: destinationAddress,
   } = streamServer.generateAddressAndSecret()
 
   const { pay, ...quoteDetails } = await quote({
@@ -182,7 +180,7 @@ test('delivers fixed destination amount with max packet amount', async () => {
     destinationAddress,
     sharedSecret,
     slippage: 0.015,
-    plugin: alice1
+    plugin: alice1,
   })
   const receipt = await pay()
 
@@ -222,20 +220,20 @@ test('ends payment if receiver closes the stream', async () => {
         plugin: alice2,
         assetCode: 'USD',
         assetScale: 2,
-        maxPacketAmount: '10' // $0.10
+        maxPacketAmount: '10', // $0.10
       },
       bob: {
         relation: 'child',
         plugin: bob1,
         assetCode: 'USD',
-        assetScale: 2
-      }
-    }
+        assetScale: 2,
+      },
+    },
   })
   await app.listen()
 
   const streamServer = await createServer({
-    plugin: bob2
+    plugin: bob2,
   })
 
   streamServer.on('connection', (connection: Connection) => {
@@ -253,7 +251,7 @@ test('ends payment if receiver closes the stream', async () => {
 
   const {
     sharedSecret,
-    destinationAccount: destinationAddress
+    destinationAccount: destinationAddress,
   } = streamServer.generateAddressAndSecret()
 
   // Since we're sending $100,000, test will fail due to timeout
@@ -264,7 +262,7 @@ test('ends payment if receiver closes the stream', async () => {
     destinationAddress,
     sharedSecret,
     slippage: 0,
-    plugin: alice1
+    plugin: alice1,
   })
   const receipt = await pay()
 
@@ -301,20 +299,20 @@ test('ends payment if receiver closes the connection', async () => {
         plugin: alice2,
         assetCode: 'ABC',
         assetScale: 0,
-        maxPacketAmount: '1'
+        maxPacketAmount: '1',
       },
       bob: {
         relation: 'child',
         plugin: bob1,
         assetCode: 'ABC',
-        assetScale: 0
-      }
-    }
+        assetScale: 0,
+      },
+    },
   })
   await app.listen()
 
   const streamServer = await createServer({
-    plugin: bob2
+    plugin: bob2,
   })
 
   const connectionPromise = streamServer.acceptConnection()
@@ -326,7 +324,7 @@ test('ends payment if receiver closes the connection', async () => {
 
   const {
     sharedSecret,
-    destinationAccount: destinationAddress
+    destinationAccount: destinationAddress,
   } = streamServer.generateAddressAndSecret()
 
   // Since we're sending such a large payment, test will fail due to timeout
@@ -337,7 +335,7 @@ test('ends payment if receiver closes the connection', async () => {
     destinationAddress,
     sharedSecret,
     slippage: 0,
-    plugin: alice1
+    plugin: alice1,
   })
 
   // End the connection after 1 second

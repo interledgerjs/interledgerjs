@@ -3,7 +3,7 @@ import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { ControllerMap } from './controllers'
 import { AccountController, AccountDetails } from './controllers/asset-details'
 import { PendingRequestTracker } from './controllers/pending-requests'
-import { getRate, AssetPrices } from './rates'
+import { getRate } from './rates'
 import { fetchCoinCapRates } from './rates/coincap'
 import { Integer, isInteger } from './utils'
 import { query, isStreamCredentials } from './setup/spsp'
@@ -32,22 +32,25 @@ export interface PaymentOptions {
   amountToSend?: BigNumber.Value
   /** Fixed amount to deliver to the recipient, in normalized destination units with arbitrary precision */
   amountToDeliver?: BigNumber.Value
-  /** 3 or 4 digit asset code or symbol the invoice is denominated in. Required for fixed delivery */
+  /** 3-4 character asset code or symbol the invoice is denominated in. Required for fixed delivery */
   destinationAssetCode?: string
   /** Asset scale the invoice is denominated in. Require for fixed delivery */
   destinationAssetScale?: number
-  /** Percentage to subtract from an external exchange rate to determine the minimum acceptable rate */
+  /** Percentage to subtract from an external exchange rate to determine the minimum acceptable exchange rate */
   slippage?: number
-  /** Callback to get the packet expiration timestamp */
+  /** Callback to set the expiration timestamp of each packet given the destination ILP address */
   getExpiry?: (destination: string) => Date
-  /** Set of asset codes -> prices in a standardized asset, to pull external rates */
+  /**
+   * Set of asset codes -> price in a standardized base asset, to calculate exchange rates.
+   * By default, rates will be pulled from the CoinCap API
+   */
   prices?: {
     [assetCode: string]: number
   }
 }
 
 export interface Quote {
-  /** Maximum amount that will be sent (relevant for fixed-destination payments) */
+  /** Maximum amount that will be sent in source units */
   maxSourceAmount: BigNumber
   /** Probed exchange rate over the path: range of [minimum, maximum] */
   estimatedExchangeRate: [BigNumber, BigNumber]
@@ -103,13 +106,13 @@ export enum PaymentError {
   InvalidPaymentPointer = 'InvalidPaymentPointer',
   /** STREAM credentials (shared secret and destination address) were not provided or invalid */
   InvalidCredentials = 'InvalidCredentials',
-  /** Plugin failed to connect or disconnect from the Interleder network */
+  /** Plugin failed to connect or is disconnected from the Interleder network */
   Disconnected = 'Disconnected',
   /** Slippage percentage is not between 0 and 1 (inclusive) */
   InvalidSlippage = 'InvalidSlippage',
   /** Sender and receiver use incompatible Interledger network prefixes */
   IncompatibleIntegerledgerNetworks = 'IncompatibleIntegerledgerNetworks',
-  /** Unable to fetch IL-DCP details for the source account: unknown sending asset or ILP address */
+  /** Failed to fetch IL-DCP details for the source account: unknown sending asset or ILP address */
   UnknownSourceAsset = 'UnknownSourceAsset',
   /** No fixed source amount or fixed destination amount was provided */
   UnknownPaymentTarget = 'UnknownPaymentTarget',
@@ -132,17 +135,21 @@ export enum PaymentError {
   UnknownDestinationAsset = 'UnknownDestinationAsset',
   /** Receiver sent conflicting destination asset details */
   DestinationAssetConflict = 'DestinationAssetConflict',
+  /** Receiver's advertised limit is incompatible with the amount we want to send or deliver to them */
+  IncompatibleReceiveMax = 'IncompatibleReceiveMax',
 
   /**
    * Miscellaneous errors
    */
 
-  /** Rate probe failed to complete before the timeout */
-  RateProbeTimeout = 'RateProbeTimeout',
+  /** Rate probe failed to establish the realized exchange rate */
+  RateProbeFailed = 'RateProbeFailed',
+  /** Send more than intended: paid more than the fixed source amount of the payment */
+  OverpaidFixedSend = 'OverpaidFixedSend',
+  /** Send more than intended: paid more than the fixed destination amount of the payment */
+  OverpaidFixedDelivery = 'OverpaidFixedDelivery',
   /** Sent too many packets with this encryption key and must close the connection */
   ExceededMaxSequence = 'ExceededMaxSequence',
-  /** Rate probe failed to establish the realized exchange rate (TODO What is the likely cause here?) */
-  RateProbeFailed = 'RateProbeFailed'
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -173,7 +180,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
   })
 
   // Fetch asset details of source account
-  const sourceAccount: AccountDetails = await sendIldcpRequest(data => plugin.sendData(data))
+  const sourceAccount: AccountDetails = await sendIldcpRequest((data) => plugin.sendData(data))
     .catch(() => {
       throw PaymentError.UnknownSourceAsset
     })
@@ -185,7 +192,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
       return {
         assetCode,
         assetScale,
-        ilpAddress: clientAddress
+        ilpAddress: clientAddress,
       }
     })
 
@@ -233,7 +240,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
 
     target = {
       type: PaymentType.FixedSend,
-      amountToSend: adjustedAmount as Integer
+      amountToSend: adjustedAmount as Integer,
     }
   } else if (options.amountToDeliver) {
     // Invoices require a known destination asset
@@ -253,7 +260,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
 
     target = {
       type: PaymentType.FixedDelivery,
-      amountToDeliver: adjustedAmount
+      amountToDeliver: adjustedAmount,
     }
   } else {
     await connection.close()
@@ -319,6 +326,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
   const lowerRate = controllers.get(ExchangeRateController).getRateLowerBound()
   const upperRate = controllers.get(ExchangeRateController).getRateUpperBound()
   if (!lowerRate || !upperRate) {
+    await connection.close()
     throw PaymentError.RateProbeFailed
   }
 
@@ -361,10 +369,10 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
           .generateReceipt(sourceAccount.assetScale, destinationAccount.assetScale),
         // Asset details
         sourceAccount,
-        destinationAccount
+        destinationAccount,
       }
     },
 
-    cancel: () => connection.close()
+    cancel: () => connection.close(),
   }
 }

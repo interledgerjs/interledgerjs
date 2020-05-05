@@ -33,7 +33,9 @@ export const getRate = (
   sourceAssetScale: number,
   destinationAssetCode: string,
   destinationAssetScale: number,
-  prices: AssetPrices
+  prices: {
+    [assetCode: string]: number
+  }
 ): Rational | undefined => {
   let rate = 1
 
@@ -49,14 +51,15 @@ export const getRate = (
       return
     }
 
+    // This seems counterintuitive because the rate is typically destination amount / source amount
+    // However, this is different becaues it's converting source asset -> base currency -> destination asset
     rate = sourceAssetPrice / destinationAssetPrice
   }
 
-  // Since the rate is in the unit of exchange (e.g. BTC, ETH),
-  // it must be converted to the correct scaled units
+  // Since the rate is in the unit of exchange, it must be converted to the correct scaled units
   const scaledRate = rate * 10 ** (destinationAssetScale - sourceAssetScale)
 
-  // If any asset price is 0, rate will be Infinity
+  // If any destination asset price is 0, rate will be Infinity
   if (!isValidRate(scaledRate)) {
     return
   }

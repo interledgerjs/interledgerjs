@@ -46,7 +46,7 @@ export const ILP_ERROR_CODES = {
   R00: 'transfer timed out',
   R01: 'insufficient source amount',
   R02: 'insufficient timeout',
-  R99: 'application error'
+  R99: 'application error',
 }
 
 /** Create an empty ILP Reject from an error code */
@@ -54,7 +54,7 @@ export const createReject = (code: string, message = ''): IlpReject => ({
   code,
   message,
   triggeredBy: '',
-  data: Buffer.alloc(0)
+  data: Buffer.alloc(0),
 })
 
 /** Generic application error */
@@ -68,9 +68,6 @@ export const timeout = <T>(durationMs: number, task: Promise<T>, timeoutValue?: 
     task.then(resolve, reject).finally(() => clearTimeout(timer))
   })
 
-// TODO Change these to higher order functions: e.g., divide = a => b => a.dividedBy(b)
-//      Then use Maybe.ap ?
-
 // TODO More performant
 export const toBigNumber = (num: Long) => new BigNumber(num.toString())
 
@@ -78,83 +75,18 @@ export const toBigNumber = (num: Long) => new BigNumber(num.toString())
 export const toLong = (num: BigNumber) =>
   Long.fromString(num.toFixed(0, BigNumber.ROUND_DOWN), true)
 
-// export type Rational = Brand<BigNumber, 'Rational'>
-// export type Integer = Brand<Rational, 'Integer'>
-
 /** Is the given amount a BigNumber, finite, and non-negative (positive or 0)? */
 export const isRational = (n: BigNumber): n is Rational =>
   n.isGreaterThanOrEqualTo(0) && n.isFinite()
 
 export const isInteger = (n: BigNumber): n is Integer => isRational(n) && n.isInteger()
 
-// export const stringify: Matcher<BigNumber, string> = {
-//   Just: n => n.toString(),
-//   Nothing: () => 'N/A'
-// }
-
-// (o: Maybe<BigNumber>): string => o.map(n => n.toString()).unwrapOr('N/A')
-
-/** Safe division. If dividing by 0, return `Nothing`. */
-// export const divide = (a: Rational) => (b: Rational): Maybe<Rational> =>
-//   b.isZero() ? Maybe.nothing() : Maybe.just(a.dividedBy(b) as Rational)
-// export const divide = (a: Rational) => (b: Rational): Maybe<Rational> =>
-//   b.isZero() ? Maybe.nothing() : Maybe.just(a.dividedBy(b) as Rational)
-
-// export const ceil = (n: Rational) => n.integerValue(BigNumber.ROUND_CEIL) as Integer
-
-// export const floor = (n: Rational) => n.integerValue(BigNumber.ROUND_DOWN) as Integer
-
-// /** Safe modulo operation. If dividing by 0, return `Nothing`. */
-// export const modulo = (a: Integer) => (b: Integer): Maybe<Integer> =>
-//   b.isZero() ? Maybe.nothing() : Maybe.just(a.modulo(b) as Integer)
-
-// // export const add = (a: Rational) => (b: Rational) => a.plus(b) as Rational
-// export const add = (a: Integer) => (b: Integer) => a.plus(b) as Integer
-// export const add1 = (n: Integer) => n.plus(1) as Integer
-
-// /** Subtract b from a. If difference is less than 0, `Nothing`. */
-// export const subtract = <T extends Rational>(a: T) => (b: T): Maybe<T> =>
-//   b.isGreaterThan(a) ? Maybe.nothing() : Maybe.just(a.minus(b) as T)
-
-// export const multiply = (a: Rational) => (b: Rational) => a.times(b) as Rational
-// export const multiplyInt = (a: Integer) => (b: Integer) => a.times(b) as Integer
-
-// export const max = <T extends Rational>(amounts: T[]): Maybe<T> =>
-//   amounts.length === 0 ? Maybe.nothing() : Maybe.just(BigNumber.max(...amounts) as T)
-
-// /** Maximum of all given `Just` values, or `Nothing` if no values are `Just`. */
-// export const maybeMax = (...amounts: Maybe<Integer>[]): Maybe<Integer> =>
-//   amounts.length === 0
-//     ? Maybe.nothing()
-//     : Maybe.all(...amounts.filter(Maybe.isJust)).map(
-//         justAmounts => BigNumber.max(...justAmounts) as Integer
-//       )
-
-// /** Minimum of all the given `Just` values, or `Nothing` if no values are `Just`. */
-// export const maybeMin = (...amounts: Maybe<Integer>[]): Maybe<Integer> =>
-//   amounts.length === 0
-//     ? Maybe.nothing()
-//     : Maybe.all(...amounts.filter(Maybe.isJust)).map(
-//         justAmounts => BigNumber.min(...justAmounts) as Integer
-//       )
-
-// export const min = <T extends Rational>(amounts: T[]): Maybe<T> =>
-//   amounts.length === 0 ? Maybe.nothing() : Maybe.just(BigNumber.min(...amounts) as T)
-
-// export const equals = (a: BigNumber) => (b: BigNumber): boolean => a.isEqualTo(b)
-
-// export const greaterThan = (a: BigNumber) => (b: BigNumber): boolean => a.isGreaterThan(b)
-
-// export const lessThan = (a: BigNumber) => (b: BigNumber): boolean => a.isLessThan(b)
-
 export const SAFE_ZERO = new BigNumber(0) as Integer
-
-/** TODO Move these "safety" utils somewhere else? */
 
 /** Nominal type to enforce usage of custom type guards */
 // export type Brand<K, T> = K & { readonly __brand: T }
-
-// TODO Try this to see if it improves the type checking vs aliases
+// export type Rational = Brand<BigNumber, 'Rational'>
+// export type Integer = Brand<Rational, 'Integer'>
 
 export class Rational extends BigNumber {
   protected __isRational: undefined
@@ -179,12 +111,7 @@ export const MAX_UINT64 = new BigNumber('18446744073709551615') as Integer
 //   isSafeBigNumber(o) && o.isInteger() && o.isLessThanOrEqualTo(MAX_UINT64)
 
 /** Wait and resolve after the given number of milliseconds */
-export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-// export const spread = <T extends (...args: any[]) => any>(f: T) => (
-//   args: Parameters<T>
-// ): ReturnType<T> => f(...args)
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // export class Int {
 //   value: bigint
@@ -212,54 +139,43 @@ export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 //     }
 //   }
 
-//   plus(n: Int): Int {
+//   add(n: Int): Int {
 //     return new Int(this.value + n.value)
 //   }
 
 //   // TODO Require predicate -> SafeSubtraction?
 
-//   minus(n: Int): Int | undefined {
+//   subtract(n: Int): Int | undefined {
 //     if (this.value >= n.value) {
 //       return new Int(this.value - n.value)
 //     }
 //   }
 
-//   // TODO Add multiply & divide functions with rationals + floor & ceiling
-
-//   times(n: Int): Int {
+//   multiply(n: Int): Int {
 //     return new Int(this.value * n.value)
 //   }
 
-//   // multiplyFloor(n: BigNumber): Int {
-//   // TODO How to implement?
-//   // this.value * n.floor() ?
-//   // }
+//   multiplyFloor(n: Ratio): Int | undefined {
+//     return this.divideFloor(n.reciprocal())
+//   }
 
-//   // multiplyCeil(n: BigNumber): Int {
-//   // TODO How to implement?
-//   // this.value * n.ceil() ?
-//   // }
+//   multiplyCeil(n: Ratio): Int | undefined {
+//     return this.divideCeil(n.reciprocal())
+//   }
 
-//   dividedBy(n: Int): Int | undefined {
-//     if (!n.isEqualTo(new Int(BigInt(0)))) {
-//       return new Int(this.value / n.value)
+//   divideCeil(n: Int | Ratio): Int | undefined {
+//     const a = n instanceof Int ? this.value : this.value * n.b.value
+//     const b = n instanceof Int ? n.value : n.a.value
+//     if (b > BigInt(0)) {
+//       return new Int(a % b === BigInt(0) ? a / b : a / b + BigInt(1))
 //     }
 //   }
 
-//   // TODO I don't think this is correct? Is a / ceil(b) === ceil(a / b) ?
-//   divideCeil(n: BigNumber): Int | undefined {
-//     if (n.isGreaterThan(0) && n.isFinite()) {
-//       const d = Int.from(n)
-//       const r = this.value % d.value
-//       return r === BigInt(0)
-//         ? new Int(this.value / d.value)
-//         : new Int(this.value / d.value).plus(new Int(BigInt(1)))
-//     }
-//   }
-
-//   divideFloor(n: BigNumber): Int | undefined {
-//     if (n.isGreaterThan(0) && n.isFinite()) {
-//       return new Int(this.value / Int.from(n).value)
+//   divideFloor(n: Int | Ratio): Int | undefined {
+//     const a = n instanceof Int ? this.value : this.value * n.b.value
+//     const b = n instanceof Int ? n.value : n.a.value
+//     if (b > BigInt(0)) {
+//       return new Int(a / b)
 //     }
 //   }
 
@@ -287,6 +203,10 @@ export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 //     return this.value <= n.value
 //   }
 
+//   isZero(): boolean {
+//     return this.value === 0n
+//   }
+
 //   orLessor(n?: Int): Int {
 //     return !n || this.value <= n.value ? this : n
 //   }
@@ -311,4 +231,45 @@ export const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 //   }
 // }
 
-// export class Ratio {}
+// export class Ratio {
+//   a: Int
+//   b: Int
+
+//   constructor(a: Int, b: Int) {
+//     this.a = a
+
+//     // TODO Should this validate that b isn't 0? b can't be 0, right, or it's an invalid ratio?
+
+//     this.b = b
+//   }
+
+//   reciprocal(): Ratio {
+//     return new Ratio(this.b, this.a)
+//   }
+
+//   isEqualTo(n: Ratio): boolean {
+//     return this.a.value * n.b.value === this.b.value * n.a.value
+//   }
+
+//   isGreaterThan(n: Ratio): boolean {
+//     return this.a.value * n.b.value > this.b.value * n.a.value
+//   }
+
+//   isGreaterThanOrEqualTo(n: Ratio): boolean {
+//     return this.a.value * n.b.value >= this.b.value * n.a.value
+//   }
+
+//   isLessThan(n: Ratio): boolean {
+//     return this.a.value * n.b.value < this.b.value * n.a.value
+//   }
+
+//   isLessThanOrEqualTo(n: Ratio): boolean {
+//     return this.a.value * n.b.value <= this.b.value * n.a.value
+//   }
+
+//   isZero(): boolean {
+//     return this.a.isZero()
+//   }
+
+//   // TODO fromNumber ?
+// }
