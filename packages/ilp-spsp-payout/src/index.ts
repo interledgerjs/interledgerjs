@@ -15,13 +15,13 @@ export class Payout {
   private slippage?: number
   private payouts: {
     [pointer: string]: {
-      connection: PayoutConnection,
-      lastSent: number,
+      connection: PayoutConnection
+      lastSent: number
       timer: NodeJS.Timer
     }
   }
 
-  constructor (opts?: PayoutOpts) {
+  constructor(opts?: PayoutOpts) {
     if (opts && opts.makePlugin) {
       this.createPlugin = opts.makePlugin
     } else {
@@ -31,31 +31,29 @@ export class Payout {
     this.slippage = opts && opts.slippage
   }
 
-  getPayout (paymentPointer: string) {
+  getPayout(paymentPointer: string) {
     return this.payouts[paymentPointer]
   }
 
-  send (paymentPointer: string, amount: number) {
+  send(paymentPointer: string, amount: number) {
     if (!this.payouts[paymentPointer]) {
       this.payouts[paymentPointer] = {
         connection: new PayoutConnection({
           pointer: paymentPointer,
           plugin: this.createPlugin(),
-          slippage: this.slippage
+          slippage: this.slippage,
         }),
         lastSent: Date.now(),
-        timer: this.makeTimer(paymentPointer, CLEANUP_TIMEOUT)
+        timer: this.makeTimer(paymentPointer, CLEANUP_TIMEOUT),
       }
     } else {
       this.payouts[paymentPointer].lastSent = Date.now()
     }
 
-    this.payouts[paymentPointer]
-      .connection
-      .send(amount)
+    this.payouts[paymentPointer].connection.send(amount)
   }
 
-  private async expirePaymentPointer (paymentPointer: string) {
+  private async expirePaymentPointer(paymentPointer: string) {
     const payout = this.payouts[paymentPointer]
     if (!payout) {
       return
@@ -66,8 +64,10 @@ export class Payout {
 
     if (isExpired) {
       if (!isIdle) {
-        console.error('closing payout that was not idle.',
-          JSON.stringify(payout.connection.getDebugInfo()))
+        console.error(
+          'closing payout that was not idle.',
+          JSON.stringify(payout.connection.getDebugInfo())
+        )
       }
 
       delete this.payouts[paymentPointer]
@@ -78,7 +78,7 @@ export class Payout {
     }
   }
 
-  private makeTimer (paymentPointer: string, duration: number) {
+  private makeTimer(paymentPointer: string, duration: number) {
     return setTimeout(() => {
       this.expirePaymentPointer(paymentPointer).catch((e: Error) => {
         console.error('failed to clean up payout.', e)

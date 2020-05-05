@@ -21,7 +21,7 @@ export enum State {
   DISCONNECTED,
   CONNECTING,
   IDLE,
-  SENDING
+  SENDING,
 }
 
 export class PayoutConnection {
@@ -38,34 +38,31 @@ export class PayoutConnection {
   private target = 0
   private sent = 0
 
-  constructor ({ pointer, plugin, slippage }: { pointer: string, plugin: any, slippage?: number }) {
+  constructor({ pointer, plugin, slippage }: { pointer: string; plugin: any; slippage?: number }) {
     this.pointer = pointer
     this.spspUrl = resolvePaymentPointer(pointer)
     this.plugin = plugin
     this.slippage = slippage
   }
 
-  getDebugInfo () {
+  getDebugInfo() {
     return {
       state: this.state,
       target: this.target,
       sent: this.sent,
       currentStreamTotalSent: this.stream && this.stream.totalSent,
-      pointer: this.pointer
+      pointer: this.pointer,
     }
   }
 
-  send (amount: number) {
+  send(amount: number) {
     if (this.closing) {
       throw new Error('payout connection is closing')
     }
 
     this.target += amount
 
-    if ((this.getState() === State.SENDING ||
-      this.getState() === State.IDLE) &&
-      this.stream
-    ) {
+    if ((this.getState() === State.SENDING || this.getState() === State.IDLE) && this.stream) {
       this.setState(State.SENDING)
       this.stream.setSendMax(this.getSendMax())
     } else {
@@ -73,11 +70,11 @@ export class PayoutConnection {
     }
   }
 
-  isIdle () {
+  isIdle() {
     return this.getState() === State.IDLE
   }
 
-  async close () {
+  async close() {
     this.closing = true
     if (this.connection) {
       await this.connection.destroy()
@@ -85,46 +82,45 @@ export class PayoutConnection {
     await this.plugin.disconnect()
   }
 
-  private async spspQuery () {
+  private async spspQuery() {
     const { data } = await axios({
       url: this.spspUrl,
       method: 'GET',
       headers: {
-        accept: 'application/spsp4+json'
-      }
+        accept: 'application/spsp4+json',
+      },
     })
 
     return {
       destinationAccount: data.destination_account,
-      sharedSecret: Buffer.from(data.shared_secret, 'base64')
+      sharedSecret: Buffer.from(data.shared_secret, 'base64'),
     }
   }
 
-  private getSendMax () {
+  private getSendMax() {
     return this.target - this.sent
   }
 
   // appeases type checker
-  private getState () {
+  private getState() {
     return this.state
   }
 
-  private setState (state: State) {
+  private setState(state: State) {
     this.state = state
   }
 
-  private async safeTrySending () {
-    this.trySending()
-      .catch(() => {
-        // TODO: backoff
-        this.setState(State.DISCONNECTED)
-        setTimeout(() => {
-          this.safeTrySending()
-        }, 2000)
-      })
+  private async safeTrySending() {
+    this.trySending().catch(() => {
+      // TODO: backoff
+      this.setState(State.DISCONNECTED)
+      setTimeout(() => {
+        this.safeTrySending()
+      }, 2000)
+    })
   }
 
-  private async trySending () {
+  private async trySending() {
     if (this.getState() !== State.DISCONNECTED) {
       return
     }
@@ -135,7 +131,7 @@ export class PayoutConnection {
     const connection = await createConnection({
       plugin: this.plugin,
       ...(this.slippage && { slippage: this.slippage }),
-      ...spspParams
+      ...spspParams,
     })
 
     const stream = connection.createStream()

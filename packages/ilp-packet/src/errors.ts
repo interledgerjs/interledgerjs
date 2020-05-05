@@ -22,12 +22,12 @@ export const codes = {
   R00_TRANSFER_TIMED_OUT: 'R00',
   R01_INSUFFICIENT_SOURCE_AMOUNT: 'R01',
   R02_INSUFFICIENT_TIMEOUT: 'R02',
-  R99_APPLICATION_ERROR: 'R99'
+  R99_APPLICATION_ERROR: 'R99',
 }
 
 export class BadRequestError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F00_BAD_REQUEST
   }
@@ -35,7 +35,7 @@ export class BadRequestError extends BaseError {
 
 export class InvalidPacketError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F01_INVALID_PACKET
   }
@@ -43,7 +43,7 @@ export class InvalidPacketError extends BaseError {
 
 export class UnreachableError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F02_UNREACHABLE
   }
@@ -51,7 +51,7 @@ export class UnreachableError extends BaseError {
 
 export class InvalidAmountError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F03_INVALID_AMOUNT
   }
@@ -59,7 +59,7 @@ export class InvalidAmountError extends BaseError {
 
 export class InsufficientDestinationAmountError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F04_INSUFFICIENT_DESTINATION_AMOUNT
   }
@@ -67,7 +67,7 @@ export class InsufficientDestinationAmountError extends BaseError {
 
 export class WrongConditionError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F05_WRONG_CONDITION
   }
@@ -75,7 +75,7 @@ export class WrongConditionError extends BaseError {
 
 export class UnexpectedPaymentError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F06_UNEXPECTED_PAYMENT
   }
@@ -83,21 +83,21 @@ export class UnexpectedPaymentError extends BaseError {
 
 export class CannotReceiveError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.F07_CANNOT_RECEIVE
   }
 }
 
 export interface AmountTooLargeErrorOpts {
-  receivedAmount: string,
+  receivedAmount: string
   maximumAmount: string
 }
 
 export class AmountTooLargeError extends BaseError {
   public ilpErrorCode: string
   public ilpErrorData: Buffer
-  constructor (message: string, opts: AmountTooLargeErrorOpts) {
+  constructor(message: string, opts: AmountTooLargeErrorOpts) {
     super(message)
     this.ilpErrorCode = codes.F08_AMOUNT_TOO_LARGE
 
@@ -112,7 +112,7 @@ export class AmountTooLargeError extends BaseError {
 export class FinalApplicationError extends BaseError {
   public ilpErrorCode: string
   public ilpErrorData: Buffer
-  constructor (message: string, data: Buffer) {
+  constructor(message: string, data: Buffer) {
     super(message)
     this.ilpErrorCode = codes.F99_APPLICATION_ERROR
     this.ilpErrorData = data
@@ -121,7 +121,7 @@ export class FinalApplicationError extends BaseError {
 
 export class InternalError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.T00_INTERNAL_ERROR
   }
@@ -129,7 +129,7 @@ export class InternalError extends BaseError {
 
 export class PeerUnreachableError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.T01_PEER_UNREACHABLE
   }
@@ -137,7 +137,7 @@ export class PeerUnreachableError extends BaseError {
 
 export class PeerBusyError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.T02_PEER_BUSY
   }
@@ -145,7 +145,7 @@ export class PeerBusyError extends BaseError {
 
 export class ConnectorBusyError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.T03_CONNECTOR_BUSY
   }
@@ -153,7 +153,7 @@ export class ConnectorBusyError extends BaseError {
 
 export class InsufficientLiquidityError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.T04_INSUFFICIENT_LIQUIDITY
   }
@@ -161,7 +161,7 @@ export class InsufficientLiquidityError extends BaseError {
 
 export class RateLimitedError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.T05_RATE_LIMITED
   }
@@ -170,7 +170,7 @@ export class RateLimitedError extends BaseError {
 export class TemporaryApplicationError extends BaseError {
   public ilpErrorCode: string
   public ilpErrorData: Buffer
-  constructor (message: string, data: Buffer) {
+  constructor(message: string, data: Buffer) {
     super(message)
     this.ilpErrorCode = codes.T99_APPLICATION_ERROR
     this.ilpErrorData = data
@@ -179,7 +179,7 @@ export class TemporaryApplicationError extends BaseError {
 
 export class TransferTimedOutError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.R00_TRANSFER_TIMED_OUT
   }
@@ -187,7 +187,7 @@ export class TransferTimedOutError extends BaseError {
 
 export class InsufficientSourceAmountError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.R01_INSUFFICIENT_SOURCE_AMOUNT
   }
@@ -195,7 +195,7 @@ export class InsufficientSourceAmountError extends BaseError {
 
 export class InsufficientTimeoutError extends BaseError {
   public ilpErrorCode: string
-  constructor (message: string) {
+  constructor(message: string) {
     super(message)
     this.ilpErrorCode = codes.R02_INSUFFICIENT_TIMEOUT
   }
@@ -204,7 +204,7 @@ export class InsufficientTimeoutError extends BaseError {
 export class RelativeApplicationError extends BaseError {
   public ilpErrorCode: string
   public ilpErrorData: Buffer
-  constructor (message: string, data: Buffer) {
+  constructor(message: string, data: Buffer) {
     super(message)
     this.ilpErrorCode = codes.R99_APPLICATION_ERROR
     this.ilpErrorData = data

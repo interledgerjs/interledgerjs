@@ -1,6 +1,6 @@
 name: master
 
-on: 
+on:
   push:
     branches:
     - master
@@ -25,23 +25,17 @@ jobs:
       shell: bash
       env:
         NPM_AUTH_TOKEN: ${{secrets.npm_token}}
-    - name: install 
-      uses: borales/actions-yarn@v2.0.0
-      with:
-        cmd: install
-    - name: lint
-      uses: borales/actions-yarn@v2.0.0
-      with:
-        cmd: lint:all
-    - name: build
-      uses: borales/actions-yarn@v2.0.0
-      with:
-        cmd: build
-    - name: test
-      uses: borales/actions-yarn@v2.0.0
-      with:
-        cmd: cover
-    - name: upload code coverage and publish
+    - name: Install dependencies
+      run: yarn
+    - name: Lint
+      run: yarn lint:all
+    - name: Build
+      run: yarn build
+    - name: Test
+      run: yarn cover
+      env:
+        CI: true
+    - name: Upload code coverage and publish
       run: |
         yarn codecov
         yarn publish:release

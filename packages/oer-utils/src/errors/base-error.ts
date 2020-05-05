@@ -12,21 +12,21 @@
  * Note that this code is specific to V8 (due to `Error.captureStackTrace`).
  */
 class BaseError extends Error {
-  constructor (message: string = '') {
+  constructor(message: string = '') {
     super()
 
     // Set this.message
     Object.defineProperty(this, 'message', {
       configurable: true,
       enumerable: false,
-      value: message
+      value: message,
     })
 
     // Set this.name
     Object.defineProperty(this, 'name', {
       configurable: true,
       enumerable: false,
-      value: this.constructor.name
+      value: this.constructor.name,
     })
 
     // Set this.stack

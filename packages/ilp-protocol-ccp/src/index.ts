@@ -1,16 +1,26 @@
-import { IlpPrepare, deserializeIlpPrepare, serializeIlpPrepare, IlpFulfill, serializeIlpFulfill, deserializeIlpFulfill } from 'ilp-packet'
+import {
+  IlpPrepare,
+  deserializeIlpPrepare,
+  serializeIlpPrepare,
+  IlpFulfill,
+  serializeIlpFulfill,
+  deserializeIlpFulfill,
+} from 'ilp-packet'
 import { Reader, Writer } from 'oer-utils'
 import { readUuid, writeUuid } from './uuid'
 
 export const CCP_CONTROL_DESTINATION = 'peer.route.control'
 export const CCP_UPDATE_DESTINATION = 'peer.route.update'
 export const PEER_PROTOCOL_FULFILLMENT = Buffer.alloc(32)
-export const PEER_PROTOCOL_CONDITION = Buffer.from('Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=', 'base64')
+export const PEER_PROTOCOL_CONDITION = Buffer.from(
+  'Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=',
+  'base64'
+)
 const PEER_PROTOCOL_EXPIRY_DURATION = 60000
 
 export enum Mode {
   MODE_IDLE = 0,
-  MODE_SYNC = 1
+  MODE_SYNC = 1,
 }
 
 export const ModeReverseMap = ['IDLE', 'SYNC']
@@ -27,8 +37,7 @@ export interface CcpRouteControlResponse {
 }
 
 // Well-known route property IDs
-export enum PropId {
-}
+export enum PropId {}
 
 export interface CcpRoutePropCommon {
   isOptional: boolean
@@ -50,8 +59,7 @@ export interface CcpRoutePropString extends CcpRoutePropCommon {
 
 export type CcpRouteProp =
   // Generic props
-  CcpRoutePropBuffer |
-  CcpRoutePropString
+  CcpRoutePropBuffer | CcpRoutePropString
 
 export interface CcpRoute {
   prefix: string
@@ -94,7 +102,7 @@ const deserializeCcpRouteControlRequestPayload = (data: Buffer): CcpRouteControl
     mode,
     lastKnownRoutingTableId,
     lastKnownEpoch,
-    features
+    features,
   }
 }
 
@@ -144,7 +152,7 @@ const constructCcpRouteControlRequest = (request: CcpRouteControlRequest): IlpPr
     destination: CCP_CONTROL_DESTINATION,
     executionCondition: PEER_PROTOCOL_CONDITION,
     expiresAt: new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
-    data: serializeCcpRouteControlRequestPayload(request)
+    data: serializeCcpRouteControlRequestPayload(request),
   }
 }
 
@@ -191,20 +199,20 @@ const deserializeCcpRouteUpdateRequestPayload = (payload: Buffer): CcpRouteUpdat
         isOptional,
         isTransitive,
         isPartial,
-        id
+        id,
       }
 
       if (isUtf8) {
         props.push({
           ...incompleteProp,
           isUtf8: true,
-          value: value.toString('utf8')
+          value: value.toString('utf8'),
         })
       } else {
         props.push({
           ...incompleteProp,
           isUtf8: false,
-          value: value
+          value: value,
         })
       }
     }
@@ -213,7 +221,7 @@ const deserializeCcpRouteUpdateRequestPayload = (payload: Buffer): CcpRouteUpdat
       prefix,
       path,
       auth,
-      props
+      props,
     })
   }
 
@@ -231,7 +239,7 @@ const deserializeCcpRouteUpdateRequestPayload = (payload: Buffer): CcpRouteUpdat
     holdDownTime,
     speaker,
     newRoutes,
-    withdrawnRoutes
+    withdrawnRoutes,
   }
 }
 
@@ -325,7 +333,7 @@ const constructCcpRouteUpdateRequest = (request: CcpRouteUpdateRequest): IlpPrep
     destination: CCP_UPDATE_DESTINATION,
     executionCondition: PEER_PROTOCOL_CONDITION,
     expiresAt: new Date(Date.now() + PEER_PROTOCOL_EXPIRY_DURATION),
-    data: serializeCcpRouteUpdateRequestPayload(request)
+    data: serializeCcpRouteUpdateRequestPayload(request),
   }
 }
 
@@ -344,7 +352,7 @@ const deserializeCcpResponse = (response: Buffer): void => {
 const constructCcpResponse = (): IlpFulfill => {
   return {
     fulfillment: PEER_PROTOCOL_FULFILLMENT,
-    data: Buffer.alloc(0)
+    data: Buffer.alloc(0),
   }
 }
 
@@ -367,5 +375,5 @@ export {
   serializeCcpRouteUpdateRequest,
   deserializeCcpResponse,
   constructCcpResponse,
-  serializeCcpResponse
+  serializeCcpResponse,
 }

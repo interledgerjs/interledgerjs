@@ -4,7 +4,7 @@ import {
   getUIntBufferSize,
   getIntBufferSize,
   getLongUIntBufferSize,
-  getLongIntBufferSize
+  getLongIntBufferSize,
 } from './util'
 import * as Long from 'long'
 import { WriterInterface } from './writer'
@@ -20,32 +20,32 @@ type LongValue = Long | number | string
 class Predictor implements WriterInterface {
   private size: number
 
-  constructor () {
+  constructor() {
     this.size = 0
   }
 
-  get length (): number {
+  get length(): number {
     return this.size
   }
 
   /**
    * Add the size of a fixed-length unsigned integer to the predicted size.
    */
-  writeUInt (value: LongValue, length: number) {
+  writeUInt(value: LongValue, length: number) {
     this.size += length
   }
 
   /**
    * Add the size of a fixed-length integer to the predicted size.
    */
-  writeInt (value: LongValue, length: number) {
+  writeInt(value: LongValue, length: number) {
     this.size += length
   }
 
   /**
    * Calculate the size of a variable-length unsigned integer.
    */
-  writeVarUInt (_value: LongValue) {
+  writeVarUInt(_value: LongValue) {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     }
@@ -68,7 +68,7 @@ class Predictor implements WriterInterface {
   /**
    * Calculate the size of a variable-length integer.
    */
-  writeVarInt (_value: LongValue) {
+  writeVarInt(_value: LongValue) {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
     }
@@ -87,10 +87,15 @@ class Predictor implements WriterInterface {
   /**
    * Skip bytes for a fixed-length octet string.
    */
-  writeOctetString (buffer: Buffer, length: number) {
+  writeOctetString(buffer: Buffer, length: number) {
     if (buffer.length !== length) {
-      throw new Error('Incorrect length for octet string (actual: ' +
-        buffer.length + ', expected: ' + length + ')')
+      throw new Error(
+        'Incorrect length for octet string (actual: ' +
+          buffer.length +
+          ', expected: ' +
+          length +
+          ')'
+      )
     }
     this.skip(length)
   }
@@ -98,14 +103,14 @@ class Predictor implements WriterInterface {
   /**
    * Skip bytes for a variable-length octet string.
    */
-  writeVarOctetString (buffer: Buffer) {
+  writeVarOctetString(buffer: Buffer) {
     this.skipVarOctetString(buffer.length)
   }
 
   /**
    * Skip bytes for a variable-length octet string.
    */
-  createVarOctetString (length: number): WriterInterface {
+  createVarOctetString(length: number): WriterInterface {
     this.skipVarOctetString(length)
     return new Predictor()
   }
@@ -115,7 +120,7 @@ class Predictor implements WriterInterface {
    *
    * @param {Buffer} Bytes to write.
    */
-  write (bytes: Buffer) {
+  write(bytes: Buffer) {
     this.size += bytes.length
   }
 
@@ -124,7 +129,7 @@ class Predictor implements WriterInterface {
    *
    * @param {Number} Number of bytes to pretend to write.
    */
-  skip (bytes: number) {
+  skip(bytes: number) {
     this.size += bytes
   }
 
@@ -133,11 +138,11 @@ class Predictor implements WriterInterface {
    *
    * @return {Number} Size in bytes.
    */
-  getSize () {
+  getSize() {
     return this.size
   }
 
-  static measureVarOctetString (length: number): number {
+  static measureVarOctetString(length: number): number {
     // Skip initial byte
     let total = 1
 
@@ -151,24 +156,24 @@ class Predictor implements WriterInterface {
     return total
   }
 
-  private skipVarOctetString (length: number) {
+  private skipVarOctetString(length: number) {
     this.skip(Predictor.measureVarOctetString(length))
   }
 }
 
 interface Predictor {
-  writeUInt8 (value: number): undefined
-  writeUInt16 (value: number): undefined
-  writeUInt32 (value: number): undefined
-  writeUInt64 (value: number): undefined
-  writeInt8 (value: number): undefined
-  writeInt16 (value: number): undefined
-  writeInt32 (value: number): undefined
-  writeInt64 (value: number): undefined
+  writeUInt8(value: number): undefined
+  writeUInt16(value: number): undefined
+  writeUInt32(value: number): undefined
+  writeUInt64(value: number): undefined
+  writeInt8(value: number): undefined
+  writeInt16(value: number): undefined
+  writeInt32(value: number): undefined
+  writeInt64(value: number): undefined
 }
 
 // Create writeUInt{8,16,32,64} shortcuts
-[1, 2, 4, 8].forEach((bytes) => {
+;[1, 2, 4, 8].forEach((bytes) => {
   Predictor.prototype['writeUInt' + bytes * 8] = function (value: number) {
     return this.writeUInt(value, bytes)
   }
