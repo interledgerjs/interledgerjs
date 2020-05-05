@@ -6,7 +6,7 @@ module.exports = {
   entry: './test/browser/main.js',
   resolve: {
     aliasFields: ['browser'],
-    extensions: ['.tsx', '.ts', '.js']
+    extensions: ['.tsx', '.ts', '.js', '.json']
   },
   module: {
     rules: [
