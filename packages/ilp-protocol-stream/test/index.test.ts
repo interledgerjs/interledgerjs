@@ -1,7 +1,7 @@
 import 'mocha'
 import { Connection } from '../src/connection'
 import { DataAndMoneyStream } from '../src/stream'
-import { createConnection, Server, createServer } from '../src/index'
+import { createConnection, Server, createServer, GenerateAddressSecretOpts } from '../src/index'
 import MockPlugin from './mocks/plugin'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
@@ -65,7 +65,21 @@ describe('Server', function () {
       assert.typeOf(result.destinationAccount, 'string')
     })
 
-    it('should accept connections created without connectionTags', async function () {
+    it('should return whether or not the connection will have receipts', async function () {
+      await this.server.listen()
+
+      let result = this.server.generateAddressAndSecret()
+      assert.typeOf(result.receiptsEnabled, 'boolean')
+      assert.equal(result.receiptsEnabled, false)
+
+      const receiptNonce = Buffer.alloc(16)
+      const receiptSecret = Buffer.alloc(32)
+      result = this.server.generateAddressAndSecret({ receiptNonce, receiptSecret })
+      assert.typeOf(result.receiptsEnabled, 'boolean')
+      assert.equal(result.receiptsEnabled, true)
+    })
+
+    it('should accept connections created without options', async function () {
       await this.server.listen()
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       const connectionPromise = this.server.acceptConnection()
@@ -79,10 +93,41 @@ describe('Server', function () {
       const connection = await connectionPromise
     })
 
-    it('should accept a connectionTag and attach it to the incoming connection', async function () {
+    it('should accept connections created with empty options', async function () {
+      await this.server.listen()
+      const opts: GenerateAddressSecretOpts = {}
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(opts)
+      const connectionPromise = this.server.acceptConnection()
+
+      const clientConn = await createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret
+      })
+
+      const connection = await connectionPromise
+    })
+
+    it('should accept a connectionTag as a string and attach it to the incoming connection', async function () {
       await this.server.listen()
       const connectionTag = 'hello-there_123'
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionTag)
+      const connectionPromise = this.server.acceptConnection()
+
+      const clientConn = await createConnection({
+        plugin: this.clientPlugin,
+        destinationAccount,
+        sharedSecret
+      })
+
+      const connection = await connectionPromise
+      assert.equal(connection.connectionTag, connectionTag)
+    })
+
+    it('should accept a connectionTag and attach it to the incoming connection', async function () {
+      await this.server.listen()
+      const connectionTag = 'hello-there_123'
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret({ connectionTag })
       const connectionPromise = this.server.acceptConnection()
 
       const clientConn = await createConnection({
@@ -120,9 +165,38 @@ describe('Server', function () {
       assert.notCalled(spy)
     })
 
-    it('should throw an error if the connectionTag includes characters that cannot go into an ILP address', async function () {
+    it('should accept receipt nonce and secret with or without connectionTag', async function () {
       await this.server.listen()
-      assert.throws(() => this.server.generateAddressAndSecret('invalid\n'), 'connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", "-", and "~"')
+      const connectionTag = 'hello-there_123'
+      const receiptNonce = Buffer.alloc(16)
+      const receiptSecret = Buffer.alloc(32)
+      this.server.generateAddressAndSecret({ connectionTag, receiptNonce, receiptSecret })
+      this.server.generateAddressAndSecret({ receiptNonce, receiptSecret })
+    })
+
+    it('should require receipt nonce and secret together', async function () {
+      await this.server.listen()
+      const connectionTag = 'hello-there_123'
+      const receiptNonce = Buffer.from('nonce_123', 'ascii')
+      const receiptSecret = Buffer.from('secret_123', 'ascii')
+      assert.throws(() => this.server.generateAddressAndSecret({ receiptNonce }), 'receiptNonce and receiptSecret must accompany each other')
+      assert.throws(() => this.server.generateAddressAndSecret({ receiptSecret }), 'receiptNonce and receiptSecret must accompany each other')
+      assert.throws(() => this.server.generateAddressAndSecret({ connectionTag, receiptNonce }), 'receiptNonce and receiptSecret must accompany each other')
+      assert.throws(() => this.server.generateAddressAndSecret({ connectionTag, receiptSecret }), 'receiptNonce and receiptSecret must accompany each other')
+    })
+
+    it('should require 16 byte receipt nonce', async function () {
+      await this.server.listen()
+      const receiptNonce = Buffer.alloc(15)
+      const receiptSecret = Buffer.alloc(32)
+      assert.throws(() => this.server.generateAddressAndSecret({ receiptNonce, receiptSecret }), 'receiptNonce must be 16 bytes')
+    })
+
+    it('should require 32 byte receipt secret', async function () {
+      await this.server.listen()
+      const receiptNonce = Buffer.alloc(16)
+      const receiptSecret = Buffer.alloc(31)
+      assert.throws(() => this.server.generateAddressAndSecret({ receiptNonce, receiptSecret }), 'receiptSecret must be 32 bytes')
     })
   })
 

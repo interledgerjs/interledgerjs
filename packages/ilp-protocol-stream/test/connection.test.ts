@@ -9,6 +9,9 @@ import * as Chai from 'chai'
 import { Writer } from 'oer-utils'
 import * as chaiAsPromised from 'chai-as-promised'
 import * as Long from 'long'
+import { longFromValue } from '../src/util/long'
+import { createReceipt } from '../src/util/receipt'
+import { hmac } from '../src/crypto'
 Chai.use(chaiAsPromised)
 const assert = Object.assign(Chai.assert, sinon.assert)
 
@@ -16,13 +19,18 @@ describe('Connection', function () {
   beforeEach(async function () {
     this.clientPlugin = new MockPlugin(0.5)
     this.serverPlugin = this.clientPlugin.mirror
+    this.receiptNonce = Buffer.alloc(16)
+    this.receiptSecret = Buffer.alloc(32)
 
     this.server = await createServer({
       plugin: this.serverPlugin,
       serverSecret: Buffer.alloc(32)
     })
 
-    const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
+    const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret({
+      receiptNonce: this.receiptNonce,
+      receiptSecret: this.receiptSecret
+    })
     this.destinationAccount = destinationAccount
     this.sharedSecret = sharedSecret
 
@@ -523,6 +531,24 @@ describe('Connection', function () {
 
       // 2nd arg passed to `money` event handler should be the same ILP Prepare received by the plugin
       assert.deepEqual(moneyEventSpy.getCall(0).args[1], IlpPacket.deserializeIlpPrepare(handleDataSpy.getCall(0).args[0]))
+    })
+
+    it('should get a receipt for each fulfilled packet', async function () {
+      const clientStream = this.clientConn.createStream()
+      const spy = sinon.spy(clientStream, '_setReceipt')
+      await clientStream.sendTotal(1002)
+
+      const receiptFixture = require('./fixtures/packets.json').find(({ name }: { name: string}) => name === 'frame:stream_receipt' ).packet.frames[0].receipt
+      assert.calledTwice(spy)
+      assert.calledWith(spy.firstCall, receiptFixture)
+      const receipt = createReceipt({
+        nonce: this.receiptNonce,
+        streamId: clientStream.id,
+        totalReceived: '501',
+        secret: this.receiptSecret
+      })
+      assert.calledWith(spy.secondCall, receipt)
+      assert(clientStream.receipt.equals(receipt))
     })
   })
 

@@ -139,12 +139,13 @@ describe('Packet Fixtures', function () {
 function buildFrame (options: any) {
   for (const key in options) {
     const value = options[key]
-    if (typeof value === 'string' && /^\d+$/.test(value)) {
-      options[key] = Long.fromString(value, true)
+    if (typeof value === 'string') {
+      if (/^\d+$/.test(value)) {
+        options[key] = Long.fromString(value, true)
+      } else if (['data', 'receipt'].indexOf(key) !== -1) {
+        options[key] = Buffer.from(value, 'base64')
+      }
     }
-  }
-  if (typeof options.data === 'string') {
-    options.data = Buffer.from(options.data, 'base64')
   }
   return Object.assign(
     Object.create(PacketModule[options.name + 'Frame'].prototype),

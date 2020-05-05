@@ -16,6 +16,10 @@ export async function hash (preimage: Buffer): Promise<Buffer> {
 }
 
 export async function encrypt (pskEncryptionKey: Buffer, ...buffers: Buffer[]): Promise<Buffer> {
+  return Promise.resolve(encryptSync(pskEncryptionKey, ...buffers))
+}
+
+function encryptSync (pskEncryptionKey: Buffer, ...buffers: Buffer[]): Buffer {
   const iv = crypto.randomBytes(IV_LENGTH)
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, iv)
 
@@ -26,10 +30,14 @@ export async function encrypt (pskEncryptionKey: Buffer, ...buffers: Buffer[]): 
   ciphertext.push(cipher.final())
   const tag = cipher.getAuthTag()
   ciphertext.unshift(iv, tag)
-  return Promise.resolve(Buffer.concat(ciphertext))
+  return Buffer.concat(ciphertext)
 }
 
 export async function decrypt (pskEncryptionKey: Buffer, data: Buffer): Promise<Buffer> {
+  return Promise.resolve(decryptSync(pskEncryptionKey, data))
+}
+
+function decryptSync (pskEncryptionKey: Buffer, data: Buffer): Buffer {
   assert(data.length > 0, 'cannot decrypt empty buffer')
   const nonce = data.slice(0, IV_LENGTH)
   const tag = data.slice(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH)
@@ -37,10 +45,10 @@ export async function decrypt (pskEncryptionKey: Buffer, data: Buffer): Promise<
   const decipher = crypto.createDecipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, nonce)
   decipher.setAuthTag(tag)
 
-  return Promise.resolve(Buffer.concat([
+  return Buffer.concat([
     decipher.update(encrypted),
     decipher.final()
-  ]))
+  ])
 }
 
 export async function hmac (key: Buffer, message: Buffer): Promise<Buffer> {
@@ -57,4 +65,16 @@ export function generateSharedSecretFromToken (seed: Buffer, token: Buffer): Buf
   const keygen = hmacSync(seed, SHARED_SECRET_GENERATION_STRING)
   const sharedSecret = hmacSync(keygen, token)
   return sharedSecret
+}
+
+export function generateReceiptHMAC (secret: Buffer, message: Buffer): Buffer {
+  return hmacSync(secret, message)
+}
+
+export function encryptConnectionAddressToken (seed: Buffer, token: Buffer): Buffer {
+  return encryptSync(seed, token)
+}
+
+export function decryptConnectionAddressToken (seed: Buffer, token: Buffer): Buffer {
+  return decryptSync(seed, token)
 }

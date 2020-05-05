@@ -20,11 +20,12 @@ import {
   ConnectionMaxStreamIdFrame,
   StreamMaxDataFrame,
   StreamDataBlockedFrame,
+  StreamReceiptFrame,
   ConnectionMaxDataFrame,
   ConnectionDataBlockedFrame,
   StreamMoneyBlockedFrame
 } from './packet'
-import { Reader } from 'oer-utils'
+import { Reader, Writer } from 'oer-utils'
 import { CongestionController } from './util/congestion'
 import { Plugin } from './util/plugin-interface'
 import {
@@ -38,6 +39,7 @@ import {
 } from './util/long'
 import * as Long from 'long'
 import Rational from './util/rational'
+import { createReceipt, RECEIPT_VERSION } from './util/receipt'
 import { v4 as uuid } from 'uuid'
 
 const RETRY_DELAY_START = 100
@@ -65,6 +67,10 @@ export interface ConnectionOpts {
   enablePadding?: boolean,
   /** User-specified connection identifier that was passed into [`generateAddressAndSecret`]{@link Server#generateAddressAndSecret} */
   connectionTag?: string,
+  /** User-specified receipt nonce that was passed into [`generateAddressAndSecret`]{@link Server#generateAddressAndSecret} */
+  receiptNonce?: Buffer,
+  /** User-specified receipt secret that was passed into [`generateAddressAndSecret`]{@link Server#generateAddressAndSecret} */
+  receiptSecret?: Buffer,
   /** Maximum number of streams the other entity can have open at once. Defaults to 10 */
   maxRemoteStreams?: number,
   /** Number of bytes each connection can have in the buffer. Defaults to 65534 */
@@ -147,6 +153,8 @@ function defaultGetExpiry (): Date {
 export class Connection extends EventEmitter {
   /** Application identifier for a certain connection */
   readonly connectionTag?: string
+  protected readonly _receiptNonce?: Buffer
+  protected readonly _receiptSecret?: Buffer
 
   protected connectionId: string
   protected plugin: Plugin
@@ -221,6 +229,11 @@ export class Connection extends EventEmitter {
     this.allowableReceiveExtra = Rational.fromNumber(1.01, true)
     this.enablePadding = !!opts.enablePadding
     this.connectionTag = opts.connectionTag
+    if (!opts.receiptNonce !== !opts.receiptSecret) {
+      throw new Error('receiptNonce and receiptSecret must accompany each other')
+    }
+    this._receiptNonce = opts.receiptNonce
+    this._receiptSecret = opts.receiptSecret
     this.maxStreamId = 2 * (opts.maxRemoteStreams || DEFAULT_MAX_REMOTE_STREAMS)
     this.maxBufferedData = opts.connectionBufferSize || MAX_DATA_SIZE * 2
     this.minExchangeRatePrecision = opts.minExchangeRatePrecision || DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION
@@ -681,8 +694,22 @@ export class Connection extends EventEmitter {
     }
 
     // Add incoming amounts to each stream
+    const totalsReceived: Map<number, string> = new Map()
     for (let { stream, amount } of amountsToReceive) {
       stream._addToIncoming(amount, prepare)
+      totalsReceived.set(stream.id, stream.totalReceived)
+    }
+
+    // Add receipt frame(s)
+    if (this._receiptNonce && this._receiptSecret) {
+      for (let [streamId, totalReceived] of totalsReceived) {
+        responseFrames.push(new StreamReceiptFrame(streamId, createReceipt({
+          nonce: this._receiptNonce,
+          streamId,
+          totalReceived,
+          secret: this._receiptSecret
+        })))
+      }
     }
 
     // TODO make sure the queued frames aren't too big
@@ -1142,6 +1169,17 @@ export class Connection extends EventEmitter {
       }
 
       if (responsePacket.ilpPacketType === IlpPacketType.Fulfill) {
+        for (let frame of responsePacket.frames) {
+          if (frame.type === FrameType.StreamReceipt) {
+            const stream = this.streams.get(frame.streamId.toNumber())
+            if (stream) {
+              stream._setReceipt(frame.receipt)
+            } else {
+              this.log.debug('received receipt for unknown stream %d: %h', frame.streamId, frame.receipt)
+            }
+          }
+        }
+
         for (let stream of streamsSentFrom) {
           stream._executeHold(requestPacket.sequence.toString())
         }
@@ -1158,7 +1196,7 @@ export class Connection extends EventEmitter {
   }
 
   /**
-   * (Internal) Send volly of test packests to find the exchange rate, its precision, and potential other amounts to try.
+   * (Internal) Send volley of test packets to find the exchange rate, its precision, and potential other amounts to try.
    * @private
    */
   protected async sendTestPacketVolley (testPacketAmounts: number[]): Promise<any> {

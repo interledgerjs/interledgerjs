@@ -131,3 +131,21 @@ export function randomBytes (size: number): Buffer {
 export function generateSharedSecretFromToken (seed: Buffer, token: Buffer): Buffer {
   throw new Error('unreachable in browser')
 }
+
+// Dummy function to make typescript happy. This function is only ever used by
+// the server, which is not included in the browser build.
+export function generateReceiptHMAC (secret: Buffer, message: Buffer): Buffer {
+  throw new Error('unreachable in browser')
+}
+
+// Dummy function to make typescript happy. This function is only ever used by
+// the server, which is not included in the browser build.
+export function encryptConnectionAddressToken (seed: Buffer, token: Buffer): Buffer {
+  throw new Error('unreachable in browser')
+}
+
+// Dummy function to make typescript happy. This function is only ever used by
+// the server, which is not included in the browser build.
+export function decryptConnectionAddressToken (seed: Buffer, token: Buffer): Buffer {
+  throw new Error('unreachable in browser')
+}

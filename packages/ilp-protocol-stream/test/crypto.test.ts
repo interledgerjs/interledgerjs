@@ -11,9 +11,9 @@ if (typeof describe === 'function') {
 export function runCryptoTests (args: {describe: Mocha.SuiteFunction, it: Mocha.TestFunction}) {
   const { describe, it } = args
 
-  describe('generateToken', function () {
-    it('generates a random 18-byte token', function () {
-      assert.equal(helpers.generateToken().length, 18)
+  describe('generateTokenNonce', function () {
+    it('generates a random 18-byte token nonce', function () {
+      assert.equal(helpers.generateTokenNonce().length, 18)
     })
   })
 

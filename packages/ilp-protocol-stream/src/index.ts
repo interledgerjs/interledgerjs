@@ -6,7 +6,7 @@ import { Connection, ConnectionOpts } from './connection'
 
 export { Connection } from './connection'
 export { DataAndMoneyStream } from './stream'
-export { Server, ServerOpts, createServer } from './server'
+export { Server, ServerOpts, createServer, GenerateAddressSecretOpts } from './server'
 
 export interface CreateConnectionOpts extends ConnectionOpts {
   /** ILP Address of the server */

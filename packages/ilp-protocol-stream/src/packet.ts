@@ -47,7 +47,8 @@ export enum FrameType {
   StreamMoneyBlocked = 0x13,
   StreamData = 0x14,
   StreamMaxData = 0x15,
-  StreamDataBlocked = 0x16
+  StreamDataBlocked = 0x16,
+  StreamReceipt = 0x17
 }
 
 /**
@@ -68,6 +69,7 @@ export type Frame =
   | StreamDataFrame
   | StreamMaxDataFrame
   | StreamDataBlockedFrame
+  | StreamReceiptFrame
 
 /**
  * STREAM Protocol Packet
@@ -487,6 +489,33 @@ export class StreamDataBlockedFrame extends BaseFrame {
   }
 }
 
+export class StreamReceiptFrame extends BaseFrame {
+  type: FrameType.StreamReceipt
+  streamId: Long
+  receipt: Buffer
+
+  constructor (streamId: LongValue, receipt: Buffer) {
+    super('StreamReceipt')
+    this.streamId = longFromValue(streamId, true)
+    this.receipt = receipt
+  }
+
+  static fromContents (reader: Reader): StreamReceiptFrame {
+    const streamId = reader.readVarUIntLong()
+    const receipt = reader.readVarOctetString()
+    return new StreamReceiptFrame(streamId, receipt)
+  }
+
+  toJSON (): Object {
+    return {
+      type: this.type,
+      name: this.name,
+      streamId: this.streamId,
+      receipt: this.receipt.toString('base64')
+    }
+  }
+}
+
 function parseFrame (reader: Reader): Frame | undefined {
   const type = reader.readUInt8Number()
   const contents = Reader.from(reader.readVarOctetString())
@@ -520,6 +549,8 @@ function parseFrame (reader: Reader): Frame | undefined {
       return StreamMaxDataFrame.fromContents(contents)
     case FrameType.StreamDataBlocked:
       return StreamDataBlockedFrame.fromContents(contents)
+    case FrameType.StreamReceipt:
+      return StreamReceiptFrame.fromContents(contents)
     default:
       return undefined
   }

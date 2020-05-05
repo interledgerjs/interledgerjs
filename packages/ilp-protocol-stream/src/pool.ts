@@ -1,5 +1,6 @@
 import createLogger from 'ilp-logger'
 import * as IlpPacket from 'ilp-packet'
+import { Reader } from 'oer-utils'
 import { Connection, BuildConnectionOpts } from './connection'
 import * as cryptoHelper from './crypto'
 
@@ -52,15 +53,46 @@ export class ServerConnectionPool {
     if (pendingConnection) return pendingConnection
 
     const connectionPromise = (async () => {
-      const sharedSecret = await this.getSharedSecret(id, prepare)
+      const token = Buffer.from(id, 'base64')
+      const sharedSecret = await this.getSharedSecret(token, prepare)
       // If we get here, that means it was a token + sharedSecret we created
-      const tilde = id.indexOf('~')
-      const connectionTag = tilde !== -1 ? id.slice(tilde + 1) : undefined
+      let connectionTag: string | undefined
+      let receiptNonce: Buffer | undefined
+      let receiptSecret: Buffer | undefined
+      const reader = new Reader(cryptoHelper.decryptConnectionAddressToken(this.serverSecret, token))
+      reader.skipOctetString(cryptoHelper.TOKEN_NONCE_LENGTH)
+      if (reader.peekVarOctetString().length) {
+        connectionTag = reader.readVarOctetString().toString('ascii')
+      } else {
+        reader.skipVarOctetString()
+      }
+      switch (reader.peekVarOctetString().length) {
+        case 0:
+          reader.skipVarOctetString()
+          break
+        case 16:
+          receiptNonce = reader.readVarOctetString()
+          break
+        default:
+          throw new Error('receiptNonce must be 16 bytes')
+      }
+      switch (reader.peekVarOctetString().length) {
+        case 0:
+          reader.skipVarOctetString()
+          break
+        case 32:
+          receiptSecret = reader.readVarOctetString()
+          break
+        default:
+          throw new Error('receiptSecret must be 32 bytes')
+      }
       const conn = await Connection.build({
         ...this.connectionOpts,
         sharedSecret,
         connectionTag,
-        connectionId: id
+        connectionId: id,
+        receiptNonce,
+        receiptSecret
       })
       log.debug('got incoming packet for new connection: %s%s', id, (connectionTag ? ' (connectionTag: ' + connectionTag + ')' : ''))
       try {
@@ -92,11 +124,10 @@ export class ServerConnectionPool {
   }
 
   private async getSharedSecret (
-    id: string,
+    token: Buffer,
     prepare: IlpPacket.IlpPrepare
   ): Promise<Buffer> {
     try {
-      const token = Buffer.from(id, 'ascii')
       const sharedSecret = cryptoHelper.generateSharedSecretFromToken(
         this.serverSecret, token)
       // TODO just pass this into the connection?

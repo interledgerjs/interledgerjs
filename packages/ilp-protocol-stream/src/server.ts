@@ -5,9 +5,9 @@ import createLogger from 'ilp-logger'
 import * as cryptoHelper from './crypto'
 import { Connection, ConnectionOpts } from './connection'
 import { ServerConnectionPool } from './pool'
+import { Predictor, Writer } from 'oer-utils'
 import { Plugin } from './util/plugin-interface'
 
-const CONNECTION_ID_REGEX = /^[a-zA-Z0-9~_-]+$/
 const DEFAULT_DISCONNECT_DELAY = 100
 
 export interface ServerOpts extends ConnectionOpts {
@@ -18,6 +18,12 @@ export interface ServerOpts extends ConnectionOpts {
    * the plugin so packets may be safely returned
    */
   disconnectDelay?: number
+}
+
+export interface GenerateAddressSecretOpts {
+  connectionTag?: string,
+  receiptNonce?: Buffer,
+  receiptSecret?: Buffer
 }
 
 /**
@@ -155,23 +161,61 @@ export class Server extends EventEmitter {
    * Two different clients SHOULD NOT be given the same address and secret.
    *
    * @param connectionTag Optional connection identifier that will be appended to the ILP address and can be used to identify incoming connections. Can only include characters that can go into an ILP Address
+   * @param receiptNonce Optional nonce to include in STREAM receipts
+   * @param receiptSecret Optional secret to use for signing STREAM receipts
    */
-  generateAddressAndSecret (connectionTag?: string): { destinationAccount: string, sharedSecret: Buffer } {
+  generateAddressAndSecret (opts?: string | GenerateAddressSecretOpts): { destinationAccount: string, sharedSecret: Buffer, receiptsEnabled: boolean } {
     if (!this.connected) {
       throw new Error('Server must be connected to generate address and secret')
     }
-    let token = base64url(cryptoHelper.generateToken())
-    if (connectionTag) {
-      if (!CONNECTION_ID_REGEX.test(connectionTag)) {
-        throw new Error('connectionTag can only include ASCII characters a-z, A-Z, 0-9, "_", "-", and "~"')
+    let connectionTag = Buffer.alloc(0)
+    let receiptNonce = Buffer.alloc(0)
+    let receiptSecret = Buffer.alloc(0)
+    let receiptsEnabled = false
+    if (opts) {
+      if (typeof opts === 'object') {
+        if (opts.connectionTag) {
+          connectionTag = Buffer.from(opts.connectionTag, 'ascii')
+        }
+        if (!opts.receiptNonce !== !opts.receiptSecret) {
+          throw new Error('receiptNonce and receiptSecret must accompany each other')
+        }
+        if (opts.receiptNonce) {
+          if (opts.receiptNonce.length !== 16) {
+            throw new Error('receiptNonce must be 16 bytes')
+          }
+          receiptsEnabled = true
+          receiptNonce = opts.receiptNonce
+        }
+        if (opts.receiptSecret) {
+          if (opts.receiptSecret.length !== 32) {
+            throw new Error('receiptSecret must be 32 bytes')
+          }
+          receiptSecret = opts.receiptSecret
+        }
+      } else {
+        connectionTag = Buffer.from(opts, 'ascii')
       }
-      token = token + '~' + connectionTag
     }
-    const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, Buffer.from(token, 'ascii'))
+    const tokenNonce = cryptoHelper.generateTokenNonce()
+    const predictor = new Predictor()
+    predictor.writeOctetString(tokenNonce, cryptoHelper.TOKEN_NONCE_LENGTH)
+    predictor.writeVarOctetString(connectionTag)
+    predictor.writeVarOctetString(receiptNonce)
+    predictor.writeVarOctetString(receiptSecret)
+    const writer = new Writer(predictor.length)
+    writer.writeOctetString(tokenNonce, cryptoHelper.TOKEN_NONCE_LENGTH)
+    writer.writeVarOctetString(connectionTag)
+    writer.writeVarOctetString(receiptNonce)
+    writer.writeVarOctetString(receiptSecret)
+
+    const token = cryptoHelper.encryptConnectionAddressToken(this.serverSecret, writer.getBuffer())
+    const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
     return {
       // TODO should this be called serverAccount or serverAddress instead?
-      destinationAccount: `${this.serverAccount}.${token}`,
-      sharedSecret
+      destinationAccount: `${this.serverAccount}.${base64url(token)}`,
+      sharedSecret,
+      receiptsEnabled
     }
   }
 
