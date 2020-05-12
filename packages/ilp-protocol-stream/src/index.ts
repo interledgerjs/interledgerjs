@@ -7,6 +7,14 @@ import { Connection, ConnectionOpts } from './connection'
 export { Connection } from './connection'
 export { DataAndMoneyStream } from './stream'
 export { Server, ServerOpts, createServer, GenerateAddressSecretOpts } from './server'
+export {
+  createReceipt,
+  decodeReceipt,
+  verifyReceipt,
+  Receipt,
+  ReceiptOpts,
+  RECEIPT_VERSION
+} from './util/receipt'
 
 export interface CreateConnectionOpts extends ConnectionOpts {
   /** ILP Address of the server */
