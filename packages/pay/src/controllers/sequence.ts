@@ -1,4 +1,4 @@
-import { StreamController, StreamRequest, StreamRequestBuilder, SendState } from '.'
+import { StreamController, StreamRequestBuilder, SendState } from '.'
 import { PaymentError } from '..'
 
 /** Track the sequence number of outgoing packets */
@@ -19,7 +19,8 @@ export class SequenceController implements StreamController {
     return SendState.Ready
   }
 
-  applyPrepare(request: StreamRequest) {
-    this.nextSequence = request.sequence + 1
+  applyRequest() {
+    this.nextSequence++
+    return () => {}
   }
 }

@@ -42,12 +42,12 @@ export const getRate = (
   // Only fetch the price if the assets are different -- otherwise rate is 1!
   if (sourceAssetCode !== destinationAssetCode) {
     const sourceAssetPrice = prices[sourceAssetCode]
-    if (!sourceAssetPrice) {
+    if (typeof sourceAssetPrice !== 'number') {
       return
     }
 
     const destinationAssetPrice = prices[destinationAssetCode]
-    if (!destinationAssetPrice) {
+    if (typeof destinationAssetPrice !== 'number') {
       return
     }
 
@@ -67,15 +67,3 @@ export const getRate = (
   // TODO Add validation when constructing the `Rational` directly
   return new BigNumber(scaledRate) as Rational
 }
-
-export const convert = (
-  sourceAmount: BigNumber.Value,
-  sourceAssetCode: string,
-  destinationAssetCode: string,
-  destinationAssetScale: number,
-  prices: AssetPrices,
-  roundingMode: typeof BigNumber.ROUND_DOWN | typeof BigNumber.ROUND_CEIL
-): BigNumber | undefined =>
-  getRate(sourceAssetCode, 0, destinationAssetCode, destinationAssetScale, prices)
-    ?.times(sourceAmount)
-    .integerValue(roundingMode)

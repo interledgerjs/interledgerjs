@@ -1,0 +1,41 @@
+coverage:
+  status:
+    patch:
+      default:
+        target: 80%
+    project:
+      default:
+        target: 80%
+      pay:
+        target: 95%
+        flags:
+          - pay
+
+flags:
+  connection_tag_utils:
+    paths:
+      - packages/connection-tag-utils/
+  ilp_logger:
+    paths:
+      - packages/ilp-logger/
+  ilp_packet:
+    paths:
+      - packages/ilp-packet/
+  ilp_plugin:
+    paths:
+      - packages/ilp-packet/
+  ilp_protocol_ccp:
+    paths:
+      - packages/ilp-protocol-ccp/
+  ilp_protocol-ildcp:
+    paths:
+      - packages/ilp-protocol-ildcp/
+  ilp_spsp_payout:
+    paths:
+      - packages/ilp-spsp-payout/
+  oer_utils:
+    paths:
+      - packages/oer-utils/
+  pay:
+    paths:
+      - packages/pay/

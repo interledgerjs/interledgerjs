@@ -1,4 +1,4 @@
-import { StreamController, StreamReply, StreamRequestBuilder, SendState, isAuthentic } from '.'
+import { StreamController, StreamReply, StreamRequestBuilder, SendState } from '.'
 import {
   ConnectionNewAddressFrame,
   ConnectionAssetDetailsFrame,
@@ -8,7 +8,7 @@ import {
   ConnectionMaxStreamIdFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { DEFAULT_STREAM_ID } from './amount'
-import { AssetScale, isValidAssetScale } from '../setup/open-payments'
+import { AssetScale } from '../setup/open-payments'
 import { IlpAddress } from '../setup/shared'
 import { PaymentError } from '..'
 
@@ -38,10 +38,6 @@ export class AccountController implements StreamController {
     this.destinationAddress = destinationAddress
   }
 
-  getSourceAccount(): AccountDetails {
-    return this.sourceAccount
-  }
-
   getDestinationAccount(): AccountDetails | undefined {
     if (this.destinationAsset) {
       return {
@@ -67,13 +63,10 @@ export class AccountController implements StreamController {
 
     // Notify the recipient of our source account and other limits
     if (!this.remoteKnowsOurAccount) {
-      if (this.sourceAccount) {
+      builder.addFrames(
         // Share address with receiver (required by RFC)
         // `ilp-protocol-stream`, Rust & Java respond to this with a `ConnectionAssetDetails` frame
-        builder.addFrames(new ConnectionNewAddressFrame(this.sourceAccount.ilpAddress))
-      }
-
-      builder.addFrames(
+        new ConnectionNewAddressFrame(this.sourceAccount.ilpAddress),
         // Disallow incoming money
         // `ilp-protocol-stream` auto opens a stream from this
         new StreamMaxMoneyFrame(DEFAULT_STREAM_ID, 0, 0),
@@ -87,18 +80,15 @@ export class AccountController implements StreamController {
     return SendState.Ready
   }
 
-  applyFulfill(reply: StreamReply) {
-    this.remoteKnowsOurAccount = true
-    this.handleDestinationDetails(reply)
+  applyRequest() {
+    return (reply: StreamReply) => {
+      this.remoteKnowsOurAccount = this.remoteKnowsOurAccount || reply.isAuthentic()
+      this.handleDestinationDetails(reply)
+    }
   }
 
-  applyReject(reply: StreamReply) {
-    this.remoteKnowsOurAccount = this.remoteKnowsOurAccount || isAuthentic(reply)
-    this.handleDestinationDetails(reply)
-  }
-
-  private handleDestinationDetails({ responseFrames, log }: StreamReply) {
-    const assetDetails = responseFrames?.find(
+  private handleDestinationDetails({ frames, log }: StreamReply) {
+    const assetDetails = frames?.find(
       (frame): frame is ConnectionAssetDetailsFrame =>
         frame.type === FrameType.ConnectionAssetDetails
     )
@@ -106,16 +96,15 @@ export class AccountController implements StreamController {
       return
     }
 
+    // Packet deserialization should already ensure the asset scale is limited to u8:
+    // https://github.com/interledgerjs/ilp-protocol-stream/blob/8551fd498f1ff313da72f63891b9fa428212c31a/src/packet.ts#L274
     const { sourceAssetScale: assetScale, sourceAssetCode: assetCode } = assetDetails
-    if (!isValidAssetScale(assetScale)) {
-      return // Deserializing the packet *should* already ensure the asset scale is u8
-    }
 
     // Only set destination details if we don't already know them
     if (!this.destinationAsset) {
       this.destinationAsset = {
         assetCode,
-        assetScale,
+        assetScale: assetScale as AssetScale, // TODO Remove this?
       }
     }
     // If the destination asset details changed, end the payment
@@ -123,7 +112,7 @@ export class AccountController implements StreamController {
       this.destinationAsset.assetCode !== assetCode ||
       this.destinationAsset.assetScale !== assetScale
     ) {
-      log?.error(
+      log.error(
         'ending payment: remote unexpectedly changed destination asset from %s %s to %s %s',
         this.destinationAsset.assetCode,
         this.destinationAsset.assetScale,

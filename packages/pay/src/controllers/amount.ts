@@ -14,13 +14,12 @@ import {
   FrameType,
   StreamMoneyFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
-import Long from 'long'
 import { MaxPacketAmountController } from './max-packet'
 import { ExchangeRateController } from './exchange-rate'
 import { AssetScale } from '../setup/open-payments'
 import { PaymentError } from '..'
 
-export const DEFAULT_STREAM_ID = Long.fromNumber(1, true)
+export const DEFAULT_STREAM_ID = 1
 
 export enum PaymentType {
   FixedSend,
@@ -59,29 +58,28 @@ export class AmountController implements StreamController {
     return !this.target
       ? SendState.Ready // No fixed source or delivery amount set
       : this.target.type === PaymentType.FixedSend
-      ? this.applyFixedSendStrategy(builder)
-      : this.applyFixedDeliveryStrategy(builder)
+      ? this.applyFixedSendStrategy(builder, this.target.amountToSend)
+      : this.applyFixedDeliveryStrategy(builder, this.target.amountToDeliver)
   }
 
-  private applyFixedSendStrategy(builder: StreamRequestBuilder): SendState | PaymentError {
+  private applyFixedSendStrategy(
+    builder: StreamRequestBuilder,
+    amountToSend: Integer
+  ): SendState | PaymentError {
     const { log } = builder
 
-    if (this.target?.type !== PaymentType.FixedSend) {
-      return SendState.Ready
-    }
-
-    const overpaidFixedSend = this.amountSent.isGreaterThan(this.target.amountToSend)
+    const overpaidFixedSend = this.amountSent.isGreaterThan(amountToSend)
     if (overpaidFixedSend) {
       log.error(
         'ending payment: overpaid source amount limit. sent %s of %s',
         this.amountSent,
-        this.target?.amountToSend
+        amountToSend
       )
       return PaymentError.OverpaidFixedSend
     }
 
     const paidFixedSend =
-      this.amountSent.isEqualTo(this.target.amountToSend) && this.getAmountInFlight().isZero()
+      this.amountSent.isEqualTo(amountToSend) && this.getAmountInFlight().isZero()
     if (paidFixedSend) {
       log.debug('payment complete: paid fixed source amount. sent %s', this.amountSent)
       return SendState.End
@@ -89,7 +87,7 @@ export class AmountController implements StreamController {
 
     // TODO Compare estimated remaining to deliver vs receive max?
 
-    const availableToSendLimit = this.target.amountToSend
+    const availableToSendLimit = amountToSend
       .minus(this.amountSent)
       .minus(this.getAmountInFlight()) as Integer
     const isBlocked = availableToSendLimit.isLessThanOrEqualTo(0)
@@ -128,10 +126,11 @@ export class AmountController implements StreamController {
         .times(minExchangeRate)
         .integerValue(BigNumber.ROUND_CEIL)
       builder.setMinDestinationAmount(minDestinationAmount as Integer)
+    } else {
+      // TODO If rate enforcement is disabled, set arbitrary low minimum destination amount
+      // (If this is 0, packet will be sent unfulfillable)
+      builder.setMinDestinationAmount(new BigNumber(1) as Integer)
     }
-
-    // TODO Should this support sending by source amount with no min exchange rate?
-    //      Since min destination is 0, the packets will be unfulfillable if not
 
     if (sourceAmount.isGreaterThan(0)) {
       builder.addFrames(new StreamMoneyFrame(DEFAULT_STREAM_ID, 1))
@@ -140,22 +139,21 @@ export class AmountController implements StreamController {
     return SendState.Ready
   }
 
-  private applyFixedDeliveryStrategy(builder: StreamRequestBuilder): SendState | PaymentError {
+  private applyFixedDeliveryStrategy(
+    builder: StreamRequestBuilder,
+    amountToDeliver: Integer
+  ): SendState | PaymentError {
     const { log } = builder
 
-    if (this.target?.type !== PaymentType.FixedDelivery) {
-      return SendState.Ready
-    }
-
-    const remainingToDeliver = this.target.amountToDeliver.minus(this.amountDelivered)
+    const remainingToDeliver = amountToDeliver.minus(this.amountDelivered)
     const overpaidFixedDelivery = remainingToDeliver.isLessThan(0)
     if (overpaidFixedDelivery) {
-      log.error(
-        'ending payment: overpaid fixed destination amount. delivered %s of %s',
+      log.debug(
+        'payment complete: overpaid fixed destination amount. delivered %s of %s',
         this.amountDelivered,
-        this.target.amountToDeliver
+        amountToDeliver
       )
-      return PaymentError.OverpaidFixedDelivery
+      return SendState.End
     }
 
     // TODO Rather, should this check if destination amount inflight is 0?
@@ -169,13 +167,11 @@ export class AmountController implements StreamController {
     }
 
     // // Is the recipient's advertised `receiveMax` less than the fixed destination amount?
-    const incompatibleReceiveMax = this.target.amountToDeliver.isGreaterThan(
-      this.remoteReceiveMax ?? Infinity
-    )
+    const incompatibleReceiveMax = amountToDeliver.isGreaterThan(this.remoteReceiveMax ?? Infinity)
     if (incompatibleReceiveMax) {
       log.error(
         'ending payment: fixed destination amount is too much for recipient. amount to deliver: %s, receive max: %s',
-        this.target.amountToDeliver,
+        amountToDeliver,
         this.remoteReceiveMax
       )
       return PaymentError.IncompatibleReceiveMax
@@ -185,9 +181,10 @@ export class AmountController implements StreamController {
     const highEndAmountInFlight = [...this.inFlightAmounts.values()].reduce(
       (total, [sourceAmount, minDestination]) => {
         const deliveryEstimate =
-          this.controllers.get(ExchangeRateController).estimateDestinationAmount(sourceAmount) ?? []
-        const highEstimate = deliveryEstimate[1] ?? new BigNumber(0)
-        return total.plus(BigNumber.max(minDestination, highEstimate))
+          this.controllers
+            .get(ExchangeRateController)
+            .estimateDestinationAmount(sourceAmount)?.[1] ?? new BigNumber(0)
+        return total.plus(BigNumber.max(minDestination, deliveryEstimate))
       },
       new BigNumber(0)
     )
@@ -199,7 +196,7 @@ export class AmountController implements StreamController {
     const availableToDeliver = remainingToDeliver.minus(highEndAmountInFlight)
     const isBlocked = availableToDeliver.isLessThanOrEqualTo(0)
     if (isBlocked) {
-      return SendState.Wait
+      return SendState.Wait // TODO What if it never set the amount in this case?
     }
 
     // Aggregate all the destination packet amount ceilings
@@ -254,20 +251,32 @@ export class AmountController implements StreamController {
       .integerValue(BigNumber.ROUND_DOWN)
       .plus(sourceAmountEstimate[0]) as Integer
 
+    // TODO Now, estimate the destination amount this delivers to accurately set the min destination amount
+    //      as high as possible?
+    // const minDestination = this.controllers
+    //   .get(ExchangeRateController)
+    //   .estimateDestinationAmount(sourceAmount)?.[0]
+    // if (!minDestination) {
+    //   throw new Error('TODO Failed to compute')
+    // }
+
     // TODO Is there ever a case where both the low estimate and high estimate are known
     //      to precisely convert to the destination amount?
     //      In that case, it should default to the low estimate, right?
 
     // TODO Alternatively -- set sourceAmount to lower target destination, use normal min destination amount
     // TODO That was incoherent but basically use the commented lines instead
-    builder.setSourceAmount(sourceAmount).setMinDestinationAmount(targetDestinationAmount)
+    builder.setSourceAmount(sourceAmount).setMinDestinationAmount(targetDestinationAmount) // TODO Change back to target destination?
+
+    // TODO There should be a more robust check here to ensure ALL packets can clear the min exchange rate
+    //      given the lower bound rate.
 
     // TODO Where should the min destination amount checking exist?
     const minExchangeRate = this.controllers.get(ExchangeRateController).getMinExchangeRate()
     if (minExchangeRate) {
       const minDestinationAmount = sourceAmount
         .times(minExchangeRate)
-        .integerValue(BigNumber.ROUND_DOWN)
+        .integerValue(BigNumber.ROUND_CEIL)
       if (targetDestinationAmount.isLessThan(minDestinationAmount)) {
         return PaymentError.InsufficientExchangeRate
       }
@@ -288,110 +297,73 @@ export class AmountController implements StreamController {
     this.target = target
   }
 
-  applyPrepare(request: StreamRequest) {
-    const { sequence, sourceAmount, minDestinationAmount } = request
+  applyRequest(request: StreamRequest) {
+    const { sequence, sourceAmount, minDestinationAmount, log } = request
+
     if (isFulfillable(request)) {
       this.inFlightAmounts.set(sequence, [sourceAmount, minDestinationAmount])
     }
-  }
 
-  applyFulfill(reply: StreamReply) {
-    const { sequence, sourceAmount, minDestinationAmount, destinationAmount } = reply
+    return (reply: StreamReply) => {
+      if (reply.isFulfill()) {
+        const destinationAmount = reply.destinationAmount
 
-    // TODO Add log somewhere (maybe when sending packet?) of the minimum destination amount/target amount
+        // Delivered amount must be *at least* the minimum acceptable amount we told the receiver
+        // No matter what, since they fulfilled it, we must assume they got at least the minimum
+        let amountDelivered: BigNumber
+        if (!destinationAmount) {
+          log.warn(
+            'packet fulfilled with no authentic STREAM data: assuming minimum of %s got delivered',
+            minDestinationAmount
+          )
+          amountDelivered = minDestinationAmount
+        } else if (destinationAmount.isLessThan(minDestinationAmount)) {
+          log.warn(
+            'packet wrongly fulfilled. claimed destination amount of %s less than minimum of %s. assuming minimum got delivered',
+            destinationAmount,
+            minDestinationAmount
+          )
+          amountDelivered = minDestinationAmount
 
-    // Delivered amount must be *at least* the minimum acceptable amount we told the receiver
-    // No matter what, since they fulfilled it, we must assume they got at least the minimum
-    let amountDelivered: BigNumber
-    if (!destinationAmount) {
-      reply.log.warn(
-        'packet fulfilled with no authentic STREAM data: assuming minimum of %s got delivered',
-        minDestinationAmount
-      )
-      amountDelivered = minDestinationAmount
-    } else if (destinationAmount.isLessThan(minDestinationAmount)) {
-      reply.log.warn(
-        'packet wrongly fulfilled. claimed destination amount of %s less than minimum of %s. assuming minimum got delivered',
-        destinationAmount,
-        minDestinationAmount
-      )
-      amountDelivered = minDestinationAmount
+          // TODO Should this end the payment immediately? Why would this ever happen legitimately?
+          // TODO Should `PaymentError` be allowed as a return value from `applyFulfill` / `applyReject`?
+        } else {
+          log.debug(
+            'packet sent %s, delivered %s, min destination %s.',
+            sourceAmount,
+            destinationAmount,
+            minDestinationAmount
+          )
+          amountDelivered = destinationAmount
+        }
 
-      // TODO Should this end the payment immediately? Why would this ever happen legitimately?
-      // TODO Should `PaymentError` be allowed as a return value from `applyFulfill` / `applyReject`?
-    } else {
-      reply.log.debug(
-        'packet sent %s, delivered %s, min destination %s.',
-        sourceAmount,
-        destinationAmount,
-        minDestinationAmount
-      )
-      amountDelivered = destinationAmount
+        this.amountSent = this.amountSent.plus(sourceAmount) as Integer
+        this.amountDelivered = this.amountDelivered.plus(amountDelivered) as Integer
+      }
+
+      this.inFlightAmounts.delete(sequence)
+      this.updateReceiveMax(reply)
     }
-
-    this.amountSent = this.amountSent.plus(sourceAmount) as Integer
-    this.amountDelivered = this.amountDelivered.plus(amountDelivered) as Integer
-
-    this.inFlightAmounts.delete(sequence)
-    this.updateReceiveMax(reply)
   }
 
-  applyReject(reply: StreamReply) {
-    if (reply.destinationAmount?.isLessThan(reply.minDestinationAmount)) {
-      reply.log.debug(
-        'exchange rate failure: destination amount of %s was below minimum of %s',
-        reply.destinationAmount,
-        reply.minDestinationAmount
-      )
-    }
-
-    this.inFlightAmounts.delete(reply.sequence)
-    this.updateReceiveMax(reply)
-  }
-
-  private updateReceiveMax({ responseFrames, log }: StreamReply) {
-    responseFrames
+  private updateReceiveMax({ frames, log }: StreamReply) {
+    frames
       ?.filter((frame): frame is StreamMaxMoneyFrame => frame.type === FrameType.StreamMaxMoney)
       .filter((frame) => frame.streamId.equals(DEFAULT_STREAM_ID))
       .forEach((frame) => {
         log.trace(
-          'recipient told us this stream can receive up to: %s and has received: %s so far',
-          frame.receiveMax,
-          frame.totalReceived
+          'recipient told us the stream has received %s of up to %s',
+          frame.totalReceived,
+          frame.receiveMax
         )
 
+        // Note: totalReceived *can* be greater than receiveMax!
+        // `ilp-protocol-stream` allows receiving 1% more than the receiveMax
         const receiveMax = toBigNumber(frame.receiveMax) as Integer
-        const totalReceived = toBigNumber(frame.totalReceived) as Integer
 
-        // Frame is invalid
-        if (!receiveMax.isGreaterThanOrEqualTo(totalReceived)) {
-          return
-        }
-
-        // TODO There's still a race condition: remote receives seq 5, then seq 4.
-        //      Thus, seq 4 includes greater totalDelivered. But, on return side,
-        //      seq 4 gets delivered before seq 5, so we set to the higher
-        //      delivered amount, then add seq 5. Basically, you don't know what order
-        //      the packets will get delivered to the remote...
-
-        // // "Fast-forward" the total received if it's not synchronized with the recipient
-        // // This case occurs if an intermediary or the recipient dropped a Fulfill, causing them to lose money
-        // const oldestInFlightPacket = Math.min(sequence, ...this.inFlightAmounts.keys())
-        // // Only fast-forward in response to the oldest in-flight packet: return packets received out-of-order could overcount the delivered amount
-        // const isOldestInFlight = oldestInFlightPacket === sequence
-        // if (isOldestInFlight) {
-        //   if (totalReceived.isGreaterThan(this.amountDelivered)) {
-        //     log.warn(
-        //       'fast forwarding total delivered from %s to %s. other nodes in path may have lost money',
-        //       this.amountDelivered,
-        //       totalReceived
-        //     )
-        //     this.amountDelivered = totalReceived
-        //   }
-
-        //   // If totalReceived is less than the amount we know we delivered, we shouldn't do anything,
-        //   // since Rust and Java return `StreamMaxMoney` frames with totalReceived of 0
-        // }
+        // TODO Add "fast forward" functionality using `totalReceived` to account for dropped Fulfills
+        //      The only problem is, it seems very complicated to implement without race conditions
+        //      since you can't guarantee the order packets are delivered to the receiver
 
         // Remote receive max can only increase
         this.remoteReceiveMax = this.remoteReceiveMax
@@ -415,8 +387,8 @@ export class AmountController implements StreamController {
   }
 
   private reduceMaxPacketAmountToPreventDust(
-    remainingAmount: Integer,
-    maxPacketAmount: Integer | undefined
+    remainingAmount: Integer, // TODO Add type assertion somewhere that this must be greater than 0
+    maxPacketAmount?: Integer
   ): Integer | undefined {
     if (!maxPacketAmount || maxPacketAmount.isZero()) {
       return
@@ -426,33 +398,33 @@ export class AmountController implements StreamController {
       .dividedBy(maxPacketAmount)
       .integerValue(BigNumber.ROUND_CEIL) // Increase amount of final packet by subtracting from other packets
 
-    if (numberRemainingPackets.isZero()) {
-      return
-    }
+    // `numberRemainingPackets` should always be non-zero since `remainingAmount` is non-zero
+    // Therefore, no divide-by-zero error
 
     return remainingAmount
       .dividedBy(numberRemainingPackets)
       .integerValue(BigNumber.ROUND_CEIL) as Integer
   }
 
-  private increaseMinPacketAmountToPreventDust(
-    remainingAmount: Integer,
-    minPacketAmount: Integer | undefined
-  ): Integer | undefined {
-    if (!minPacketAmount || minPacketAmount.isZero()) {
-      return
-    }
+  // TODO Move this elsewhere?
+  // private increaseMinPacketAmountToPreventDust(
+  //   remainingAmount: Integer,
+  //   minPacketAmount?: Integer
+  // ): Integer | undefined {
+  //   if (!minPacketAmount || minPacketAmount.isZero()) {
+  //     return
+  //   }
 
-    const numberRemainingPackets = remainingAmount
-      .dividedBy(minPacketAmount)
-      .integerValue(BigNumber.ROUND_DOWN) // Don't send the final packet -- distribute dust across other packets
+  //   const numberRemainingPackets = remainingAmount
+  //     .dividedBy(minPacketAmount)
+  //     .integerValue(BigNumber.ROUND_DOWN) // Don't send the final packet -- distribute dust across other packets
 
-    if (numberRemainingPackets.isZero()) {
-      return
-    }
+  //   if (numberRemainingPackets.isZero()) {
+  //     return
+  //   }
 
-    return remainingAmount
-      .dividedBy(numberRemainingPackets)
-      .integerValue(BigNumber.ROUND_CEIL) as Integer
-  }
+  //   return remainingAmount
+  //     .dividedBy(numberRemainingPackets)
+  //     .integerValue(BigNumber.ROUND_CEIL) as Integer
+  // }
 }
