@@ -1,9 +1,9 @@
-import { BackendInstance } from '@kincaidoneil/ilp-connector/dist/types/backend'
-import { AccountInfo } from '@kincaidoneil/ilp-connector/dist/types/accounts'
+import { BackendInstance } from 'ilp-connector/dist/types/backend'
+import { AccountInfo } from 'ilp-connector/dist/types/accounts'
 import { getRate, AssetPrices } from '../src/rates'
 import { Injector } from 'reduct'
-import Config from '@kincaidoneil/ilp-connector/dist/services/config'
-import Accounts from '@kincaidoneil/ilp-connector/dist/services/accounts'
+import Config from 'ilp-connector/dist/services/config'
+import Accounts from 'ilp-connector/dist/services/accounts'
 
 export class CustomBackend implements BackendInstance {
   protected getPrices: () => AssetPrices

@@ -1,12 +1,7 @@
-import {
-  DataHandler,
-  MoneyHandler,
-  PluginInstance
-} from '@kincaidoneil/ilp-connector/dist/types/plugin'
+import { DataHandler, MoneyHandler, PluginInstance } from 'ilp-connector/dist/types/plugin'
 import { EventEmitter } from 'events'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { sleep } from '../src/utils'
-import { serializeIlpReject, Errors } from 'ilp-packet'
 
 // TODO Normal distribution
 // TODO Cite this: https://stackoverflow.com/questions/25582882/javascript-math-random-normal-distribution-gaussian-bell-curve
@@ -23,21 +18,18 @@ const getRandomFloat = (min: number, max: number): number => {
   return num
 }
 
-const defaultDataHandler = async () =>
-  serializeIlpReject({
-    code: Errors.codes.F02_UNREACHABLE,
-    message: '',
-    triggeredBy: '',
-    data: Buffer.alloc(0)
-  })
+const defaultDataHandler = async () => {
+  throw new Error('No data handler registered')
+}
 
 const defaultMoneyHandler = () => {
   throw new Error('No money handler registered')
 }
 
 export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance {
-  private mirror?: MirrorPlugin
   private connected = false
+
+  public mirror?: MirrorPlugin
 
   public dataHandler: DataHandler = defaultDataHandler
   public moneyHandler: MoneyHandler = defaultMoneyHandler
@@ -61,8 +53,17 @@ export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance
     this.maxSettlementLatency = maxSettlementLatency
   }
 
-  linkTo(mirror: MirrorPlugin) {
-    this.mirror = mirror
+  static createPair(
+    minNetworkLatency?: number,
+    maxNetworkLatency?: number
+  ): [MirrorPlugin, MirrorPlugin] {
+    const pluginA = new MirrorPlugin(minNetworkLatency, maxNetworkLatency)
+    const pluginB = new MirrorPlugin(minNetworkLatency, maxNetworkLatency)
+
+    pluginA.mirror = pluginB
+    pluginB.mirror = pluginA
+
+    return [pluginA, pluginB]
   }
 
   async connect() {
@@ -80,7 +81,7 @@ export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance
   async sendData(data: Buffer) {
     if (this.mirror && this.connected) {
       await this.addNetworkDelay()
-      const response = this.mirror.dataHandler(data)
+      const response = await this.mirror.dataHandler(data)
       await this.addNetworkDelay()
       return response
     } else {
