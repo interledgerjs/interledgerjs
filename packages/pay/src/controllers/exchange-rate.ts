@@ -1,13 +1,19 @@
 import BigNumber from 'bignumber.js'
-import { StreamController, StreamReply } from '.'
-import { Integer, Rational } from '../utils'
+import { StreamController, StreamReply, StreamRequest } from '.'
+import { Integer, Rational, Brand } from '../utils'
 import { PaymentError } from '..'
 
 // TODO How should the realized rate change over time? How should old data points be invalidated?
 
+export type ValidSlippage = Brand<number, 'ValidSlippage'>
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const isValidSlippage = (o: any): o is ValidSlippage =>
+  typeof o === 'number' && o >= 0 && o <= 1 && !Number.isNaN(o)
+
 /** Compute the realized exchange rate from Fulfills and probed rate from Rejects */
 export class ExchangeRateController implements StreamController {
-  private static DEFAULT_SLIPPAGE = 0.01
+  static DEFAULT_SLIPPAGE = 0.01 as ValidSlippage
 
   /** Real exchange rate determined from the recipient */
   private exchangeRate?: {
@@ -17,20 +23,15 @@ export class ExchangeRateController implements StreamController {
     lowerBound: [Integer, Integer, Rational]
   }
 
-  private packetAmounts: Map<string, Integer> = new Map()
+  private sentAmounts: Map<string, Integer> = new Map()
+  private receivedAmounts: Map<string, Integer> = new Map()
 
   private minExchangeRate?: Rational
 
-  setMinExchangeRate(
-    exchangeRate: Rational,
-    slippage = ExchangeRateController.DEFAULT_SLIPPAGE
-  ): Rational | PaymentError {
+  setMinExchangeRate(exchangeRate: Rational, slippage: ValidSlippage): Rational | PaymentError {
     if (slippage === 1 || exchangeRate.isZero()) {
+      // Don't set any minimum exchange rate
       return new BigNumber(0) as Rational
-    }
-
-    if (slippage < 0 || slippage > 1 || Number.isNaN(slippage)) {
-      return PaymentError.InvalidSlippage
     }
 
     const minExchangeRate = exchangeRate.times(1 - slippage) as Rational
@@ -54,19 +55,13 @@ export class ExchangeRateController implements StreamController {
     return this.exchangeRate?.lowerBound[2]
   }
 
-  applyFulfill({ sourceAmount, minDestinationAmount, destinationAmount }: StreamReply) {
-    // Amount received must be at least the minimum in case the recipient lied
-    const receivedAmount = BigNumber.max(
-      minDestinationAmount,
-      destinationAmount || new BigNumber(0)
-    ) as Integer
-
-    this.updateRate(sourceAmount, receivedAmount)
-  }
-
-  applyReject({ sourceAmount, destinationAmount }: StreamReply) {
-    if (destinationAmount) {
-      this.updateRate(sourceAmount, destinationAmount)
+  applyRequest({ sourceAmount }: StreamRequest) {
+    return (reply: StreamReply) => {
+      const destinationAmount = reply.destinationAmount
+      if (destinationAmount) {
+        // TODO Should this take max of `minDestinationAmount` and `destinationAmount` if fulfilled in case they lied?
+        this.updateRate(sourceAmount, destinationAmount)
+      }
     }
   }
 
@@ -81,13 +76,14 @@ export class ExchangeRateController implements StreamController {
       return
     }
 
-    const previousReceivedAmount = this.packetAmounts.get(sourceAmount.toString())
+    const previousReceivedAmount = this.receivedAmounts.get(sourceAmount.toString())
     if (previousReceivedAmount && !previousReceivedAmount.isEqualTo(receivedAmount)) {
       // If the delivery amount is different, reset the entire exchange rate
       delete this.exchangeRate
     }
 
-    this.packetAmounts.set(sourceAmount.toString(), receivedAmount)
+    this.sentAmounts.set(sourceAmount.toString(), receivedAmount)
+    this.receivedAmounts.set(receivedAmount.toString(), sourceAmount)
 
     // TODO Replace BigNumber with Ratio and remove this rounding mode nonsense once and for all?
 
@@ -146,6 +142,12 @@ export class ExchangeRateController implements StreamController {
       return
     }
 
+    // If this amount was received in a previous packet, return the source amount of that packet
+    const amountSent = this.receivedAmounts.get(amountToDeliver.toString())
+    if (amountSent) {
+      return [amountSent, amountSent]
+    }
+
     const sourceAmount = amountToDeliver
       .times(this.exchangeRate.upperBound[0])
       .dividedBy(this.exchangeRate.upperBound[1])
@@ -165,11 +167,17 @@ export class ExchangeRateController implements StreamController {
   estimateDestinationAmount(amountToSend: Integer): [Integer, Integer] | undefined {
     if (
       !this.exchangeRate ||
-      // Ensure denominator is 0
+      // Ensure denominator is not 0
       this.exchangeRate.upperBound[0].isZero() ||
       this.exchangeRate.lowerBound[0].isZero()
     ) {
       return
+    }
+
+    // If we already sent a packet for this amount, return how much the recipient got
+    const amountReceived = this.sentAmounts.get(amountToSend.toString())
+    if (amountReceived) {
+      return [amountReceived, amountReceived]
     }
 
     const lowEndDestination = amountToSend

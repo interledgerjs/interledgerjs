@@ -2,11 +2,11 @@
 /* eslint-disable no-undef*/
 import BigNumber from 'bignumber.js'
 import Long from 'long'
-import uuid from 'uuid/v4'
 import { Errors, IlpReject, serializeIlpReject } from 'ilp-packet'
+import { IlpAddress } from './setup/shared'
 
-export const getConnectionId = (destinationAddress: string) =>
-  (destinationAddress.split('.').slice(-1)[0] || uuid()).replace(/[-_]/g, '').slice(0, 6)
+export const getConnectionId = (destinationAddress: IlpAddress) =>
+  destinationAddress.split('.').slice(-1)[0].replace(/[-_]/g, '').slice(0, 6)
 
 /** TODO */
 const DEFAULT_PACKET_TIMEOUT_MS = 30000
@@ -58,9 +58,10 @@ export const createReject = (code: string, message = ''): IlpReject => ({
 })
 
 /** Generic application error */
-export const APPLICATION_ERROR_REJECT = serializeIlpReject(
-  createReject(Errors.codes.F99_APPLICATION_ERROR)
-)
+export const F99_REJECT = serializeIlpReject(createReject(Errors.codes.F99_APPLICATION_ERROR))
+
+/** unexpected payment error */
+export const F06_REJECT = serializeIlpReject(createReject(Errors.codes.F06_UNEXPECTED_PAYMENT))
 
 export const timeout = <T>(durationMs: number, task: Promise<T>, timeoutValue?: T) =>
   new Promise<T>((resolve, reject) => {

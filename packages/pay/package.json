@@ -18,8 +18,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "jest",
-    "cover": "jest --coverage --ci",
-    "codecov": "codecov --root=../../ -f coverage/*.json -F pay"
+    "cover": "jest --coverage",
+    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F pay"
   },
   "dependencies": {
     "@rgrove/parse-xml": "^2.0.2",

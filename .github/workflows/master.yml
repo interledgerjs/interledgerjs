@@ -35,10 +35,11 @@ jobs:
       run: yarn cover
       env:
         CI: true
-    - name: Upload code coverage and publish
-      run: |
-        yarn codecov
-        yarn publish:release
+    - name: Report coverage
+      run: yarn codecov
       env:
         CI: true
-        CODECOV_TOKEN: ${{secrets.codecov_token}}
+    - name: Publish
+      run: yarn publish:release
+      env:
+        CI: true

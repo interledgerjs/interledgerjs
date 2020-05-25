@@ -20,18 +20,22 @@ export interface StreamRequest {
   log: Logger
 }
 
-/** Amounts and data for an ILP Prepare and its Fulfill or Reject received over STREAM */
-export interface StreamReply extends StreamRequest {
+export interface StreamReply {
+  /** Logger namespaced to this connection and request sequence number */
+  readonly log: Logger
+  /** Parsed frames from the STREAM response packet. Omitted if no authentic STREAM reply */
+  readonly frames?: Frame[]
   /** Amount the recipient claimed to receive. Omitted if no authentic STREAM reply */
-  destinationAmount?: Integer
-  /** Parsed frames from the response STREAM packet. Omitted if no authentic STREAM reply */
-  responseFrames?: Frame[]
-}
-
-/** Amounts and data for an ILP Prepare and its ILP Reject received over STREAM */
-export interface StreamReject extends StreamReply {
-  /** Parsed ILP Reject received over STREAM */
-  reject: IlpReject
+  readonly destinationAmount?: Integer
+  /**
+   * Did the recipient authenticate that they received the STREAM request packet?
+   * If they responded with a Fulfill or valid STREAM reply, they necessarily decoded the request
+   */
+  isAuthentic(): boolean
+  /** Is this an ILP Reject packet? */
+  isReject(): this is StreamReject
+  /** Is this an ILP Fulfill packet? */
+  isFulfill(): this is StreamFulfill
 }
 
 /** Next state as signaled by each controller */
@@ -58,28 +62,73 @@ export interface StreamController {
    * @param builder Builder to construct the next ILP Prepare and STREAM request
    */
   nextState?(builder: StreamRequestBuilder): SendState | PaymentError
+
   /**
    * Apply side effects before sending an ILP Prepare over STREAM.
-   * Called synchronously with `nextState` and `applyPrepare` for all controllers
+   * Return an optional callback function to apply side effects from the
+   * corresponding reply (ILP Fulfill or ILP Reject) received over STREAM.
+   *
+   * `applyRequest` is called synchronously after `nextState` for all controllers.
+   *
    * @param request Finalized amounts and data of the ILP Prepare
    */
-  applyPrepare?(request: StreamRequest): void
-  /**
-   * Apply side effects from an ILP Fulfill or ILP Reject received over STREAM
-   * @param reply Parsed amounts and data of the ILP Fulfill and STREAM reply
-   */
-  applyFulfill?(reply: StreamReply): void
-  /**
-   * Apply side effects from an ILP Reject received over STREAM
-   * @param reply Parsed amounts and data of the ILP Reject and STREAM reply
-   */
-  applyReject?(reply: StreamReject): void
+  applyRequest(request: StreamRequest): (reply: StreamReply) => void
 }
 
 /** Set of all controllers keyed by their constructor */
 export interface ControllerMap
   extends Map<new (...args: any[]) => StreamController, StreamController> {
   get<T extends StreamController>(key: new (...args: any[]) => T): T
+}
+
+export class StreamFulfill implements StreamReply {
+  readonly log: Logger
+  readonly frames?: Frame[]
+  readonly destinationAmount?: Integer
+
+  constructor(log: Logger, frames?: Frame[], destinationAmount?: Integer) {
+    this.log = log
+    this.frames = frames
+    this.destinationAmount = destinationAmount
+  }
+
+  isAuthentic() {
+    return true
+  }
+
+  isReject(): this is StreamReject {
+    return false
+  }
+
+  isFulfill(): this is StreamFulfill {
+    return true
+  }
+}
+
+export class StreamReject implements StreamReply {
+  readonly log: Logger
+  readonly frames?: Frame[]
+  readonly destinationAmount?: Integer
+  readonly ilpReject: IlpReject
+
+  constructor(log: Logger, ilpReject: IlpReject, frames?: Frame[], destinationAmount?: Integer) {
+    this.log = log
+    this.ilpReject = ilpReject
+    this.frames = frames
+    this.destinationAmount = destinationAmount
+  }
+
+  isAuthentic() {
+    return !!this.frames && !!this.destinationAmount
+  }
+
+  isReject(): this is StreamReject {
+    return true
+  }
+
+  isFulfill(): this is StreamFulfill {
+    return false
+  }
 }
 
 export class StreamRequestBuilder {
@@ -125,15 +174,7 @@ export class StreamRequestBuilder {
   }
 }
 
-/** Is the given STREAM reply an ILP Fulfill packet? */
-export const isFulfill = (reply: StreamReply): boolean => !('reject' in reply)
-
-/**
- * Did the recipient authenticate that they received the STREAM request packet?
- * If they responded with a Fulfill or valid STREAM reply, they necessarily decoded the request
- */
-export const isAuthentic = (reply: StreamReply): boolean =>
-  !!reply.responseFrames || isFulfill(reply)
+// TODO Replace with method on StreamRequest?
 
 /**
  * Should the recipient be allowed to fulfill this request, or should it use a random condition?

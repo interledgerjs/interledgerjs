@@ -35,3 +35,7 @@ jobs:
       run: yarn cover
       env:
         CI: true
+    - name: Report coverage
+      run: yarn codecov
+      env:
+        CI: true

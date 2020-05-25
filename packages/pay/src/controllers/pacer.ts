@@ -1,4 +1,4 @@
-import { StreamController, StreamReply, StreamRequest, isAuthentic, SendState } from '.'
+import { StreamController, StreamReply, SendState } from '.'
 
 /** Maximum number of packets to send at one time before a Fulfill or Reject is received */
 const MAX_INFLIGHT_PACKETS = 20
@@ -26,17 +26,16 @@ const ROUND_TRIP_AVERAGE_WEIGHT = 0.9
  * and prevent sending too many packets
  */
 export class PacingController implements StreamController {
-  /** Mapping of sequence number -> UNIX timestamp when the packet was sent */
-  private readonly inFlightPackets: Map<number, number> = new Map()
+  /** UNIX timestamp when most recent packet was sent */
+  private lastPacketSentTime = 0
+
+  /** Number of packets currently in flight */
+  private numberInFlight = 0
 
   /** Exponential weighted moving average of the round trip time */
-  public averageRoundTrip = DEFAULT_ROUND_TRIP_TIME_MS
+  private averageRoundTrip = DEFAULT_ROUND_TRIP_TIME_MS
 
-  public getMaxNumberInFlightPackets(): number {
-    return MAX_INFLIGHT_PACKETS
-  }
-
-  public getPacketFrequency(): number {
+  private getPacketFrequency(): number {
     const packetsPerSecondDelay = 1000 / MAX_PACKETS_PER_SECOND
     const maxInFlightDelay = this.averageRoundTrip / MAX_INFLIGHT_PACKETS
 
@@ -44,45 +43,34 @@ export class PacingController implements StreamController {
   }
 
   nextState() {
-    const exceedsMaxInFlight = this.inFlightPackets.size + 1 > MAX_INFLIGHT_PACKETS
+    const exceedsMaxInFlight = this.numberInFlight + 1 > MAX_INFLIGHT_PACKETS
     if (exceedsMaxInFlight) {
       return SendState.Wait
     }
 
     const delayDuration = this.getPacketFrequency()
-    const lastPacketSentTime = Math.max(...this.inFlightPackets.values())
-    if (lastPacketSentTime + delayDuration > Date.now()) {
+    if (this.lastPacketSentTime + delayDuration > Date.now()) {
       return SendState.Wait
     }
 
     return SendState.Ready
   }
 
-  applyPrepare({ sequence }: StreamRequest) {
-    this.inFlightPackets.set(sequence, Date.now())
-  }
+  applyRequest() {
+    const sentTime = Date.now()
+    this.lastPacketSentTime = sentTime
+    this.numberInFlight++
 
-  applyFulfill(reply: StreamReply) {
-    this.updateAverageRoundTripTime(reply)
-  }
+    return (reply: StreamReply) => {
+      this.numberInFlight--
 
-  applyReject(reply: StreamReply) {
-    this.updateAverageRoundTripTime(reply)
-    // TODO Back-off in time on T05 errors? Or other errors, e.g. T00?
-  }
-
-  private updateAverageRoundTripTime(reply: StreamReply) {
-    // Only update the RTT if we know the request got to the recipient
-    if (isAuthentic(reply)) {
-      const startTime = this.inFlightPackets.get(reply.sequence)
-      if (startTime) {
-        const roundTripTime = Math.max(Date.now() - startTime, 0)
+      // Only update the RTT if we know the request got to the recipient
+      if (reply.isAuthentic()) {
+        const roundTripTime = Math.max(Date.now() - sentTime, 0)
         this.averageRoundTrip =
           this.averageRoundTrip * ROUND_TRIP_AVERAGE_WEIGHT +
           roundTripTime * (1 - ROUND_TRIP_AVERAGE_WEIGHT)
       }
     }
-
-    this.inFlightPackets.delete(reply.sequence)
   }
 }

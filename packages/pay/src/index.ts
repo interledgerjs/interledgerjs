@@ -10,7 +10,7 @@ import { query, isStreamCredentials } from './setup/spsp'
 import { IlpAddress, areSchemesCompatible, isValidIlpAddress } from './setup/shared'
 import { AssetScale, isValidAssetScale } from './setup/open-payments'
 import { AmountController, PaymentTarget, PaymentType } from './controllers/amount'
-import { ExchangeRateController } from './controllers/exchange-rate'
+import { ExchangeRateController, isValidSlippage } from './controllers/exchange-rate'
 import { SequenceController } from './controllers/sequence'
 import { PacingController } from './controllers/pacer'
 import { FailureController } from './controllers/failure'
@@ -137,6 +137,8 @@ export enum PaymentError {
   DestinationAssetConflict = 'DestinationAssetConflict',
   /** Receiver's advertised limit is incompatible with the amount we want to send or deliver to them */
   IncompatibleReceiveMax = 'IncompatibleReceiveMax',
+  /** The recipient closed the connection or stream, terminating the payment */
+  ClosedByRecipient = 'ClosedByRecipient',
 
   /**
    * Miscellaneous errors
@@ -146,8 +148,12 @@ export enum PaymentError {
   RateProbeFailed = 'RateProbeFailed',
   /** Send more than intended: paid more than the fixed source amount of the payment */
   OverpaidFixedSend = 'OverpaidFixedSend',
+  /** Failed to fulfill a packet before payment timed out */
+  IdleTimeout = 'IdleTimeout',
+  /** Encountered an ILP Reject packet with a final error */
+  TerminalReject = 'TerminalReject',
   /** Send more than intended: paid more than the fixed destination amount of the payment */
-  OverpaidFixedDelivery = 'OverpaidFixedDelivery',
+  // OverpaidFixedDelivery = 'OverpaidFixedDelivery', // TODO Remove?
   /** Sent too many packets with this encryption key and must close the connection */
   ExceededMaxSequence = 'ExceededMaxSequence',
 }
@@ -172,6 +178,12 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
     throw PaymentError.InvalidCredentials
   }
   const { destinationAddress, sharedSecret } = credentials
+
+  // Validate the slippage
+  const slippage = options.slippage ?? ExchangeRateController.DEFAULT_SLIPPAGE
+  if (!isValidSlippage(slippage)) {
+    throw PaymentError.InvalidSlippage
+  }
 
   // TODO Log here that the quote is starting?
 
@@ -231,7 +243,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
   // - Ensure the account is precise enough for the given denomination
   // - For fixed destination payments, set the destination asset details
   let target: PaymentTarget
-  if (options.amountToSend) {
+  if (typeof options.amountToSend !== 'undefined') {
     const adjustedAmount = new BigNumber(options.amountToSend).shiftedBy(sourceAccount.assetScale)
     if (!isInteger(adjustedAmount) || !adjustedAmount.isGreaterThan(0)) {
       await connection.close()
@@ -242,7 +254,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
       type: PaymentType.FixedSend,
       amountToSend: adjustedAmount as Integer,
     }
-  } else if (options.amountToDeliver) {
+  } else if (typeof options.amountToDeliver !== 'undefined') {
     // Invoices require a known destination asset
     const { destinationAssetCode: assetCode, destinationAssetScale: assetScale } = options
     if (!assetCode || !isValidAssetScale(assetScale)) {
@@ -276,12 +288,14 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
 
   // If the send loop failed due to an error, end the payment/quote
   if (isPaymentError(result)) {
+    await connection.close()
     throw result
   }
 
   controllers.get(RateProbe).disable()
 
   // Pull exchange rate from external API to determine the minimum exchange rate
+  // TODO This should have a timeout attached to it
   const prices =
     options.prices ??
     (await fetchCoinCapRates().catch(async () => {
@@ -309,9 +323,10 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
   }
 
   // Enforce a minimum exchange rate
+  connection.log.extend('rate').debug('setting min exchnage rate to %s', externalRate) // TODO Remove
   const minRateOrErr = controllers
     .get(ExchangeRateController)
-    .setMinExchangeRate(externalRate, options.slippage)
+    .setMinExchangeRate(externalRate, slippage)
   if (isPaymentError(minRateOrErr)) {
     await connection.close()
     throw minRateOrErr

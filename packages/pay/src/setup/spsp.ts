@@ -32,7 +32,7 @@ const isValidSpspResponse = (o: any): o is SpspResponse =>
   isSharedSecretBase64(o.shared_secret)
 
 export const query = async (paymentPointer: string): Promise<StreamCredentials> => {
-  const spspUrl = parsePaymentPointer(paymentPointer, true)
+  const spspUrl = parsePaymentPointer(paymentPointer)
   if (!spspUrl) {
     throw PaymentError.InvalidPaymentPointer
   }

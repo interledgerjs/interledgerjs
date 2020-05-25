@@ -1,7 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Brand } from '../utils'
 
-const ALLOCATION_SCHEMES = ['g', 'private', 'example', 'test', 'local', 'peer', 'self']
+// TODO Also, prevent paying to `peer` addresses?
+
+const ALLOCATION_SCHEMES = [
+  'g',
+  'private',
+  'example',
+  'test',
+  'test1',
+  'test2',
+  'test3',
+  'local',
+  'peer',
+  'self',
+]
 
 const SHARED_SECRET_BYTES = 32
 
@@ -25,15 +38,10 @@ export const isSharedSecretBase64 = (o: any): boolean =>
 export const isSharedSecretBuffer = (o: any): boolean =>
   Buffer.isBuffer(o) && o.byteLength === SHARED_SECRET_BYTES
 
-export const parsePaymentPointer = (pointer: string, isSpsp = false): string | undefined => {
+export const parsePaymentPointer = (pointer: string): string | undefined => {
   try {
     const endpoint = new URL(pointer.startsWith('$') ? 'https://' + pointer.substring(1) : pointer)
-    endpoint.pathname =
-      endpoint.pathname !== '/'
-        ? endpoint.pathname
-        : isSpsp
-        ? '/.well-known/pay'
-        : '/.well-known/open-payments'
+    endpoint.pathname = endpoint.pathname !== '/' ? endpoint.pathname : '/.well-known/pay'
     return endpoint.href
   } catch (_) {
     // No-op if the URL is invalid
