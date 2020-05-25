@@ -4,16 +4,16 @@ import {
   StreamRequestBuilder,
   ControllerMap,
   SendState,
-  StreamReject,
   StreamRequest,
   StreamReply,
+  StreamReject,
+  isFulfillable,
 } from '.'
 import { Integer } from '../utils'
 import BigNumber from 'bignumber.js'
 import { MaxPacketAmountController } from './max-packet'
 import { Errors } from 'ilp-packet'
 
-// TODO What to do otherwise? Use max packet amount?
 // TODO Need algo to discover the **best** exchange rate
 // TODO Add backoff on temporary errors, e.g. T04s?
 
@@ -40,7 +40,9 @@ export class RateProbe implements StreamController {
     1e1,
     1,
   ].map((n) => new BigNumber(n))
-  private inFlight = new Set<number>()
+
+  /** Amounts queued to send or in-flight */
+  private inFlightAmounts = new Set<string>()
 
   constructor(controllers: ControllerMap) {
     this.controllers = controllers
@@ -52,7 +54,7 @@ export class RateProbe implements StreamController {
     }
 
     if (this.deadline && Date.now() > this.deadline) {
-      return PaymentError.RateProbeFailed
+      return PaymentError.RateProbeFailed // TODO Replace with `SendState.End`?
     }
 
     // Apply the actual test packet amount, if we have one available
@@ -60,7 +62,7 @@ export class RateProbe implements StreamController {
     if (amount) {
       builder.setSourceAmount(amount as Integer)
       return SendState.Ready
-    } else if (this.inFlight.size === 0) {
+    } else if (this.inFlightAmounts.size === 0) {
       // No in-flight pckaets and no test packets left to send
       return SendState.End
     } else {
@@ -69,32 +71,49 @@ export class RateProbe implements StreamController {
     }
   }
 
-  applyPrepare({ sequence }: StreamRequest) {
+  applyRequest(request: StreamRequest) {
+    // Don't do anything if this isn't a probe packet
+    if (isFulfillable(request) || this.disabled) {
+      return () => {}
+    }
+
     // Mutate the array to remove this test packet amount
+    const { sourceAmount } = request
     this.remainingTestPacketAmounts.shift()
-    this.inFlight.add(sequence)
+    this.inFlightAmounts.add(sourceAmount.toString())
 
     if (!this.deadline) {
       this.deadline = Date.now() + 10000 // TODO Create constant
     }
-  }
 
-  applyFulfill({ sequence }: StreamReply) {
-    this.inFlight.delete(sequence)
-  }
+    return (reply: StreamReply) => {
+      this.inFlightAmounts.delete(sourceAmount.toString())
 
-  applyReject({ reject, sequence }: StreamReject) {
-    // Keep retrying on F08s until we can get packets through
-    if (reject.code === Errors.codes.F08_AMOUNT_TOO_LARGE) {
-      const maxPacketProbeAmount = this.controllers
-        .get(MaxPacketAmountController)
-        .getMaxPacketAmount()
-      if (maxPacketProbeAmount) {
-        this.remainingTestPacketAmounts.push(maxPacketProbeAmount)
+      // Note: we already checked that the request is unfulfillabe, so it must be a Reject
+      const maxPacketController = this.controllers.get(MaxPacketAmountController)
+      if (
+        (reply as StreamReject).ilpReject.code === Errors.codes.F08_AMOUNT_TOO_LARGE ||
+        !maxPacketController.isPreciseMaxKnown()
+      ) {
+        this.queueTestAmount()
       }
     }
+  }
 
-    this.inFlight.delete(sequence)
+  private queueTestAmount() {
+    const maxPacketProbeAmount = this.controllers
+      .get(MaxPacketAmountController)
+      .getMaxPacketAmount()
+    if (!maxPacketProbeAmount) {
+      return
+    }
+
+    if (this.inFlightAmounts.has(maxPacketProbeAmount.toString())) {
+      return
+    }
+
+    this.inFlightAmounts.add(maxPacketProbeAmount.toString())
+    this.remainingTestPacketAmounts.push(maxPacketProbeAmount)
   }
 
   disable() {

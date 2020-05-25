@@ -1240,6 +1240,8 @@ describe('fixed delivery payments', () => {
             plugin: alicePlugin2,
             assetCode: 'BTC',
             assetScale: 8,
+            // Tests multiple max packet amounts will get reduced
+            maxPacketAmount: '2000000', // 0.02 BTC (larger than $0.01)
           },
           bob: {
             relation: 'peer',
