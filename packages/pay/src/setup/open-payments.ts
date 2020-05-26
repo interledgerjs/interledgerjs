@@ -8,7 +8,7 @@ const MAX_U64 = new BigNumber('18446744073709551615')
 const isValidU64 = (o: BigNumber.Value): boolean => {
   const bn = new BigNumber(o)
   return (
-    bn.isFinite() &&
+    bn.isFinite() && // Ensures not `NaN`
     bn.isGreaterThanOrEqualTo(0) &&
     bn.isLessThanOrEqualTo(MAX_U64) &&
     bn.isInteger()
