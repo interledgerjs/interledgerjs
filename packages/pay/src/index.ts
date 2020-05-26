@@ -19,6 +19,7 @@ import { createConnection } from './connection'
 import { RateProbe } from './controllers/rate-probe'
 import { fetch as sendIldcpRequest } from 'ilp-protocol-ildcp'
 
+/** Parameters to setup and prepare a payment */
 export interface PaymentOptions {
   /** Plugin to send (and optionally, receive) ILP packets over the network */
   plugin: Plugin
@@ -49,6 +50,7 @@ export interface PaymentOptions {
   }
 }
 
+/** Parameters of payment execution and the projected outcome of a payment */
 export interface Quote {
   /** Maximum amount that will be sent in source units */
   maxSourceAmount: BigNumber
@@ -74,6 +76,7 @@ export interface Quote {
   cancel: () => Promise<void>
 }
 
+/** Final outcome of a payment */
 export interface Receipt {
   /** Error type if the payment failed with an error */
   error?: PaymentError
@@ -97,6 +100,7 @@ export interface Receipt {
   }
 }
 
+/** Payment error states */
 export enum PaymentError {
   /**
    * Errors likely caused by the library user
@@ -150,10 +154,8 @@ export enum PaymentError {
   OverpaidFixedSend = 'OverpaidFixedSend',
   /** Failed to fulfill a packet before payment timed out */
   IdleTimeout = 'IdleTimeout',
-  /** Encountered an ILP Reject packet with a final error */
+  /** Encountered an ILP Reject packet with a final error that cannot be retried */
   TerminalReject = 'TerminalReject',
-  /** Send more than intended: paid more than the fixed destination amount of the payment */
-  // OverpaidFixedDelivery = 'OverpaidFixedDelivery', // TODO Remove?
   /** Sent too many packets with this encryption key and must close the connection */
   ExceededMaxSequence = 'ExceededMaxSequence',
 }

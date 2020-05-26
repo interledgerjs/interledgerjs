@@ -31,7 +31,6 @@ import { GenericContainer, Wait } from 'testcontainers'
 import Axios from 'axios'
 import PluginHttp from 'ilp-plugin-http'
 import getPort from 'get-port'
-import { Duration, TemporalUnit } from 'node-duration'
 
 // TODO Remove non-determinism from CoinCap rates
 // TODO Add timeout to fetching CoinCap rates
