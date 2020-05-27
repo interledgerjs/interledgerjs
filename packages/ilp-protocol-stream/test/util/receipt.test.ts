@@ -60,6 +60,13 @@ describe('Receipt', function () {
   })
 
   describe('verifyReceipt', function () {
+    it('should be able to take a function as secret ', function () {
+      verifyReceipt(receiptFixture, (decoded) => {
+        // we may want to compute the secret based on the decoded nonce
+        assert.isDefined(decoded.nonce)
+        return Buffer.alloc(32)
+      })
+    })
     it('should return true for valid receipt', function () {
       const secret = Buffer.alloc(32)
       const receipt = verifyReceipt(receiptFixture, secret)

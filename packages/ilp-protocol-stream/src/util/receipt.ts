@@ -1,8 +1,5 @@
 import { Reader, Writer } from 'oer-utils'
-import {
-  LongValue,
-  longFromValue
-} from './long'
+import { longFromValue, LongValue } from './long'
 import * as Long from 'long'
 import { generateReceiptHMAC } from '../crypto'
 
@@ -65,10 +62,13 @@ export function decodeReceipt (receipt: Buffer): Receipt {
   return decode(receipt)
 }
 
-export function verifyReceipt (receipt: Buffer, secret: Buffer): Receipt {
+export function verifyReceipt (receipt: Buffer, secret: Buffer | ((decoded: ReceiptWithHMAC) => Buffer)): Receipt {
   const decoded = decode(receipt)
   if (decoded.version !== RECEIPT_VERSION) {
     throw new Error('invalid version')
+  }
+  if (typeof secret === 'function') {
+    secret = secret(decoded)
   }
   const message = receipt.slice(0, 26)
   if (!decoded.hmac.equals(generateReceiptHMAC(secret, message))) {
