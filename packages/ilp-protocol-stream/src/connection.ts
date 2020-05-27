@@ -737,10 +737,19 @@ export class Connection extends EventEmitter {
       switch (frame.type) {
         case FrameType.ConnectionNewAddress:
           this.log.trace('peer notified us of their account: %s', frame.sourceAccount)
+
+          // Tell the other side our max stream id and asset details
+          this.queuedFrames.push(
+            new ConnectionMaxStreamIdFrame(this.maxStreamId),
+            new ConnectionAssetDetailsFrame(this.sourceAssetCode, this.sourceAssetScale)
+          )
+
           const firstConnection = this._destinationAccount === undefined
           this._destinationAccount = frame.sourceAccount
           if (firstConnection) {
-            this.handleConnect()
+            this.closed = false
+            this.log.info('connected')
+            this.safeEmit('connect')
           }
           // TODO reset the exchange rate and send a test packet to make sure they haven't spoofed the address
           break
@@ -852,21 +861,6 @@ export class Connection extends EventEmitter {
           continue
       }
     }
-  }
-
-  /**
-   * Handle the initial connection from the other side
-   */
-  protected handleConnect () {
-    this.closed = false
-    this.log.info('connected')
-    this.safeEmit('connect')
-
-    // Tell the other side our max stream id and asset details
-    this.queuedFrames.push(
-      new ConnectionMaxStreamIdFrame(this.maxStreamId),
-      new ConnectionAssetDetailsFrame(this.sourceAssetCode, this.sourceAssetScale)
-    )
   }
 
   /**
