@@ -133,6 +133,11 @@ describe('Connection', function () {
       assert.calledOnce(closeSpy)
     })
 
+    it('should resolve even if the remote address is unknown', async function () {
+      delete this.serverConn._destinationAccount
+      await this.serverConn.end()
+    })
+
     it('should close all outgoing streams', async function () {
       const clientSpy = {
         stream1: {

@@ -966,6 +966,7 @@ export class Connection extends EventEmitter {
     }
     if (!this._destinationAccount) {
       this.log.debug('not sending because we do not know the client\'s address')
+      this.safeEmit('_send_loop_finished')
       return
     }
 
