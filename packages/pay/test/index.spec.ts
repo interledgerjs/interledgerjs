@@ -1602,12 +1602,12 @@ describe('payment execution', () => {
           assetCode: 'ABC',
           assetScale: 0,
           plugin: senderPlugin2,
-          // Limit to 1 packet / 100ms
+          // Limit to 1 packet / 200ms
           // should ensure a T05 error is encountered
           rateLimit: {
             capacity: 1,
             refillCount: 1,
-            refillPeriod: 100,
+            refillPeriod: 200,
           },
           maxPacketAmount: '1',
         },
@@ -1636,8 +1636,8 @@ describe('payment execution', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    // 10 units / 1 max packet amount => at least 10 packets
-    const amountToSend = 10
+    // 20 units / 1 max packet amount => at least 20 packets
+    const amountToSend = 20
     const { pay } = await quote({
       plugin: senderPlugin1,
       amountToSend,
@@ -1650,7 +1650,7 @@ describe('payment execution', () => {
 
     await app.shutdown()
     await streamServer.close()
-  })
+  }, 20000)
 
   it('fails if no packets are fulfilled before idle timeout', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()

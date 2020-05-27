@@ -176,7 +176,7 @@ export class MaxPacketAmountController implements StreamController {
     }
 
     if (
-      this.state.type !== MaxPacketState.UnknownMax &&
+      this.state.type === MaxPacketState.ImpreciseMax &&
       this.greatestAckAmount.isEqualTo(this.state.maxPacketAmount)
     ) {
       // Binary search from F08s without metadata is complete: discovered precise max

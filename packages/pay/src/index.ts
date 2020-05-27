@@ -150,7 +150,7 @@ export enum PaymentError {
 
   /** Rate probe failed to establish the realized exchange rate */
   RateProbeFailed = 'RateProbeFailed',
-  /** Send more than intended: paid more than the fixed source amount of the payment */
+  /** Sent more than intended: paid more than the fixed source amount of the payment */
   OverpaidFixedSend = 'OverpaidFixedSend',
   /** Failed to fulfill a packet before payment timed out */
   IdleTimeout = 'IdleTimeout',
@@ -325,7 +325,7 @@ export const quote = async (options: PaymentOptions): Promise<Quote> => {
   }
 
   // Enforce a minimum exchange rate
-  connection.log.extend('rate').debug('setting min exchnage rate to %s', externalRate) // TODO Remove
+  connection.log.extend('rate').debug('setting min exchange rate to %s', externalRate) // TODO Remove
   const minRateOrErr = controllers
     .get(ExchangeRateController)
     .setMinExchangeRate(externalRate, slippage)

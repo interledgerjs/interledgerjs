@@ -1,31 +1,29 @@
 import { StreamController, StreamReply, SendState } from '.'
-
-/** Maximum number of packets to send at one time before a Fulfill or Reject is received */
-const MAX_INFLIGHT_PACKETS = 20
-
-/**
- * Maximum number of packets to send in 1 second interval, corresponding
- * to a minimum 25ms delay between sending packets
- */
-const MAX_PACKETS_PER_SECOND = 40
-
-/**
- * Estimated round trip to use for pacing before an average RTT
- * can be ascertained
- */
-const DEFAULT_ROUND_TRIP_TIME_MS = 200
-
-/**
- * Weight to apply to existing weighted average when computing the next value.
- * The weight of previous round trips will be halved each ~5 flights
- */
-const ROUND_TRIP_AVERAGE_WEIGHT = 0.9
+import { Errors } from 'ilp-packet'
 
 /**
  * Flow controller to send packets at a consistent cadence
- * and prevent sending too many packets
+ * and prevent sending more packets than the network can handle
  */
 export class PacingController implements StreamController {
+  /** Maximum number of packets to have in-flight, yet to receive a Fulfill or Reject */
+  private static MAX_INFLIGHT_PACKETS = 20
+
+  /** Initial number of packets to send in 1 second interval (25ms delay between packets) */
+  private static DEFAULT_PACKETS_PER_SECOND = 40
+
+  /** Always try to send at least 1 packet in 1 second (unless RTT is very high) */
+  private static MIN_PACKETS_PER_SECOND = 1
+
+  /** Maximum number of packets to send in a 1 second interval, after ramp up (5ms delay) */
+  private static MAX_PACKETS_PER_SECOND = 200
+
+  /** RTT to use for pacing before an average can be ascertained */
+  private static DEFAULT_ROUND_TRIP_TIME_MS = 200
+
+  /** Weight to compute next RTT average. Halves weight of past round trips every ~5 flights */
+  private static ROUND_TRIP_AVERAGE_WEIGHT = 0.9
+
   /** UNIX timestamp when most recent packet was sent */
   private lastPacketSentTime = 0
 
@@ -33,23 +31,35 @@ export class PacingController implements StreamController {
   private numberInFlight = 0
 
   /** Exponential weighted moving average of the round trip time */
-  private averageRoundTrip = DEFAULT_ROUND_TRIP_TIME_MS
+  private averageRoundTrip = PacingController.DEFAULT_ROUND_TRIP_TIME_MS
 
-  private getPacketFrequency(): number {
-    const packetsPerSecondDelay = 1000 / MAX_PACKETS_PER_SECOND
-    const maxInFlightDelay = this.averageRoundTrip / MAX_INFLIGHT_PACKETS
+  /** Rate of packets to send per second. This shouldn't ever be 0, but may become a small fraction */
+  private packetsPerSecond = PacingController.DEFAULT_PACKETS_PER_SECOND
+
+  /**
+   * Rate to send packets, in packets / millisecond, using packet rate limit and round trip time.
+   * Corresponds to the ms delay between each packet
+   */
+  getPacketFrequency(): number {
+    const packetsPerSecondDelay = 1000 / this.packetsPerSecond
+    const maxInFlightDelay = this.averageRoundTrip / PacingController.MAX_INFLIGHT_PACKETS
 
     return Math.max(packetsPerSecondDelay, maxInFlightDelay)
   }
 
+  /** Earliest UNIX timestamp when the pacer will allow the next packet to be sent */
+  getNextPacketSendTime(): number {
+    const delayDuration = this.getPacketFrequency()
+    return this.lastPacketSentTime + delayDuration
+  }
+
   nextState() {
-    const exceedsMaxInFlight = this.numberInFlight + 1 > MAX_INFLIGHT_PACKETS
+    const exceedsMaxInFlight = this.numberInFlight + 1 > PacingController.MAX_INFLIGHT_PACKETS
     if (exceedsMaxInFlight) {
       return SendState.Wait
     }
 
-    const delayDuration = this.getPacketFrequency()
-    if (this.lastPacketSentTime + delayDuration > Date.now()) {
+    if (this.getNextPacketSendTime() > Date.now()) {
       return SendState.Wait
     }
 
@@ -68,8 +78,34 @@ export class PacingController implements StreamController {
       if (reply.isAuthentic()) {
         const roundTripTime = Math.max(Date.now() - sentTime, 0)
         this.averageRoundTrip =
-          this.averageRoundTrip * ROUND_TRIP_AVERAGE_WEIGHT +
-          roundTripTime * (1 - ROUND_TRIP_AVERAGE_WEIGHT)
+          this.averageRoundTrip * PacingController.ROUND_TRIP_AVERAGE_WEIGHT +
+          roundTripTime * (1 - PacingController.ROUND_TRIP_AVERAGE_WEIGHT)
+      }
+
+      // If we encounter a temporary error that's not related to liquidity,
+      // exponentially backoff the rate of packet sending
+      if (
+        reply.isReject() &&
+        reply.ilpReject.code[0] === 'T' &&
+        reply.ilpReject.code !== Errors.codes.T04_INSUFFICIENT_LIQUIDITY
+      ) {
+        const reducedRate = Math.max(
+          PacingController.MIN_PACKETS_PER_SECOND,
+          this.packetsPerSecond / 2 // Fractional rates are fine
+        )
+        reply.log.debug(
+          'handling %s. backing off to %s packets / second',
+          reply.ilpReject.code,
+          reducedRate
+        )
+        this.packetsPerSecond = reducedRate
+      }
+      // If a packet got through the packet, additive increase of sending rate, up to some maximum
+      else if (reply.isAuthentic()) {
+        this.packetsPerSecond = Math.min(
+          PacingController.MAX_PACKETS_PER_SECOND,
+          this.packetsPerSecond + 0.5
+        )
       }
     }
   }

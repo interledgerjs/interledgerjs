@@ -372,6 +372,7 @@ export class AmountController implements StreamController {
       })
   }
 
+  // TODO Cache this to not continue repeating this
   getAmountInFlight(): Integer {
     return [...this.inFlightAmounts.values()]
       .map(([sourceAmount]) => sourceAmount)
