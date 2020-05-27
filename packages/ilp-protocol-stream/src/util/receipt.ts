@@ -19,7 +19,7 @@ export interface Receipt {
   totalReceived: Long
 }
 
-interface ReceiptWithHMAC extends Receipt {
+export interface ReceiptWithHMAC extends Receipt {
   hmac: Buffer
 }
 

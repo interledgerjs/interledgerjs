@@ -13,6 +13,7 @@ export {
   verifyReceipt,
   Receipt,
   ReceiptOpts,
+  ReceiptWithHMAC,
   RECEIPT_VERSION
 } from './util/receipt'
 
