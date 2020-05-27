@@ -671,6 +671,13 @@ export class Connection extends EventEmitter {
       })
     }
 
+    // Add incoming amounts to each stream
+    const totalsReceived: Map<number, string> = new Map()
+    for (let { stream, amount } of amountsToReceive) {
+      stream._addToIncoming(amount, prepare)
+      totalsReceived.set(stream.id, stream.totalReceived)
+    }
+
     // Tell peer about closed streams and how much each stream can receive
     if (!this.closed && this.remoteState !== RemoteState.Closed) {
       for (let [_, stream] of this.streams) {
@@ -691,13 +698,6 @@ export class Connection extends EventEmitter {
           responseFrames.push(new StreamMaxDataFrame(stream.id, stream._getIncomingOffsets().maxAcceptable))
         }
       }
-    }
-
-    // Add incoming amounts to each stream
-    const totalsReceived: Map<number, string> = new Map()
-    for (let { stream, amount } of amountsToReceive) {
-      stream._addToIncoming(amount, prepare)
-      totalsReceived.set(stream.id, stream.totalReceived)
     }
 
     // Add receipt frame(s)
