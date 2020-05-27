@@ -21,7 +21,9 @@ import { Errors } from 'ilp-packet'
 //      not just during a send loop?
 
 export class RateProbe implements StreamController {
-  private disabled = false
+  private static TIMEOUT_MS = 10000
+
+  private isDisabled = false
   private deadline?: number
   private controllers: ControllerMap
   private remainingTestPacketAmounts = [
@@ -49,7 +51,7 @@ export class RateProbe implements StreamController {
   }
 
   nextState(builder: StreamRequestBuilder): SendState | PaymentError {
-    if (this.disabled) {
+    if (this.isDisabled) {
       return SendState.Ready
     }
 
@@ -73,7 +75,7 @@ export class RateProbe implements StreamController {
 
   applyRequest(request: StreamRequest) {
     // Don't do anything if this isn't a probe packet
-    if (isFulfillable(request) || this.disabled) {
+    if (isFulfillable(request) || this.isDisabled) {
       return () => {}
     }
 
@@ -82,8 +84,9 @@ export class RateProbe implements StreamController {
     this.remainingTestPacketAmounts.shift()
     this.inFlightAmounts.add(sourceAmount.toString())
 
+    // Rate probe must complete before deadline
     if (!this.deadline) {
-      this.deadline = Date.now() + 10000 // TODO Create constant
+      this.deadline = Date.now() + RateProbe.TIMEOUT_MS
     }
 
     return (reply: StreamReply) => {
@@ -117,6 +120,6 @@ export class RateProbe implements StreamController {
   }
 
   disable() {
-    this.disabled = true
+    this.isDisabled = true
   }
 }

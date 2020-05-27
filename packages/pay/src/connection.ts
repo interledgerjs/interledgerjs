@@ -119,10 +119,14 @@ export const createConnection = async (
       for (;;) {
         // Each controller signals next state. Default to the first state that's not `Ready`
         const builder = new StreamRequestBuilder(log)
-        const state =
-          [...controllers.values()]
-            .map((c) => c.nextState?.(builder) ?? SendState.Ready)
-            .find((s) => s !== SendState.Ready) ?? SendState.Ready
+        let state: SendState | PaymentError = SendState.Ready
+        for (const c of controllers.values()) {
+          state = c.nextState?.(builder) ?? SendState.Ready
+
+          if (state !== SendState.Ready) {
+            break
+          }
+        }
         const request = builder.build()
 
         const pendingRequests = controllers.get(PendingRequestTracker).getPendingRequests()
