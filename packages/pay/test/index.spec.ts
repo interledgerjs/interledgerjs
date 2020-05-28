@@ -26,7 +26,11 @@ import {
 } from 'ilp-protocol-stream/dist/src/crypto'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { serve } from 'ilp-protocol-ildcp'
-import { Packet, IlpPacketType } from 'ilp-protocol-stream/dist/src/packet'
+import {
+  Packet,
+  IlpPacketType,
+  ConnectionAssetDetailsFrame,
+} from 'ilp-protocol-stream/dist/src/packet'
 import { GenericContainer, Wait } from 'testcontainers'
 import Axios from 'axios'
 import PluginHttp from 'ilp-plugin-http'
@@ -588,10 +592,29 @@ describe('setup/quoting flow', () => {
       plugin: receiverPlugin2,
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const sharedSecret = randomBytes(32)
+    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
+
+    // Create simple STREAM receiver that acks test packets,
+    // but replies with conflicting asset details
+    receiverPlugin2.registerDataHandler(async (data) => {
+      const prepare = deserializeIlpPrepare(data)
+
+      const streamRequest = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
+
+      const streamReply = new Packet(streamRequest.sequence, IlpPacketType.Reject, prepare.amount, [
+        new ConnectionAssetDetailsFrame('ABC', 2),
+        new ConnectionAssetDetailsFrame('XYZ', 2),
+        new ConnectionAssetDetailsFrame('XYZ', 3),
+      ])
+
+      return serializeIlpReject({
+        code: Errors.codes.F99_APPLICATION_ERROR,
+        message: '',
+        triggeredBy: '',
+        data: await streamReply.serializeAndEncrypt(encryptionKey),
+      })
+    })
 
     await expect(
       quote({
@@ -599,7 +622,7 @@ describe('setup/quoting flow', () => {
         amountToDeliver: 100,
         destinationAssetCode: 'XYZ',
         destinationAssetScale: 2,
-        destinationAddress,
+        destinationAddress: 'private.larry.receiver',
         sharedSecret,
       })
     ).rejects.toBe(PaymentError.DestinationAssetConflict)
@@ -1649,7 +1672,14 @@ describe('payment execution', () => {
     expect(+receipt.amountSent).toBe(amountToSend)
 
     await app.shutdown()
-    await streamServer.close()
+
+    // TODO Don't exit the STREAM server here until ilp-protocol-stream#146 is merged
+
+    // If the `ConnectionClose` packet happens to be rejected with T00
+    // (non-deterministic due to timing), the remote won't be closed.
+    // So, when the server is closed, the server will try to start a new send loop
+    // which will hang due to a bug since the client ILP address is unknown.
+    // await streamServer.close()
   }, 20000)
 
   it('fails if no packets are fulfilled before idle timeout', async () => {
@@ -1863,16 +1893,14 @@ describe('interledger.rs integration', () => {
 
     // Setup the Rust connector
     const adminAuthToken = 'admin'
-    const rustNodeContainer = await new GenericContainer('interledgerrs/ilp-node')
+    const rustNodeContainer = await new GenericContainer('interledgerrs/ilp-node', 'latest')
       .withEnv('ILP_SECRET_SEED', randomBytes(32).toString('hex'))
       .withEnv('ILP_ADMIN_AUTH_TOKEN', adminAuthToken)
       .withEnv('ILP_DATABASE_URL', `redis://localhost:${redisPort}`)
       .withEnv('ILP_ILP_ADDRESS', 'g.corp')
       .withNetworkMode('host')
+      .withWaitStrategy(Wait.forLogMessage('HTTP API listening'))
       .start()
-
-    // The Docker image doesn't currently support logging, so wait for it to startup
-    await sleep(5000)
 
     // Create receiver account
     await Axios.post(
@@ -1964,10 +1992,11 @@ describe('interledger4j integration', () => {
     const adminPassword = 'admin'
     const connectorContainer = await new GenericContainer(
       'interledger4j/java-ilpv4-connector',
-      'nightly'
+      '0.5.0'
     )
       .withEnv('redis.host', `redis://localhost:${redisPort}`)
       .withEnv('interledger.connector.adminPassword', adminPassword)
+      .withEnv('interledger.connector.spsp.serverSecret', randomBytes(32).toString('base64'))
       .withEnv('interledger.connector.enabledFeatures.localSpspFulfillmentEnabled', 'true')
       .withEnv('interledger.connector.enabledProtocols.spspEnabled', 'true')
       .withNetworkMode('host')

@@ -106,7 +106,7 @@ export class FailureController implements StreamController {
    * Note: this is also called when we received incoming packets to check for close frames
    */
   handleRemoteClose(responseFrames: Frame[], log: Logger) {
-    const closeFrame = responseFrames?.find(
+    const closeFrame = responseFrames.find(
       (frame): frame is ConnectionCloseFrame | StreamCloseFrame =>
         frame.type === FrameType.ConnectionClose ||
         (frame.type === FrameType.StreamClose && frame.streamId.equals(DEFAULT_STREAM_ID))

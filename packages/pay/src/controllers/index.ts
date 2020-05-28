@@ -72,7 +72,7 @@ export interface StreamController {
    *
    * @param request Finalized amounts and data of the ILP Prepare
    */
-  applyRequest(request: StreamRequest): (reply: StreamReply) => void
+  applyRequest(request: StreamRequest): (reply: StreamFulfill | StreamReject) => void
 }
 
 /** Set of all controllers keyed by their constructor */

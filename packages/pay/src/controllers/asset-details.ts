@@ -59,16 +59,39 @@ export class AccountController implements StreamController {
       return PaymentError.DestinationAssetConflict
     }
 
-    // TODO What should the `ConnectionNewAddress` behavior be in "send only" mode?
+    // We can't receive packets, so only send a `ConnectionNewAddress` for backwards
+    // compatbility to fetch asset details. If we already know asset detatils, skip this!
+    if (!this.destinationAsset) {
+      /**
+       * Interledger.rs, Interledger4j, and `ilp-protocol-stream` < 2.5.0
+       * base64 URL encode 18 random bytes for the connection token (length 24).
+       *
+       * But... `ilp-protocol-stream` >= 2.5.0 encrypts it using the server
+       * secret, identifing that version, which is widely used in production.
+       */
+      const connectionToken = this.destinationAddress.split('.').slice(-1)[0]
+      if (connectionToken.length === 24) {
+        /**
+         * Interledger.rs rejects with an F02 if we send a `ConnectionNewAddress` frame with an invalid (e.g. empty) address.
+         *
+         * Since both Rust & Java won't ever send any packets, we can use any address here, since it's just so they reply
+         * with asset details.
+         */
+        builder.addFrames(new ConnectionNewAddressFrame(this.sourceAccount.ilpAddress))
+      } else {
+        /**
+         * For `ilp-protocol-stream` >= 2.5.0, send `ConnectionNewAddress`
+         * with an empty address, which will (1) trigger a reply with asset details,
+         * and (2) not trigger a send loop.
+         */
+        builder.addFrames(new ConnectionNewAddressFrame(''))
+      }
+    }
 
-    // Notify the recipient of our source account and other limits
+    // Notify the recipient of our limits
     if (!this.remoteKnowsOurAccount) {
       builder.addFrames(
-        // Share address with receiver (required by RFC)
-        // `ilp-protocol-stream`, Rust & Java respond to this with a `ConnectionAssetDetails` frame
-        new ConnectionNewAddressFrame(this.sourceAccount.ilpAddress),
-        // Disallow incoming money
-        // `ilp-protocol-stream` auto opens a stream from this
+        // Disallow incoming money (JS auto opens a new stream for this)
         new StreamMaxMoneyFrame(DEFAULT_STREAM_ID, 0, 0),
         // Disallow incoming data
         new ConnectionMaxDataFrame(0),
@@ -88,38 +111,37 @@ export class AccountController implements StreamController {
   }
 
   private handleDestinationDetails({ frames, log }: StreamReply) {
-    const assetDetails = frames?.find(
-      (frame): frame is ConnectionAssetDetailsFrame =>
-        frame.type === FrameType.ConnectionAssetDetails
-    )
-    if (!assetDetails) {
-      return
-    }
-
-    // Packet deserialization should already ensure the asset scale is limited to u8:
-    // https://github.com/interledgerjs/ilp-protocol-stream/blob/8551fd498f1ff313da72f63891b9fa428212c31a/src/packet.ts#L274
-    const { sourceAssetScale: assetScale, sourceAssetCode: assetCode } = assetDetails
-
-    // Only set destination details if we don't already know them
-    if (!this.destinationAsset) {
-      this.destinationAsset = {
-        assetCode,
-        assetScale: assetScale as AssetScale, // TODO Remove this?
-      }
-    }
-    // If the destination asset details changed, end the payment
-    else if (
-      this.destinationAsset.assetCode !== assetCode ||
-      this.destinationAsset.assetScale !== assetScale
-    ) {
-      log.error(
-        'ending payment: remote unexpectedly changed destination asset from %s %s to %s %s',
-        this.destinationAsset.assetCode,
-        this.destinationAsset.assetScale,
-        assetCode,
-        assetScale
+    frames
+      ?.filter(
+        (frame): frame is ConnectionAssetDetailsFrame =>
+          frame.type === FrameType.ConnectionAssetDetails
       )
-      this.remoteAssetChanged = true
-    }
+      .forEach((assetDetails) => {
+        // Packet deserialization should already ensure the asset scale is limited to u8:
+        // https://github.com/interledgerjs/ilp-protocol-stream/blob/8551fd498f1ff313da72f63891b9fa428212c31a/src/packet.ts#L274
+        const { sourceAssetScale: assetScale, sourceAssetCode: assetCode } = assetDetails
+
+        // Only set destination details if we don't already know them
+        if (!this.destinationAsset) {
+          this.destinationAsset = {
+            assetCode,
+            assetScale: assetScale as AssetScale, // TODO Remove this?
+          }
+        }
+        // If the destination asset details changed, end the payment
+        else if (
+          this.destinationAsset.assetCode !== assetCode ||
+          this.destinationAsset.assetScale !== assetScale
+        ) {
+          log.error(
+            'ending payment: remote unexpectedly changed destination asset from %s %s to %s %s',
+            this.destinationAsset.assetCode,
+            this.destinationAsset.assetScale,
+            assetCode,
+            assetScale
+          )
+          this.remoteAssetChanged = true
+        }
+      })
   }
 }
