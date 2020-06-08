@@ -1,200 +1,151 @@
-import BigNumber from 'bignumber.js'
 import { StreamController, StreamReply, StreamRequest } from '.'
-import { Integer, Rational, Brand } from '../utils'
-import { PaymentError } from '..'
+import { Ratio, PositiveInt, Int } from '../utils'
+import { Logger } from 'ilp-logger'
 
-// TODO How should the realized rate change over time? How should old data points be invalidated?
+/** Track exchange rates and calculate corresponding source/destination amounts */
+export class ExchangeRateCalculator {
+  /** Realized exchange rate is less than this ratio (exclusive): destination / source */
+  upperBoundRate: Ratio
 
-export type ValidSlippage = Brand<number, 'ValidSlippage'>
+  /** Realized exchange rate is greater than or equal to this ratio (inclusive): destination / source */
+  lowerBoundRate: Ratio
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const isValidSlippage = (o: any): o is ValidSlippage =>
-  typeof o === 'number' && o >= 0 && o <= 1 && !Number.isNaN(o)
+  /** Mapping of packet source amounts to its most recent received amount */
+  private sentAmounts = new Map<bigint, Int>()
 
-/** Compute the realized exchange rate from Fulfills and probed rate from Rejects */
-export class ExchangeRateController implements StreamController {
-  static DEFAULT_SLIPPAGE = 0.01 as ValidSlippage
+  /** Mapping of packet received amounts to its most recent source amount */
+  private receivedAmounts = new Map<bigint, Int>()
 
-  /** Real exchange rate determined from the recipient */
-  private exchangeRate?: {
-    /** Real exchange rate MUST be less than this ratio (exclusive): sent, received, rate */
-    upperBound: [Integer, Integer, Rational]
-    /** Real exchange rate MUST be greater than or equal to this ratio (inclusive): sent, received, rate */
-    lowerBound: [Integer, Integer, Rational]
+  constructor(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger) {
+    this.upperBoundRate = new Ratio(receivedAmount.add(Int.ONE), sourceAmount)
+    this.lowerBoundRate = new Ratio(receivedAmount, sourceAmount)
+    log.trace('setting initial rate to [%s, %s]', this.lowerBoundRate, this.upperBoundRate)
+
+    this.sentAmounts.set(sourceAmount.value, receivedAmount)
+    this.receivedAmounts.set(receivedAmount.value, sourceAmount)
   }
 
-  private sentAmounts: Map<string, Integer> = new Map()
-  private receivedAmounts: Map<string, Integer> = new Map()
-
-  private minExchangeRate?: Rational
-
-  setMinExchangeRate(exchangeRate: Rational, slippage: ValidSlippage): Rational | PaymentError {
-    if (slippage === 1 || exchangeRate.isZero()) {
-      // Don't set any minimum exchange rate
-      return new BigNumber(0) as Rational
-    }
-
-    const minExchangeRate = exchangeRate.times(1 - slippage) as Rational
-    if (this.getRateLowerBound()?.isGreaterThanOrEqualTo(minExchangeRate)) {
-      this.minExchangeRate = minExchangeRate
-      return minExchangeRate
-    } else {
-      return PaymentError.InsufficientExchangeRate
-    }
-  }
-
-  getMinExchangeRate(): Rational | undefined {
-    return this.minExchangeRate
-  }
-
-  getRateUpperBound(): Rational | undefined {
-    return this.exchangeRate?.upperBound[2]
-  }
-
-  getRateLowerBound(): Rational | undefined {
-    return this.exchangeRate?.lowerBound[2]
-  }
-
-  applyRequest({ sourceAmount }: StreamRequest) {
-    return (reply: StreamReply) => {
-      const destinationAmount = reply.destinationAmount
-      if (destinationAmount) {
-        // TODO Should this take max of `minDestinationAmount` and `destinationAmount` if fulfilled in case they lied?
-        this.updateRate(sourceAmount, destinationAmount)
-      }
-    }
-  }
-
-  private updateRate(sourceAmount: Integer, receivedAmount: Integer) {
+  updateRate(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger): void {
     // Since intermediaries floor packet amounts, the exchange rate cannot be precisely computed:
     // it's only known with some margin however. However, as we send packets of varying sizes,
     // the upper and lower bounds should converge closer and closer to the real exchange rate.
 
-    // Prevent divide-by-0 errors
-    // Sending 0... is not useful
-    if (sourceAmount.isZero()) {
-      return
+    const packetUpperBoundRate = new Ratio(receivedAmount.add(Int.ONE), sourceAmount)
+    const packetLowerBoundRate = new Ratio(receivedAmount, sourceAmount)
+
+    const previousReceivedAmount = this.receivedAmounts.get(sourceAmount.value)
+
+    // If the exchange rate fluctuated and is "out of bounds," reset it
+    const shouldResetExchangeRate =
+      (previousReceivedAmount && !previousReceivedAmount.isEqualTo(receivedAmount)) ||
+      packetUpperBoundRate.isLessThanOrEqualTo(this.lowerBoundRate) ||
+      packetLowerBoundRate.isGreaterThanOrEqualTo(this.upperBoundRate)
+    if (shouldResetExchangeRate) {
+      log.trace(
+        'exchange rate changed. resetting to [%s, %s]',
+        packetLowerBoundRate,
+        packetUpperBoundRate
+      )
+      this.upperBoundRate = packetUpperBoundRate
+      this.lowerBoundRate = packetLowerBoundRate
+      this.sentAmounts.clear()
+      this.receivedAmounts.clear()
     }
 
-    const previousReceivedAmount = this.receivedAmounts.get(sourceAmount.toString())
-    if (previousReceivedAmount && !previousReceivedAmount.isEqualTo(receivedAmount)) {
-      // If the delivery amount is different, reset the entire exchange rate
-      delete this.exchangeRate
+    if (packetLowerBoundRate.isGreaterThan(this.lowerBoundRate)) {
+      log.trace(
+        'increasing probed rate lower bound from %s to %s',
+        this.lowerBoundRate,
+        packetLowerBoundRate
+      )
+      this.lowerBoundRate = packetLowerBoundRate
     }
 
-    this.sentAmounts.set(sourceAmount.toString(), receivedAmount)
-    this.receivedAmounts.set(receivedAmount.toString(), sourceAmount)
-
-    // TODO Replace BigNumber with Ratio and remove this rounding mode nonsense once and for all?
-
-    BigNumber.set({ ROUNDING_MODE: BigNumber.ROUND_CEIL }) // Otherwise some inequalities won't work
-    const packetRateUpperBound = receivedAmount.plus(1).dividedBy(sourceAmount) as Rational
-
-    BigNumber.set({ ROUNDING_MODE: BigNumber.ROUND_CEIL })
-    const packetRateLowerBound = receivedAmount.dividedBy(sourceAmount) as Rational
-
-    BigNumber.set({ ROUNDING_MODE: BigNumber.ROUND_HALF_UP }) // Reset to default rounding mode
-
-    if (!this.exchangeRate) {
-      // Set the initial exchange rate
-      this.exchangeRate = {
-        upperBound: [sourceAmount, receivedAmount, packetRateUpperBound],
-        lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound],
-      }
-    } else {
-      // If the new exchange rate fluctuated and is "out of bounds," reset it
-      const isOutOfBounds =
-        packetRateUpperBound.isLessThan(this.exchangeRate.lowerBound[2]) ||
-        packetRateLowerBound.isGreaterThanOrEqualTo(this.exchangeRate.upperBound[2])
-      if (isOutOfBounds) {
-        this.exchangeRate = {
-          upperBound: [sourceAmount, receivedAmount, packetRateUpperBound],
-          lowerBound: [sourceAmount, receivedAmount, packetRateLowerBound],
-        }
-      } else {
-        // Otherwise, continue narrowing the bounds of the exchange rate
-        this.exchangeRate = {
-          upperBound: this.exchangeRate.upperBound[2].isLessThan(packetRateUpperBound)
-            ? this.exchangeRate.upperBound
-            : [sourceAmount, receivedAmount.plus(1) as Integer, packetRateUpperBound],
-          lowerBound: this.exchangeRate.lowerBound[2].isGreaterThan(packetRateLowerBound)
-            ? this.exchangeRate.lowerBound
-            : [sourceAmount, receivedAmount, packetRateLowerBound],
-        }
-      }
+    if (packetUpperBoundRate.isLessThan(this.upperBoundRate)) {
+      log.trace(
+        'reducing probed rate upper bound from %s to %s',
+        this.upperBoundRate,
+        packetUpperBoundRate
+      )
+      this.upperBoundRate = packetUpperBoundRate
     }
+
+    this.sentAmounts.set(sourceAmount.value, receivedAmount)
+    this.receivedAmounts.set(receivedAmount.value, sourceAmount)
   }
 
   /**
-   * Estimate the source amount that delivers the given destination amount.
-   * (1) Low-end estimate: lowest source amount that *may* deliver the given destination
-   *     amount (TODO won't overdeliver, but may underdeliver?).
-   * (2) High-end estimate: lowest source amount that *must* deliver at least the given
-   *     destination amount (TODO may overdeliver, won't underdeliver?).
+   * Estimate the delivered amount from the given source amount.
+   * (1) Low-end estimate: at least this amount will get delivered, if the rate hasn't fluctuated.
+   * (2) High-end estimate: no more than this amount will get delivered, if the rate hasn't fluctuated.
    */
-  estimateSourceAmount(amountToDeliver: Integer): [Integer, Integer] | undefined {
-    if (
-      !this.exchangeRate ||
-      // Ensure denominator is not 0
-      this.exchangeRate.upperBound[1].isZero() ||
-      this.exchangeRate.lowerBound[1].isZero()
-    ) {
-      return
-    }
-
-    // If this amount was received in a previous packet, return the source amount of that packet
-    const amountSent = this.receivedAmounts.get(amountToDeliver.toString())
-    if (amountSent) {
-      return [amountSent, amountSent]
-    }
-
-    const sourceAmount = amountToDeliver
-      .times(this.exchangeRate.upperBound[0])
-      .dividedBy(this.exchangeRate.upperBound[1])
-    const lowEndSource = sourceAmount.isInteger()
-      ? sourceAmount.plus(1)
-      : sourceAmount.integerValue(BigNumber.ROUND_CEIL)
-
-    const highEndSource = amountToDeliver
-      .times(this.exchangeRate.lowerBound[0])
-      .dividedBy(this.exchangeRate.lowerBound[1])
-      .integerValue(BigNumber.ROUND_CEIL)
-
-    return [lowEndSource as Integer, highEndSource as Integer]
-  }
-
-  /** TODO Explain differences between the two estimates */
-  estimateDestinationAmount(amountToSend: Integer): [Integer, Integer] | undefined {
-    if (
-      !this.exchangeRate ||
-      // Ensure denominator is not 0
-      this.exchangeRate.upperBound[0].isZero() ||
-      this.exchangeRate.lowerBound[0].isZero()
-    ) {
-      return
-    }
-
+  estimateDestinationAmount(sourceAmount: Int): [Int, Int] {
     // If we already sent a packet for this amount, return how much the recipient got
-    const amountReceived = this.sentAmounts.get(amountToSend.toString())
+    const amountReceived = this.sentAmounts.get(sourceAmount.value)
     if (amountReceived) {
       return [amountReceived, amountReceived]
     }
 
-    const lowEndDestination = amountToSend
-      .times(this.exchangeRate.lowerBound[1])
-      .dividedBy(this.exchangeRate.lowerBound[0])
-      .integerValue(BigNumber.ROUND_DOWN)
+    const lowEndDestination = sourceAmount.multiplyFloor(this.lowerBoundRate)
 
     // Since upper bound exchange rate is exclusive:
-    // If source amount converts exactly to an integer, destination amount MUST be 1 below
-    // If source amount doesn't convert precisely, we can't narrow it any better than that amount ¯\_(ツ)_/¯
-    const destinationAmount = amountToSend
-      .times(this.exchangeRate.upperBound[1])
-      .dividedBy(this.exchangeRate.upperBound[0])
-    const highEndDestination = destinationAmount.isInteger()
-      ? BigNumber.max(0, destinationAmount.minus(1))
-      : destinationAmount.integerValue(BigNumber.ROUND_DOWN)
+    // If source amount converts exactly to an integer, destination amount MUST be 1 unit less
+    // If source amount doesn't convert precisely, we can't narrow it any better than that amount, floored ¯\_(ツ)_/¯
+    const highEndDestination = sourceAmount.multiplyCeil(this.upperBoundRate).subtract(Int.ONE)
 
-    return [lowEndDestination as Integer, highEndDestination as Integer]
+    return [lowEndDestination, highEndDestination]
+  }
+
+  /**
+   * Estimate the source amount that delivers the given destination amount.
+   * (1) Low-end estimate (may under-deliver, won't over-deliver): lowest source amount
+   *     that *may* deliver the given destination amount, if the rate hasn't fluctuated.
+   * (2) High-end estimate (won't under-deliver, may over-deliver): lowest source amount that
+   *     delivers at least the given destination amount, if the rate hasn't fluctuated.
+   * Returns `undefined` if the rate is 0 and it may not be possible to deliver anything.
+   */
+  estimateSourceAmount(destinationAmount: Int): [Int, Int] | undefined {
+    // If the exchange rate is a packet that delivered 0, the source amount is undefined
+    const lowerBoundRate = this.lowerBoundRate.reciprocal()
+    const upperBoundRate = this.upperBoundRate.reciprocal()
+    if (!lowerBoundRate || !upperBoundRate) {
+      return
+    }
+
+    // If this amount was received in a previous packet, return the source amount of that packet
+    const amountSent = this.receivedAmounts.get(destinationAmount.value)
+    if (amountSent) {
+      return [amountSent, amountSent]
+    }
+
+    const lowEndSource = destinationAmount.multiplyFloor(upperBoundRate).add(Int.ONE)
+    const highEndSource = destinationAmount.multiplyCeil(lowerBoundRate)
+    return [lowEndSource, highEndSource]
+  }
+}
+
+/** Compute the realized exchange rate from STREAM replies */
+export class ExchangeRateController implements StreamController {
+  state?: ExchangeRateCalculator
+
+  applyRequest({ sourceAmount, log }: StreamRequest): (reply: StreamReply) => void {
+    return ({ destinationAmount }: StreamReply) => {
+      // Discard 0 amount packets
+      if (!sourceAmount.isPositive()) {
+        return
+      }
+
+      // Only track the rate for authentic STREAM replies
+      if (!destinationAmount) {
+        return
+      }
+
+      if (!this.state) {
+        // Once we establish a rate, from that point on, a rate is always known
+        this.state = new ExchangeRateCalculator(sourceAmount, destinationAmount, log)
+      } else {
+        this.state.updateRate(sourceAmount, destinationAmount, log)
+      }
+    }
   }
 }
