@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/no-non-null-assertion */
 import { it, expect } from '@jest/globals'
 import { MirrorPlugin } from './plugin'
 import { createConnection } from '../src/connection'
@@ -9,8 +10,6 @@ import {
   ConnectionMaxStreamIdFrame,
   ConnectionDataBlockedFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
-import BigNumber from 'bignumber.js'
-import { Integer } from '../src/utils'
 import createLogger from 'ilp-logger'
 import {
   serializeIlpReject,
@@ -30,6 +29,7 @@ import {
 import { IlpAddress } from '../src/setup/shared'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { SequenceController } from '../src/controllers/sequence'
+import { Int } from '../src/utils'
 
 const destinationAddress = 'private.bob' as IlpAddress
 const sharedSecret = randomBytes(32)
@@ -170,8 +170,9 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 31,
-      sourceAmount: new BigNumber(100) as Integer,
-      minDestinationAmount: new BigNumber(99) as Integer,
+      sourceAmount: Int.fromNumber(100)!,
+      minDestinationAmount: Int.fromNumber(99)!,
+      isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
     })
@@ -202,8 +203,9 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 20,
-      sourceAmount: new BigNumber(100) as Integer,
-      minDestinationAmount: new BigNumber(99) as Integer,
+      sourceAmount: Int.fromNumber(100)!,
+      minDestinationAmount: Int.fromNumber(99)!,
+      isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
     })
@@ -237,8 +239,9 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 20,
-      sourceAmount: new BigNumber(100) as Integer,
-      minDestinationAmount: new BigNumber(99) as Integer,
+      sourceAmount: Int.fromNumber(100)!,
+      minDestinationAmount: Int.fromNumber(99)!,
+      isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
     })
@@ -281,8 +284,9 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 20,
-      sourceAmount: new BigNumber(100) as Integer,
-      minDestinationAmount: new BigNumber(99) as Integer,
+      sourceAmount: Int.fromNumber(100)!,
+      minDestinationAmount: Int.fromNumber(99)!,
+      isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
     })
@@ -326,8 +330,9 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 1,
-      sourceAmount: new BigNumber(100) as Integer,
-      minDestinationAmount: new BigNumber(99) as Integer,
+      sourceAmount: Int.fromNumber(100)!,
+      minDestinationAmount: Int.fromNumber(99)!,
+      isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
     })
@@ -364,8 +369,9 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 1,
-      sourceAmount: new BigNumber(100) as Integer,
-      minDestinationAmount: new BigNumber(99) as Integer,
+      sourceAmount: Int.fromNumber(100)!,
+      minDestinationAmount: Int.fromNumber(99)!,
+      isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
     })
