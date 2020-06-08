@@ -1,4 +1,4 @@
-import { StreamController, StreamRequestBuilder, SendState } from '.'
+import { StreamController, StreamRequestBuilder, SendState, StreamReply } from '.'
 import { PaymentError } from '..'
 
 /** Track the sequence number of outgoing packets */
@@ -19,8 +19,9 @@ export class SequenceController implements StreamController {
     return SendState.Ready
   }
 
-  applyRequest() {
+  applyRequest(): (reply: StreamReply) => void {
     this.nextSequence++
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     return () => {}
   }
 }

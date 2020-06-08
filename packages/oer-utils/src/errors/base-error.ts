@@ -12,7 +12,7 @@
  * Note that this code is specific to V8 (due to `Error.captureStackTrace`).
  */
 class BaseError extends Error {
-  constructor(message: string = '') {
+  constructor(message = '') {
     super()
 
     // Set this.message

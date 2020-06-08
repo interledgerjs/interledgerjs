@@ -1,9 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios from 'axios'
 import parseXml, { NodeBase, Element, Document } from '@rgrove/parse-xml'
-import { AssetPrices, FetchPrices } from '.'
-
-// TODO Use `cross-fetch` instead of axios?
 
 const DAY_DURATION_MS = 24 * 60 * 60 * 1000
 
@@ -19,7 +16,11 @@ const isValidTimestamp = (node: NodeBase): boolean =>
     new Date(node.attributes.time).getTime() > minimumUpdatedTimestamp) ||
   ((isElement(node) || isDocument(node)) && node.children.map(isValidTimestamp).some((a) => a))
 
-const parsePairs = (node: NodeBase): AssetPrices => {
+const parsePairs = (
+  node: NodeBase
+): {
+  [symbol: string]: number
+} => {
   if (isElement(node) && hasCurrencyPair(node)) {
     return {
       // [node.attributes.currency]: node.attributes.rate // TODO Fix this so the backend actually fetches rates...
@@ -31,7 +32,9 @@ const parsePairs = (node: NodeBase): AssetPrices => {
   }
 }
 
-export const fetchEcbRates: FetchPrices = async () => {
+export const fetchEcbRates = async (): Promise<{
+  [symbol: string]: number
+}> => {
   const response = await axios.get('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml')
   const parsedResponse = parseXml(response.data)
 

@@ -1,13 +1,5 @@
-import {
-  StreamController,
-  StreamRequestBuilder,
-  StreamReply,
-  StreamRequest,
-  isFulfillable,
-  SendState,
-} from '.'
-import { Errors } from 'ilp-packet'
-import { ILP_ERROR_CODES } from '../utils'
+import { StreamController, StreamRequestBuilder, StreamReply, StreamRequest, SendState } from '.'
+import { ILP_ERROR_CODES, IlpError } from '../utils'
 import {
   ConnectionCloseFrame,
   FrameType,
@@ -22,7 +14,7 @@ import { PaymentError } from '..'
 /** Controller to cancel a payment if no more money is fulfilled */
 export class FailureController implements StreamController {
   /** Number of milliseconds since the last Fulfill was received before the payment should fail */
-  private static MAX_DURATION_SINCE_LAST_FULFILL = 10000
+  private static MAX_DURATION_SINCE_LAST_FULFILL = 10_000
 
   /** UNIX timestamp when the last Fulfill was received. Begins when the first fulfillable Prepare is sent */
   private lastFulfillTime?: number
@@ -33,12 +25,16 @@ export class FailureController implements StreamController {
   /** Was the connection or stream closed by the recipient? */
   private remoteClosed = false
 
-  nextState({ log }: StreamRequestBuilder) {
+  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
+    const { log } = builder
+
     if (this.terminalReject) {
-      return PaymentError.TerminalReject
+      builder.sendConnectionClose()
+      return PaymentError.ConnectorError
     }
 
     if (this.remoteClosed) {
+      builder.sendConnectionClose()
       return PaymentError.ClosedByRecipient
     }
 
@@ -50,6 +46,7 @@ export class FailureController implements StreamController {
           this.lastFulfillTime,
           deadline
         )
+        builder.sendConnectionClose()
         return PaymentError.IdleTimeout
       }
     }
@@ -57,17 +54,17 @@ export class FailureController implements StreamController {
     return SendState.Ready
   }
 
-  applyRequest(request: StreamRequest) {
+  applyRequest({ log, isFulfillable }: StreamRequest): (reply: StreamReply) => void {
     // Initialize timer when first fulfillable packet is sent
     // so the rate probe doesn't trigger an idle timeout
-    if (!this.lastFulfillTime && isFulfillable(request)) {
+    if (!this.lastFulfillTime && isFulfillable) {
       this.lastFulfillTime = Date.now()
     }
 
     return (reply: StreamReply) => {
       const frames = reply.frames
       if (frames) {
-        this.handleRemoteClose(frames, request.log)
+        this.handleRemoteClose(frames, log)
       }
 
       if (reply.isFulfill()) {
@@ -82,15 +79,18 @@ export class FailureController implements StreamController {
           return
         }
         switch (code) {
-          case Errors.codes.F08_AMOUNT_TOO_LARGE:
-          case Errors.codes.F99_APPLICATION_ERROR:
-          case Errors.codes.R01_INSUFFICIENT_SOURCE_AMOUNT:
+          case IlpError.F08_AMOUNT_TOO_LARGE:
+          case IlpError.F99_APPLICATION_ERROR:
+          case IlpError.R01_INSUFFICIENT_SOURCE_AMOUNT:
             return
         }
 
-        // On any other error, end the payment
+        // TODO F02, R00 (and maybe even F00) tend to be routing errors.
+        //      Should it tolerate a few of these before ending the payment?
+
+        // On any other error, end the payment immediately
         this.terminalReject = true
-        request.log.error(
+        log.error(
           'ending payment: got %s %s error. message: %s, triggered by: %s',
           code,
           ILP_ERROR_CODES[code],
@@ -105,7 +105,7 @@ export class FailureController implements StreamController {
    * End the payment if the receiver closed the connection or the stream used to send money.
    * Note: this is also called when we received incoming packets to check for close frames
    */
-  handleRemoteClose(responseFrames: Frame[], log: Logger) {
+  handleRemoteClose(responseFrames: Frame[], log: Logger): void {
     const closeFrame = responseFrames.find(
       (frame): frame is ConnectionCloseFrame | StreamCloseFrame =>
         frame.type === FrameType.ConnectionClose ||

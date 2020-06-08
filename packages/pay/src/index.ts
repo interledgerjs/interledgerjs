@@ -3,11 +3,10 @@ import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { ControllerMap } from './controllers'
 import { AccountController, AccountDetails } from './controllers/asset-details'
 import { PendingRequestTracker } from './controllers/pending-requests'
-import { getRate } from './rates'
 import { fetchCoinCapRates } from './rates/coincap'
 import { query, isStreamCredentials } from './setup/spsp'
-import { IlpAddress, isValidIlpAddress, getScheme } from './setup/shared'
-import { AssetScale, isValidAssetScale } from './setup/open-payments'
+import { isValidIlpAddress, getScheme } from './setup/shared'
+import { isValidAssetScale } from './setup/open-payments'
 import { AmountController, PaymentType } from './controllers/amount'
 import { ExchangeRateController } from './controllers/exchange-rate'
 import { SequenceController } from './controllers/sequence'
@@ -27,6 +26,8 @@ import {
 } from './utils'
 import createLogger from 'ilp-logger'
 
+export { AccountDetails } from './controllers/asset-details'
+
 /** Parameters to setup and prepare a payment */
 export interface PaymentOptions {
   /** Plugin to send (and optionally, receive) ILP packets over the network */
@@ -41,7 +42,7 @@ export interface PaymentOptions {
   amountToSend?: BigNumber.Value
   /** Fixed amount to deliver to the recipient, in normalized destination units with arbitrary precision */
   amountToDeliver?: BigNumber.Value
-  /** 3-4 character asset code or symbol the invoice is denominated in. Required for fixed delivery */
+  /** Asset code or symbol identifying the asset the recipient will receive. Required for fixed delivery */
   destinationAssetCode?: string
   /** Asset scale the invoice is denominated in. Require for fixed delivery */
   destinationAssetScale?: number
@@ -71,17 +72,9 @@ export interface Quote {
   /** Estimated payment duration in milliseconds, based on max packet amount, RTT, and rate of packet throttling */
   estimatedDuration: number
   /** Source account details */
-  sourceAccount: {
-    ilpAddress: IlpAddress
-    assetScale: AssetScale
-    assetCode: string
-  }
+  sourceAccount: AccountDetails
   /** Destination account details */
-  destinationAccount: {
-    ilpAddress: IlpAddress
-    assetScale: AssetScale
-    assetCode: string
-  }
+  destinationAccount: AccountDetails
   /** Execute the payment within these parameters */
   pay: () => Promise<Receipt>
   /** Cancel the payment (disconnects the plugin and closes connection with recipient) */
@@ -97,17 +90,9 @@ export interface Receipt {
   /** Amount delivered to recipient, in normalized destination units with arbitrary precision */
   amountDelivered: BigNumber
   /** Source account details */
-  sourceAccount: {
-    ilpAddress: IlpAddress
-    assetScale: AssetScale
-    assetCode: string
-  }
+  sourceAccount: AccountDetails
   /** Destination account details */
-  destinationAccount: {
-    ilpAddress: IlpAddress
-    assetScale: AssetScale
-    assetCode: string
-  }
+  destinationAccount: AccountDetails
 }
 
 /** Payment error states */
@@ -125,7 +110,7 @@ export enum PaymentError {
   /** Slippage percentage is not between 0 and 1 (inclusive) */
   InvalidSlippage = 'InvalidSlippage',
   /** Sender and receiver use incompatible Interledger network prefixes */
-  IncompatibleIntegerledgerNetworks = 'IncompatibleIntegerledgerNetworks',
+  IncompatibleInterledgerNetworks = 'IncompatibleInterledgerNetworks',
   /** Failed to fetch IL-DCP details for the source account: unknown sending asset or ILP address */
   UnknownSourceAsset = 'UnknownSourceAsset',
   /** No fixed source amount or fixed destination amount was provided */
@@ -161,8 +146,8 @@ export enum PaymentError {
   RateProbeFailed = 'RateProbeFailed',
   /** Failed to fulfill a packet before payment timed out */
   IdleTimeout = 'IdleTimeout',
-  /** Encountered an ILP Reject packet with a final error that cannot be retried */
-  TerminalReject = 'TerminalReject',
+  /** Encountered an ILP Reject that cannot be retried, or the payment is not possible over this path */
+  ConnectorError = 'ConnectorError',
   /** Sent too many packets with this encryption key and must close the connection */
   ExceededMaxSequence = 'ExceededMaxSequence',
   /** Rate enforcement is not possible due to rounding: max packet amount may be too low, minimum exchange rate may require more slippage, or exchange rate may be insufficient */
@@ -234,7 +219,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
       sourceAccount.ilpAddress,
       destinationAddress
     )
-    throw PaymentError.IncompatibleIntegerledgerNetworks
+    throw PaymentError.IncompatibleInterledgerNetworks
   }
 
   const controllers: ControllerMap = new Map()
@@ -271,7 +256,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     )
     if (!amountToSend || !amountToSend.isPositive()) {
       log.debug(
-        'invalid config: fixed source amount is not a positive integer or more precise than the source account'
+        'invalid config: amount to send is not a positive integer or more precise than the source account'
       )
       await connection.close()
       throw PaymentError.InvalidSourceAmount
@@ -296,7 +281,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     )
     if (!amountToDeliver || !amountToDeliver.isPositive()) {
       log.debug(
-        'invalid config: fixed delivery amount is not a positive integer or more precise than the destination account'
+        'invalid config: amount to deliver is not a positive integer or more precise than the destination account'
       )
       await connection.close()
       throw PaymentError.InvalidDestinationAmount
@@ -305,7 +290,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     targetAmount = amountToDeliver
     targetType = PaymentType.FixedDelivery
   } else {
-    log.debug('invalid config: no fixed source or destination amount was provided')
+    log.debug('invalid config: no amount to send or deliver was provided')
     await connection.close()
     throw PaymentError.UnknownPaymentTarget
   }
@@ -321,23 +306,14 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     connection.runSendLoop(),
     controllers.get(RateProbe).done(),
   ])
+  controllers.delete(RateProbe)
 
   // If the send loop failed due to an error, end the payment/quote
   if (typeof probeResult === 'string') {
     await connection.close()
     throw probeResult
   }
-
-  controllers.delete(RateProbe)
-
-  // Pull exchange rate from external API to determine the minimum exchange rate
-  const prices =
-    options.prices ??
-    (await fetchCoinCapRates().catch(async (err) => {
-      log.debug('quote failed: error fetching external prices: %s', err) // Note: stringify since axios errors are verbose
-      await connection.close()
-      throw PaymentError.ExternalRateUnavailable
-    }))
+  const { rateCalculator, maxPacketAmount } = probeResult
 
   const destinationAccount = controllers.get(AccountController).getDestinationAccount()
   if (!destinationAccount) {
@@ -346,28 +322,44 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     throw PaymentError.UnknownDestinationAsset
   }
 
-  // Convert into the appropriate scaled units
-  const externalRate = getRate(
-    sourceAccount.assetCode,
-    sourceAccount.assetScale,
-    destinationAccount.assetCode,
-    destinationAccount.assetScale,
-    prices
-  )
-  if (!externalRate) {
-    log.debug(
-      'quote failed: no external rate available from %s to %s',
-      sourceAccount.assetCode,
-      destinationAccount.assetCode
-    )
-    await connection.close()
-    throw PaymentError.ExternalRateUnavailable
+  // Determine minimum exchange rate & pull prices from external API
+  let externalRate = 1
+  if (sourceAccount.assetCode !== destinationAccount.assetCode) {
+    const prices =
+      options.prices ??
+      (await fetchCoinCapRates().catch(async (err) => {
+        log.debug('quote failed: error fetching external prices: %s', err) // Note: stringify since axios errors are verbose
+        await connection.close()
+        throw PaymentError.ExternalRateUnavailable
+      }))
+
+    const sourcePrice = prices[sourceAccount.assetCode]
+    const destinationPrice = prices[destinationAccount.assetCode]
+
+    // Ensure the prices are defined, finite, and denominator > 0
+    if (
+      !isNonNegativeNumber(sourcePrice) ||
+      !isNonNegativeNumber(destinationPrice) ||
+      destinationPrice === 0
+    ) {
+      log.debug(
+        'quote failed: no external rate available from %s to %s',
+        sourceAccount.assetCode,
+        destinationAccount.assetCode
+      )
+      await connection.close()
+      throw PaymentError.ExternalRateUnavailable
+    }
+
+    // This seems counterintuitive because the rate is typically destination amount / source amount
+    // However, this is different becaues it's converting source asset -> base currency -> destination asset
+    externalRate = sourcePrice / destinationPrice
   }
 
-  const minimumRate = Ratio.fromNumber((externalRate * (1 - slippage)) as NonNegativeNumber)
+  const scaledExternalRate =
+    externalRate * 10 ** (destinationAccount.assetScale - sourceAccount.assetScale)
+  const minimumRate = Ratio.fromNumber((scaledExternalRate * (1 - slippage)) as NonNegativeNumber)
   log.debug('calculated min exchange rate of %s', minimumRate)
-
-  const { rateCalculator, maxPacketAmount } = probeResult
 
   const projectedOutcome = controllers
     .get(AmountController)

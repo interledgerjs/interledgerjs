@@ -6,27 +6,27 @@ import {
   SendState,
   StreamRequest,
   StreamReply,
-  StreamReject,
-  isFulfillable,
 } from '.'
-import { Integer } from '../utils'
-import BigNumber from 'bignumber.js'
+import { Int } from '../utils'
 import { MaxPacketAmountController } from './max-packet'
-import { Errors } from 'ilp-packet'
+import { PromiseResolver } from '../utils'
+import { ExchangeRateController, ExchangeRateCalculator } from './exchange-rate'
 
-// TODO Need algo to discover the **best** exchange rate
-// TODO Add backoff on temporary errors, e.g. T04s?
+// TODO Improve discovery of accurate exchange rates
 
-// TODO Is there a way for this to run passively in the background,
-//      not just during a send loop?
+export interface RateProbeOutcome {
+  maxPacketAmount: Int
+  rateCalculator: ExchangeRateCalculator
+}
 
 export class RateProbe implements StreamController {
   private static TIMEOUT_MS = 10000
 
-  private isDisabled = false
+  private status = new PromiseResolver<RateProbeOutcome>()
+
   private deadline?: number
   private controllers: ControllerMap
-  private remainingTestPacketAmounts = [
+  private initialTestPacketAmounts = [
     0,
     1e12,
     1e11,
@@ -38,88 +38,77 @@ export class RateProbe implements StreamController {
     1e5,
     1e4,
     1e3,
-    1e2,
-    1e1,
+    100,
+    10,
     1,
-  ].map((n) => new BigNumber(n))
+  ].map(Int.fromNumber)
 
-  /** Amounts queued to send or in-flight */
-  private inFlightAmounts = new Set<string>()
+  /** Amounts that are in flight */
+  private inFlightAmounts = new Set<bigint>()
+
+  /** Amounts sent that received an authentic reply */
+  private ackedAmounts = new Set<bigint>()
 
   constructor(controllers: ControllerMap) {
     this.controllers = controllers
   }
 
-  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
-    if (this.isDisabled) {
-      return SendState.Ready
-    }
-
-    if (this.deadline && Date.now() > this.deadline) {
-      return PaymentError.RateProbeFailed // TODO Replace with `SendState.End`?
-    }
-
-    // Apply the actual test packet amount, if we have one available
-    const amount = this.remainingTestPacketAmounts[0]
-    if (amount) {
-      builder.setSourceAmount(amount as Integer)
-      return SendState.Ready
-    } else if (this.inFlightAmounts.size === 0) {
-      // No in-flight pckaets and no test packets left to send
-      return SendState.End
-    } else {
-      // Wait for in-flight requests to complete (we may need to send more)
-      return SendState.Wait
-    }
+  done(): Promise<RateProbeOutcome> {
+    return this.status.promise
   }
 
-  applyRequest(request: StreamRequest) {
-    // Don't do anything if this isn't a probe packet
-    if (isFulfillable(request) || this.isDisabled) {
-      return () => {}
+  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
+    if (this.deadline && Date.now() > this.deadline) {
+      return PaymentError.RateProbeFailed
     }
 
-    // Mutate the array to remove this test packet amount
-    const { sourceAmount } = request
-    this.remainingTestPacketAmounts.shift()
-    this.inFlightAmounts.add(sourceAmount.toString())
+    const nextTestPacket = this.initialTestPacketAmounts[0]
+    if (nextTestPacket) {
+      builder.setSourceAmount(nextTestPacket).send()
+      return SendState.Wait
+    }
 
-    // Rate probe must complete before deadline
+    // Max packet probe amount or discovered max packet amount
+    const maxPacketAmount = this.controllers.get(MaxPacketAmountController).getMaxPacketAmount()
+
+    const rateCalculator = this.controllers.get(ExchangeRateController).state
+    const discoveredMaxPacket = this.controllers.get(MaxPacketAmountController).isPreciseMaxKnown()
+    if (discoveredMaxPacket && rateCalculator && this.inFlightAmounts.size === 0) {
+      this.status.resolve({
+        maxPacketAmount,
+        rateCalculator,
+      })
+      return SendState.End
+    }
+
+    if (
+      !this.inFlightAmounts.has(maxPacketAmount.value) &&
+      !this.ackedAmounts.has(maxPacketAmount.value)
+    ) {
+      builder.setSourceAmount(maxPacketAmount).send()
+      return SendState.Wait
+    }
+
+    return SendState.Wait
+  }
+
+  applyRequest({ sourceAmount }: StreamRequest): (reply: StreamReply) => void {
+    this.inFlightAmounts.add(sourceAmount.value)
+
+    // Safe to mutate since the hardcoded amounts are used for all the earliest test packets
+    this.initialTestPacketAmounts.shift()
+
+    // Set deadline when the first test packet is sent
     if (!this.deadline) {
       this.deadline = Date.now() + RateProbe.TIMEOUT_MS
     }
 
     return (reply: StreamReply) => {
-      this.inFlightAmounts.delete(sourceAmount.toString())
+      this.inFlightAmounts.delete(sourceAmount.value)
 
-      // Note: we already checked that the request is unfulfillabe, so it must be a Reject
-      const maxPacketController = this.controllers.get(MaxPacketAmountController)
-      if (
-        (reply as StreamReject).ilpReject.code === Errors.codes.F08_AMOUNT_TOO_LARGE ||
-        !maxPacketController.isPreciseMaxKnown()
-      ) {
-        this.queueTestAmount()
+      if (reply.isAuthentic()) {
+        this.ackedAmounts.add(sourceAmount.value)
       }
     }
-  }
-
-  private queueTestAmount() {
-    const maxPacketProbeAmount = this.controllers
-      .get(MaxPacketAmountController)
-      .getMaxPacketAmount()
-    if (!maxPacketProbeAmount) {
-      return
-    }
-
-    if (this.inFlightAmounts.has(maxPacketProbeAmount.toString())) {
-      return
-    }
-
-    this.inFlightAmounts.add(maxPacketProbeAmount.toString())
-    this.remainingTestPacketAmounts.push(maxPacketProbeAmount)
-  }
-
-  disable() {
-    this.isDisabled = true
   }
 }

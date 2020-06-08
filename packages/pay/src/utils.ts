@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import BigNumber from 'bignumber.js'
 import Long from 'long'
-import { Errors, IlpReject, serializeIlpReject } from 'ilp-packet'
+import { IlpReject, serializeIlpReject } from 'ilp-packet'
 import { IlpAddress } from './setup/shared'
 import { hash } from 'ilp-protocol-stream/dist/src/crypto'
 
+/** Promise that can be resolved or rejected outside its executor callback */
 export class PromiseResolver<T> {
   resolve!: (value?: T | PromiseLike<T>) => void
   reject!: (value?: T | PromiseLike<T>) => void
@@ -14,6 +15,7 @@ export class PromiseResolver<T> {
   })
 }
 
+/** Compute short string to uniquely identify this connection in logs */
 export const getConnectionId = (destinationAddress: IlpAddress): Promise<string> =>
   hash(Buffer.from(destinationAddress)).then((image) => image.toString('hex').slice(0, 6))
 
@@ -57,24 +59,62 @@ export const ILP_ERROR_CODES = {
   R99: 'application error',
 }
 
-/** Create an empty ILP Reject from an error code */
-export const createReject = (code: string, message = ''): IlpReject => ({
-  code,
-  message,
-  triggeredBy: '',
-  data: Buffer.alloc(0),
-})
+/** ILP Reject error codes */
+export enum IlpError {
+  // Final errors
+  F00_BAD_REQUEST = 'F00',
+  F01_INVALID_PACKET = 'F01',
+  F02_UNREACHABLE = 'F02',
+  F03_INVALID_AMOUNT = 'F03',
+  F04_INSUFFICIENT_DESTINATION_AMOUNT = 'F04',
+  F05_WRONG_CONDITION = 'F05',
+  F06_UNEXPECTED_PAYMENT = 'F06',
+  F07_CANNOT_RECEIVE = 'F07',
+  F08_AMOUNT_TOO_LARGE = 'F08',
+  F99_APPLICATION_ERROR = 'F99',
+  // Temporary errors
+  T00_INTERNAL_ERROR = 'T00',
+  T01_PEER_UNREACHABLE = 'T01',
+  T02_PEER_BUSY = 'T02',
+  T03_CONNECTOR_BUSY = 'T03',
+  T04_INSUFFICIENT_LIQUIDITY = 'T04',
+  T05_RATE_LIMITED = 'T05',
+  T99_APPLICATION_ERROR = 'T99',
+  // Relative errors
+  R00_TRANSFER_TIMED_OUT = 'R00',
+  R01_INSUFFICIENT_SOURCE_AMOUNT = 'R01',
+  R02_INSUFFICIENT_TIMEOUT = 'R02',
+  R99_APPLICATION_ERROR = 'R99',
+}
 
-/** Generic application error */
-export const APPLICATION_ERROR_REJECT = serializeIlpReject(
-  createReject(Errors.codes.F99_APPLICATION_ERROR)
-)
+/** Construct an ILP Reject packet */
+export class RejectBuilder implements IlpReject {
+  code = IlpError.F00_BAD_REQUEST
+  message = ''
+  triggeredBy = ''
+  data = Buffer.alloc(0)
 
-/** Unexpected payment error */
-export const UNEXPECTED_PAYMENT_REJECT = serializeIlpReject(
-  createReject(Errors.codes.F06_UNEXPECTED_PAYMENT)
-)
+  setCode(code: IlpError): this {
+    this.code = code
+    return this
+  }
 
+  setTriggeredBy(sourceAddress: IlpAddress): this {
+    this.triggeredBy = sourceAddress
+    return this
+  }
+
+  setData(data: Buffer): this {
+    this.data = data
+    return this
+  }
+
+  serialize(): Buffer {
+    return serializeIlpReject(this)
+  }
+}
+
+/** Create a cancellable Promise the resolves after the given duration */
 export const createTimeout = (
   durationMs: number
 ): {
@@ -103,6 +143,7 @@ export type Brand<T, N extends string> = T & Tag<N>
 const LONG_BIGINT_BUFFER = new ArrayBuffer(8)
 const LONG_BIGINT_DATAVIEW = new DataView(LONG_BIGINT_BUFFER)
 
+/** Integer greater than or equal to 0 */
 export class Int {
   value: bigint
 
@@ -135,9 +176,10 @@ export class Int {
     return new Int(LONG_BIGINT_DATAVIEW.getBigUint64(0))
   }
 
-  // If param is PositiveInt, return type should also be a PositiveInt
-  add<T extends Int>(n: T): T {
-    return new Int(this.value + n.value) as T
+  add(n: PositiveInt): PositiveInt
+  add(n: Int): Int
+  add<T extends Int>(n: T): Int {
+    return new Int(this.value + n.value)
   }
 
   subtract(n: Int): Int {
@@ -153,9 +195,9 @@ export class Int {
   }
 
   multiplyCeil(r: Ratio): Int {
-    return this.modulo(r).isZero()
-      ? new Int((this.value * r.a.value) / r.b.value)
-      : new Int((this.value * r.a.value) / r.b.value).add(Int.ONE)
+    return this.modulo(r).isPositive()
+      ? new Int((this.value * r.a.value) / r.b.value).add(Int.ONE)
+      : new Int((this.value * r.a.value) / r.b.value)
   }
 
   divideFloor(n: PositiveInt): Int {
@@ -163,19 +205,15 @@ export class Int {
   }
 
   divideCeil(n: PositiveInt): Int {
-    return this.modulo(n).isZero()
-      ? new Int(this.value / n.value)
-      : new Int(this.value / n.value).add(Int.ONE)
+    return this.modulo(n).isPositive()
+      ? new Int(this.value / n.value).add(Int.ONE)
+      : new Int(this.value / n.value)
   }
 
   modulo(n: Int | Ratio): Int {
     return n instanceof Int
       ? new Int(this.value % n.value)
       : new Int((this.value * n.a.value) % n.b.value)
-  }
-
-  isPositive(): this is PositiveInt {
-    return this.value > 0
   }
 
   isEqualTo(n: Int): boolean {
@@ -186,7 +224,9 @@ export class Int {
     return this.value > n.value
   }
 
-  isGreaterThanOrEqualTo<T extends Int>(n: T): this is T {
+  isGreaterThanOrEqualTo(n: PositiveInt): this is PositiveInt
+  isGreaterThanOrEqualTo(n: Int): boolean
+  isGreaterThanOrEqualTo<T extends Int>(n: T): boolean {
     return this.value >= n.value
   }
 
@@ -198,16 +238,18 @@ export class Int {
     return this.value <= n.value
   }
 
-  isZero(): boolean {
-    return this.isEqualTo(Int.ZERO)
+  isPositive(): this is PositiveInt {
+    return this.isGreaterThan(Int.ZERO)
   }
 
   orLesser(n: Int): Int {
-    return n.value < this.value ? n : this
+    return this.isLessThanOrEqualTo(n) ? this : n
   }
 
-  orGreater(n: Int): Int {
-    return n.value > this.value ? n : this
+  orGreater(n: PositiveInt): PositiveInt
+  orGreater(n: Int): Int
+  orGreater<T extends Int>(n: T): Int {
+    return this.isGreaterThanOrEqualTo(n) ? this : n
   }
 
   toString(): string {
@@ -226,6 +268,7 @@ export class Int {
   }
 }
 
+/** Integer greater than 0 */
 export interface PositiveInt extends Int {
   multiply(n: PositiveInt): PositiveInt
   multiply(n: Int): Int
@@ -236,14 +279,22 @@ export interface PositiveInt extends Int {
   isLessThan(n: Int): n is PositiveInt
   isLessThanOrEqualTo(n: Int): n is PositiveInt
   isPositive(): true
-  isZero(): false
+  orLesser(n: PositiveInt): PositiveInt
+  orLesser(n: Int): Int
+  orGreater(n: Int): PositiveInt
 }
 
+/** Finite number greater than or equal to 0 */
 export type NonNegativeNumber = Brand<number, 'NonNegativeNumber'>
 
+/** Is the given number greater than or equal to 0, not `NaN`, and not `Infinity`? */
 export const isNonNegativeNumber = (o: number): o is NonNegativeNumber =>
   Number.isFinite(o) && o >= 0
 
+/**
+ * Ratio of two integers: a numerator greater than or equal to 0,
+ * and a denominator greater than 0
+ */
 export class Ratio {
   a: Int
   b: PositiveInt
@@ -253,13 +304,24 @@ export class Ratio {
     this.b = b
   }
 
+  static fromNumber(n: NonNegativeNumber): Ratio {
+    let e = 1
+    while (!Number.isInteger(n * e)) {
+      e *= 10
+    }
+
+    const a = Int.fromNumber(n * e)!
+    const b = Int.fromNumber(e)!
+    return new Ratio(a, b as PositiveInt)
+  }
+
   reciprocal(): Ratio | undefined {
     if (this.a.isPositive()) {
       return new Ratio(this.b, this.a)
     }
   }
 
-  minus(r: Ratio): Ratio {
+  subtract(r: Ratio): Ratio {
     const a = this.a.multiply(r.b).subtract(r.a.multiply(this.b))
     const b = this.b.multiply(r.b)
     return new Ratio(a, b)
@@ -269,7 +331,9 @@ export class Ratio {
     return this.a.value * r.b.value > this.b.value * r.a.value
   }
 
-  isGreaterThanOrEqualTo<T extends Ratio>(r: T): this is T {
+  isGreaterThanOrEqualTo(r: PositiveRatio): this is PositiveRatio
+  isGreaterThanOrEqualTo(r: Ratio): boolean
+  isGreaterThanOrEqualTo<T extends Ratio>(r: T): boolean {
     return this.a.value * r.b.value >= this.b.value * r.a.value
   }
 
@@ -285,17 +349,6 @@ export class Ratio {
     return this.a.isPositive()
   }
 
-  static fromNumber(n: NonNegativeNumber): Ratio {
-    let e = 1
-    while (!Number.isInteger(n * e)) {
-      e *= 10
-    }
-
-    const a = Int.fromNumber(n * e)!
-    const b = Int.fromNumber(e)!
-    return new Ratio(a, b as PositiveInt)
-  }
-
   toBigNumber(): BigNumber {
     return new BigNumber(this.a.toString()).dividedBy(this.b.toString())
   }
@@ -306,12 +359,12 @@ export class Ratio {
   }
 }
 
+/** Ratio of two integers greater than 0 */
 interface PositiveRatio extends Ratio {
   a: PositiveInt
   b: PositiveInt
 
   reciprocal(): PositiveRatio
-  isEqualTo(r: Ratio): r is PositiveRatio
   isLessThan(r: Ratio): r is PositiveRatio
   isLessThanOrEqualTo(r: Ratio): r is PositiveRatio
   isPositive(): true
