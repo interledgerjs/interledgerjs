@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/camelcase */
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
+/* eslint-disable prefer-const, @typescript-eslint/no-empty-function, @typescript-eslint/no-non-null-assertion */
 import { createApp } from 'ilp-connector'
-import RateBackend from 'ilp-connector/dist/services/rate-backend'
 import BigNumber from 'bignumber.js'
 import { Connection, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
 import Long from 'long'
@@ -25,7 +23,7 @@ import {
   hash,
 } from 'ilp-protocol-stream/dist/src/crypto'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { serve } from 'ilp-protocol-ildcp'
+import { serializeIldcpResponse } from 'ilp-protocol-ildcp'
 import {
   Packet,
   IlpPacketType,
@@ -35,9 +33,10 @@ import { GenericContainer, Wait } from 'testcontainers'
 import Axios from 'axios'
 import PluginHttp from 'ilp-plugin-http'
 import getPort from 'get-port'
+import { Writer } from 'oer-utils'
+import nock from 'nock'
 
 // TODO Remove non-determinism from CoinCap rates
-// TODO Add timeout to fetching CoinCap rates
 
 describe('setup/quoting flow', () => {
   it('fails if given no payment pointer or STREAM credentials', async () => {
@@ -67,13 +66,18 @@ describe('setup/quoting flow', () => {
   })
 
   it('fails if SPSP response is invalid', async () => {
-    const spspApp = express().get('/foo', (_, res) => res.json())
-    const spspServer = spspApp.listen(8080)
+    const port = await getPort()
+    const spspApp = express().get('/foo', (_, res) =>
+      res.json({
+        meh: 'why?',
+      })
+    )
+    const spspServer = spspApp.listen(port)
 
     await expect(
       quote({
         plugin: new MirrorPlugin(),
-        paymentPointer: 'http://localhost:8080/foo',
+        paymentPointer: `http://localhost:${port}/foo`,
       })
     ).rejects.toBe(PaymentError.SpspQueryFailed)
 
@@ -243,17 +247,13 @@ describe('setup/quoting flow', () => {
       isConnected() {
         return true
       },
-      sendData(data) {
+      async sendData() {
         // Handle IL-DCP requests
         // Return invalid ILP address
-        return serve({
-          requestPacket: data,
-          handler: async () => ({
-            clientAddress: 'private',
-            assetCode: 'USD',
-            assetScale: 2,
-          }),
-          serverAddress: 'private',
+        return serializeIldcpResponse({
+          clientAddress: 'private',
+          assetCode: 'USD',
+          assetScale: 2,
         })
       },
       registerDataHandler() {},
@@ -300,7 +300,7 @@ describe('setup/quoting flow', () => {
     await app.shutdown()
   })
 
-  it('fails if amount to send is 0, negative, NaN, or Infinity', async () => {
+  it('fails if amount to send is not a positive integer', async () => {
     const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
 
     const app = createApp({
@@ -427,7 +427,7 @@ describe('setup/quoting flow', () => {
     await app.shutdown()
   })
 
-  it('fails if amount to deliver is 0, negative, NaN, or Infinity', async () => {
+  it('fails if amount to deliver is not a positive integer', async () => {
     const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
 
     const app = createApp({
@@ -633,6 +633,53 @@ describe('setup/quoting flow', () => {
     await streamServer.close()
   })
 
+  it('fails if no test packets are delivered', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const app = createApp({
+      ilpAddress: 'private.larry',
+      backend: 'one-to-one',
+      spread: 0,
+      accounts: {
+        sender: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 0,
+          plugin: senderPlugin2,
+        },
+        receiver: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 0,
+          plugin: receiverPlugin1,
+        },
+      },
+    })
+    await app.listen()
+
+    receiverPlugin2.registerDataHandler(async () =>
+      serializeIlpReject({
+        code: Errors.codes.T01_PEER_UNREACHABLE,
+        message: '',
+        triggeredBy: '',
+        data: Buffer.alloc(0),
+      })
+    )
+
+    await expect(
+      quote({
+        plugin: senderPlugin1,
+        amountToSend: '1000',
+        destinationAddress: 'private.larry.receiver',
+        sharedSecret: Buffer.alloc(32),
+      })
+    ).rejects.toBe(PaymentError.RateProbeFailed)
+    expect(!senderPlugin1.isConnected())
+
+    await app.shutdown()
+  }, 15000)
+
   it('fails if recipient never shared destination asset details', async () => {
     const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
 
@@ -671,7 +718,90 @@ describe('setup/quoting flow', () => {
     await app.shutdown()
   })
 
-  it('fails if external price for the source asset is unavailable', async () => {
+  it('fails if price api is unavailable', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const app = createApp({
+      ilpAddress: 'private.larry',
+      backend: 'one-to-one',
+      spread: 0,
+      accounts: {
+        sender: {
+          relation: 'child',
+          assetCode: 'JPY',
+          assetScale: 0,
+          plugin: senderPlugin2,
+        },
+        receiver: {
+          relation: 'child',
+          assetCode: 'GBP',
+          assetScale: 0,
+          plugin: receiverPlugin1,
+        },
+      },
+    })
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    const tryQuote = async () => {
+      const {
+        sharedSecret,
+        destinationAccount: destinationAddress,
+      } = streamServer.generateAddressAndSecret()
+
+      await expect(
+        quote({
+          plugin: senderPlugin1,
+          amountToSend: 100,
+          destinationAddress,
+          sharedSecret,
+        })
+      ).rejects.toBe(PaymentError.ExternalRateUnavailable)
+      expect(!senderPlugin1.isConnected())
+    }
+
+    const response = {
+      timestamp: Date.now(),
+      data: [
+        {
+          symbol: 'JPY',
+          rateUsd: 1,
+        },
+        {
+          symbol: 'GBP',
+          priceUsd: 1,
+        },
+      ],
+    }
+
+    nock('https://api.coincap.io')
+      .get('/v2/assets')
+      .delay(7000)
+      .reply(200, response)
+      .get('/v2/rates')
+      .reply(200, response)
+    await tryQuote()
+    nock.cleanAll()
+
+    nock('https://api.coincap.io')
+      .get('/v2/rates')
+      .reply(400)
+      .get('/v2/assets')
+      .reply(200, response)
+    await tryQuote()
+    nock.cleanAll()
+
+    await app.shutdown()
+    await streamServer.close()
+
+    nock.abortPendingRequests()
+  })
+
+  it('fails if no external price for the source asset exists', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
@@ -719,7 +849,7 @@ describe('setup/quoting flow', () => {
     await streamServer.close()
   })
 
-  it('fails if external price for the destination asset is unavailable', async () => {
+  it('fails if no external price for the destination asset exists', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
@@ -767,7 +897,7 @@ describe('setup/quoting flow', () => {
     await streamServer.close()
   })
 
-  it('fails if external rate is 0', async () => {
+  it('fails if the external exchange rate is 0', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
@@ -808,6 +938,8 @@ describe('setup/quoting flow', () => {
         destinationAddress,
         sharedSecret,
         prices: {
+          // Computing this rate would be a divide-by-0 error,
+          // so the rate is "unavailable" rather than quoted as 0
           ABC: 1,
           XYZ: 0,
         },
@@ -819,12 +951,191 @@ describe('setup/quoting flow', () => {
     await streamServer.close()
   })
 
-  it('discovers precise max packet amount from F08s without metadata', async () => {
-    const [senderPlugin1, maxPacketPlugin] = MirrorPlugin.createPair()
-    const connectorPlugin = new MirrorPlugin()
-    connectorPlugin.mirror = senderPlugin1
-
+  it('fails it the probed rate is below the minimum', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const app = createApp({
+      ilpAddress: 'private.larry',
+      backend: 'one-to-one',
+      spread: 0.02,
+      accounts: {
+        sender: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 4,
+          plugin: senderPlugin2,
+        },
+        receiver: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 4,
+          plugin: receiverPlugin1,
+        },
+      },
+    })
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    await expect(
+      quote({
+        plugin: senderPlugin1,
+        amountToSend: '1000',
+        destinationAddress,
+        sharedSecret,
+        slippage: 0.01,
+      })
+    ).rejects.toBe(PaymentError.InsufficientExchangeRate)
+    expect(!senderPlugin1.isConnected())
+
+    await app.shutdown()
+    await streamServer.close()
+  })
+
+  it('fails if the probed rate is 0', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const prices = {
+      BTC: 9814.04,
+      EUR: 1.13,
+    }
+
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
+
+    const app = createApp(
+      {
+        ilpAddress: 'private.larry',
+        // All packets here should round down to 0 EUR
+        accounts: {
+          sender: {
+            relation: 'child',
+            assetCode: 'BTC',
+            assetScale: 8,
+            plugin: senderPlugin2,
+            maxPacketAmount: '1000',
+          },
+          receiver: {
+            relation: 'child',
+            assetCode: 'EUR',
+            assetScale: 0,
+            plugin: receiverPlugin1,
+          },
+        },
+      },
+      deps
+    )
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    await expect(
+      quote({
+        plugin: senderPlugin1,
+        amountToSend: '1000',
+        destinationAddress,
+        sharedSecret,
+        prices,
+      })
+    ).rejects.toBe(PaymentError.InsufficientExchangeRate)
+    expect(!senderPlugin1.isConnected())
+
+    await app.shutdown()
+    await streamServer.close()
+  })
+
+  it('fails if min rate and max packet amount would cause rounding errors', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const prices = {
+      BTC: 9814.04,
+      EUR: 1.13,
+    }
+
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
+
+    const app = createApp(
+      {
+        ilpAddress: 'private.larry',
+        spread: 0.0005,
+        accounts: {
+          sender: {
+            relation: 'child',
+            assetCode: 'BTC',
+            assetScale: 8,
+            plugin: senderPlugin2,
+            maxPacketAmount: '1000',
+          },
+          receiver: {
+            relation: 'child',
+            assetCode: 'EUR',
+            assetScale: 6,
+            plugin: receiverPlugin1,
+          },
+        },
+      },
+      deps
+    )
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    await expect(
+      quote({
+        plugin: senderPlugin1,
+        amountToSend: 100_000,
+        destinationAddress,
+        sharedSecret,
+        // Slippage/minExchangeRate is far too close to the real spread/rate
+        // to perform the payment without rounding errors, since the max packet
+        // amount of 1000 doesn't allow more precision.
+        slippage: 0.00051,
+        prices,
+      })
+    ).rejects.toBe(PaymentError.ExchangeRateRoundingError)
+    expect(!senderPlugin1.isConnected())
+
+    await app.shutdown()
+    await streamServer.close()
+  })
+
+  it('discovers precise max packet amount from F08s without metadata', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const streamServerPlugin = new MirrorPlugin()
+    streamServerPlugin.mirror = receiverPlugin1
 
     const app = createApp({
       ilpAddress: 'private.larry',
@@ -835,7 +1146,9 @@ describe('setup/quoting flow', () => {
           relation: 'child',
           assetCode: 'ABC',
           assetScale: 0,
-          plugin: connectorPlugin,
+          plugin: senderPlugin2,
+          // This tests the max packet state transition from precise -> imprecise
+          maxPacketAmount: '1000000',
         },
         receiver: {
           relation: 'child',
@@ -848,7 +1161,7 @@ describe('setup/quoting flow', () => {
     await app.listen()
 
     const streamServer = await createServer({
-      plugin: receiverPlugin2,
+      plugin: streamServerPlugin,
     })
 
     streamServer.on('connection', (connection: Connection) => {
@@ -862,7 +1175,7 @@ describe('setup/quoting flow', () => {
 
     // Add middleware to return F08 errors *without* metadata
     // and track the greatest packet amount that's sent
-    maxPacketPlugin.registerDataHandler(async (data) => {
+    receiverPlugin2.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
       if (+prepare.amount > maxPacketAmount) {
         return serializeIlpReject({
@@ -873,7 +1186,7 @@ describe('setup/quoting flow', () => {
         })
       } else {
         largestAmountReceived = Math.max(largestAmountReceived, +prepare.amount)
-        return connectorPlugin.dataHandler(data)
+        return streamServerPlugin.dataHandler(data)
       }
     })
 
@@ -899,6 +1212,8 @@ describe('setup/quoting flow', () => {
     await app.shutdown()
     await streamServer.close()
   }, 10000)
+
+  it.todo('works if theres no max packet amount without sending max u64 packets')
 })
 
 describe('fixed source payments', () => {
@@ -906,19 +1221,21 @@ describe('fixed source payments', () => {
     const [alice1, alice2] = MirrorPlugin.createPair()
     const [bob1, bob2] = MirrorPlugin.createPair()
 
-    // Override with rate backend for custom rates
-    const deps = reduct()
-    deps.setOverride(RateBackend, CustomBackend)
+    const prices = {
+      USD: 1,
+      XRP: 0.2041930991198592,
+    }
 
-    const prices = await fetchCoinCapRates()
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
 
     const app = createApp(
       {
         ilpAddress: 'test.larry',
         spread: 0.014, // 1.4% slippage
-        backendConfig: {
-          prices,
-        },
         accounts: {
           alice: {
             relation: 'child',
@@ -962,46 +1279,150 @@ describe('fixed source payments', () => {
       sharedSecret,
       plugin: alice1,
       slippage: 0.015,
+      prices,
     })
 
-    expect(quoteDetails.sourceAccount.assetCode).toBe('USD')
-    expect(quoteDetails.sourceAccount.assetScale).toBe(6)
-    expect(quoteDetails.sourceAccount.ilpAddress).toBe('test.larry.alice')
-    expect(quoteDetails.destinationAccount.assetCode).toBe('XRP')
-    expect(quoteDetails.destinationAccount.assetScale).toBe(9)
-    expect(quoteDetails.destinationAccount.ilpAddress).toBe(destinationAddress)
+    expect(quoteDetails.sourceAccount).toEqual({
+      assetCode: 'USD',
+      assetScale: 6,
+      ilpAddress: 'test.larry.alice',
+    })
+    expect(quoteDetails.destinationAccount).toEqual({
+      assetCode: 'XRP',
+      assetScale: 9,
+      ilpAddress: destinationAddress,
+    })
     expect(quoteDetails.maxSourceAmount).toEqual(amountToSend)
 
     const receipt = await pay()
+
+    expect(receipt.error).toBeUndefined()
 
     const serverConnection = await connectionPromise
     expect(new BigNumber(serverConnection.totalReceived)).toEqual(
       receipt.amountDelivered.shiftedBy(9)
     )
     expect(receipt.amountSent).toEqual(amountToSend)
-    expect(receipt.amountInFlight).toEqual(new BigNumber(0))
 
     await app.shutdown()
     await streamServer.close()
   }, 10000)
 
+  it('completes source amount payment if exchange rate is very close to minimum', async () => {
+    const [senderPlugin1, finalPacketPlugin] = MirrorPlugin.createPair()
+
+    const senderPlugin2 = new MirrorPlugin()
+    senderPlugin2.mirror = senderPlugin1
+
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const prices = {
+      BTC: 9814.04,
+      EUR: 1.13,
+    }
+
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
+
+    const app = createApp(
+      {
+        ilpAddress: 'private.larry',
+        spread: 0,
+        accounts: {
+          sender: {
+            relation: 'child',
+            assetCode: 'BTC',
+            assetScale: 8,
+            plugin: senderPlugin2,
+            maxPacketAmount: '1000',
+          },
+          receiver: {
+            relation: 'child',
+            assetCode: 'EUR',
+            assetScale: 4,
+            plugin: receiverPlugin1,
+          },
+        },
+      },
+      deps
+    )
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    streamServer.on('connection', (connection: Connection) => {
+      connection.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(Infinity)
+      })
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    // On the final packet, reject. This tests that the delivery shortfall
+    // correctly gets refunded, and after the packet is retried,
+    // the payment completes.
+    let failedOnFinalPacket = false
+    finalPacketPlugin.registerDataHandler(async (data) => {
+      const prepare = deserializeIlpPrepare(data)
+      if (prepare.amount === '2' && !failedOnFinalPacket) {
+        failedOnFinalPacket = true
+        return serializeIlpReject({
+          code: Errors.codes.T02_PEER_BUSY,
+          message: '',
+          triggeredBy: '',
+          data: Buffer.alloc(0),
+        })
+      } else {
+        return senderPlugin2.dataHandler(data)
+      }
+    })
+
+    const { pay, ...details } = await quote({
+      plugin: senderPlugin1,
+      // Send 100,002 sats
+      // Max packet amount of 1000 means the final packet will try to send 2 units
+      // This rounds down to 0, but the delivery shortfall should ensure this is acceptable
+      amountToSend: 0.00100002,
+      destinationAddress,
+      sharedSecret,
+      slippage: 0.002,
+      prices,
+    })
+    expect(+details.maxSourceAmount).toBe(0.00100002)
+
+    const receipt = await pay()
+    expect(receipt.error).toBeUndefined()
+    expect(+receipt.amountSent).toBe(0.00100002)
+    expect(+receipt.amountDelivered).toBeGreaterThanOrEqual(+details.minDeliveryAmount)
+
+    await app.shutdown()
+    await streamServer.close()
+  })
+
   it('complete source amount payment with no latency', async () => {
     const [alice1, alice2] = MirrorPlugin.createPair(0, 0)
     const [bob1, bob2] = MirrorPlugin.createPair(0, 0)
 
-    // Override with rate backend for custom rates
-    const deps = reduct()
-    deps.setOverride(RateBackend, CustomBackend)
-
     const prices = await fetchCoinCapRates()
+
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
 
     const app = createApp(
       {
         ilpAddress: 'test.larry',
         spread: 0,
-        backendConfig: {
-          prices,
-        },
         accounts: {
           alice: {
             relation: 'child',
@@ -1053,14 +1474,15 @@ describe('fixed source payments', () => {
       destinationAddress,
       sharedSecret,
       plugin: alice1,
+      slippage: 1,
+      prices: {},
     })
 
     const receipt = await pay()
 
+    expect(receipt.error).toBeUndefined()
     expect(highestNumberPacketsInFlight).toBe(20)
     expect(+receipt.amountSent).toEqual(100)
-    expect(+receipt.amountInFlight).toEqual(0)
-    expect(receipt.error).toBeUndefined()
 
     await app.shutdown()
     await streamServer.close()
@@ -1070,22 +1492,21 @@ describe('fixed source payments', () => {
     const [alice1, alice2] = MirrorPlugin.createPair()
     const [bob1, bob2] = MirrorPlugin.createPair()
 
-    // Override with rate backend for custom rates
-    const deps = reduct()
-    deps.setOverride(RateBackend, CustomBackend)
-
     const prices = {
       ABC: 3.2,
       XYZ: 1.5,
     }
 
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
+
     const app = createApp(
       {
         ilpAddress: 'test.larry',
         spread: 0.014, // 1.4% slippage
-        backendConfig: {
-          prices,
-        },
         accounts: {
           alice: {
             relation: 'child',
@@ -1133,8 +1554,8 @@ describe('fixed source payments', () => {
     expect(minExchangeRate).toEqual(new BigNumber(0))
 
     const receipt = await pay()
+    expect(receipt.error).toBeUndefined()
     expect(receipt.amountSent).toEqual(amountToSend)
-    expect(receipt.amountInFlight).toEqual(new BigNumber(0))
     expect(receipt.amountDelivered.isGreaterThan(0))
 
     await app.shutdown()
@@ -1149,19 +1570,26 @@ describe('fixed delivery payments', () => {
     const [alice1, alice2] = MirrorPlugin.createPair()
     const [bob1, bob2] = MirrorPlugin.createPair()
 
-    // Override with rate backend for custom rates
-    const deps = reduct()
-    deps.setOverride(RateBackend, CustomBackend)
+    const prices = {
+      USD: 1,
+      EUR: 1.0805787579827757,
+      BTC: 9290.22557286273,
+      ETH: 208.46218430418685,
+      XRP: 0.2199704769864391,
+      JPY: 0.00942729201037,
+      GBP: 1.2344993179391268,
+    }
 
-    const prices = await fetchCoinCapRates()
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
 
     const app = createApp(
       {
         ilpAddress: 'test.larry',
         spread: 0.01, // 1% spread
-        backendConfig: {
-          prices,
-        },
         accounts: {
           alice: {
             relation: 'child',
@@ -1186,11 +1614,9 @@ describe('fixed delivery payments', () => {
       plugin: bob2,
     })
 
-    const amountToDeliver = getRate('USD', 0, 'BTC', 0, prices)?.times(10).decimalPlaces(8)
-    if (!amountToDeliver) {
-      return Promise.reject()
-    }
-
+    const amountToDeliver = new BigNumber(10)
+      .times(getRate('USD', 0, 'BTC', 0, prices)!)
+      .decimalPlaces(8)
     const connectionPromise = streamServer.acceptConnection()
     streamServer.on('connection', (connection: Connection) => {
       connection.on('stream', (stream: DataAndMoneyStream) => {
@@ -1211,15 +1637,17 @@ describe('fixed delivery payments', () => {
       sharedSecret,
       slippage: 0.015,
       plugin: alice1,
+      prices,
     })
 
     const receipt = await pay()
+
+    expect(receipt.error).toBeUndefined()
 
     const serverConnection = await connectionPromise
     const totalReceived = new BigNumber(serverConnection.totalReceived)
     expect(totalReceived).toEqual(amountToDeliver.shiftedBy(8))
     expect(receipt.amountDelivered).toEqual(amountToDeliver)
-    expect(receipt.amountInFlight).toEqual(new BigNumber(0))
     expect(receipt.amountSent.isLessThanOrEqualTo(quoteDetails.maxSourceAmount))
 
     await app.shutdown()
@@ -1245,17 +1673,16 @@ describe('fixed delivery payments', () => {
     const [bobPlugin1, bobPlugin2] = MirrorPlugin.createPair(20, 30)
 
     // Override with rate backend for custom rates
-    const deps = reduct()
-    deps.setOverride(RateBackend, CustomBackend)
+    let aliceBackend: CustomBackend
+    const aliceDeps = reduct((Constructor) => Constructor.name === 'RateBackend' && aliceBackend)
+    aliceBackend = new CustomBackend(aliceDeps)
+    aliceBackend.setPrices(prices)
 
     const aliceConnector = createApp(
       {
         ilpAddress: 'test.alice',
         defaultRoute: 'bob',
         spread: 0.005, // 0.5%
-        backendConfig: {
-          prices,
-        },
         accounts: {
           sender: {
             relation: 'child',
@@ -1273,20 +1700,19 @@ describe('fixed delivery payments', () => {
           },
         },
       },
-      deps
+      aliceDeps
     )
 
     // Override with rate backend for custom rates
-    const deps2 = reduct()
-    deps2.setOverride(RateBackend, CustomBackend)
+    let bobBackend: CustomBackend
+    const bobDeps = reduct((Constructor) => Constructor.name === 'RateBackend' && bobBackend)
+    bobBackend = new CustomBackend(bobDeps)
+    bobBackend.setPrices(prices)
 
     const bobConnector = createApp(
       {
         ilpAddress: 'test.bob',
         spread: 0.0031, // 0.31%
-        backendConfig: {
-          prices,
-        },
         accounts: {
           alice: {
             relation: 'peer',
@@ -1304,7 +1730,7 @@ describe('fixed delivery payments', () => {
           },
         },
       },
-      deps2
+      bobDeps
     )
 
     await Promise.all([aliceConnector.listen(), bobConnector.listen()])
@@ -1344,6 +1770,8 @@ describe('fixed delivery payments', () => {
 
     const receipt = await pay()
 
+    expect(receipt.error).toBeUndefined()
+
     const serverConnection = await connectionPromise
     const totalReceived = new BigNumber(serverConnection.totalReceived).shiftedBy(-9)
     expect(receipt.amountDelivered).toEqual(totalReceived)
@@ -1355,7 +1783,6 @@ describe('fixed delivery payments', () => {
     const maxOverDeliveryAmount = getRate('BTC', 8, 'XRP', 9, prices)!
     expect(receipt.amountDelivered.isLessThanOrEqualTo(amountToDeliver.plus(maxOverDeliveryAmount)))
 
-    expect(receipt.amountInFlight).toEqual(new BigNumber(0))
     expect(receipt.amountSent.isLessThanOrEqualTo(quoteDetails.maxSourceAmount))
 
     await aliceConnector.shutdown()
@@ -1364,7 +1791,7 @@ describe('fixed delivery payments', () => {
     await streamServer.close()
   }, 10000)
 
-  // TODO This should error during the quoting flow
+  // TODO This should error during the quoting flow, but JS stream only returns `StreamMaxMoney` if the packet sent money!
   it('fails if receive max is incompatible on fixed delivery payment', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
@@ -1422,6 +1849,67 @@ describe('fixed delivery payments', () => {
     await streamServer.close()
   })
 
+  it('fails if minimum exchange rate is 0 and cannot enforce delivery', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const app = createApp({
+      ilpAddress: 'private.larry',
+      defaultRoute: 'receiver',
+      backend: 'one-to-one',
+      spread: 0,
+      accounts: {
+        sender: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 4,
+          plugin: senderPlugin2,
+        },
+        receiver: {
+          relation: 'child',
+          assetCode: 'XYZ',
+          assetScale: 2,
+          plugin: receiverPlugin1,
+        },
+      },
+    })
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    streamServer.on('connection', (connection: Connection) => {
+      connection.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(Infinity)
+      })
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    await expect(
+      quote({
+        plugin: senderPlugin1,
+        amountToDeliver: 100,
+        destinationAssetCode: 'ABC',
+        destinationAssetScale: 4,
+        destinationAddress,
+        sharedSecret,
+        slippage: 1,
+        prices: {
+          ABC: 1,
+          XYZ: 1,
+        },
+      })
+    ).rejects.toBe(PaymentError.UnenforceableDelivery)
+
+    await app.shutdown()
+    await streamServer.close()
+  })
+
   it('accounts for fulfilled packets even if data is corrupted', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
@@ -1454,22 +1942,25 @@ describe('fixed delivery payments', () => {
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
-    // STREAM "receiver" that fulfills packets
+    // STREAM "receiver" that just fulfills packets
+    let totalReceived = 0
     receiverPlugin2.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
 
       const fulfillment = await generateFulfillment(fulfillmentKey, prepare.data)
       const isFulfillable = prepare.executionCondition.equals(await hash(fulfillment))
 
+      const streamPacket = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
+
       if (isFulfillable) {
         // On fulfillable packets, fulfill *without valid STREAM data*
+        totalReceived += +streamPacket.prepareAmount
         return serializeIlpFulfill({
           fulfillment,
           data: randomBytes(200),
         })
       } else {
         // On test packets, reject and ACK as normal so the quote succeeds
-        const streamPacket = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
         const reject = new Packet(streamPacket.sequence, IlpPacketType.Reject, prepare.amount)
         return serializeIlpReject({
           code: Errors.codes.F99_APPLICATION_ERROR,
@@ -1482,28 +1973,27 @@ describe('fixed delivery payments', () => {
 
     const { pay, ...quoteDetails } = await quote({
       plugin: senderPlugin1,
-      amountToDeliver: 100,
+      // Amount much larger than max packet, so test will fail unless sender fails fast
+      amountToDeliver: 1000000,
       destinationAssetCode: 'ABC',
       destinationAssetScale: 0,
       destinationAddress,
       sharedSecret,
-      slippage: 0.06,
+      slippage: 0.1,
+      prices: {},
     })
 
     const receipt = await pay()
-    expect(+receipt.amountDelivered).toEqual(100)
+    expect(receipt.error).toBe(PaymentError.ReceiverProtocolViolation)
+    expect(+receipt.amountDelivered).toEqual(totalReceived)
     expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
-    expect(+receipt.amountInFlight).toEqual(0)
 
     await app.shutdown()
   }, 10000)
 
   it('accounts for delivered amounts if the recipient claims to receive less than minimum', async () => {
-    // Since the received packets claim 1 unit, the payment will fail due to exchange rate issues
-    // So, the 5 Prepares need to be sent in quick succession, so increase the latency
-    // TODO The better approach here is the receiver misbheaving should fail immediately with a protocol violation
-    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair(100, 100)
-    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair(100, 100)
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
     const app = createApp({
       ilpAddress: 'private.larry',
@@ -1534,16 +2024,18 @@ describe('fixed delivery payments', () => {
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
     // STREAM "receiver" that fulfills packets
+    let totalReceived = 0
     receiverPlugin2.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
-
-      const streamPacket = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
 
       const fulfillment = await generateFulfillment(fulfillmentKey, prepare.data)
       const isFulfillable = prepare.executionCondition.equals(await hash(fulfillment))
 
+      const streamPacket = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
+
       if (isFulfillable) {
         // On fulfillable packets, fulfill, but lie and say we only received 1 unit
+        totalReceived += +streamPacket.prepareAmount
         const streamReply = new Packet(streamPacket.sequence, IlpPacketType.Fulfill, 1)
         return serializeIlpFulfill({
           fulfillment,
@@ -1563,20 +2055,186 @@ describe('fixed delivery payments', () => {
 
     const { pay, ...quoteDetails } = await quote({
       plugin: senderPlugin1,
-      amountToDeliver: 100,
+      // Amount much larger than max packet, so test will fail unless sender fails fast
+      amountToDeliver: 100000,
       destinationAssetCode: 'ABC',
       destinationAssetScale: 0,
       destinationAddress,
       sharedSecret,
-      slippage: 0,
+      slippage: 0.2,
     })
 
     const receipt = await pay()
-    expect(+receipt.amountDelivered).toEqual(100)
+    expect(receipt.error).toBe(PaymentError.ReceiverProtocolViolation)
+    expect(+receipt.amountDelivered).toEqual(totalReceived)
     expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
-    expect(+receipt.amountInFlight).toEqual(0)
 
     await app.shutdown()
+  })
+
+  it('fails if the exchange rate drops to 0 during the payment', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const prices = {
+      USD: 1,
+      EUR: 1.13,
+    }
+
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
+
+    const app = createApp(
+      {
+        ilpAddress: 'test.larry',
+        spread: 0.01, // 1% spread
+        accounts: {
+          alice: {
+            relation: 'child',
+            plugin: senderPlugin2,
+            assetCode: 'USD',
+            assetScale: 4,
+            maxPacketAmount: '10000', // $1
+          },
+          bob: {
+            relation: 'child',
+            plugin: receiverPlugin1,
+            assetCode: 'EUR',
+            assetScale: 4,
+          },
+        },
+      },
+      deps
+    )
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    const connectionPromise = streamServer.acceptConnection()
+    streamServer.on('connection', (connection: Connection) => {
+      connection.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(Infinity)
+      })
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    const { pay, ...quoteDetails } = await quote({
+      amountToDeliver: 10, // $10
+      destinationAssetCode: 'EUR',
+      destinationAssetScale: 4,
+      destinationAddress,
+      sharedSecret,
+      slippage: 0.015, // 1.5% slippage allowed
+      plugin: senderPlugin1,
+    })
+
+    const serverConnection = await connectionPromise
+
+    // Change exchange rate to 0 before the payment begins
+    backend.setSpread(1)
+
+    const receipt = await pay()
+    expect(receipt.error).toBe(PaymentError.InsufficientExchangeRate)
+    expect(+receipt.amountDelivered).toBe(0)
+    expect(+receipt.amountDelivered).toBe(+serverConnection.totalReceived / 10000)
+    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+
+    await app.shutdown()
+    await streamServer.close()
+  })
+
+  it('fails if the exchange rate drops below the minimum during the payment', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair(200, 200)
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair(200, 200)
+
+    const prices = {
+      USD: 1,
+      EUR: 1.13,
+    }
+
+    // Override with rate backend for custom rates
+    let backend: CustomBackend
+    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
+    backend = new CustomBackend(deps)
+    backend.setPrices(prices)
+
+    const app = createApp(
+      {
+        ilpAddress: 'test.larry',
+        spread: 0.01, // 1% spread
+        accounts: {
+          alice: {
+            relation: 'child',
+            plugin: senderPlugin2,
+            assetCode: 'USD',
+            assetScale: 4,
+            maxPacketAmount: '10000', // $1
+          },
+          bob: {
+            relation: 'child',
+            plugin: receiverPlugin1,
+            assetCode: 'EUR',
+            assetScale: 4,
+          },
+        },
+      },
+      deps
+    )
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    const connectionPromise = streamServer.acceptConnection()
+    streamServer.on('connection', (connection: Connection) => {
+      connection.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(Infinity)
+
+        stream.on('money', () => {
+          // Change exchange rate so it's just below the minimum
+          // Only the first packets that have already been routed will be delivered
+          backend.setSpread(0.016)
+        })
+      })
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    const amountToDeliver = 10 // $10
+    const { pay, ...quoteDetails } = await quote({
+      amountToDeliver,
+      destinationAssetCode: 'EUR',
+      destinationAssetScale: 4,
+      destinationAddress,
+      sharedSecret,
+      slippage: 0.015, // 1.5% slippage allowed
+      plugin: senderPlugin1,
+      prices,
+    })
+
+    const serverConnection = await connectionPromise
+
+    const receipt = await pay()
+    expect(receipt.error).toBe(PaymentError.InsufficientExchangeRate)
+    expect(+receipt.amountDelivered).toBeLessThan(amountToDeliver)
+    expect(+receipt.amountDelivered).toBe(+serverConnection.totalReceived / 10000)
+    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+
+    await app.shutdown()
+    await streamServer.close()
   })
 })
 
@@ -1603,12 +2261,115 @@ describe('payment execution', () => {
       quote({
         plugin: senderPlugin,
         amountToSend: 10,
-        destinationAddress: 'private.unknown', // Un-routable address
+        destinationAddress: 'private.unknown', // Non-routable address
         sharedSecret: Buffer.alloc(32),
       })
     ).rejects.toBe(PaymentError.TerminalReject)
 
     await app.shutdown()
+  })
+
+  it('handles invalid F08 errors', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const streamServerPlugin = new MirrorPlugin()
+    streamServerPlugin.mirror = receiverPlugin1
+
+    const app = createApp({
+      ilpAddress: 'test.larry',
+      backend: 'one-to-one',
+      spread: 0,
+      accounts: {
+        alice: {
+          relation: 'child',
+          plugin: senderPlugin2,
+          assetCode: 'USD',
+          assetScale: 2,
+          maxPacketAmount: '10', // $0.10
+        },
+        bob: {
+          relation: 'child',
+          plugin: receiverPlugin1,
+          assetCode: 'USD',
+          assetScale: 2,
+        },
+      },
+    })
+    await app.listen()
+
+    // On the first & second packets, reply with an invalid F08: amount received <= maximum.
+    // This checks against a potential divide-by-0 error
+    let sentFirstInvalidReply = false
+    let sentSecondInvalidReply = false
+    receiverPlugin2.registerDataHandler(async (data) => {
+      if (!sentFirstInvalidReply) {
+        sentFirstInvalidReply = true
+
+        const writer = new Writer(16)
+        writer.writeUInt64(0) // Amount received
+        writer.writeUInt64(1) // Maximum
+
+        return serializeIlpReject({
+          code: Errors.codes.F08_AMOUNT_TOO_LARGE,
+          message: '',
+          triggeredBy: '',
+          data: writer.getBuffer(),
+        })
+      } else if (!sentSecondInvalidReply) {
+        sentSecondInvalidReply = true
+
+        const writer = new Writer(16)
+        writer.writeUInt64(1) // Amount received
+        writer.writeUInt64(1) // Maximum
+
+        return serializeIlpReject({
+          code: Errors.codes.F08_AMOUNT_TOO_LARGE,
+          message: '',
+          triggeredBy: '',
+          data: writer.getBuffer(),
+        })
+      } else {
+        return streamServerPlugin.dataHandler(data)
+      }
+    })
+
+    const streamServer = await createServer({
+      plugin: streamServerPlugin,
+    })
+
+    streamServer.on('connection', (connection: Connection) => {
+      connection.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(Infinity)
+
+        stream.on('money', (amount: string) => {
+          // Test that it ignores the invalid F08, and uses
+          // the max packet amount of 10
+          expect(amount).toBe('10')
+        })
+      })
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    const { pay } = await quote({
+      amountToSend: new BigNumber(1),
+      destinationAddress,
+      sharedSecret,
+      plugin: senderPlugin1,
+      slippage: 1,
+      prices: {},
+    })
+    const receipt = await pay()
+    expect(receipt.error).toBeUndefined()
+    expect(+receipt.amountSent).toEqual(1)
+    expect(+receipt.amountDelivered).toEqual(1)
+
+    await app.shutdown()
+    await streamServer.close()
   })
 
   it('retries on temporary errors', async () => {
@@ -1666,20 +2427,16 @@ describe('payment execution', () => {
       amountToSend,
       sharedSecret,
       destinationAddress,
+      slippage: 1,
+      prices: {},
     })
 
     const receipt = await pay()
+    expect(receipt.error).toBeUndefined()
     expect(+receipt.amountSent).toBe(amountToSend)
 
     await app.shutdown()
-
-    // TODO Don't exit the STREAM server here until ilp-protocol-stream#146 is merged
-
-    // If the `ConnectionClose` packet happens to be rejected with T00
-    // (non-deterministic due to timing), the remote won't be closed.
-    // So, when the server is closed, the server will try to start a new send loop
-    // which will hang due to a bug since the client ILP address is unknown.
-    // await streamServer.close()
+    await streamServer.close()
   }, 20000)
 
   it('fails if no packets are fulfilled before idle timeout', async () => {
@@ -1794,15 +2551,15 @@ describe('payment execution', () => {
       amountToSend: new BigNumber(10000000),
       destinationAddress,
       sharedSecret,
-      slippage: 0,
       plugin: alice1,
+      slippage: 1,
+      prices: {},
     })
     const receipt = await pay()
 
     expect(receipt.error).toBe(PaymentError.ClosedByRecipient)
     expect(receipt.amountSent).toEqual(new BigNumber(0.2)) // Only $0.20 was received
     expect(receipt.amountDelivered).toEqual(new BigNumber(0.2)) // Only $0.20 was received
-    expect(receipt.amountInFlight).toEqual(new BigNumber(0))
 
     await app.shutdown()
     await streamServer.close()
@@ -1857,8 +2614,9 @@ describe('payment execution', () => {
       amountToSend: new BigNumber(100000000000),
       destinationAddress,
       sharedSecret,
-      slippage: 0,
+      slippage: 1,
       plugin: alice1,
+      prices: {},
     })
 
     // End the connection after 1 second
@@ -1866,12 +2624,10 @@ describe('payment execution', () => {
     setTimeout(() => serverConnection.end(), 500)
 
     const receipt = await pay()
-
     expect(receipt.error).toBe(PaymentError.ClosedByRecipient)
     expect(receipt.amountSent.isGreaterThan(1))
     expect(receipt.amountSent.isLessThan(100))
     expect(receipt.amountSent).toEqual(receipt.amountDelivered)
-    expect(receipt.amountInFlight).toEqual(new BigNumber(0))
 
     await app.shutdown()
     await streamServer.close()
@@ -1931,6 +2687,7 @@ describe('interledger.rs integration', () => {
         staticToken: 'password',
       },
     })
+    await plugin.connect()
 
     // Create account for sender to connect to
     await Axios.post(
@@ -1960,8 +2717,8 @@ describe('interledger.rs integration', () => {
     })
 
     const receipt = await pay()
+    expect(receipt.error).toBeUndefined()
     expect(+receipt.amountSent).toBe(amountToSend)
-    expect(+receipt.amountInFlight).toBe(0)
     expect(+receipt.amountDelivered).toBe(amountToSend) // Exchange rate is 1:1
 
     // Check the balance
@@ -2010,8 +2767,8 @@ describe('interledger4j integration', () => {
         accountId: 'receiver',
         accountRelationship: 'PEER',
         linkType: 'ILP_OVER_HTTP',
-        assetCode: 'USD',
-        assetScale: '2',
+        assetCode: 'XRP',
+        assetScale: '9',
         sendRoutes: true,
         receiveRoutes: true,
         customSettings: {
@@ -2047,8 +2804,8 @@ describe('interledger4j integration', () => {
         accountRelationship: 'CHILD',
         linkType: 'ILP_OVER_HTTP',
         assetCode: 'USD',
-        assetScale: '2',
-        maximumPacketAmount: '1',
+        assetScale: '6',
+        maximumPacketAmount: '400000', // $0.40
         sendRoutes: true,
         receiveRoutes: true,
         customSettings: {
@@ -2064,17 +2821,21 @@ describe('interledger4j integration', () => {
       }
     )
 
-    const amountToSend = 0.1 // $0.10 @ max packet amount of $0.01 => 10 packets
-    const { pay } = await quote({
+    const amountToSend = 98 // $98
+    const { pay, ...details } = await quote({
       plugin,
       paymentPointer: `http://localhost:8080/receiver`,
       amountToSend,
     })
 
     const receipt = await pay()
-    expect(+receipt.amountSent).toBe(amountToSend)
-    expect(+receipt.amountInFlight).toBe(0)
-    expect(+receipt.amountDelivered).toBe(amountToSend) // Exchange rate is 1:1
+    expect(receipt.error).toBeUndefined()
+    expect(receipt.amountSent.isEqualTo(amountToSend))
+    expect(receipt.amountSent.isLessThanOrEqualTo(details.maxSourceAmount))
+    expect(receipt.sourceAccount.assetCode).toBe('USD')
+    expect(receipt.sourceAccount.assetScale).toBe(6)
+    expect(receipt.destinationAccount.assetCode).toBe('XRP')
+    expect(receipt.destinationAccount.assetScale).toBe(9)
 
     // // Check the balance
     const { data } = await Axios({
@@ -2085,8 +2846,9 @@ describe('interledger4j integration', () => {
         password: adminPassword,
       },
     })
-    expect(data.accountBalance.netBalance).toBe('10')
-    expect(data.accountBalance.clearingBalance).toBe('10')
+
+    expect(+data.accountBalance.netBalance).toEqual(+receipt.amountDelivered.shiftedBy(9))
+    expect(+data.accountBalance.netBalance).toBeGreaterThanOrEqual(+details.minDeliveryAmount)
 
     await plugin.disconnect()
 

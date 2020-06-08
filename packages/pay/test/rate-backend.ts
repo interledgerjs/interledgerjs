@@ -1,31 +1,27 @@
+/* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/explicit-module-boundary-types */
 import { BackendInstance } from 'ilp-connector/dist/types/backend'
-import { AccountInfo } from 'ilp-connector/dist/types/accounts'
 import { getRate, AssetPrices } from '../src/rates'
 import { Injector } from 'reduct'
 import Config from 'ilp-connector/dist/services/config'
 import Accounts from 'ilp-connector/dist/services/accounts'
 
 export class CustomBackend implements BackendInstance {
-  protected getPrices: () => AssetPrices
-  protected getSpread: () => number
-  protected getInfo: (accountId: string) => AccountInfo | undefined
+  protected deps: Injector
+
+  protected prices: AssetPrices = {}
+  protected spread?: number
 
   constructor(deps: Injector) {
-    const config = deps(Config)
-    const accounts = deps(Accounts)
-
-    this.getPrices = () => (config.backendConfig ? config.backendConfig.prices : {})
-    this.getSpread = () => config.spread ?? 0
-    this.getInfo = (account: string) => accounts.getInfo(account)
+    this.deps = deps
   }
 
-  async getRate(sourceAccount: string, destinationAccount: string) {
-    const sourceInfo = this.getInfo(sourceAccount)
+  async getRate(sourceAccount: string, destinationAccount: string): Promise<number> {
+    const sourceInfo = this.deps(Accounts).getInfo(sourceAccount)
     if (!sourceInfo) {
       throw new Error('unable to fetch account info for source account.')
     }
 
-    const destInfo = this.getInfo(destinationAccount)
+    const destInfo = this.deps(Accounts).getInfo(destinationAccount)
     if (!destInfo) {
       throw new Error('unable to fetch account info for destination account.')
     }
@@ -35,13 +31,22 @@ export class CustomBackend implements BackendInstance {
       sourceInfo.assetScale,
       destInfo.assetCode,
       destInfo.assetScale,
-      this.getPrices()
+      this.prices
     )
     if (!rate) {
       throw new Error('Rate unavailable')
     }
 
-    return rate.toNumber() * (1 - this.getSpread())
+    const spread = this.spread ?? this.deps(Config).spread ?? 0
+    return rate * (1 - spread)
+  }
+
+  setPrices(prices: AssetPrices): void {
+    this.prices = prices
+  }
+
+  setSpread(spread: number): void {
+    this.spread = spread
   }
 
   async connect() {}
