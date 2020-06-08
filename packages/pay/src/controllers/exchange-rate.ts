@@ -14,7 +14,7 @@ export class ExchangeRateCalculator {
   private sentAmounts = new Map<bigint, Int>()
 
   /** Mapping of packet received amounts to its most recent source amount */
-  private receivedAmounts = new Map<bigint, Int>()
+  private receivedAmounts = new Map<bigint, PositiveInt>()
 
   constructor(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger) {
     this.upperBoundRate = new Ratio(receivedAmount.add(Int.ONE), sourceAmount)
@@ -104,19 +104,20 @@ export class ExchangeRateCalculator {
    *     delivers at least the given destination amount, if the rate hasn't fluctuated.
    * Returns `undefined` if the rate is 0 and it may not be possible to deliver anything.
    */
-  estimateSourceAmount(destinationAmount: Int): [Int, Int] | undefined {
-    // If the exchange rate is a packet that delivered 0, the source amount is undefined
-    const lowerBoundRate = this.lowerBoundRate.reciprocal()
-    const upperBoundRate = this.upperBoundRate.reciprocal()
-    if (!lowerBoundRate || !upperBoundRate) {
-      return
-    }
-
+  estimateSourceAmount(destinationAmount: PositiveInt): [PositiveInt, PositiveInt] | undefined {
     // If this amount was received in a previous packet, return the source amount of that packet
     const amountSent = this.receivedAmounts.get(destinationAmount.value)
     if (amountSent) {
       return [amountSent, amountSent]
     }
+
+    // If the exchange rate is a packet that delivered 0, the source amount is undefined
+    if (!this.lowerBoundRate.isPositive() || !this.upperBoundRate.isPositive()) {
+      return
+    }
+
+    const lowerBoundRate = this.lowerBoundRate.reciprocal()
+    const upperBoundRate = this.upperBoundRate.reciprocal()
 
     const lowEndSource = destinationAmount.multiplyFloor(upperBoundRate).add(Int.ONE)
     const highEndSource = destinationAmount.multiplyCeil(lowerBoundRate)

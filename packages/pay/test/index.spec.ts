@@ -7,14 +7,13 @@ import reduct from 'reduct'
 import { CustomBackend } from './rate-backend'
 import { MirrorPlugin } from './plugin'
 import { fetchCoinCapRates } from '../src/rates/coincap'
-import { getRate } from '../src/rates'
 import { quote, PaymentError } from '../src'
 import { describe, it, expect, jest } from '@jest/globals'
 import express from 'express'
 import https from 'https'
 import { createCertificate, CertificateCreationResult } from 'pem'
-import { Errors, serializeIlpFulfill, deserializeIlpPrepare, serializeIlpReject } from 'ilp-packet'
-import { sleep } from '../src/utils'
+import { serializeIlpFulfill, deserializeIlpPrepare, serializeIlpReject } from 'ilp-packet'
+import { sleep, IlpError } from '../src/utils'
 import {
   randomBytes,
   generateFulfillment,
@@ -294,7 +293,7 @@ describe('setup/quoting flow', () => {
         destinationAddress: 'test.unknown',
         sharedSecret: Buffer.alloc(32),
       })
-    ).rejects.toBe(PaymentError.IncompatibleIntegerledgerNetworks)
+    ).rejects.toBe(PaymentError.IncompatibleInterledgerNetworks)
     expect(!senderPlugin.isConnected())
 
     await app.shutdown()
@@ -609,7 +608,7 @@ describe('setup/quoting flow', () => {
       ])
 
       return serializeIlpReject({
-        code: Errors.codes.F99_APPLICATION_ERROR,
+        code: IlpError.F99_APPLICATION_ERROR,
         message: '',
         triggeredBy: '',
         data: await streamReply.serializeAndEncrypt(encryptionKey),
@@ -660,7 +659,7 @@ describe('setup/quoting flow', () => {
 
     receiverPlugin2.registerDataHandler(async () =>
       serializeIlpReject({
-        code: Errors.codes.T01_PEER_UNREACHABLE,
+        code: IlpError.T01_PEER_UNREACHABLE,
         message: '',
         triggeredBy: '',
         data: Buffer.alloc(0),
@@ -679,6 +678,77 @@ describe('setup/quoting flow', () => {
 
     await app.shutdown()
   }, 15000)
+
+  it('fails if max packet amount is 0', async () => {
+    const [senderPlugin1, maxPacketPlugin] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const senderPlugin2 = new MirrorPlugin()
+    senderPlugin2.mirror = senderPlugin1
+
+    const app = createApp({
+      ilpAddress: 'private.larry',
+      backend: 'one-to-one',
+      spread: 0,
+      accounts: {
+        sender: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 0,
+          plugin: senderPlugin2,
+        },
+        receiver: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 0,
+          plugin: receiverPlugin1,
+        },
+      },
+    })
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: receiverPlugin2,
+    })
+
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret()
+
+    // `ilp-connector` doesn't support 0 max packet amount,
+    // so use a custom middleware to test this
+    maxPacketPlugin.registerDataHandler(async (data) => {
+      const prepare = deserializeIlpPrepare(data)
+      if (+prepare.amount > 0) {
+        const writer = new Writer(16)
+        writer.writeUInt64(prepare.amount) // Amount received
+        writer.writeUInt64(0) // Maximum
+
+        return serializeIlpReject({
+          code: IlpError.F08_AMOUNT_TOO_LARGE,
+          message: '',
+          triggeredBy: '',
+          data: writer.getBuffer(),
+        })
+      } else {
+        return senderPlugin2.dataHandler(data)
+      }
+    })
+
+    await expect(
+      quote({
+        plugin: senderPlugin1,
+        amountToSend: 100,
+        destinationAddress,
+        sharedSecret,
+      })
+    ).rejects.toBe(PaymentError.ConnectorError)
+    expect(!senderPlugin1.isConnected())
+
+    await app.shutdown()
+    await streamServer.close()
+  })
 
   it('fails if recipient never shared destination asset details', async () => {
     const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
@@ -1179,7 +1249,7 @@ describe('setup/quoting flow', () => {
       const prepare = deserializeIlpPrepare(data)
       if (+prepare.amount > maxPacketAmount) {
         return serializeIlpReject({
-          code: Errors.codes.F08_AMOUNT_TOO_LARGE,
+          code: IlpError.F08_AMOUNT_TOO_LARGE,
           message: '',
           triggeredBy: '',
           data: Buffer.alloc(0),
@@ -1375,7 +1445,7 @@ describe('fixed source payments', () => {
       if (prepare.amount === '2' && !failedOnFinalPacket) {
         failedOnFinalPacket = true
         return serializeIlpReject({
-          code: Errors.codes.T02_PEER_BUSY,
+          code: IlpError.T02_PEER_BUSY,
           message: '',
           triggeredBy: '',
           data: Buffer.alloc(0),
@@ -1614,9 +1684,7 @@ describe('fixed delivery payments', () => {
       plugin: bob2,
     })
 
-    const amountToDeliver = new BigNumber(10)
-      .times(getRate('USD', 0, 'BTC', 0, prices)!)
-      .decimalPlaces(8)
+    const amountToDeliver = new BigNumber(0.00107643) // ~$10 in BTC
     const connectionPromise = streamServer.acceptConnection()
     streamServer.on('connection', (connection: Connection) => {
       connection.on('stream', (stream: DataAndMoneyStream) => {
@@ -1779,8 +1847,11 @@ describe('fixed delivery payments', () => {
     // Ensure at least the invoice amount was delivered
     expect(receipt.amountDelivered.isGreaterThanOrEqualTo(amountToDeliver))
 
-    // Ensure over-delivery is minimized to the equivalent of a single unit in the source asset
-    const maxOverDeliveryAmount = getRate('BTC', 8, 'XRP', 9, prices)!
+    // Ensure over-delivery is minimized to the equivalent of a single source unit, 1 satoshi
+    const maxOverDeliveryAmount = new BigNumber(1)
+      .shiftedBy(-8)
+      .times(quoteDetails.minExchangeRate)
+      .integerValue(BigNumber.ROUND_CEIL)
     expect(receipt.amountDelivered.isLessThanOrEqualTo(amountToDeliver.plus(maxOverDeliveryAmount)))
 
     expect(receipt.amountSent.isLessThanOrEqualTo(quoteDetails.maxSourceAmount))
@@ -1963,7 +2034,7 @@ describe('fixed delivery payments', () => {
         // On test packets, reject and ACK as normal so the quote succeeds
         const reject = new Packet(streamPacket.sequence, IlpPacketType.Reject, prepare.amount)
         return serializeIlpReject({
-          code: Errors.codes.F99_APPLICATION_ERROR,
+          code: IlpError.F99_APPLICATION_ERROR,
           message: '',
           triggeredBy: '',
           data: await reject.serializeAndEncrypt(encryptionKey),
@@ -2045,7 +2116,7 @@ describe('fixed delivery payments', () => {
         // On test packets, reject and ACK as normal so the quote succeeds
         const reject = new Packet(streamPacket.sequence, IlpPacketType.Reject, prepare.amount)
         return serializeIlpReject({
-          code: Errors.codes.F99_APPLICATION_ERROR,
+          code: IlpError.F99_APPLICATION_ERROR,
           message: '',
           triggeredBy: '',
           data: await reject.serializeAndEncrypt(encryptionKey),
@@ -2135,6 +2206,7 @@ describe('fixed delivery payments', () => {
       sharedSecret,
       slippage: 0.015, // 1.5% slippage allowed
       plugin: senderPlugin1,
+      prices,
     })
 
     const serverConnection = await connectionPromise
@@ -2264,7 +2336,7 @@ describe('payment execution', () => {
         destinationAddress: 'private.unknown', // Non-routable address
         sharedSecret: Buffer.alloc(32),
       })
-    ).rejects.toBe(PaymentError.TerminalReject)
+    ).rejects.toBe(PaymentError.ConnectorError)
 
     await app.shutdown()
   })
@@ -2311,7 +2383,7 @@ describe('payment execution', () => {
         writer.writeUInt64(1) // Maximum
 
         return serializeIlpReject({
-          code: Errors.codes.F08_AMOUNT_TOO_LARGE,
+          code: IlpError.F08_AMOUNT_TOO_LARGE,
           message: '',
           triggeredBy: '',
           data: writer.getBuffer(),
@@ -2324,7 +2396,7 @@ describe('payment execution', () => {
         writer.writeUInt64(1) // Maximum
 
         return serializeIlpReject({
-          code: Errors.codes.F08_AMOUNT_TOO_LARGE,
+          code: IlpError.F08_AMOUNT_TOO_LARGE,
           message: '',
           triggeredBy: '',
           data: writer.getBuffer(),
@@ -2854,5 +2926,5 @@ describe('interledger4j integration', () => {
 
     await connectorContainer.stop()
     await redisContainer.stop()
-  }, 30000)
+  }, 60000)
 })

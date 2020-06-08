@@ -49,7 +49,7 @@ const createLogger = function (namespace: string) {
 interface ModuleExport {
   (namespace: string): Logger
   default: ModuleExport
-  Logger: Function
+  Logger: typeof Logger
   formatters: debug.Formatters
 }
 

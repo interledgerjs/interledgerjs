@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types */
 import { Brand } from '../utils'
-
-// TODO Also, prevent paying to `peer` addresses?
 
 const ALLOCATION_SCHEMES = [
   'g',
@@ -14,13 +12,13 @@ const ALLOCATION_SCHEMES = [
   'local',
   'peer',
   'self',
-]
+] as const
 
 const SHARED_SECRET_BYTES = 32
 
-/** Are the allocation schemes of 2 ILP addresses compatible? Are they on the same network? */
-export const areSchemesCompatible = (address1: string, address2: string) =>
-  address1.split('.')[0] === address2.split('.')[0]
+/** Get prefix or allocation scheme of the given ILP address */
+export const getScheme = (address: IlpAddress): typeof ALLOCATION_SCHEMES[number] =>
+  address.split('.')[0] as typeof ALLOCATION_SCHEMES[number]
 
 export type IlpAddress = Brand<string, 'IlpAddress'>
 
@@ -28,7 +26,7 @@ export const isValidIlpAddress = (o: any): o is IlpAddress =>
   typeof o === 'string' &&
   !/[^A-Za-z0-9._\-~]/.test(o) && // Valid characters: alphanumeric and "_ ~ - ."
   o.split('.').length >= 2 && // At least two segments
-  ALLOCATION_SCHEMES.includes(o.split('.')[0]) && // First segment is a valid allocation scheme
+  (ALLOCATION_SCHEMES as readonly string[]).includes(o.split('.')[0]) && // First segment is a valid allocation scheme
   o.length <= 1023 &&
   o[o.length - 1] !== '.' // Doesn't end in "."
 

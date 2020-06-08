@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/explicit-module-boundary-types */
 import { BackendInstance } from 'ilp-connector/dist/types/backend'
-import { getRate, AssetPrices } from '../src/rates'
 import { Injector } from 'reduct'
 import Config from 'ilp-connector/dist/services/config'
 import Accounts from 'ilp-connector/dist/services/accounts'
@@ -8,7 +7,9 @@ import Accounts from 'ilp-connector/dist/services/accounts'
 export class CustomBackend implements BackendInstance {
   protected deps: Injector
 
-  protected prices: AssetPrices = {}
+  protected prices: {
+    [symbol: string]: number
+  } = {}
   protected spread?: number
 
   constructor(deps: Injector) {
@@ -26,22 +27,16 @@ export class CustomBackend implements BackendInstance {
       throw new Error('unable to fetch account info for destination account.')
     }
 
-    const rate = getRate(
-      sourceInfo.assetCode,
-      sourceInfo.assetScale,
-      destInfo.assetCode,
-      destInfo.assetScale,
-      this.prices
-    )
-    if (!rate) {
-      throw new Error('Rate unavailable')
-    }
+    const sourcePrice = this.prices[sourceInfo.assetCode] ?? 1
+    const destPrice = this.prices[destInfo.assetCode] ?? 1
+
+    const rate = (sourcePrice / destPrice) * 10 ** (destInfo.assetScale - sourceInfo.assetScale)
 
     const spread = this.spread ?? this.deps(Config).spread ?? 0
     return rate * (1 - spread)
   }
 
-  setPrices(prices: AssetPrices): void {
+  setPrices(prices: { [symbol: string]: number }): void {
     this.prices = prices
   }
 

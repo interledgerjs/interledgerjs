@@ -1,11 +1,5 @@
 import { StreamController } from '.'
-
-class PromiseResolver {
-  resolve!: Function
-  readonly promise = new Promise<void>((resolve) => {
-    this.resolve = resolve
-  })
-}
+import { PromiseResolver } from '../utils'
 
 /** Wrap all pending requests in Promises to await their completion */
 export class PendingRequestTracker implements StreamController {
@@ -16,8 +10,8 @@ export class PendingRequestTracker implements StreamController {
     return [...this.inFlightRequests]
   }
 
-  applyRequest() {
-    const { resolve, promise } = new PromiseResolver()
+  applyRequest(): () => void {
+    const { resolve, promise } = new PromiseResolver<void>()
     this.inFlightRequests.add(promise)
 
     return () => {

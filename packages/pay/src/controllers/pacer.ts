@@ -1,5 +1,5 @@
 import { StreamController, StreamReply, SendState } from '.'
-import { Errors } from 'ilp-packet'
+import { IlpError } from '../utils'
 
 /**
  * Flow controller to send packets at a consistent cadence
@@ -53,7 +53,7 @@ export class PacingController implements StreamController {
     return this.lastPacketSentTime + delayDuration
   }
 
-  nextState() {
+  nextState(): SendState {
     const exceedsMaxInFlight = this.numberInFlight + 1 > PacingController.MAX_INFLIGHT_PACKETS
     if (exceedsMaxInFlight) {
       return SendState.Wait
@@ -66,7 +66,7 @@ export class PacingController implements StreamController {
     return SendState.Ready
   }
 
-  applyRequest() {
+  applyRequest(): (reply: StreamReply) => void {
     const sentTime = Date.now()
     this.lastPacketSentTime = sentTime
     this.numberInFlight++
@@ -87,7 +87,7 @@ export class PacingController implements StreamController {
       if (
         reply.isReject() &&
         reply.ilpReject.code[0] === 'T' &&
-        reply.ilpReject.code !== Errors.codes.T04_INSUFFICIENT_LIQUIDITY
+        reply.ilpReject.code !== IlpError.T04_INSUFFICIENT_LIQUIDITY
       ) {
         const reducedRate = Math.max(
           PacingController.MIN_PACKETS_PER_SECOND,
@@ -100,7 +100,7 @@ export class PacingController implements StreamController {
         )
         this.packetsPerSecond = reducedRate
       }
-      // If a packet got through the packet, additive increase of sending rate, up to some maximum
+      // If the packet got through, additive increase of sending rate, up to some maximum
       else if (reply.isAuthentic()) {
         this.packetsPerSecond = Math.min(
           PacingController.MAX_PACKETS_PER_SECOND,

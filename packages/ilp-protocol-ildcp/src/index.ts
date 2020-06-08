@@ -1,6 +1,8 @@
 import * as IlpPacket from 'ilp-packet'
 import { Predictor, Reader, Writer, WriterInterface } from 'oer-utils'
-const debug = require('debug')('ilp-protocol-ildcp')
+import debug = require('debug')
+
+const log = debug('ilp-protocol-ildcp')
 
 const ILDCP_DESTINATION = 'peer.config'
 const PEER_PROTOCOL_FULFILLMENT = Buffer.alloc(32)
@@ -104,16 +106,16 @@ const fetch = async (
 
   if (data[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
     const { triggeredBy, message } = IlpPacket.deserializeIlpReject(data)
-    debug('IL-DCP request rejected. triggeredBy=%s errorMessage=%s', triggeredBy, message)
+    log('IL-DCP request rejected. triggeredBy=%s errorMessage=%s', triggeredBy, message)
     throw new Error('IL-DCP failed: ' + message)
   } else if (data[0] !== IlpPacket.Type.TYPE_ILP_FULFILL) {
-    debug('invalid response type. type=%s', data[0])
+    log('invalid response type. type=%s', data[0])
     throw new Error('IL-DCP error, unable to retrieve client configuration.')
   }
 
   const { clientAddress, assetScale, assetCode } = deserializeIldcpResponse(data)
 
-  debug(
+  log(
     'received client info. clientAddress=%s assetScale=%s assetCode=%s',
     clientAddress,
     assetScale,
@@ -142,7 +144,7 @@ const serve = async ({ requestPacket, handler, serverAddress }: ServeSettings): 
     return serializeIldcpResponse(info)
   } catch (err) {
     const errInfo = err && typeof err === 'object' && err.stack ? err.stack : err
-    debug('error while handling ildcp request. error=%s', errInfo)
+    log('error while handling ildcp request. error=%s', errInfo)
 
     return IlpPacket.serializeIlpReject({
       code: 'F00',

@@ -13,7 +13,6 @@ import {
 import createLogger from 'ilp-logger'
 import {
   serializeIlpReject,
-  Errors,
   deserializeIlpPrepare,
   serializeIlpFulfill,
   serializeIlpPrepare,
@@ -28,11 +27,28 @@ import {
 } from 'ilp-protocol-stream/dist/src/crypto'
 import { IlpAddress } from '../src/setup/shared'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { SequenceController } from '../src/controllers/sequence'
-import { Int } from '../src/utils'
+import { Int, IlpError } from '../src/utils'
+import { FailureController } from '../src/controllers/failure'
+import { AccountController } from '../src/controllers/asset-details'
+import { AssetScale } from '../src/setup/open-payments'
+import { DataAndMoneyStream } from 'ilp-protocol-stream'
 
 const destinationAddress = 'private.bob' as IlpAddress
 const sharedSecret = randomBytes(32)
+
+const controllers: ControllerMap = new Map()
+controllers.set(
+  AccountController,
+  new AccountController(
+    {
+      ilpAddress: 'private.alice' as IlpAddress,
+      assetScale: 2 as AssetScale,
+      assetCode: 'ABC',
+    },
+    destinationAddress
+  )
+)
+controllers.set(FailureController, new FailureController())
 
 describe('handles requests', () => {
   it('acknowledges authentic incoming ILP Prepare packets', async () => {
@@ -41,12 +57,7 @@ describe('handles requests', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    await createConnection(
-      receiverPlugin,
-      new Map() as ControllerMap,
-      sharedSecret,
-      destinationAddress
-    )
+    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
 
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
@@ -71,7 +82,7 @@ describe('handles requests', () => {
       .sendData(serializeIlpPrepare(ilpPrepare))
       .then(deserializeIlpReject)
 
-    expect(ilpReply.code).toBe(Errors.codes.F99_APPLICATION_ERROR)
+    expect(ilpReply.code).toBe(IlpError.F99_APPLICATION_ERROR)
 
     const streamReply = await Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
 
@@ -81,18 +92,38 @@ describe('handles requests', () => {
     expect(streamReply.frames.length).toBe(0)
   })
 
+  it('rejects incoming data that is not an ILP Prepare', async () => {
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
+
+    await senderPlugin.connect()
+    await receiverPlugin.connect()
+
+    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
+
+    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
+
+    const ilpReply = await senderPlugin
+      .sendData(
+        serializeIlpFulfill({
+          fulfillment: randomBytes(32),
+          data: randomBytes(50),
+        })
+      )
+      .then(deserializeIlpReject)
+
+    expect(ilpReply.code).toBe(IlpError.F01_INVALID_PACKET)
+
+    const streamReply = Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
+    await expect(streamReply).rejects.toBeInstanceOf(Error)
+  })
+
   it('rejects incoming ILP Prepare packets that fail decryption', async () => {
     const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    await createConnection(
-      receiverPlugin,
-      new Map() as ControllerMap,
-      sharedSecret,
-      destinationAddress
-    )
+    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
 
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
 
@@ -108,7 +139,7 @@ describe('handles requests', () => {
       .sendData(serializeIlpPrepare(ilpPrepare))
       .then(deserializeIlpReject)
 
-    expect(ilpReply.code).toBe(Errors.codes.F06_UNEXPECTED_PAYMENT)
+    expect(ilpReply.code).toBe(IlpError.F06_UNEXPECTED_PAYMENT)
 
     const streamReply = Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
     await expect(streamReply).rejects.toBeInstanceOf(Error)
@@ -120,12 +151,7 @@ describe('handles requests', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    await createConnection(
-      receiverPlugin,
-      new Map() as ControllerMap,
-      sharedSecret,
-      destinationAddress
-    )
+    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
 
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
 
@@ -143,7 +169,7 @@ describe('handles requests', () => {
       .sendData(serializeIlpPrepare(ilpPrepare))
       .then(deserializeIlpReject)
 
-    expect(ilpReply.code).toBe(Errors.codes.F99_APPLICATION_ERROR)
+    expect(ilpReply.code).toBe(IlpError.F99_APPLICATION_ERROR)
 
     const streamReply = Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
     await expect(streamReply).rejects.toBeInstanceOf(Error)
@@ -151,6 +177,45 @@ describe('handles requests', () => {
 })
 
 describe('validates replies', () => {
+  it('returns F01 if reply is not Fulfill or Reject', async () => {
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
+
+    await senderPlugin.connect()
+    await receiverPlugin.connect()
+
+    const connection = await createConnection(
+      senderPlugin,
+      controllers,
+      sharedSecret,
+      destinationAddress
+    )
+
+    receiverPlugin.registerDataHandler(async () =>
+      serializeIlpPrepare({
+        destination: 'private.foo',
+        executionCondition: randomBytes(32),
+        expiresAt: new Date(Date.now() + 10000),
+        amount: '1',
+        data: Buffer.alloc(0),
+      })
+    )
+
+    const reply = await connection.sendRequest({
+      sequence: 20,
+      sourceAmount: Int.fromNumber(100)!,
+      minDestinationAmount: Int.fromNumber(99)!,
+      isFulfillable: true,
+      requestFrames: [],
+      log: createLogger('ilp-pay'),
+    })
+
+    expect(reply.destinationAmount).toBeUndefined()
+    expect(reply.frames).toBeUndefined()
+
+    expect(reply.isReject())
+    expect((reply as StreamReject).ilpReject.code).toBe(IlpError.F01_INVALID_PACKET)
+  })
+
   it('returns R00 if packet times out', async () => {
     const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
@@ -159,7 +224,7 @@ describe('validates replies', () => {
 
     const connection = await createConnection(
       senderPlugin,
-      new Map() as ControllerMap,
+      controllers,
       sharedSecret,
       destinationAddress,
       () => new Date(Date.now() + 3000) // Short expiry so test doesn't take forever
@@ -181,7 +246,7 @@ describe('validates replies', () => {
     expect(reply.frames).toBeUndefined()
 
     expect(reply.isReject())
-    expect((reply as StreamReject).ilpReject.code).toBe(Errors.codes.R00_TRANSFER_TIMED_OUT)
+    expect((reply as StreamReject).ilpReject.code).toBe(IlpError.R00_TRANSFER_TIMED_OUT)
   })
 
   it('returns T00 if the plugin throws an error', async () => {
@@ -192,7 +257,7 @@ describe('validates replies', () => {
 
     const connection = await createConnection(
       senderPlugin,
-      new Map() as ControllerMap,
+      controllers,
       sharedSecret,
       destinationAddress
     )
@@ -214,7 +279,7 @@ describe('validates replies', () => {
     expect(reply.frames).toBeUndefined()
 
     expect(reply.isReject())
-    expect((reply as StreamReject).ilpReject.code).toBe(Errors.codes.T00_INTERNAL_ERROR)
+    expect((reply as StreamReject).ilpReject.code).toBe(IlpError.T00_INTERNAL_ERROR)
   })
 
   it('returns F05 on invalid fulfillment', async () => {
@@ -225,7 +290,7 @@ describe('validates replies', () => {
 
     const connection = await createConnection(
       senderPlugin,
-      new Map() as ControllerMap,
+      controllers,
       sharedSecret,
       destinationAddress
     )
@@ -250,7 +315,7 @@ describe('validates replies', () => {
     expect(reply.frames).toBeUndefined()
 
     expect(reply.isReject())
-    expect((reply as StreamReject).ilpReject.code).toBe(Errors.codes.F05_WRONG_CONDITION)
+    expect((reply as StreamReject).ilpReject.code).toBe(IlpError.F05_WRONG_CONDITION)
   })
 
   it('discards STREAM reply with invalid sequence', async () => {
@@ -264,7 +329,7 @@ describe('validates replies', () => {
 
     const connection = await createConnection(
       senderPlugin,
-      new Map() as ControllerMap,
+      controllers,
       sharedSecret,
       destinationAddress
     )
@@ -309,7 +374,7 @@ describe('validates replies', () => {
 
     const connection = await createConnection(
       senderPlugin,
-      new Map() as ControllerMap,
+      controllers,
       sharedSecret,
       destinationAddress
     )
@@ -352,7 +417,7 @@ describe('validates replies', () => {
 
     const connection = await createConnection(
       senderPlugin,
-      new Map() as ControllerMap,
+      controllers,
       sharedSecret,
       destinationAddress
     )
@@ -360,7 +425,7 @@ describe('validates replies', () => {
     const replyData = randomBytes(100)
     receiverPlugin.registerDataHandler(async () =>
       serializeIlpReject({
-        code: Errors.codes.F07_CANNOT_RECEIVE,
+        code: IlpError.F07_CANNOT_RECEIVE,
         message: '',
         triggeredBy: '',
         data: replyData,
@@ -381,7 +446,7 @@ describe('validates replies', () => {
     expect(reply.frames).toBeUndefined()
 
     expect(reply.isReject())
-    expect((reply as StreamReject).ilpReject.code).toBe(Errors.codes.F07_CANNOT_RECEIVE)
+    expect((reply as StreamReject).ilpReject.code).toBe(IlpError.F07_CANNOT_RECEIVE)
     expect((reply as StreamReject).ilpReject.data).toEqual(replyData)
   })
 })
@@ -401,8 +466,6 @@ it('catches plugin disconnect errors', async () => {
       return true
     },
   }
-
-  const controllers: ControllerMap = new Map().set(SequenceController, new SequenceController())
 
   const connection = await createConnection(plugin, controllers, sharedSecret, destinationAddress)
 

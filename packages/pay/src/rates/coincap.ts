@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosResponse } from 'axios'
-import { FetchPrices, AssetPrices, isValidRate, ValidRate } from '.'
+import { NonNegativeNumber, isNonNegativeNumber } from '../utils'
 
 const DAY_DURATION_MS = 24 * 60 * 60 * 1000
 
@@ -12,14 +12,18 @@ const COINCAP_RATES_URL = 'https://api.coincap.io/v2/rates'
 
 interface CoinCapResponse {
   timestamp: number
-  data: {
-    symbol: string
-    rateUsd?: string
-    priceUsd?: string
-  }[]
+  data: (
+    | {
+        symbol: string
+        rateUsd: string
+      }
+    | {
+        symbol: string
+        priceUsd: string
+      }
+  )[]
 }
 
-// TODO Could I use purify schemas feature instead?
 const isValidResponse = (o: any): o is CoinCapResponse =>
   typeof o === 'object' &&
   o !== null &&
@@ -28,26 +32,45 @@ const isValidResponse = (o: any): o is CoinCapResponse =>
   o.data.every(
     (el: any) =>
       typeof el.symbol === 'string' &&
-      ['string', 'undefined'].includes(typeof el.priceUsd) &&
-      ['string', 'undefined'].includes(typeof el.rateUsd)
+      (typeof el.priceUsd === 'string' || typeof el.rateUsd === 'string')
   )
 
-const parseResponse = ({ data }: AxiosResponse<any>): AssetPrices => {
+const parseResponse = ({
+  data,
+}: AxiosResponse<any>): {
+  [symbol: string]: NonNegativeNumber
+} => {
   const minimumUpdatedTimestamp = Date.now() - DAY_DURATION_MS
   if (!isValidResponse(data) || data.timestamp < minimumUpdatedTimestamp) {
     return {}
   }
 
   return data.data
-    .map((pair): [string, number] => [pair.symbol, +(pair.priceUsd || pair.rateUsd || NaN)])
-    .filter((pair): pair is [string, ValidRate] => isValidRate(pair[1]))
-    .map(([symbol, price]) => ({
-      [symbol]: price,
-    }))
-    .reduce((acc, cur) => ({ ...acc, ...cur }))
+    .map((pair): [string, number] => [
+      pair.symbol,
+      'priceUsd' in pair ? +pair.priceUsd : +pair.rateUsd,
+    ])
+    .filter((pair): pair is [string, NonNegativeNumber] => isNonNegativeNumber(pair[1]))
+    .reduce(
+      (acc, [symbol, price]) => ({
+        ...acc,
+        [symbol]: price,
+      }),
+      {}
+    )
 }
 
-export const fetchCoinCapRates: FetchPrices = async () => ({
-  ...parseResponse(await axios.get(COINCAP_ASSETS_URL)),
-  ...parseResponse(await axios.get(COINCAP_RATES_URL)),
+export const fetchCoinCapRates = async (): Promise<{
+  [symbol: string]: NonNegativeNumber
+}> => ({
+  ...parseResponse(
+    await axios.get(COINCAP_ASSETS_URL, {
+      timeout: 5000,
+    })
+  ),
+  ...parseResponse(
+    await axios.get(COINCAP_RATES_URL, {
+      timeout: 5000,
+    })
+  ),
 })

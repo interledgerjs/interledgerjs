@@ -15,9 +15,9 @@ type LongValue = Long | number | string
 
 class Writer implements WriterInterface {
   // Largest value that can be written as a variable-length unsigned integer
-  static MAX_SAFE_INTEGER: number = 0x1fffffffffffff
-  static MIN_SAFE_INTEGER: number = -0x1fffffffffffff
-  static MIN_BUFFER_SIZE: number = 32
+  static MAX_SAFE_INTEGER = 0x1fffffffffffff
+  static MIN_SAFE_INTEGER = -0x1fffffffffffff
+  static MIN_BUFFER_SIZE = 32
 
   // The UINT_RANGES and INT_RANGES are only used up to util.MAX_SAFE_BYTES.
   // After that the buffer length is determined using getUIntBufferSize and

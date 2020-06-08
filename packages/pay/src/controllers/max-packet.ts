@@ -1,11 +1,20 @@
 import { Reader } from 'oer-utils'
-import { StreamController, StreamReject, StreamReply, StreamRequest } from './'
-import { toBigNumber, Integer, SAFE_ZERO } from '../utils'
-import BigNumber from 'bignumber.js'
-import { Errors } from 'ilp-packet'
+import {
+  StreamController,
+  StreamReject,
+  StreamReply,
+  StreamRequest,
+  SendState,
+  StreamRequestBuilder,
+} from './'
+import { Int, IlpError, PositiveInt } from '../utils'
+import { Logger } from 'ilp-logger'
+import { PaymentError } from '..'
 
 /** How the maximum packet amount is known or discovered */
 enum MaxPacketState {
+  /** Initial state before any F08 errors have been encountered */
+  UnknownMax,
   /** F08 errors included metadata to communicate the precise max packet amount */
   PreciseMax,
   /**
@@ -13,8 +22,6 @@ enum MaxPacketState {
    * Discover the exact max packet amount through probing.
    */
   ImpreciseMax,
-  /** No F08 errors have been encountered yet */
-  UnknownMax,
 }
 
 /** Max packet amount and how it was discovered */
@@ -22,12 +29,12 @@ type MaxPacketAmount =
   | {
       type: MaxPacketState.PreciseMax
       /** Precise max packet amount communicated from F08 errors */
-      maxPacketAmount: Integer
+      maxPacketAmount: PositiveInt
     }
   | {
       type: MaxPacketState.ImpreciseMax
       /** Max packet amount is known to be less than this, but isn't known precisely */
-      maxPacketAmount: Integer
+      maxPacketAmount: PositiveInt
     }
   | {
       type: MaxPacketState.UnknownMax
@@ -40,147 +47,145 @@ export class MaxPacketAmountController implements StreamController {
     type: MaxPacketState.UnknownMax,
   }
 
-  /** Greatest amount the recipient acknowledged to have received */
-  private greatestAckAmount = SAFE_ZERO
+  /**
+   * Greatest amount the recipient acknowledged to have received.
+   * Note: this is always reduced so it's never greater than the max packet amount
+   */
+  private verifiedPathCapacity = Int.ZERO
+
+  /** Is the max packet amount 0 and impossible to send value over this path? */
+  private noCapacityAvailable = false
+
+  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
+    if (this.noCapacityAvailable) {
+      builder.sendConnectionClose()
+      return PaymentError.ConnectorError
+    }
+
+    return SendState.Ready
+  }
 
   /**
    * Return a limit on the amount of the next packet: the precise max packet amount,
    * or a probe amount if we're still discovering the precise max packet amount.
    */
-  getMaxPacketAmount(): Integer | undefined {
+  getMaxPacketAmount(): PositiveInt {
     switch (this.state.type) {
       case MaxPacketState.PreciseMax:
         return this.state.maxPacketAmount
 
       // Use a binary search to discover the precise max
       case MaxPacketState.ImpreciseMax:
+        // Always positive: if verifiedCapacity=0, maxPacketAmount / 2
+        // must round up to 1, or if verifiedCapacity=maxPacketAmount,
+        // verifiedCapacity is positive, so adding it will always be positive
         return this.state.maxPacketAmount
-          .minus(BigNumber.min(this.state.maxPacketAmount, this.greatestAckAmount))
-          .dividedBy(2)
-          .integerValue(BigNumber.ROUND_CEIL)
-          .plus(this.greatestAckAmount) as Integer
+          .subtract(this.verifiedPathCapacity)
+          .divideCeil(Int.TWO)
+          .add(this.verifiedPathCapacity) as PositiveInt
+
+      case MaxPacketState.UnknownMax:
+        return Int.MAX_U64
     }
   }
 
   /** Have we discovered the precise max packet amount of the path? */
   isPreciseMaxKnown(): boolean {
-    return this.state.type === MaxPacketState.PreciseMax
+    return (
+      (this.state.type === MaxPacketState.PreciseMax ||
+        this.state.type === MaxPacketState.UnknownMax) &&
+      this.verifiedPathCapacity.isPositive()
+    )
   }
 
   applyRequest({ sourceAmount }: StreamRequest) {
-    return (reply: StreamReply) => {
-      if (reply.isReject() && reply.ilpReject.code === Errors.codes.F08_AMOUNT_TOO_LARGE) {
+    return (reply: StreamReply): void => {
+      if (reply.isReject() && reply.ilpReject.code === IlpError.F08_AMOUNT_TOO_LARGE) {
         this.reduceMaxPacketAmount(reply, sourceAmount)
       } else if (reply.isAuthentic()) {
-        this.increasePathCapacity(reply, sourceAmount)
+        this.adjustPathCapacity(reply.log, sourceAmount)
       }
     }
   }
 
   /** Decrease the path max packet amount in response to F08 errors */
-  private reduceMaxPacketAmount({ log, ilpReject }: StreamReject, sourceAmount: Integer) {
-    let newMax: Integer
+  private reduceMaxPacketAmount({ log, ilpReject }: StreamReject, sourceAmount: Int) {
+    let newMax: Int
+    let isPreciseMax: boolean
     try {
       const reader = Reader.from(ilpReject.data)
-      const remoteReceived = toBigNumber(reader.readUInt64Long())
-      const remoteMaximum = toBigNumber(reader.readUInt64Long())
+      const remoteReceived = Int.fromLong(reader.readUInt64Long())
+      const remoteMaximum = Int.fromLong(reader.readUInt64Long())
+
+      log.debug('handling F08. remote received: %s, remote max: %s', remoteReceived, remoteMaximum)
 
       // F08 is invalid if they received less than their own maximum!
-      // This check ensures that remoteReceived is always at least 1
-      if (remoteReceived.isLessThanOrEqualTo(remoteMaximum)) {
+      // This check ensures that remoteReceived is always > 0
+      if (!remoteReceived.isGreaterThan(remoteMaximum)) {
         return
       }
 
       // Exchange rate = remote amount / source amount
       // Local maximum = remote maximum / exchange rate
 
-      // Convert max packet amount into source units
-      // Per above check, no divide by 0 error since `remoteReceived` cannot be 0
-      newMax = remoteMaximum
-        .times(sourceAmount)
-        .dividedBy(remoteReceived)
-        .integerValue(BigNumber.ROUND_DOWN) as Integer
-
-      switch (this.state.type) {
-        case MaxPacketState.PreciseMax:
-        case MaxPacketState.ImpreciseMax:
-          // Only lower the max packet amount
-          if (!newMax.isLessThan(this.state.maxPacketAmount)) {
-            return
-          }
-
-          log.debug(
-            'handling F08. reducing max packet amount from %s to %s',
-            this.state.maxPacketAmount,
-            newMax
-          )
-          break
-
-        case MaxPacketState.UnknownMax:
-          log.debug('handling F08. setting initial max packet to %s', newMax)
-      }
-
-      this.state = {
-        type: MaxPacketState.PreciseMax,
-        maxPacketAmount: newMax,
-      }
+      // Convert remote max packet amount into source units
+      newMax = remoteMaximum.multiply(sourceAmount).divideFloor(remoteReceived)
+      isPreciseMax = true
     } catch (_) {
-      // If no metadata was included, the only thing we can infer is that the
-      // amount we sent was too high
-      const newMax = sourceAmount.minus(1) as Integer
-
-      switch (this.state.type) {
-        case MaxPacketState.PreciseMax:
-        case MaxPacketState.ImpreciseMax: {
-          // Only lower the max packet amount
-          if (!newMax.isLessThan(this.state.maxPacketAmount)) {
-            return
-          }
-
-          log.debug('handling F08 without metadata. reducing max packet amount to %s', newMax)
-          break
-        }
-
-        case MaxPacketState.UnknownMax:
-          log.debug(
-            'handling F08 without metadata. setting initial max packet amount to %s',
-            newMax
-          )
-      }
-
-      this.state = {
-        type: MaxPacketState.ImpreciseMax,
-        maxPacketAmount: newMax,
-      }
+      // If no metadata was included, the only thing we can infer is that the amount we sent was too high
+      log.debug('handling F08 without metadata. source amount: %s', sourceAmount)
+      newMax = sourceAmount.subtract(Int.ONE)
+      isPreciseMax = false
     }
 
-    // The greatest path packet amount should never be greater than the maximum
-    this.greatestAckAmount = BigNumber.min(
-      this.greatestAckAmount,
-      this.state.maxPacketAmount
-    ) as Integer
+    // Special case if max packet is 0 or rounds to 0
+    if (!newMax.isPositive()) {
+      log.debug('ending payment: max packet amount is 0, cannot send over path')
+      this.noCapacityAvailable = true
+      return
+    }
+
+    if (this.state.type === MaxPacketState.UnknownMax) {
+      log.debug('setting initial max packet amount to %s', newMax)
+    } else if (newMax.isLessThan(this.state.maxPacketAmount)) {
+      log.debug('reducing max packet amount from %s to %s', this.state.maxPacketAmount, newMax)
+    } else {
+      return // Ignore F08s that don't lower the max packet amount
+    }
+
+    this.state = {
+      type: isPreciseMax ? MaxPacketState.PreciseMax : MaxPacketState.ImpreciseMax,
+      maxPacketAmount: newMax,
+    }
+
+    this.adjustPathCapacity(log, this.verifiedPathCapacity)
   }
 
   /**
    * Increase the greatest amount acknowledged by the recipient, which
    * indicates the path is capable of sending packets of at least that amount
    */
-  private increasePathCapacity(reply: StreamReply, sourceAmount: Integer) {
-    if (sourceAmount.isGreaterThan(this.greatestAckAmount)) {
-      reply.log.debug(
+  private adjustPathCapacity(log: Logger, ackAmount: Int) {
+    const maxPacketAmount =
+      this.state.type === MaxPacketState.UnknownMax ? Int.MAX_U64 : this.state.maxPacketAmount
+
+    const newPathCapacity = this.verifiedPathCapacity.orGreater(ackAmount).orLesser(maxPacketAmount)
+    if (newPathCapacity.isGreaterThan(this.verifiedPathCapacity)) {
+      log.debug(
         'increasing greatest path packet amount from %s to %s',
-        this.greatestAckAmount,
-        sourceAmount
+        this.verifiedPathCapacity,
+        newPathCapacity
       )
-      this.greatestAckAmount = sourceAmount
     }
+
+    this.verifiedPathCapacity = newPathCapacity
 
     if (
       this.state.type === MaxPacketState.ImpreciseMax &&
-      this.greatestAckAmount.isEqualTo(this.state.maxPacketAmount)
+      this.verifiedPathCapacity.isEqualTo(this.state.maxPacketAmount)
     ) {
       // Binary search from F08s without metadata is complete: discovered precise max
-      reply.log.debug('discovered precise max packet amount: %s', this.state.maxPacketAmount)
+      log.debug('discovered precise max packet amount: %s', this.state.maxPacketAmount)
       this.state = {
         type: MaxPacketState.PreciseMax,
         maxPacketAmount: this.state.maxPacketAmount,

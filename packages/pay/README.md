@@ -105,12 +105,11 @@ Similarily, if an error was encountered during the payment itself, it will inclu
 
 Quote and prepare to perform a payment:
 
-- Query the recipient's payment pointer or SPSP server, if provided
+- Query the recipient's payment pointer or invoice to setup the payment
 - Fetch the asset and details of the sending account
 - Ensure there's a viable payment path to the recipient
 - Probe the realized exchange rate to the recipient
-- Enforce exchange rates by comparing against rates pulled from external sources, and set the maximum amount that will be sent
-- Perform other validation as a prerequisite to performing the payment
+- Enforce minimum exchange rates by comparing against rates pulled from external sources, and compute a maximum amount that will be sent
 
 After the quote is complete, the consumer will have the option to execute or cancel the payment.
 
@@ -202,27 +201,35 @@ If **[`prices`](#prices)** was not provided, rates are pulled from the [CoinCap 
 
 Callback function to set the expiration timestamp of each ILP Prepare packet. By default, the expiration is set to 30 seconds in the future.
 
+#### `AccountDetails`
+
+> Interface
+
+Asset and Interledger address for an account (sender or receiver)
+
+| Property         | Type     | Description                                                                       |
+| :--------------- | :------- | :-------------------------------------------------------------------------------- |
+| **`ilpAddress`** | `string` | Interledger address of the account.                                               |
+| **`assetScale`** | `number` | Precision of the asset denomination: number of decimal places of the normal unit. |
+| **`assetCode`**  | `string` | Asset code or symbol identifying the currency of the account.                     |
+
 #### `Quote`
 
 > Interface
 
 Parameters of payment execution and the projected outcome of a payment
 
-| Property                            | Type                                                                                                             | Description                                                                                                                                                                                                                                                                         |
-| :---------------------------------- | :--------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`pay`**                           | `() => Promise<`[`Receipt`](#receipt)`>`                                                                         | Execute the payment within these parameters                                                                                                                                                                                                                                         |
-| **`cancel`**                        | `() => Promise<void>`                                                                                            | Cancel the payment: disconnects plugin and closes connection with recipient                                                                                                                                                                                                         |
-| **`maxSourceAmount`**               | [`BigNumber`](https://mikemcl.github.io/bignumber.js/)                                                           | Maximum amount that will be sent in the asset and units of the sending account. This is intended to be presented to the user or agent before authorizing a fixed delivery payment. For fixed source amount payments, this will be the provided **[`amountToSend`](#amounttosend)**. |
-| **`minDeliveryAmount`**             | [`BigNumber`](https://mikemcl.github.io/bignumber.js/)                                                           | Minimum amount that will be delivered if the payment completes, in the asset and units of the receiving account. For fixed delivery payments, this will be the provided **[`amountToDeliver`](#amounttodeliver)**.                                                                  |
-| **`estimatedExchangeRate`**         | [[`BigNumber`](https://mikemcl.github.io/bignumber.js/), [`BigNumber`](https://mikemcl.github.io/bignumber.js/)] | Probed exchange rate over the path. Range of [lower bound, upper bound], where the rate represents the ratio of the destination amount to the source amount.                                                                                                                        |
-| **`minExchangeRate`**               | [`BigNumber`](https://mikemcl.github.io/bignumber.js/)                                                           | Minimum exchange rate enforced on each packet to ensure enough money gets delivered.                                                                                                                                                                                                |
-| **`estimatedDuration`**             | `number`                                                                                                         | Estimated payment duration in milliseconds, based on max packet amount, round trip time, and rate of packet throttling.                                                                                                                                                             |
-| **`sourceAccount.ilpAddress`**      | `string`                                                                                                         | Interledger address of the sender.                                                                                                                                                                                                                                                  |
-| **`sourceAccount.assetScale`**      | `number`                                                                                                         | The precision of the sending asset denomination: the number of decimal places of the normal unit of the source asset.                                                                                                                                                               |
-| **`sourceAccount.assetCode`**       | `string`                                                                                                         | Asset code or symbol identifying the asset of the sender.                                                                                                                                                                                                                           |
-| **`destinationAccount.ilpAddress`** | `string`                                                                                                         | Interledger address of the recipient, uniquely identifying this connection.                                                                                                                                                                                                         |
-| **`destinationAccount.assetScale`** | `number`                                                                                                         | The precision of the recipient's asset denomination: the number of decimal places of the normal unit of the destination asset.                                                                                                                                                      |
-| **`destinationAccount.assetCode`**  | `string`                                                                                                         | Asset code or symbol identifying the asset the recipient received.                                                                                                                                                                                                                  |
+| Property                    | Type                                                                                                             | Description                                                                                                                                                                                                                                                                         |
+| :-------------------------- | :--------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`pay`**                   | `() => Promise<`[`Receipt`](#receipt)`>`                                                                         | Execute the payment within these parameters.                                                                                                                                                                                                                                        |
+| **`cancel`**                | `() => Promise<void>`                                                                                            | Cancel the payment: disconnect plugin and closes connection with recipient.                                                                                                                                                                                                         |
+| **`maxSourceAmount`**       | [`BigNumber`](https://mikemcl.github.io/bignumber.js/)                                                           | Maximum amount that will be sent in the asset and units of the sending account. This is intended to be presented to the user or agent before authorizing a fixed delivery payment. For fixed source amount payments, this will be the provided **[`amountToSend`](#amounttosend)**. |
+| **`minDeliveryAmount`**     | [`BigNumber`](https://mikemcl.github.io/bignumber.js/)                                                           | Minimum amount that will be delivered if the payment completes, in the asset and units of the receiving account. For fixed delivery payments, this will be the provided **[`amountToDeliver`](#amounttodeliver)** or amount of the invoice.                                         |
+| **`estimatedExchangeRate`** | [[`BigNumber`](https://mikemcl.github.io/bignumber.js/), [`BigNumber`](https://mikemcl.github.io/bignumber.js/)] | Probed exchange rate over the path. Range of [lower bound, upper bound], where the rate represents the ratio of the destination amount to the source amount.                                                                                                                        |
+| **`minExchangeRate`**       | [`BigNumber`](https://mikemcl.github.io/bignumber.js/)                                                           | Minimum exchange rate enforced on each packet to ensure enough money gets delivered.                                                                                                                                                                                                |
+| **`estimatedDuration`**     | `number`                                                                                                         | Estimated payment duration in milliseconds, based on max packet amount, round trip time, and rate of packet throttling.                                                                                                                                                             |
+| **`sourceAccount`**         | [`AccountDetails`](#accountdetails)                                                                              | Asset and details of the sender's Interledger account                                                                                                                                                                                                                               |
+| **`destinationAccount`**    | [`AccountDetails`](#accountdetails)                                                                              | Asset and details of the recipient's Interledger account                                                                                                                                                                                                                            |
 
 #### `Receipt`
 
@@ -230,17 +237,13 @@ Parameters of payment execution and the projected outcome of a payment
 
 Final outcome of a payment
 
-| Property                            | Type                                                   | Description                                                                                                                    |
-| :---------------------------------- | :----------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------- |
-| **`error`** (_Optional_)            | [`PaymentError`](#paymenterror)                        | Error state, if the payment failed.                                                                                            |
-| **`amountSent`**                    | [`BigNumber`](https://mikemcl.github.io/bignumber.js/) | Amount sent and fulfilled, in normal units of the source asset.                                                                |
-| **`amountDelivered`**               | [`BigNumber`](https://mikemcl.github.io/bignumber.js/) | Amount delivered to the recipient, in normal units of the destination asset.                                                   |
-| **`sourceAccount.ilpAddress`**      | `string`                                               | Interledger address of the sender.                                                                                             |
-| **`sourceAccount.assetScale`**      | `number`                                               | The precision of the sending asset denomination: the number of decimal places of the normal unit of the source asset.          |
-| **`sourceAccount.assetCode`**       | `string`                                               | Asset code or symbol identifying the asset of the sender.                                                                      |
-| **`destinationAccount.ilpAddress`** | `string`                                               | Interledger address of the recipient, uniquely identifying this connection.                                                    |
-| **`destinationAccount.assetScale`** | `number`                                               | The precision of the recipient's asset denomination: the number of decimal places of the normal unit of the destination asset. |
-| **`destinationAccount.assetCode`**  | `string`                                               | Asset code or symbol identifying the asset the recipient received.                                                             |
+| Property                 | Type                                                   | Description                                                                  |
+| :----------------------- | :----------------------------------------------------- | :--------------------------------------------------------------------------- |
+| **`error`** (_Optional_) | [`PaymentError`](#paymenterror)                        | Error state, if the payment failed.                                          |
+| **`amountSent`**         | [`BigNumber`](https://mikemcl.github.io/bignumber.js/) | Amount sent and fulfilled, in normal units of the source asset.              |
+| **`amountDelivered`**    | [`BigNumber`](https://mikemcl.github.io/bignumber.js/) | Amount delivered to the recipient, in normal units of the destination asset. |
+| **`sourceAccount`**      | [`AccountDetails`](#accountdetails)                    | Asset and details of the sender's Interledger account                        |
+| **`destinationAccount`** | [`AccountDetails`](#accountdetails)                    | Asset and details of the recipient's Interledger account                     |
 
 #### `PaymentError`
 
@@ -250,18 +253,18 @@ Payment error states
 
 ##### Errors likely caused by the user
 
-| Variant                                 | Description                                                                                          |
-| :-------------------------------------- | :--------------------------------------------------------------------------------------------------- |
-| **`InvalidPaymentPointer`**             | Payment pointer is formatted incorrectly                                                             |
-| **`InvalidCredentials`**                | STREAM credentials (shared secret and destination address) were not provided or semantically invalid |
-| **`Disconnected`**                      | Plugin failed to connect or is disconnected from the Interleder network                              |
-| **`InvalidSlippage`**                   | Slippage percentage is not between 0 and 1 (inclusive)                                               |
-| **`IncompatibleIntegerledgerNetworks`** | Sender and receiver use incompatible Interledger networks or address prefixes                        |
-| **`UnknownSourceAsset`**                | Failed to fetch IL-DCP details for the source account: unknown sending asset or ILP address          |
-| **`UnknownPaymentTarget`**              | No fixed source amount or fixed destination amount was provided                                      |
-| **`InvalidSourceAmount`**               | Fixed source amount is not a positive integer or more precise than the source account                |
-| **`InvalidDestinationAmount`**          | Fixed delivery amount is not a positive integer or more precise than the destination account         |
-| **`UnenforceableDelivery`**             | Minimum exchange rate is 0 after subtracting slippage, and cannot enforce a fixed-delivery payment   |
+| Variant                               | Description                                                                                          |
+| :------------------------------------ | :--------------------------------------------------------------------------------------------------- |
+| **`InvalidPaymentPointer`**           | Payment pointer is formatted incorrectly                                                             |
+| **`InvalidCredentials`**              | STREAM credentials (shared secret and destination address) were not provided or semantically invalid |
+| **`Disconnected`**                    | Plugin failed to connect or is disconnected from the Interleder network                              |
+| **`InvalidSlippage`**                 | Slippage percentage is not between 0 and 1 (inclusive)                                               |
+| **`IncompatibleInterledgerNetworks`** | Sender and receiver use incompatible Interledger networks or address prefixes                        |
+| **`UnknownSourceAsset`**              | Failed to fetch IL-DCP details for the source account: unknown sending asset or ILP address          |
+| **`UnknownPaymentTarget`**            | No fixed source amount or fixed destination amount was provided                                      |
+| **`InvalidSourceAmount`**             | Fixed source amount is not a positive integer or more precise than the source account                |
+| **`InvalidDestinationAmount`**        | Fixed delivery amount is not a positive integer or more precise than the destination account         |
+| **`UnenforceableDelivery`**           | Minimum exchange rate is 0 after subtracting slippage, and cannot enforce a fixed-delivery payment   |
 
 ##### Errors likely caused by the receiver, connectors, or other externalities
 
@@ -277,6 +280,6 @@ Payment error states
 | **`ReceiverProtocolViolation`** | Receiver violated the STREAM protocol that prevented accounting for delivered amounts                                                                                  |
 | **`RateProbeFailed`**           | Rate probe failed to establish the realized exchange rate                                                                                                              |
 | **`IdleTimeout`**               | Failed to fulfill a packet before payment timed out                                                                                                                    |
-| **`TerminalReject`**            | Encountered an ILP Reject packet with a final error that cannot be retried                                                                                             |
+| **`ConnectorError`**            | Encountered an ILP Reject that cannot be retried, or the payment is not possible over this path                                                                        |
 | **`ExceededMaxSequence`**       | Sent too many packets with this encryption key and must close the connection                                                                                           |
 | **`ExchangeRateRoundingError`** | Rate enforcement not possible due to rounding: max packet amount may be too low, minimum exchange rate may require more slippage, or exchange rate may be insufficient |

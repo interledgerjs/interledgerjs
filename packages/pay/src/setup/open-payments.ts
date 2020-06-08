@@ -35,7 +35,6 @@ const isValidOpenPaymentsInvoiceDetails = (o: any): o is OpenPaymentsInvoiceDeta
   typeof o === 'object' &&
   o !== null &&
   typeof o.subject === 'string' &&
-  // TODO Validate subject is URL without protocol?
   typeof o.amount === 'string' &&
   isValidU64(o.amount) &&
   typeof o.assetCode === 'string' &&
@@ -45,7 +44,7 @@ const isValidOpenPaymentsInvoiceDetails = (o: any): o is OpenPaymentsInvoiceDeta
   isValidU64(o.received) &&
   typeof o.expiresAt === 'string' &&
   isValidIsoDate(o.expiresAt) &&
-  typeof o.description === 'string' // TODO Should this be optional?
+  typeof o.description === 'string'
 
 interface OpenPaymentsInvoiceCredentials {
   ilpAddress: IlpAddress
