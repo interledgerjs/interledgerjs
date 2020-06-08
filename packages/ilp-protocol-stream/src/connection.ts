@@ -40,6 +40,7 @@ import {
 import * as Long from 'long'
 import Rational from './util/rational'
 import { createReceipt, RECEIPT_VERSION } from './util/receipt'
+import { StoppableTimeout } from './util/stoppable-timeout'
 import { v4 as uuid } from 'uuid'
 
 const RETRY_DELAY_START = 100
@@ -176,6 +177,7 @@ export class Connection extends EventEmitter {
   protected idleTimeout: number
   protected lastActive: Date
   protected idleTimer: NodeJS.Timer
+  protected rateRetryTimer: StoppableTimeout = new StoppableTimeout()
 
   protected nextPacketSequence: number
   protected streams: Map<number, DataAndMoneyStream>
@@ -188,6 +190,7 @@ export class Connection extends EventEmitter {
   protected minExchangeRatePrecision: number
   protected connected: boolean
   protected closed: boolean
+  protected done: boolean = false
   protected exchangeRate?: Rational
   protected retryDelay: number
   protected queuedFrames: Frame[]
@@ -307,10 +310,12 @@ export class Connection extends EventEmitter {
       }
       const closeHandler = () => {
         cleanup()
+        this.stopTimers()
         reject(new Error('Connection was closed before it was connected'))
       }
       const errorHandler = (error?: Error) => {
         cleanup()
+        this.stopTimers()
         reject(new Error(`Error connecting${error ? ': ' + error.message : ''}`))
       }
       this.once('connect', connectHandler)
@@ -320,7 +325,6 @@ export class Connection extends EventEmitter {
 
       const self = this
       function cleanup () {
-        clearTimeout(self.idleTimer)
         self.removeListener('connect', connectHandler)
         self.removeListener('error', errorHandler)
         self.removeListener('close', closeHandler)
@@ -365,7 +369,7 @@ export class Connection extends EventEmitter {
     await this.sendConnectionClose()
     this.safeEmit('end')
     this.safeEmit('close')
-    clearTimeout(this.idleTimer)
+    this.stopTimers()
   }
 
   /**
@@ -374,6 +378,10 @@ export class Connection extends EventEmitter {
   // TODO should this be sync or async?
   async destroy (err?: Error): Promise<void> {
     this.log.error('destroying connection with error:', err)
+    // Don't destroy the connection (most importantly: don't emit "close" & "error"
+    // if the connection has already done so, since it will confuse clients.
+    if (this.done) return
+
     if (err) {
       this.safeEmit('error', err)
     }
@@ -392,7 +400,7 @@ export class Connection extends EventEmitter {
     // wait for all the streams to be closed before emitting the connection 'close'
     await Promise.all(streamClosePromises)
     this.safeEmit('close')
-    clearTimeout(this.idleTimer)
+    this.stopTimers()
   }
 
   /**
@@ -1308,7 +1316,10 @@ export class Connection extends EventEmitter {
         const reducedPacketAmount = smallestPacketAmount.subtract(smallestPacketAmount.divide(3))
         this.log.debug('got Txx error(s), waiting %dms and reducing packet amount to %s before sending another test packet', retryDelay, reducedPacketAmount)
         testPacketAmounts = [...testPacketAmounts, reducedPacketAmount]
-        await new Promise((resolve, reject) => setTimeout(resolve, retryDelay))
+        await this.rateRetryTimer.wait(retryDelay).catch((_err) => {
+          this.log.debug('connection terminated before rate could be determind; delay=%d', retryDelay)
+          throw new Error('Connection terminated before rate could be determined.')
+        })
         retryDelay *= RETRY_DELAY_INCREASE_FACTOR
       }
 
@@ -1316,6 +1327,12 @@ export class Connection extends EventEmitter {
     }
 
     throw new Error(`Unable to establish connection, no packets meeting the minimum exchange precision of ${this.minExchangeRatePrecision} digits made it through the path.`)
+  }
+
+  private stopTimers (): void {
+    if (this.rateRetryTimer) this.rateRetryTimer.stop()
+    clearTimeout(this.idleTimer)
+    this.done = true
   }
 
   /**

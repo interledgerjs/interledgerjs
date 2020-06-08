@@ -489,6 +489,15 @@ describe('Connection', function () {
       assert.calledTwice(dataSpy)
       assert.calledTwice(moneySpy)
     })
+
+    it('does nothing when already closed from the other end', async function () {
+      const onServerError = sinon.spy()
+      this.serverConn.on('error', onServerError)
+
+      await this.clientConn.end()
+      await this.serverConn.destroy(new Error('abort!'))
+      assert.notCalled(onServerError)
+    })
   })
 
   describe('Connection Timeout', function () {
@@ -916,6 +925,31 @@ describe('Connection', function () {
 
       clearInterval(interval)
       clock.restore()
+    })
+
+    it('should stop trying to connect the connection closes', async function () {
+      // NOTE: This test uses real timers to ensure that `determineExchangeRate`
+      // doesn't take forever to abort when the connection is terminated.
+      const realSendData = this.serverPlugin.sendData.bind(this.serverPlugin)
+      const sendDataStub = sinon.stub(this.serverPlugin, 'sendData')
+        .onFirstCall().callsFake(realSendData) // ILDCP
+        .resolves(IlpPacket.serializeIlpReject({
+          code: 'T04',
+          message: 'Insufficient Liquidity Error',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector'
+        }))
+
+      const connectionPromise = createConnection({
+        ...this.server.generateAddressAndSecret(),
+        plugin: this.clientPlugin
+      })
+      const serverConnection = await this.server.acceptConnection()
+      const onServerError = sinon.spy()
+      const clientConnection = await connectionPromise
+      const serverRatePromise = serverConnection['determineExchangeRate']()
+      await clientConnection.end()
+      await assert.isRejected(serverRatePromise, 'Connection terminated before rate could be determined.')
     })
   })
 
