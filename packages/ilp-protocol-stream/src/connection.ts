@@ -189,7 +189,12 @@ export class Connection extends EventEmitter {
   protected congestion: CongestionController
   protected minExchangeRatePrecision: number
   protected connected: boolean
+  // Set to `true`:
+  // - Until `'connect'` event.
+  // - When a `ConnectionCloseFrame` is received.
+  // - When `end()` is called, but before sending the `ConnectionCloseFrame` to remote.
   protected closed: boolean
+  // Set to `true` when either `end()` or `destroy()` has finished.
   protected done: boolean = false
   protected exchangeRate?: Rational
   protected retryDelay: number
