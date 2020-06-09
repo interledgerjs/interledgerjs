@@ -1317,7 +1317,7 @@ export class Connection extends EventEmitter {
         this.log.debug('got Txx error(s), waiting %dms and reducing packet amount to %s before sending another test packet', retryDelay, reducedPacketAmount)
         testPacketAmounts = [...testPacketAmounts, reducedPacketAmount]
         await this.rateRetryTimer.wait(retryDelay).catch((_err) => {
-          this.log.debug('connection terminated before rate could be determind; delay=%d', retryDelay)
+          this.log.debug('connection terminated before rate could be determined; delay=%d', retryDelay)
           throw new Error('Connection terminated before rate could be determined.')
         })
         retryDelay *= RETRY_DELAY_INCREASE_FACTOR

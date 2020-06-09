@@ -927,7 +927,7 @@ describe('Connection', function () {
       clock.restore()
     })
 
-    it('should stop trying to connect the connection closes', async function () {
+    it('should stop trying to connect when the connection closes', async function () {
       // NOTE: This test uses real timers to ensure that `determineExchangeRate`
       // doesn't take forever to abort when the connection is terminated.
       const realSendData = this.serverPlugin.sendData.bind(this.serverPlugin)
@@ -945,7 +945,6 @@ describe('Connection', function () {
         plugin: this.clientPlugin
       })
       const serverConnection = await this.server.acceptConnection()
-      const onServerError = sinon.spy()
       const clientConnection = await connectionPromise
       const serverRatePromise = serverConnection['determineExchangeRate']()
       await clientConnection.end()
