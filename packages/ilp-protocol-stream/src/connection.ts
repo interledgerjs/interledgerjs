@@ -51,7 +51,7 @@ const DEFAULT_IDLE_TIMEOUT = 60000 // 1 minute
 const MAX_DATA_SIZE = 32767
 const DEFAULT_MAX_REMOTE_STREAMS = 10
 const DEFAULT_MINIMUM_EXCHANGE_RATE_PRECISION = 3
-const TEST_PACKET_MAX_ATTEMPTS = 20
+const TEST_PACKET_MAX_ATTEMPTS = 15
 
 export interface ConnectionOpts {
   /** Token in the ILP address uniquely identifying this connection */
