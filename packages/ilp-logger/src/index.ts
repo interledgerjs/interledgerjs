@@ -2,11 +2,11 @@ import * as debug from 'debug'
 
 export class Logger {
   private namespace: string
-  public info: debug.IDebugger
-  public warn: debug.IDebugger
-  public error: debug.IDebugger
-  public debug: debug.IDebugger
-  public trace: debug.IDebugger
+  public info: debug.Debugger
+  public warn: debug.Debugger
+  public error: debug.Debugger
+  public debug: debug.Debugger
+  public trace: debug.Debugger
   constructor(namespace: string) {
     this.namespace = namespace
     this.info = debug(namespace + ':info')
@@ -48,7 +48,7 @@ interface ModuleExport {
   (namespace: string): Logger
   default: ModuleExport
   Logger: Function
-  formatters: debug.IFormatters
+  formatters: debug.Formatters
 }
 
 createLogger.default = createLogger

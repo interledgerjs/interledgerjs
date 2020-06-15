@@ -22,7 +22,7 @@
     "codecov": "codecov --root=../../ -f coverage/*.json -F ilp_logger"
   },
   "dependencies": {
-    "@types/debug": "^0.0.31",
+    "@types/debug": "^4.1.0",
     "debug": "^4.1.0",
     "supports-color": "^5.5.0"
   }
