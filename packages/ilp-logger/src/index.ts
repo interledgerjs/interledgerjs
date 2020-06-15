@@ -7,6 +7,7 @@ export class Logger {
   public error: debug.Debugger
   public debug: debug.Debugger
   public trace: debug.Debugger
+
   constructor(namespace: string) {
     this.namespace = namespace
     this.info = debug(namespace + ':info')
@@ -14,6 +15,7 @@ export class Logger {
     this.error = debug(namespace + ':error')
     this.debug = debug(namespace + ':debug')
     this.trace = debug(namespace + ':trace')
+
     // `debug().destroy()` leaves the logger usable, but allows it to be garbage
     // collected once references to the `Logger` have been dropped.
     //
