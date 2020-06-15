@@ -1417,9 +1417,9 @@
     "@types/node" ">= 8"
 
 "@rgrove/parse-xml@^2.0.2":
-  version "2.0.3"
-  resolved "https://registry.yarnpkg.com/@rgrove/parse-xml/-/parse-xml-2.0.3.tgz#a2a534e52bf7e9675b244222b4979df873ed4295"
-  integrity sha512-TsJ4IumJtkyU9PFMjI7XuoGtBRCiKX8zt4V2QdI3rKFc/a94T8kFRwdhhR5v7Oc8veHlU4IfyQWpE/ClyESEAA==
+  version "2.0.4"
+  resolved "https://registry.yarnpkg.com/@rgrove/parse-xml/-/parse-xml-2.0.4.tgz#244973dd3d9ee83eb7caafad2c17a719622d181f"
+  integrity sha512-344bRXnUMu1tWqq1GJO2nCSqJRGTzcNLErcG2HZbVhUo90R5xQ6YdsCqtuT0KaFyN/mlxWqt2SdHSRNzwDvT5g==
 
 "@samverschueren/stream-to-observable@^0.3.0":
   version "0.3.0"
