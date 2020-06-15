@@ -1517,11 +1517,6 @@
   resolved "https://registry.yarnpkg.com/@types/debug/-/debug-0.0.30.tgz#dc1e40f7af3b9c815013a7860e6252f6352a84df"
   integrity sha512-orGL5LXERPYsLov6CWs3Fh6203+dXzJkR7OnddIr2514Hsecwc8xRpzCapshBbKFImCsvS/mk6+FWiN5LyZJAQ==
 
-"@types/debug@^0.0.31":
-  version "0.0.31"
-  resolved "https://registry.yarnpkg.com/@types/debug/-/debug-0.0.31.tgz#bac8d8aab6a823e91deb7f79083b2a35fa638f33"
-  integrity sha512-LS1MCPaQKqspg7FvexuhmDbWUhE2yIJ+4AgVIyObfc06/UKZ8REgxGNjZc82wPLWmbeOm7S+gSsLgo75TanG4A==
-
 "@types/debug@^4.1.0":
   version "4.1.5"
   resolved "https://registry.yarnpkg.com/@types/debug/-/debug-4.1.5.tgz#b14efa8852b7768d898906613c23f688713e02cd"
@@ -4492,15 +4487,6 @@ ilp-compat-plugin@^2.0.3:
     ilp-packet "^2.1.0"
     oer-utils "^1.3.4"
     uuid "^3.1.0"
-
-ilp-logger@^1.1.3, ilp-logger@^1.2.1:
-  version "1.2.1"
-  resolved "https://registry.yarnpkg.com/ilp-logger/-/ilp-logger-1.2.1.tgz#d6c50a9f94a43e8f4969da5557798fed915de34a"
-  integrity sha512-Qj3DjoF8ROdVXhk6oFOA3XuwXBoK8gFxUOKD9h5w0jDGokTiUVzHQp8Nsq6WT8CZh6rObmnw5GtFWHYlKhp3yQ==
-  dependencies:
-    "@types/debug" "^0.0.31"
-    debug "^4.1.0"
-    supports-color "^5.5.0"
 
 ilp-packet@^2.1.0, ilp-packet@^2.1.2:
   version "2.2.0"
