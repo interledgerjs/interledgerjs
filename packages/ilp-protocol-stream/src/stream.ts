@@ -141,7 +141,7 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
-   * The current limit up to which the stream will try to send, denominated in the connection plugin's units.
+   * The current limit up to which the stream will try to receive, denominated in the connection plugin's units.
    * (If the `receiveMax` is greater than the `totalReceived`, the stream will continue to receive money when the other side sends it)
    */
   get receiveMax (): string {
