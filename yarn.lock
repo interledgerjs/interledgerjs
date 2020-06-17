@@ -10740,9 +10740,9 @@ test-exclude@^6.0.0:
     minimatch "^3.0.4"
 
 testcontainers@^2.8.1:
-  version "2.10.0"
-  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-2.10.0.tgz#1a1bb6593e480e0e802bca3fbace26db514408d1"
-  integrity sha512-r/dOQs0h71EBvBLytWdavlX4Oe+pLfnMPJRjcER/5rLVxFkEcJqsAC+yk1ZEfwQuqUx062qLuBporatc+kOswQ==
+  version "2.12.0"
+  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-2.12.0.tgz#a441049a0fbadc18be5ca5c5e2877432713a5235"
+  integrity sha512-fNQjRDW5re29SWYCNwZo+P0IoA5SUw9MBxh9KC4WygthvAm72gUBGKWdtJCdtLEBCraV1hPTYOJX1DGoxpFsoQ==
   dependencies:
     "@types/dockerode" "^2.5.24"
     byline "^5.0.0"
