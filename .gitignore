@@ -1,10 +1,10 @@
 node_modules
 coverage
 .nyc_output
-packages/*/dist
-packages/*/test/*.js
-packages/*/test/*.js.map
-packages/*/test/*.d.ts
+packages/**/dist
+packages/**/test/*.js
+packages/**/test/*.js.map
+packages/**/test/*.d.ts
 lerna-debug.log
 npm-debug.log
 yarn-error.log

@@ -9,8 +9,7 @@ import {
   ErrorCode,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { DEFAULT_STREAM_ID } from './amount'
-import { AssetScale } from '../setup/open-payments'
-import { IlpAddress } from '../setup/shared'
+import { IlpAddress, AssetScale } from '../utils'
 import { PaymentError } from '..'
 
 /** Asset and Interledger address for an account (sender or receiver) */
@@ -20,7 +19,7 @@ export interface AccountDetails extends AssetDetails {
 }
 
 /** Asset information for an Interledger account */
-interface AssetDetails {
+export interface AssetDetails {
   /** Precision of the asset denomination: number of decimal places of the normal unit */
   assetScale: AssetScale
   /** Asset code or symbol identifying the currency of the account */
@@ -37,9 +36,14 @@ export class AccountController implements StreamController {
 
   private remoteAssetChanged = false
 
-  constructor(sourceAccount: AccountDetails, destinationAddress: IlpAddress) {
+  constructor(
+    sourceAccount: AccountDetails,
+    destinationAddress: IlpAddress,
+    destinationAsset?: AssetDetails
+  ) {
     this.sourceAccount = sourceAccount
     this.destinationAddress = destinationAddress
+    this.destinationAsset = destinationAsset
   }
 
   getSourceAccount(): AccountDetails {
@@ -52,13 +56,6 @@ export class AccountController implements StreamController {
         ilpAddress: this.destinationAddress,
         ...this.destinationAsset,
       }
-    }
-  }
-
-  setDestinationAsset(assetCode: string, assetScale: AssetScale): void {
-    this.destinationAsset = {
-      assetCode,
-      assetScale,
     }
   }
 

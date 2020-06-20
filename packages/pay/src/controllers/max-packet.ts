@@ -7,7 +7,7 @@ import {
   SendState,
   StreamRequestBuilder,
 } from './'
-import { Int, IlpError, PositiveInt } from '../utils'
+import { Int, IlpError, PositiveInt, Ratio } from '../utils'
 import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
 
@@ -67,9 +67,9 @@ export class MaxPacketAmountController implements StreamController {
 
   /**
    * Return a limit on the amount of the next packet: the precise max packet amount,
-   * or a probe amount if we're still discovering the precise max packet amount.
+   * or a probe amount if the precise max packet amount is yet to be discovered.
    */
-  getMaxPacketAmount(): PositiveInt {
+  getNextMaxPacketAmount(): PositiveInt | undefined {
     switch (this.state.type) {
       case MaxPacketState.PreciseMax:
         return this.state.maxPacketAmount
@@ -83,19 +83,23 @@ export class MaxPacketAmountController implements StreamController {
           .subtract(this.verifiedPathCapacity)
           .divideCeil(Int.TWO)
           .add(this.verifiedPathCapacity) as PositiveInt
-
-      case MaxPacketState.UnknownMax:
-        return Int.MAX_U64
     }
   }
 
-  /** Have we discovered the precise max packet amount of the path? */
-  isPreciseMaxKnown(): boolean {
-    return (
-      (this.state.type === MaxPacketState.PreciseMax ||
-        this.state.type === MaxPacketState.UnknownMax) &&
-      this.verifiedPathCapacity.isPositive()
-    )
+  /**
+   * Return a known limit on the max packet amount of the path, if it has
+   * been discovered. Requires that at least 1 unit has been acknowledged by
+   * the receiver, and either, the max packet amount has been precisely discovered,
+   * or no F08 has been encountered yet.
+   */
+  getDiscoveredMaxPacketAmount(): PositiveInt | undefined {
+    if (this.verifiedPathCapacity.isPositive()) {
+      if (this.state.type === MaxPacketState.PreciseMax) {
+        return this.state.maxPacketAmount
+      } else if (this.state.type === MaxPacketState.UnknownMax) {
+        return Int.MAX_U64
+      }
+    }
   }
 
   applyRequest({ sourceAmount }: StreamRequest) {
@@ -114,8 +118,8 @@ export class MaxPacketAmountController implements StreamController {
     let isPreciseMax: boolean
     try {
       const reader = Reader.from(ilpReject.data)
-      const remoteReceived = Int.fromLong(reader.readUInt64Long())
-      const remoteMaximum = Int.fromLong(reader.readUInt64Long())
+      const remoteReceived = Int.from(reader.readUInt64Long())
+      const remoteMaximum = Int.from(reader.readUInt64Long())
 
       log.debug('handling F08. remote received: %s, remote max: %s', remoteReceived, remoteMaximum)
 
@@ -125,11 +129,9 @@ export class MaxPacketAmountController implements StreamController {
         return
       }
 
-      // Exchange rate = remote amount / source amount
-      // Local maximum = remote maximum / exchange rate
-
       // Convert remote max packet amount into source units
-      newMax = remoteMaximum.multiply(sourceAmount).divideFloor(remoteReceived)
+      const exchangeRate = new Ratio(sourceAmount, remoteReceived)
+      newMax = remoteMaximum.multiplyFloor(exchangeRate) // newMax <= source amount since remoteMaximum / remoteReceived is < 1
       isPreciseMax = true
     } catch (_) {
       // If no metadata was included, the only thing we can infer is that the amount we sent was too high

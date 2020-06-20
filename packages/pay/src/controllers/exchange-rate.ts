@@ -10,19 +10,19 @@ export class ExchangeRateCalculator {
   /** Realized exchange rate is greater than or equal to this ratio (inclusive): destination / source */
   lowerBoundRate: Ratio
 
-  /** Mapping of packet source amounts to its most recent received amount */
-  private sentAmounts = new Map<bigint, Int>()
+  /** Mapping of packet received amounts to its most recent sent amount */
+  private sentAmounts = new Map<bigint, PositiveInt>()
 
-  /** Mapping of packet received amounts to its most recent source amount */
-  private receivedAmounts = new Map<bigint, PositiveInt>()
+  /** Mapping of packet sent amounts to its most recent received amount */
+  private receivedAmounts = new Map<bigint, Int>()
 
   constructor(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger) {
     this.upperBoundRate = new Ratio(receivedAmount.add(Int.ONE), sourceAmount)
     this.lowerBoundRate = new Ratio(receivedAmount, sourceAmount)
     log.trace('setting initial rate to [%s, %s]', this.lowerBoundRate, this.upperBoundRate)
 
-    this.sentAmounts.set(sourceAmount.value, receivedAmount)
-    this.receivedAmounts.set(receivedAmount.value, sourceAmount)
+    this.sentAmounts.set(receivedAmount.value, sourceAmount)
+    this.receivedAmounts.set(sourceAmount.value, receivedAmount)
   }
 
   updateRate(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger): void {
@@ -70,8 +70,8 @@ export class ExchangeRateCalculator {
       this.upperBoundRate = packetUpperBoundRate
     }
 
-    this.sentAmounts.set(sourceAmount.value, receivedAmount)
-    this.receivedAmounts.set(receivedAmount.value, sourceAmount)
+    this.sentAmounts.set(receivedAmount.value, sourceAmount)
+    this.receivedAmounts.set(sourceAmount.value, receivedAmount)
   }
 
   /**
@@ -81,7 +81,7 @@ export class ExchangeRateCalculator {
    */
   estimateDestinationAmount(sourceAmount: Int): [Int, Int] {
     // If we already sent a packet for this amount, return how much the recipient got
-    const amountReceived = this.sentAmounts.get(sourceAmount.value)
+    const amountReceived = this.receivedAmounts.get(sourceAmount.value)
     if (amountReceived) {
       return [amountReceived, amountReceived]
     }
@@ -106,7 +106,7 @@ export class ExchangeRateCalculator {
    */
   estimateSourceAmount(destinationAmount: PositiveInt): [PositiveInt, PositiveInt] | undefined {
     // If this amount was received in a previous packet, return the source amount of that packet
-    const amountSent = this.receivedAmounts.get(destinationAmount.value)
+    const amountSent = this.sentAmounts.get(destinationAmount.value)
     if (amountSent) {
       return [amountSent, amountSent]
     }

@@ -25,7 +25,7 @@
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_protocol_ildcp"
   },
   "dependencies": {
-    "debug": "^3.1.0",
+    "debug": "^4.1.1",
     "ilp-packet": "^3.1.0-alpha.0",
     "oer-utils": "^5.1.0-alpha.0"
   }

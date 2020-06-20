@@ -41,7 +41,7 @@ import {
   IlpError,
   RejectBuilder,
 } from './utils'
-import { IlpAddress } from './setup/shared'
+import { IlpAddress } from './utils'
 import { AccountController } from './controllers/asset-details'
 
 /** Serialize & send, and receive & authenticate all ILP and STREAM packets */
@@ -50,8 +50,6 @@ export interface StreamConnection {
   runSendLoop(): Promise<SendState | PaymentError>
   /** Send an ILP Prepare over STREAM, then parse and validate the reply */
   sendRequest(request: StreamRequest): Promise<StreamReply | StreamReject>
-  /** Disconnect the plugin and unregister handlers */
-  close(): Promise<void>
 }
 
 export const createConnection = async (
@@ -115,7 +113,8 @@ export const createConnection = async (
   })
 
   const connection: StreamConnection = {
-    // TODO start and stoppable send loop?
+    // TODO start and stoppable send loop? should it automatically start when connection is created?
+    //      something like that could be useful for WM
     async runSendLoop() {
       for (;;) {
         const builder = new StreamRequestBuilder(
@@ -274,7 +273,7 @@ export const createConnection = async (
           )
         } else {
           responseFrames = streamReply.frames
-          destinationAmount = Int.fromLong(streamReply.prepareAmount)
+          destinationAmount = Int.from(streamReply.prepareAmount)
 
           log.debug('got authentic STREAM reply. claimed destination amount: %s', destinationAmount)
           log.trace('STREAM reply frames: %o', responseFrames)
@@ -290,14 +289,6 @@ export const createConnection = async (
       return isReject(ilpReply)
         ? new StreamReject(log, ilpReply, responseFrames, destinationAmount)
         : new StreamFulfill(log, responseFrames, destinationAmount)
-    },
-
-    async close() {
-      await plugin
-        .disconnect()
-        .then(() => log.debug('plugin disconnected.'))
-        .catch((err: Error) => log.error('error disconnecting plugin:', err))
-      plugin.deregisterDataHandler()
     },
   }
 

@@ -99,7 +99,7 @@ export class AmountController implements StreamController {
     }
 
     // Assuming we accurately know the real exchange rate, if the actual destination amount is less than the
-    // min destination amount set by the sender, the packet fails due a rounding error,
+    // min destination amount set by the sender, the packet fails due to a rounding error,
     // since intermediaries round down, but senders round up:
     // - realDestinationAmount = floor(sourceAmount * realExchangeRate) --- Determined by intermediaries
     // - minDestinationAmount  =  ceil(sourceAmount * minExchangeRate)  --- Determined by sender
@@ -213,8 +213,10 @@ export class AmountController implements StreamController {
     }
 
     // Compute source amount (always positive)
-    const maxPacketAmount = this.controllers.get(MaxPacketAmountController).getMaxPacketAmount()
-    let sourceAmount: PositiveInt = availableToSend.orLesser(maxPacketAmount).orLesser(Int.MAX_U64)
+    const maxPacketAmount = this.controllers.get(MaxPacketAmountController).getNextMaxPacketAmount()
+    let sourceAmount: PositiveInt = availableToSend
+      .orLesser(maxPacketAmount ?? Int.MAX_U64)
+      .orLesser(Int.MAX_U64)
 
     // Check if fixed delivery payment is complete, and apply limits
     if (this.target.type === PaymentType.FixedDelivery) {
@@ -388,7 +390,7 @@ export class AmountController implements StreamController {
         )
 
         // Note: totalReceived *can* be greater than receiveMax! (`ilp-protocol-stream` allows receiving 1% more than the receiveMax)
-        const receiveMax = Int.fromLong(frame.receiveMax)
+        const receiveMax = Int.from(frame.receiveMax)
 
         // Remote receive max can only increase
         this.remoteReceiveMax = this.remoteReceiveMax?.orGreater(receiveMax) ?? receiveMax

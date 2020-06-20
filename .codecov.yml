@@ -14,28 +14,28 @@ coverage:
 flags:
   connection_tag_utils:
     paths:
-      - packages/connection-tag-utils/
+      - packages/connection-tag-utils/src/
   ilp_logger:
     paths:
-      - packages/ilp-logger/
+      - packages/ilp-logger/src/
   ilp_packet:
     paths:
-      - packages/ilp-packet/
+      - packages/ilp-packet/src/
   ilp_plugin:
     paths:
-      - packages/ilp-packet/
+      - packages/ilp-packet/src/
   ilp_protocol_ccp:
     paths:
-      - packages/ilp-protocol-ccp/
+      - packages/ilp-protocol-ccp/src/
   ilp_protocol-ildcp:
     paths:
-      - packages/ilp-protocol-ildcp/
+      - packages/ilp-protocol-ildcp/src/
   ilp_spsp_payout:
     paths:
-      - packages/ilp-spsp-payout/
+      - packages/ilp-spsp-payout/src/
   oer_utils:
     paths:
-      - packages/oer-utils/
+      - packages/oer-utils/src/
   pay:
     paths:
-      - packages/pay/
+      - packages/pay/src/

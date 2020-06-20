@@ -2,8 +2,7 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!**/node_modules/**',
-    // Exclude WIP functionality
-    '!src/setup/open-payments.ts',
+    // Exclude unused functionality
     '!src/rates/ecb.ts',
     '!src/controllers/liquidity-congestion.ts'
   ],

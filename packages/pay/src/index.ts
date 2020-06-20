@@ -4,9 +4,7 @@ import { ControllerMap } from './controllers'
 import { AccountController, AccountDetails } from './controllers/asset-details'
 import { PendingRequestTracker } from './controllers/pending-requests'
 import { fetchCoinCapRates } from './rates/coincap'
-import { query, isStreamCredentials } from './setup/spsp'
-import { isValidIlpAddress, getScheme } from './setup/shared'
-import { isValidAssetScale } from './setup/open-payments'
+import { isValidIlpAddress, isValidAssetScale, getScheme } from './utils'
 import { AmountController, PaymentType } from './controllers/amount'
 import { ExchangeRateController } from './controllers/exchange-rate'
 import { SequenceController } from './controllers/sequence'
@@ -18,13 +16,14 @@ import { RateProbe } from './controllers/rate-probe'
 import { fetch as sendIldcpRequest } from 'ilp-protocol-ildcp'
 import {
   getConnectionId,
-  Int,
   Ratio,
-  PositiveInt,
   isNonNegativeNumber,
   NonNegativeNumber,
+  PositiveInt,
+  Int,
 } from './utils'
 import createLogger from 'ilp-logger'
+import { fetchPaymentDetails } from './open-payments'
 
 export { AccountDetails } from './controllers/asset-details'
 
@@ -32,24 +31,14 @@ export { AccountDetails } from './controllers/asset-details'
 export interface PaymentOptions {
   /** Plugin to send (and optionally, receive) ILP packets over the network */
   plugin: Plugin
-  /** Payment pointer in "$" format or SPSP URL to resolve STREAM credentials */
+  /** Payment pointer, Open Payments or SPSP account URL to query STREAM connection credentials */
   paymentPointer?: string
-  /** ILP address of the recipient of the payment, from the STREAM server. Requires `sharedSecret` */
-  destinationAddress?: string
-  /** Shared secret from the STREAM server, as raw Buffer or base64 encoded string. Requires `destinationAddress` */
-  sharedSecret?: Buffer
+  /** Open Payments invoice URL to resolve details and credentials to pay a fixed-delivery payment */
+  invoiceUrl?: string
   /** Fixed amount to send to the recipient, in normalized source units with arbitrary precision */
   amountToSend?: BigNumber.Value
-  /** Fixed amount to deliver to the recipient, in normalized destination units with arbitrary precision */
-  amountToDeliver?: BigNumber.Value
-  /** Asset code or symbol identifying the asset the recipient will receive. Required for fixed delivery */
-  destinationAssetCode?: string
-  /** Asset scale the invoice is denominated in. Require for fixed delivery */
-  destinationAssetScale?: number
   /** Percentage to subtract from an external exchange rate to determine the minimum acceptable exchange rate */
   slippage?: number
-  /** Callback to set the expiration timestamp of each packet given the destination ILP address */
-  getExpiry?: (destination?: string) => Date
   /**
    * Set of asset codes -> price in a standardized base asset, to calculate exchange rates.
    * By default, rates will be pulled from the CoinCap API
@@ -57,10 +46,42 @@ export interface PaymentOptions {
   prices?: {
     [assetCode: string]: number
   }
+  /** Callback to set the expiration timestamp of each packet given the destination ILP address */
+  getExpiry?: (destination?: string) => Date
+  /** For testing purposes: fixed amount to deliver to the recipient, in base units */
+  amountToDeliver?: Int
+  /** For testing purposes: ILP address of the STREAM receiver to send outgoing packets. Requires `sharedSecret` */
+  destinationAddress?: string
+  /** For testing purposes: symmetric key to encrypt STREAM messages. Requires `destinationAddress` */
+  sharedSecret?: Buffer
+}
+
+/** [Open Payments invoice](https://docs.openpayments.dev/invoices) metadata */
+export interface Invoice {
+  /** URL identifying the invoice */
+  invoiceUrl: string
+  /** URL identifying the account into which payments toward the invoice will be credited */
+  accountUrl: string
+  /** UNIX timestamp in milliseconds when payments toward the invoice will no longer be accepted */
+  expiresAt: NonNegativeNumber
+  /** Human-readable description of the invoice */
+  description: string
+  /** Fixed destination amount that must be delivered to complete payment of the invoice, in ordinary units */
+  amountToDeliver: BigNumber
+  /** Amount that has already been paid toward the invoice, in ordinary units */
+  amountDelivered: BigNumber
+  /** Precision of the recipient's asset denomination: number of decimal places of the ordinary unit */
+  assetCode: string
+  /** Asset code or symbol identifying the currency of the destination account */
+  assetScale: number
 }
 
 /** Parameters of payment execution and the projected outcome of a payment */
 export interface Quote {
+  /** Execute the payment within these parameters */
+  pay: () => Promise<Receipt>
+  /** Cancel the payment (disconnects the plugin and closes connection with recipient) */
+  cancel: () => Promise<void>
   /** Maximum amount that will be sent in source units */
   maxSourceAmount: BigNumber
   /** Minimum amount that will be delivered if the payment completes */
@@ -75,10 +96,8 @@ export interface Quote {
   sourceAccount: AccountDetails
   /** Destination account details */
   destinationAccount: AccountDetails
-  /** Execute the payment within these parameters */
-  pay: () => Promise<Receipt>
-  /** Cancel the payment (disconnects the plugin and closes connection with recipient) */
-  cancel: () => Promise<void>
+  /** Open Payments invoice metadata, if the payment pays into an invoice */
+  invoice?: Invoice
 }
 
 /** Final outcome of a payment */
@@ -126,8 +145,10 @@ export enum PaymentError {
    * Errors likely caused by the receiver, connectors, or other externalities
    */
 
-  /** Failed to query the SPSP server or received an invalid response */
-  SpspQueryFailed = 'SpspQueryFailed',
+  /** Failed to query an account or invoice from an Open Payments or SPSP server */
+  QueryFailed = 'QueryFailed',
+  /** Invoice is complete: amount paid into the invoice already meets or exceeds the invoice amount */
+  InvoiceAlreadyPaid = 'InvoiceAlreadyPaid',
   /** Failed to fetch the external exchange rate and unable to enforce a minimum exchange rate */
   ExternalRateUnavailable = 'ExternalRateUnavailable',
   /** Probed exchange rate is too low: less than the minimum pulled from external rate APIs */
@@ -168,17 +189,6 @@ export const isPaymentError = (o: any): o is PaymentError => Object.values(Payme
 export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quote> => {
   let log = createLogger('ilp-pay')
 
-  // Resolve the payment payment and/or validate STREAM credentials
-  const credentials = options.paymentPointer ? await query(options.paymentPointer) : options
-  if (!isStreamCredentials(credentials)) {
-    log.debug('invalid config: shared secret or destination address missing or invalid')
-    throw PaymentError.InvalidCredentials
-  }
-  const { destinationAddress, sharedSecret } = credentials
-
-  const connectionId = await getConnectionId(destinationAddress)
-  log = log.extend(connectionId)
-
   // Validate the slippage
   const slippage = options.slippage ?? 0.01
   if (!isNonNegativeNumber(slippage) || slippage > 1) {
@@ -186,22 +196,44 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     throw PaymentError.InvalidSlippage
   }
 
-  // TODO Ensure the plugin is disconnected after all errors!
+  // Determine STREAM credentials, amount to pay, and destination details
+  // by performing Open Payments/SPSP queries, or using the provided info
+  const recipientDetailsOrError = await fetchPaymentDetails(options)
+  if (isPaymentError(recipientDetailsOrError)) {
+    throw recipientDetailsOrError
+  }
+  const { sharedSecret, destinationAddress, destinationAsset, invoice } = recipientDetailsOrError
 
+  const connectionId = await getConnectionId(destinationAddress)
+  log = log.extend(connectionId)
+
+  // TODO Add timeout here?
   await plugin.connect().catch((err: Error) => {
     log.debug('error connecting plugin:', err)
     throw PaymentError.Disconnected
   })
 
+  const close = async () => {
+    // TODO Add timeout here?
+    await plugin
+      .disconnect()
+      .then(() => log.debug('plugin disconnected.'))
+      .catch((err: Error) => log.error('error disconnecting plugin:', err))
+    plugin.deregisterDataHandler()
+  }
+
   // Fetch asset details of source account
+  // TODO Add timeout here?
   const sourceAccount: AccountDetails = await sendIldcpRequest((data) => plugin.sendData(data))
-    .catch(() => {
-      log.debug('quote failed: unknown source asset after IL-DCP request failed')
+    .catch(async (err) => {
+      log.debug('quote failed: IL-DCP request to fetch source asset failed:', err)
+      await close()
       throw PaymentError.UnknownSourceAsset
     })
-    .then(({ assetCode, assetScale, clientAddress }) => {
+    .then(async ({ assetCode, assetScale, clientAddress }) => {
       if (!isValidAssetScale(assetScale) || !isValidIlpAddress(clientAddress)) {
         log.debug('quote failed: source asset details from IL-DCP request are invalid')
+        await close()
         throw PaymentError.UnknownSourceAsset
       }
 
@@ -219,23 +251,88 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
       sourceAccount.ilpAddress,
       destinationAddress
     )
+    await close()
     throw PaymentError.IncompatibleInterledgerNetworks
+  }
+
+  let target: {
+    type: PaymentType
+    amount: PositiveInt
+  }
+  if (invoice) {
+    const remainingToDeliver = invoice.amountToDeliver.subtract(invoice.amountDelivered)
+    if (!remainingToDeliver.isPositive()) {
+      log.debug(
+        'quote failed: invoice was already paid. amountToDeliver=%s amountDelivered=%s',
+        invoice.amountToDeliver,
+        invoice.amountDelivered
+      )
+      await close()
+      throw PaymentError.InvoiceAlreadyPaid
+    }
+
+    target = {
+      type: PaymentType.FixedDelivery,
+      amount: remainingToDeliver,
+    }
+  }
+  // Validate the target amount is non-zero and compatible with the precision of the accounts
+  else if (options.amountToSend !== undefined) {
+    const amountToSend = Int.from(
+      new BigNumber(options.amountToSend).shiftedBy(sourceAccount.assetScale)
+    )
+    if (!amountToSend || !amountToSend.isPositive()) {
+      log.debug(
+        'invalid config: amount to send is not a positive integer or more precise than the source account'
+      )
+      await close()
+      throw PaymentError.InvalidSourceAmount
+    }
+
+    target = {
+      type: PaymentType.FixedSend,
+      amount: amountToSend,
+    }
+  } else if (options.amountToDeliver !== undefined) {
+    log.warn('amountToDeliver is for testing. invoices are recommended for fixed-delivery')
+
+    if (!options.amountToDeliver.isPositive()) {
+      log.debug(
+        'invalid config: amount to deliver is not a positive integer or more precise than the destination account'
+      )
+      await close()
+      throw PaymentError.InvalidDestinationAmount
+    }
+
+    target = {
+      type: PaymentType.FixedDelivery,
+      amount: options.amountToDeliver,
+    }
+  } else {
+    log.debug('invalid config: no invoice, amount to send, or amount to deliver was provided')
+    await close()
+    throw PaymentError.UnknownPaymentTarget
   }
 
   const controllers: ControllerMap = new Map()
   controllers
     // First so all other controllers log the sequence number
     .set(SequenceController, new SequenceController())
-    // Fail-fast on Fxx errors or timeouts
+    // Fail-fast on terminal rejects or timeouts
     .set(FailureController, new FailureController())
-    // Fail-fast if destination asset detail conflict
-    .set(AccountController, new AccountController(sourceAccount, destinationAddress))
-    .set(PacingController, new PacingController())
+    // Fail-fast on destination asset detail conflict
+    .set(
+      AccountController,
+      new AccountController(sourceAccount, destinationAddress, destinationAsset)
+    )
+    // Fail-fast if max packet amount is 0
     .set(MaxPacketAmountController, new MaxPacketAmountController())
+    // Limit how frequently packets are sent and early return
+    .set(PacingController, new PacingController())
     .set(AmountController, new AmountController(controllers))
     .set(ExchangeRateController, new ExchangeRateController())
     .set(RateProbe, new RateProbe(controllers))
-    // Ensure packet is processed by each controller before pending request Promises resolve
+    // Ensure each controller processes reply before resolving Promises
     .set(PendingRequestTracker, new PendingRequestTracker())
 
   // Register handlers for incoming packets and generate encryption keys
@@ -246,54 +343,6 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     destinationAddress,
     options.getExpiry
   )
-
-  // Perform initial validation of the target amount
-  let targetAmount: PositiveInt
-  let targetType: PaymentType
-  if (typeof options.amountToSend !== 'undefined') {
-    const amountToSend = Int.fromBigNumber(
-      new BigNumber(options.amountToSend).shiftedBy(sourceAccount.assetScale)
-    )
-    if (!amountToSend || !amountToSend.isPositive()) {
-      log.debug(
-        'invalid config: amount to send is not a positive integer or more precise than the source account'
-      )
-      await connection.close()
-      throw PaymentError.InvalidSourceAmount
-    }
-
-    targetAmount = amountToSend
-    targetType = PaymentType.FixedSend
-  } else if (typeof options.amountToDeliver !== 'undefined') {
-    const { destinationAssetCode: assetCode, destinationAssetScale: assetScale } = options
-    if (!assetCode || !isValidAssetScale(assetScale)) {
-      log.debug(
-        'invalid config: destination asset details must be provided in advance for fixed delivery payments'
-      )
-      await connection.close()
-      throw PaymentError.UnknownDestinationAsset
-    }
-
-    controllers.get(AccountController).setDestinationAsset(assetCode, assetScale)
-
-    const amountToDeliver = Int.fromBigNumber(
-      new BigNumber(options.amountToDeliver).shiftedBy(assetScale)
-    )
-    if (!amountToDeliver || !amountToDeliver.isPositive()) {
-      log.debug(
-        'invalid config: amount to deliver is not a positive integer or more precise than the destination account'
-      )
-      await connection.close()
-      throw PaymentError.InvalidDestinationAmount
-    }
-
-    targetAmount = amountToDeliver
-    targetType = PaymentType.FixedDelivery
-  } else {
-    log.debug('invalid config: no amount to send or deliver was provided')
-    await connection.close()
-    throw PaymentError.UnknownPaymentTarget
-  }
 
   log.debug('starting quote.')
 
@@ -310,15 +359,16 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
 
   // If the send loop failed due to an error, end the payment/quote
   if (typeof probeResult === 'string') {
-    await connection.close()
+    await close()
     throw probeResult
   }
   const { rateCalculator, maxPacketAmount } = probeResult
 
+  // Destination asset may not be known until now if it was shared over STREAM vs application layer
   const destinationAccount = controllers.get(AccountController).getDestinationAccount()
   if (!destinationAccount) {
     log.debug('quote failed: receiver never shared destination asset details')
-    await connection.close()
+    await close()
     throw PaymentError.UnknownDestinationAsset
   }
 
@@ -329,7 +379,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
       options.prices ??
       (await fetchCoinCapRates().catch(async (err) => {
         log.debug('quote failed: error fetching external prices: %s', err) // Note: stringify since axios errors are verbose
-        await connection.close()
+        await close()
         throw PaymentError.ExternalRateUnavailable
       }))
 
@@ -347,7 +397,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
         sourceAccount.assetCode,
         destinationAccount.assetCode
       )
-      await connection.close()
+      await close()
       throw PaymentError.ExternalRateUnavailable
     }
 
@@ -363,9 +413,9 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
 
   const projectedOutcome = controllers
     .get(AmountController)
-    .setPaymentTarget(targetAmount, targetType, minimumRate, rateCalculator, maxPacketAmount, log)
+    .setPaymentTarget(target.amount, target.type, minimumRate, rateCalculator, maxPacketAmount, log)
   if (isPaymentError(projectedOutcome)) {
-    await connection.close()
+    await close()
     throw projectedOutcome
   }
 
@@ -392,6 +442,18 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     sourceAccount,
     destinationAccount,
 
+    invoice: invoice && {
+      ...invoice,
+      assetCode: destinationAccount.assetCode,
+      assetScale: destinationAccount.assetScale,
+      amountDelivered: invoice.amountDelivered
+        .toBigNumber()
+        .shiftedBy(-destinationAccount.assetScale),
+      amountToDeliver: invoice.amountToDeliver
+        .toBigNumber()
+        .shiftedBy(-destinationAccount.assetScale),
+    },
+
     estimatedExchangeRate: [lowerBoundRate, upperBoundRate],
     minExchangeRate,
 
@@ -405,7 +467,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
 
       // Start send loop to execute the payment
       const finalState = await connection.runSendLoop()
-      await connection.close()
+      await close()
 
       log.debug('payment ended.')
 
@@ -428,6 +490,6 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
       }
     },
 
-    cancel: () => connection.close(),
+    cancel: close,
   }
 }
