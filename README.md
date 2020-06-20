@@ -7,22 +7,22 @@
 
 ### Payments
 
-Name | Version | Description
---- | --- | ---
-[`@interledger/pay`](./packages/pay) | [![NPM Package](https://img.shields.io/npm/v/@interledger/pay.svg?style=flat&logo=npm)](https://npmjs.org/package/@interledger/pay) | Send payments over Interledger using STREAM
-[`ilp-spsp-payout`](./packages/ilp-spsp-payout) | [![NPM Package](https://img.shields.io/npm/v/ilp-spsp-payout.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-spsp-payout) | Payout utility for SPSP servers
+| Name                                            | Version                                                                                                                             | Description                                 |
+| :---------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------ |
+| [`@interledger/pay`](./packages/pay)            | [![NPM Package](https://img.shields.io/npm/v/@interledger/pay.svg?style=flat&logo=npm)](https://npmjs.org/package/@interledger/pay) | Send payments over Interledger using STREAM |
+| [`ilp-spsp-payout`](./packages/ilp-spsp-payout) | [![NPM Package](https://img.shields.io/npm/v/ilp-spsp-payout.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-spsp-payout)   | Payout utility for SPSP servers             |
 
 ### Utilities
 
-Name | Version | Description
---- | --- | ---
-[`@interledger/connection-tag-utils`](./packages/connection-tag-utils) | [![NPM Package](https://img.shields.io/npm/v/@interledger/connection-tag-utils.svg?style=flat&logo=npm)](https://npmjs.org/package/@interledger/connection-tag-utils) | Encryption utilities for STREAM connection tags
-[`ilp-logger`](./packages/ilp-logger) | [![NPM Package](https://img.shields.io/npm/v/ilp-logger.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-logger) | Debug logging utility for Interledger modules
-[`ilp-packet`](./packages/ilp-packet) | [![NPM Package](https://img.shields.io/npm/v/ilp-packet.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-packet) | Serialization/deserialization for ILP packets
-[`ilp-plugin`](./packages/ilp-plugin) | [![NPM Package](https://img.shields.io/npm/v/ilp-plugin.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-plugin) | Connect to a local, open BTP server
-[`ilp-protocol-ccp`](./packages/ilp-protocol-ccp) | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ccp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ccp) | Serialization/deserialization for the CCP routing protocol
-[`ilp-protocol-ildcp`](./packages/ilp-protocol-ildcp) | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ildcp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ildcp) | Fetch asset and account details from a parent
-[`oer-utils`](./packages/oer-utils) | [![NPM Package](https://img.shields.io/npm/v/oer-utils.svg?style=flat&logo=npm)](https://npmjs.org/package/oer-utils) | Tools for OER parsing and serialization
+| Name                                                                   | Version                                                                                                                                                               | Description                                                |
+| :--------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
+| [`@interledger/connection-tag-utils`](./packages/connection-tag-utils) | [![NPM Package](https://img.shields.io/npm/v/@interledger/connection-tag-utils.svg?style=flat&logo=npm)](https://npmjs.org/package/@interledger/connection-tag-utils) | Encryption utilities for STREAM connection tags            |
+| [`ilp-logger`](./packages/ilp-logger)                                  | [![NPM Package](https://img.shields.io/npm/v/ilp-logger.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-logger)                                               | Debug logging utility for Interledger modules              |
+| [`ilp-packet`](./packages/ilp-packet)                                  | [![NPM Package](https://img.shields.io/npm/v/ilp-packet.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-packet)                                               | Serialization/deserialization for ILP packets              |
+| [`ilp-plugin`](./packages/ilp-plugin)                                  | [![NPM Package](https://img.shields.io/npm/v/ilp-plugin.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-plugin)                                               | Connect to a local, open BTP server                        |
+| [`ilp-protocol-ccp`](./packages/ilp-protocol-ccp)                      | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ccp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ccp)                                   | Serialization/deserialization for the CCP routing protocol |
+| [`ilp-protocol-ildcp`](./packages/ilp-protocol-ildcp)                  | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ildcp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ildcp)                               | Fetch asset and account details from a parent              |
+| [`oer-utils`](./packages/oer-utils)                                    | [![NPM Package](https://img.shields.io/npm/v/oer-utils.svg?style=flat&logo=npm)](https://npmjs.org/package/oer-utils)                                                 | Tools for OER parsing and serialization                    |
 
 ## Installation
 

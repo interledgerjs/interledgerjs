@@ -1,10 +1,10 @@
 import { DataHandler, MoneyHandler, PluginInstance } from 'ilp-connector/dist/types/plugin'
 import { EventEmitter } from 'events'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { sleep } from '../src/utils'
+import { sleep } from '../../src/utils'
 
 // TODO Normal distribution
-// TODO Cite this: https://stackoverflow.com/questions/25582882/javascript-math-random-normal-distribution-gaussian-bell-curve
+//      Cite this: https://stackoverflow.com/questions/25582882/javascript-math-random-normal-distribution-gaussian-bell-curve
 const getRandomFloat = (min: number, max: number): number => {
   let u = 0
   let v = 0
@@ -18,11 +18,11 @@ const getRandomFloat = (min: number, max: number): number => {
   return num
 }
 
-const defaultDataHandler = async () => {
+const defaultDataHandler = async (): Promise<never> => {
   throw new Error('No data handler registered')
 }
 
-const defaultMoneyHandler = () => {
+const defaultMoneyHandler = (): Promise<never> => {
   throw new Error('No money handler registered')
 }
 
@@ -66,19 +66,19 @@ export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance
     return [pluginA, pluginB]
   }
 
-  async connect() {
+  async connect(): Promise<void> {
     this.connected = true
   }
 
-  async disconnect() {
+  async disconnect(): Promise<void> {
     this.connected = false
   }
 
-  isConnected() {
+  isConnected(): boolean {
     return this.connected
   }
 
-  async sendData(data: Buffer) {
+  async sendData(data: Buffer): Promise<Buffer> {
     if (this.mirror && this.connected) {
       await this.addNetworkDelay()
       const response = await this.mirror.dataHandler(data)
@@ -89,15 +89,15 @@ export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance
     }
   }
 
-  registerDataHandler(handler: DataHandler) {
+  registerDataHandler(handler: DataHandler): void {
     this.dataHandler = handler
   }
 
-  deregisterDataHandler() {
+  deregisterDataHandler(): void {
     this.dataHandler = defaultDataHandler
   }
 
-  async sendMoney(amount: string) {
+  async sendMoney(amount: string): Promise<void> {
     if (this.mirror && this.connected) {
       await this.addSettlementDelay()
       await this.mirror.moneyHandler(amount)
@@ -106,11 +106,11 @@ export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance
     }
   }
 
-  registerMoneyHandler(handler: MoneyHandler) {
+  registerMoneyHandler(handler: MoneyHandler): void {
     this.moneyHandler = handler
   }
 
-  deregisterMoneyHandler() {
+  deregisterMoneyHandler(): void {
     this.moneyHandler = defaultMoneyHandler
   }
 

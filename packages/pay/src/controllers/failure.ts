@@ -87,6 +87,7 @@ export class FailureController implements StreamController {
 
         // TODO F02, R00 (and maybe even F00) tend to be routing errors.
         //      Should it tolerate a few of these before ending the payment?
+        //      Timeout error could be a routing loop though?
 
         // On any other error, end the payment immediately
         this.terminalReject = true

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/no-non-null-assertion */
 import { it, expect } from '@jest/globals'
-import { MirrorPlugin } from './plugin'
+import { MirrorPlugin } from './helpers/plugin'
 import { createConnection } from '../src/connection'
 import { ControllerMap, StreamReject } from '../src/controllers'
 import { randomBytes } from 'crypto'
@@ -25,13 +25,10 @@ import {
   generateFulfillmentKey,
   hash,
 } from 'ilp-protocol-stream/dist/src/crypto'
-import { IlpAddress } from '../src/setup/shared'
-import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
+import { IlpAddress, AssetScale } from '../src/utils'
 import { Int, IlpError } from '../src/utils'
 import { FailureController } from '../src/controllers/failure'
 import { AccountController } from '../src/controllers/asset-details'
-import { AssetScale } from '../src/setup/open-payments'
-import { DataAndMoneyStream } from 'ilp-protocol-stream'
 
 const destinationAddress = 'private.bob' as IlpAddress
 const sharedSecret = randomBytes(32)
@@ -202,8 +199,8 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 20,
-      sourceAmount: Int.fromNumber(100)!,
-      minDestinationAmount: Int.fromNumber(99)!,
+      sourceAmount: Int.from(100)!,
+      minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
@@ -235,8 +232,8 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 31,
-      sourceAmount: Int.fromNumber(100)!,
-      minDestinationAmount: Int.fromNumber(99)!,
+      sourceAmount: Int.from(100)!,
+      minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
@@ -268,8 +265,8 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 20,
-      sourceAmount: Int.fromNumber(100)!,
-      minDestinationAmount: Int.fromNumber(99)!,
+      sourceAmount: Int.from(100)!,
+      minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
@@ -304,8 +301,8 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 20,
-      sourceAmount: Int.fromNumber(100)!,
-      minDestinationAmount: Int.fromNumber(99)!,
+      sourceAmount: Int.from(100)!,
+      minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
@@ -349,8 +346,8 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 20,
-      sourceAmount: Int.fromNumber(100)!,
-      minDestinationAmount: Int.fromNumber(99)!,
+      sourceAmount: Int.from(100)!,
+      minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
@@ -395,8 +392,8 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 1,
-      sourceAmount: Int.fromNumber(100)!,
-      minDestinationAmount: Int.fromNumber(99)!,
+      sourceAmount: Int.from(100)!,
+      minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
@@ -434,8 +431,8 @@ describe('validates replies', () => {
 
     const reply = await connection.sendRequest({
       sequence: 1,
-      sourceAmount: Int.fromNumber(100)!,
-      minDestinationAmount: Int.fromNumber(99)!,
+      sourceAmount: Int.from(100)!,
+      minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
       log: createLogger('ilp-pay'),
@@ -449,25 +446,4 @@ describe('validates replies', () => {
     expect((reply as StreamReject).ilpReject.code).toBe(IlpError.F07_CANNOT_RECEIVE)
     expect((reply as StreamReject).ilpReject.data).toEqual(replyData)
   })
-})
-
-it('catches plugin disconnect errors', async () => {
-  const plugin: Plugin = {
-    async connect() {},
-    async disconnect() {
-      throw new Error('Failed to disconnect')
-    },
-    async sendData() {
-      return Buffer.alloc(0)
-    },
-    registerDataHandler() {},
-    deregisterDataHandler() {},
-    isConnected() {
-      return true
-    },
-  }
-
-  const connection = await createConnection(plugin, controllers, sharedSecret, destinationAddress)
-
-  await connection.close()
 })

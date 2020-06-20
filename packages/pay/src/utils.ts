@@ -2,8 +2,37 @@
 import BigNumber from 'bignumber.js'
 import Long from 'long'
 import { IlpReject, serializeIlpReject } from 'ilp-packet'
-import { IlpAddress } from './setup/shared'
 import { hash } from 'ilp-protocol-stream/dist/src/crypto'
+
+const ILP_ADDRESS_SCHEMES = [
+  'g',
+  'private',
+  'example',
+  'test',
+  'test1',
+  'test2',
+  'test3',
+  'local',
+  'peer',
+  'self',
+] as const
+
+const ILP_ADDRESS_REGEX = /^(g|private|example|peer|self|test[1-3]?|local)([.][a-zA-Z0-9_~-]+)+$/
+const ILP_ADDRESS_MAX_LENGTH = 1023
+
+export type AssetScale = Brand<number, 'AssetScale'>
+
+export const isValidAssetScale = (o: unknown): o is AssetScale =>
+  typeof o === 'number' && o >= 0 && o <= 255 && Number.isInteger(o)
+
+/** Get prefix or allocation scheme of the given ILP address */
+export const getScheme = (address: IlpAddress): typeof ILP_ADDRESS_SCHEMES[number] =>
+  address.split('.')[0] as typeof ILP_ADDRESS_SCHEMES[number]
+
+export type IlpAddress = Brand<string, 'IlpAddress'>
+
+export const isValidIlpAddress = (o: unknown): o is IlpAddress =>
+  typeof o === 'string' && o.length <= ILP_ADDRESS_MAX_LENGTH && ILP_ADDRESS_REGEX.test(o)
 
 /** Promise that can be resolved or rejected outside its executor callback */
 export class PromiseResolver<T> {
@@ -16,7 +45,7 @@ export class PromiseResolver<T> {
 }
 
 /** Compute short string to uniquely identify this connection in logs */
-export const getConnectionId = (destinationAddress: IlpAddress): Promise<string> =>
+export const getConnectionId = (destinationAddress: string): Promise<string> =>
   hash(Buffer.from(destinationAddress)).then((image) => image.toString('hex').slice(0, 6))
 
 /** Default maximum duration that a ILP Prepare can be in-flight before it should be rejected */
@@ -158,19 +187,45 @@ export class Int {
     this.value = n
   }
 
-  static fromNumber(n: number): Int | undefined {
+  static from(n: Long): Int
+  static from(n: number): Int | undefined
+  static from(n: string): Int | undefined
+  static from(n: BigNumber): Int | undefined
+  static from(n: Long | number | string | BigNumber): Int | undefined {
+    if (typeof n === 'string') {
+      return Int.fromString(n)
+    } else if (typeof n === 'number') {
+      return Int.fromNumber(n)
+    } else if (BigNumber.isBigNumber(n)) {
+      return Int.fromBigNumber(n)
+    } else {
+      return Int.fromLong(n)
+    }
+  }
+
+  private static fromString(n: string): Int | undefined {
+    try {
+      const big = BigInt(n)
+      if (big >= 0) {
+        return new Int(big)
+      }
+      // eslint-disable-next-line no-empty
+    } catch (_) {}
+  }
+
+  private static fromNumber(n: number): Int | undefined {
     if (Number.isInteger(n) && n >= 0) {
       return new Int(BigInt(n))
     }
   }
 
-  static fromBigNumber(n: BigNumber): Int | undefined {
+  private static fromBigNumber(n: BigNumber): Int | undefined {
     if (n.isInteger() && n.isGreaterThanOrEqualTo(0)) {
-      return new Int(BigInt(n.toString()))
+      return Int.fromString(n.toString())
     }
   }
 
-  static fromLong(n: Long): Int {
+  private static fromLong(n: Long): Int {
     LONG_BIGINT_DATAVIEW.setUint32(0, n.high)
     LONG_BIGINT_DATAVIEW.setUint32(4, n.low)
     return new Int(LONG_BIGINT_DATAVIEW.getBigUint64(0))
@@ -198,10 +253,6 @@ export class Int {
     return this.modulo(r).isPositive()
       ? new Int((this.value * r.a.value) / r.b.value).add(Int.ONE)
       : new Int((this.value * r.a.value) / r.b.value)
-  }
-
-  divideFloor(n: PositiveInt): Int {
-    return new Int(this.value / n.value)
   }
 
   divideCeil(n: PositiveInt): Int {
@@ -310,8 +361,8 @@ export class Ratio {
       e *= 10
     }
 
-    const a = Int.fromNumber(n * e)!
-    const b = Int.fromNumber(e)!
+    const a = Int.from(n * e)!
+    const b = Int.from(e)!
     return new Ratio(a, b as PositiveInt)
   }
 

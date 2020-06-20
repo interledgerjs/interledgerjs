@@ -41,7 +41,7 @@ export class RateProbe implements StreamController {
     100,
     10,
     1,
-  ].map(Int.fromNumber)
+  ].map(Int.from)
 
   /** Amounts that are in flight */
   private inFlightAmounts = new Set<bigint>()
@@ -69,23 +69,28 @@ export class RateProbe implements StreamController {
     }
 
     // Max packet probe amount or discovered max packet amount
-    const maxPacketAmount = this.controllers.get(MaxPacketAmountController).getMaxPacketAmount()
 
+    const knownMaxPacketAmount = this.controllers
+      .get(MaxPacketAmountController)
+      .getDiscoveredMaxPacketAmount()
     const rateCalculator = this.controllers.get(ExchangeRateController).state
-    const discoveredMaxPacket = this.controllers.get(MaxPacketAmountController).isPreciseMaxKnown()
-    if (discoveredMaxPacket && rateCalculator && this.inFlightAmounts.size === 0) {
+    if (knownMaxPacketAmount && rateCalculator && this.inFlightAmounts.size === 0) {
       this.status.resolve({
-        maxPacketAmount,
+        maxPacketAmount: knownMaxPacketAmount,
         rateCalculator,
       })
       return SendState.End
     }
 
+    const maxPacketProbeAmount = this.controllers
+      .get(MaxPacketAmountController)
+      .getNextMaxPacketAmount()
     if (
-      !this.inFlightAmounts.has(maxPacketAmount.value) &&
-      !this.ackedAmounts.has(maxPacketAmount.value)
+      maxPacketProbeAmount &&
+      !this.inFlightAmounts.has(maxPacketProbeAmount.value) &&
+      !this.ackedAmounts.has(maxPacketProbeAmount.value)
     ) {
-      builder.setSourceAmount(maxPacketAmount).send()
+      builder.setSourceAmount(maxPacketProbeAmount).send()
       return SendState.Wait
     }
 

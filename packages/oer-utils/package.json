@@ -26,7 +26,7 @@
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F oer_utils"
   },
   "dependencies": {
-    "@types/long": "4.0.0",
+    "@types/long": "4.0.1",
     "long": "^4.0.0"
   }
 }
