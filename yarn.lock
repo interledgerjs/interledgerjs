@@ -9852,9 +9852,9 @@ test-exclude@^6.0.0:
     minimatch "^3.0.4"
 
 testcontainers@^2.12.0:
-  version "2.12.0"
-  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-2.12.0.tgz#a441049a0fbadc18be5ca5c5e2877432713a5235"
-  integrity sha512-fNQjRDW5re29SWYCNwZo+P0IoA5SUw9MBxh9KC4WygthvAm72gUBGKWdtJCdtLEBCraV1hPTYOJX1DGoxpFsoQ==
+  version "2.14.0"
+  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-2.14.0.tgz#1275d933f5575bc12d10a7fda1cbd8a16f99d0ed"
+  integrity sha512-cZRINbvWcnvbDMlLQfb+FqkwlMfBwnAqV9OwUnJhN+RRdFxgmeSOoFdMRhBIa6fxqTYckr/ugHQI1UvzegJ+Jw==
   dependencies:
     "@types/dockerode" "^2.5.24"
     byline "^5.0.0"
@@ -9862,6 +9862,7 @@ testcontainers@^2.12.0:
     default-gateway "^5.0.2"
     dockerode "^2.5.8"
     get-port "^4.2.0"
+    glob "^7.1.6"
     node-duration "^1.0.4"
     stream-to-array "^2.3.0"
     tar-fs "^2.0.0"
