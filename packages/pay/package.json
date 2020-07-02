@@ -35,7 +35,6 @@
     "@types/long": "^4.0.1",
     "@types/rgrove__parse-xml": "^1.1.0",
     "@types/uuid": "^8.0.0",
-    "codecov": "^3.5.0",
     "get-port": "^5.1.1",
     "ilp-connector": "^23.0.1",
     "ilp-plugin-http": "^1.6.0",

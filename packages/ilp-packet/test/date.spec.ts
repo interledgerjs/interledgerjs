@@ -1,10 +1,7 @@
 import * as assert from 'assert'
-import {
-  dateToInterledgerTime,
-  interledgerTimeToDate
-} from '../src/utils/date'
+import { dateToInterledgerTime, interledgerTimeToDate } from '../src/utils/date'
 
-function randomBetween (min: number, max: number): number {
+function randomBetween(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min))
 }
 

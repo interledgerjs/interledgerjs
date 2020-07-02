@@ -4,7 +4,6 @@ import { ControllerMap } from './controllers'
 import { AccountController, AccountDetails } from './controllers/asset-details'
 import { PendingRequestTracker } from './controllers/pending-requests'
 import { fetchCoinCapRates } from './rates/coincap'
-import { isValidIlpAddress, isValidAssetScale, getScheme } from './utils'
 import { AmountController, PaymentType } from './controllers/amount'
 import { ExchangeRateController } from './controllers/exchange-rate'
 import { SequenceController } from './controllers/sequence'
@@ -13,7 +12,7 @@ import { FailureController } from './controllers/failure'
 import { MaxPacketAmountController } from './controllers/max-packet'
 import { createConnection } from './connection'
 import { RateProbe } from './controllers/rate-probe'
-import { fetch as sendIldcpRequest } from 'ilp-protocol-ildcp'
+import { fetch as sendIldcpRequest, isValidAssetScale } from 'ilp-protocol-ildcp'
 import {
   getConnectionId,
   Ratio,
@@ -24,6 +23,7 @@ import {
 } from './utils'
 import createLogger from 'ilp-logger'
 import { fetchPaymentDetails } from './open-payments'
+import { isValidIlpAddress, getScheme } from 'ilp-packet'
 
 export { AccountDetails } from './controllers/asset-details'
 

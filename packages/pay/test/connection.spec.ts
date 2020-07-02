@@ -18,6 +18,8 @@ import {
   serializeIlpPrepare,
   deserializeIlpReject,
   IlpPrepare,
+  IlpAddress,
+  IlpError,
 } from 'ilp-packet'
 import {
   generateFulfillment,
@@ -25,10 +27,10 @@ import {
   generateFulfillmentKey,
   hash,
 } from 'ilp-protocol-stream/dist/src/crypto'
-import { IlpAddress, AssetScale } from '../src/utils'
-import { Int, IlpError } from '../src/utils'
+import { Int } from '../src/utils'
 import { FailureController } from '../src/controllers/failure'
 import { AccountController } from '../src/controllers/asset-details'
+import { AssetScale } from 'ilp-protocol-ildcp'
 
 const destinationAddress = 'private.bob' as IlpAddress
 const sharedSecret = randomBytes(32)
