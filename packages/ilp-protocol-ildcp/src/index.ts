@@ -4,7 +4,7 @@ import debug = require('debug')
 
 const log = debug('ilp-protocol-ildcp')
 
-const ILDCP_DESTINATION = 'peer.config'
+const ILDCP_DESTINATION = 'peer.config' as IlpPacket.IlpAddress
 const PEER_PROTOCOL_FULFILLMENT = Buffer.alloc(32)
 const PEER_PROTOCOL_CONDITION = Buffer.from(
   'Zmh6rfhivXdsj8GLjp+OIAiXFIVu4jOzkCpZHQ1fKSU=',
@@ -54,7 +54,12 @@ const serializeIldcpRequest = (request: IldcpRequest): Buffer => {
   })
 }
 
-const deserializeIldcpResponse = (response: Buffer): IldcpResponse => {
+const deserializeIldcpResponse = (
+  response: Buffer
+): IldcpResponse & {
+  clientAddress: IlpPacket.IlpAddress
+  assetScale: AssetScale
+} => {
   const { fulfillment, data } = IlpPacket.deserializeIlpFulfill(response)
 
   if (!PEER_PROTOCOL_FULFILLMENT.equals(fulfillment)) {
@@ -64,8 +69,11 @@ const deserializeIldcpResponse = (response: Buffer): IldcpResponse => {
   const reader = Reader.from(data)
 
   const clientAddress = reader.readVarOctetString().toString('ascii')
+  if (!IlpPacket.isValidIlpAddress(clientAddress)) {
+    throw new Error('Invalid ILP address')
+  }
 
-  const assetScale = reader.readUInt8Number()
+  const assetScale = reader.readUInt8Number() as AssetScale
   const assetCode = reader.readVarOctetString().toString('utf8')
 
   return { clientAddress, assetScale, assetCode }
@@ -104,11 +112,11 @@ const fetch = async (
 ): Promise<IldcpResponse> => {
   const data = await sendData(serializeIldcpRequest(request || {}))
 
-  if (data[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
+  if (data[0] === IlpPacket.IlpPacketType.Reject) {
     const { triggeredBy, message } = IlpPacket.deserializeIlpReject(data)
     log('IL-DCP request rejected. triggeredBy=%s errorMessage=%s', triggeredBy, message)
     throw new Error('IL-DCP failed: ' + message)
-  } else if (data[0] !== IlpPacket.Type.TYPE_ILP_FULFILL) {
+  } else if (data[0] !== IlpPacket.IlpPacketType.Fulfill) {
     log('invalid response type. type=%s', data[0])
     throw new Error('IL-DCP error, unable to retrieve client configuration.')
   }
@@ -155,6 +163,17 @@ const serve = async ({ requestPacket, handler, serverAddress }: ServeSettings): 
   }
 }
 
+declare class Tag<N extends string> {
+  protected __nominal: N
+}
+
+type Brand<T, N extends string> = T & Tag<N>
+
+type AssetScale = Brand<number, 'AssetScale'>
+
+const isValidAssetScale = (o: unknown): o is AssetScale =>
+  typeof o === 'number' && o >= 0 && o <= 255 && Number.isInteger(o)
+
 export {
   deserializeIldcpRequest,
   serializeIldcpRequest,
@@ -162,4 +181,6 @@ export {
   serializeIldcpResponse,
   fetch,
   serve,
+  AssetScale,
+  isValidAssetScale,
 }

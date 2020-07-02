@@ -9,8 +9,9 @@ import {
   ErrorCode,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { DEFAULT_STREAM_ID } from './amount'
-import { IlpAddress, AssetScale } from '../utils'
 import { PaymentError } from '..'
+import { IlpAddress } from 'ilp-packet'
+import { AssetScale } from 'ilp-protocol-ildcp'
 
 /** Asset and Interledger address for an account (sender or receiver) */
 export interface AccountDetails extends AssetDetails {

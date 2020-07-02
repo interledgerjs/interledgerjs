@@ -1,16 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/no-empty-function */
-import { IlpAddress, isValidAssetScale, isValidIlpAddress } from './utils'
 import { Int, NonNegativeNumber, isNonNegativeNumber, PositiveInt } from './utils'
 import Axios from 'axios'
 import { PaymentError, PaymentOptions } from '.'
 import createLogger from 'ilp-logger'
 import { AssetDetails } from './controllers/asset-details'
+import { IlpAddress, isValidIlpAddress } from 'ilp-packet'
+import { isValidAssetScale } from 'ilp-protocol-ildcp'
 
 const log = createLogger('ilp-pay')
 
 /** STREAM credentials necessary to establish an authenticated connection with the receiver */
 export interface StreamCredentials {
-  /** 32-byte symmetric key to encrypt and decrypt STREAM messages, and generate ILP packet fulfillments */
+  /** 32-byte seed to encrypt and decrypt STREAM messages, and generate ILP packet fulfillments */
   sharedSecret: Buffer
   /** ILP address of the recipient, identifying this connection, which is used to send packets to their STREAM server */
   destinationAddress: IlpAddress

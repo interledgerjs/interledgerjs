@@ -1,8 +1,77 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types */
 import { Predictor, Reader, Writer } from 'oer-utils'
 import { dateToInterledgerTime, interledgerTimeToDate, INTERLEDGER_TIME_LENGTH } from './utils/date'
 import * as assert from 'assert'
+import { IlpAddress, isValidIlpAddress } from './utils/address'
+import * as Long from 'long'
 import * as errors from './errors'
+
 export const Errors = errors
+
+export { IlpAddress, isValidIlpAddress }
+export { getScheme, IlpAddressScheme } from './utils/address'
+
+export interface IlpErrorClass {
+  message: string
+  ilpErrorCode?: IlpErrorCode
+  ilpErrorData?: Buffer
+}
+
+/** ILP Reject error codes */
+export enum IlpError {
+  // Final errors
+  F00_BAD_REQUEST = 'F00',
+  F01_INVALID_PACKET = 'F01',
+  F02_UNREACHABLE = 'F02',
+  F03_INVALID_AMOUNT = 'F03',
+  F04_INSUFFICIENT_DESTINATION_AMOUNT = 'F04',
+  F05_WRONG_CONDITION = 'F05',
+  F06_UNEXPECTED_PAYMENT = 'F06',
+  F07_CANNOT_RECEIVE = 'F07',
+  F08_AMOUNT_TOO_LARGE = 'F08',
+  F99_APPLICATION_ERROR = 'F99',
+
+  // Temporary errors
+  T00_INTERNAL_ERROR = 'T00',
+  T01_PEER_UNREACHABLE = 'T01',
+  T02_PEER_BUSY = 'T02',
+  T03_CONNECTOR_BUSY = 'T03',
+  T04_INSUFFICIENT_LIQUIDITY = 'T04',
+  T05_RATE_LIMITED = 'T05',
+  T99_APPLICATION_ERROR = 'T99',
+
+  // Relative errors
+  R00_TRANSFER_TIMED_OUT = 'R00',
+  R01_INSUFFICIENT_SOURCE_AMOUNT = 'R01',
+  R02_INSUFFICIENT_TIMEOUT = 'R02',
+  R99_APPLICATION_ERROR = 'R99',
+}
+
+export type IlpErrorCode =
+  | 'F00'
+  | 'F01'
+  | 'F02'
+  | 'F03'
+  | 'F04'
+  | 'F05'
+  | 'F06'
+  | 'F07'
+  | 'F08'
+  | 'F99'
+  | 'T00'
+  | 'T01'
+  | 'T02'
+  | 'T03'
+  | 'T04'
+  | 'T05'
+  | 'T99'
+  | 'R00'
+  | 'R01'
+  | 'R02'
+  | 'R99'
+
+export const isCanonicalIlpRejectCode = (o: unknown): o is IlpErrorCode =>
+  typeof o === 'string' && Object.values<string>(IlpError).includes(o)
 
 export enum Type {
   TYPE_ILP_PREPARE = 12,
@@ -10,13 +79,18 @@ export enum Type {
   TYPE_ILP_REJECT = 14,
 }
 
-export interface IlpErrorClass {
-  message: string
-  ilpErrorCode?: string
-  ilpErrorData?: Buffer
+export enum IlpPacketType {
+  Prepare = 12,
+  Fulfill = 13,
+  Reject = 14,
 }
 
-export const deserializeEnvelope = (binary: Buffer) => {
+export const deserializeEnvelope = (
+  binary: Buffer
+): {
+  type: number
+  contents: Buffer
+} => {
   const envelopeReader = Reader.from(binary)
   const type = envelopeReader.readUInt8Number()
   const contents = envelopeReader.readVarOctetString()
@@ -49,7 +123,7 @@ export interface IlpPrepare {
   data: Buffer
 }
 
-export const serializeIlpPrepare = (json: IlpPrepare) => {
+export const serializeIlpPrepare = (json: IlpPrepare): Buffer => {
   assert(
     json.amount && typeof (json as Partial<IlpPrepare>).amount === 'string',
     'amount must be a string'
@@ -74,7 +148,7 @@ export const serializeIlpPrepare = (json: IlpPrepare) => {
   const envelopeSize = 1 + Predictor.measureVarOctetString(contentSize)
 
   const envelope = new Writer(envelopeSize)
-  envelope.writeUInt8(Type.TYPE_ILP_PREPARE)
+  envelope.writeUInt8(IlpPacketType.Prepare)
 
   const content = envelope.createVarOctetString(contentSize)
   content.writeUInt64(json.amount)
@@ -89,7 +163,7 @@ export const serializeIlpPrepare = (json: IlpPrepare) => {
 export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
   const { type, contents } = deserializeEnvelope(binary)
 
-  if (+type !== Type.TYPE_ILP_PREPARE) {
+  if (type !== IlpPacketType.Prepare) {
     throw new Error('Packet has incorrect type')
   }
 
@@ -114,30 +188,45 @@ export interface IlpFulfill {
   data: Buffer
 }
 
-export function isPrepare(packet: IlpAny): packet is IlpPrepare {
-  return (
-    typeof packet['amount'] === 'string' &&
-    typeof packet['expiresAt'] !== 'undefined' &&
-    typeof packet['destination'] === 'string' &&
-    Buffer.isBuffer(packet['executionCondition']) &&
-    Buffer.isBuffer(packet['data'])
-  )
+const isUInt64 = (o: string): boolean => {
+  try {
+    const l = Long.fromString(o, true)
+    return l.toString() === o
+  } catch (_) {
+    return false // `Long.fromString` throws if empty, misplaced hyphen, etc.
+  }
 }
 
-export function isFulfill(packet: IlpAny): packet is IlpFulfill {
-  return Buffer.isBuffer(packet['fulfillment']) && Buffer.isBuffer(packet['data'])
-}
+export const isIlpReply = (o: any): o is IlpReply => isFulfill(o) || isReject(o)
 
-export function isReject(packet: IlpAny): packet is IlpReject {
-  return (
-    typeof packet['code'] === 'string' &&
-    typeof packet['triggeredBy'] === 'string' &&
-    typeof packet['message'] === 'string' &&
-    Buffer.isBuffer(packet['data'])
-  )
-}
+export const isPrepare = (o: any): o is IlpPrepare =>
+  typeof o === 'object' &&
+  o !== null &&
+  typeof o.amount === 'string' &&
+  isUInt64(o.amount) && // All ILP packet amounts must be within u64 range or should fail serialization
+  o.expiresAt instanceof Date &&
+  !Number.isNaN(o.expiresAt.getTime()) && // Check date instance is valid
+  isValidIlpAddress(o.destination) &&
+  Buffer.isBuffer(o.executionCondition) &&
+  o.executionCondition.byteLength === 32 &&
+  Buffer.isBuffer(o.data)
 
-export const serializeIlpFulfill = (json: IlpFulfill) => {
+export const isFulfill = (o: any): o is IlpFulfill =>
+  typeof o === 'object' &&
+  o !== null &&
+  Buffer.isBuffer(o.fulfillment) &&
+  o.fulfillment.byteLength === 32 &&
+  Buffer.isBuffer(o.data)
+
+export const isReject = (o: any): o is IlpReject =>
+  typeof o === 'object' &&
+  o !== null &&
+  typeof o.code === 'string' &&
+  (isValidIlpAddress(o.triggeredBy) || o.triggeredBy === '') && // ILP address or empty string
+  typeof o.message === 'string' &&
+  Buffer.isBuffer(o.data)
+
+export const serializeIlpFulfill = (json: IlpFulfill): Buffer => {
   assert(
     Buffer.isBuffer(json.fulfillment) && json.fulfillment.length === 32,
     'fulfillment must be a 32-byte buffer'
@@ -148,7 +237,7 @@ export const serializeIlpFulfill = (json: IlpFulfill) => {
   const envelopeSize = 1 + Predictor.measureVarOctetString(contentSize)
 
   const envelope = new Writer(envelopeSize)
-  envelope.writeUInt8(Type.TYPE_ILP_FULFILL)
+  envelope.writeUInt8(IlpPacketType.Fulfill)
 
   const content = envelope.createVarOctetString(contentSize)
   content.write(json.fulfillment)
@@ -160,7 +249,7 @@ export const serializeIlpFulfill = (json: IlpFulfill) => {
 export const deserializeIlpFulfill = (binary: Buffer): IlpFulfill => {
   const { type, contents } = deserializeEnvelope(binary)
 
-  if (+type !== Type.TYPE_ILP_FULFILL) {
+  if (type !== IlpPacketType.Fulfill) {
     throw new Error('Packet has incorrect type')
   }
 
@@ -185,7 +274,7 @@ export interface IlpReject {
 
 const EMPTY_BUFFER = Buffer.alloc(0)
 
-export const serializeIlpReject = (json: IlpReject) => {
+export const serializeIlpReject = (json: IlpReject): Buffer => {
   assert(
     json.code && typeof (json as Partial<IlpReject>).code === 'string',
     'code must be a string'
@@ -215,7 +304,7 @@ export const serializeIlpReject = (json: IlpReject) => {
   const envelopeSize = 1 + Predictor.measureVarOctetString(contentSize)
 
   const envelope = new Writer(envelopeSize)
-  envelope.writeUInt8(Type.TYPE_ILP_REJECT)
+  envelope.writeUInt8(IlpPacketType.Reject)
 
   const content = envelope.createVarOctetString(contentSize)
   content.write(codeBuffer)
@@ -229,13 +318,19 @@ export const serializeIlpReject = (json: IlpReject) => {
 export const deserializeIlpReject = (binary: Buffer): IlpReject => {
   const { type, contents } = deserializeEnvelope(binary)
 
-  if (+type !== Type.TYPE_ILP_REJECT) {
+  if (type !== IlpPacketType.Reject) {
     throw new Error('Packet has incorrect type')
   }
 
   const reader = Reader.from(contents)
+
   const code = reader.read(ILP_ERROR_CODE_LENGTH).toString('ascii')
+
   const triggeredBy = reader.readVarOctetString().toString('ascii')
+  if (!isValidIlpAddress(triggeredBy) && triggeredBy !== '') {
+    throw new Error('Invalid triggeredBy ILP address')
+  }
+
   const message = reader.readVarOctetString().toString('utf8')
   const data = reader.readVarOctetString()
 
@@ -290,13 +385,11 @@ export type IlpAny = IlpPrepare | IlpFulfill | IlpReject
 
 export type IlpReply = IlpFulfill | IlpReject
 
-export function deserializeIlpReply(data: Buffer): IlpReply {
-  return deserializeIlpPacket(data).data as IlpReply
-}
+export const deserializeIlpReply = (data: Buffer): IlpReply =>
+  data[0] === IlpPacketType.Fulfill ? deserializeIlpFulfill(data) : deserializeIlpReject(data)
 
-export function serializeIlpReply(packet: IlpReply): Buffer {
-  return isFulfill(packet) ? serializeIlpFulfill(packet) : serializeIlpReject(packet)
-}
+export const serializeIlpReply = (packet: IlpReply): Buffer =>
+  isFulfill(packet) ? serializeIlpFulfill(packet) : serializeIlpReject(packet)
 
 export const errorToReject = (address: string, error: IlpErrorClass): Buffer => {
   return serializeIlpReject({

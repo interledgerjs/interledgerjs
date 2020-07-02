@@ -6,9 +6,10 @@ import {
   isReject,
   serializeIlpPrepare,
   IlpPrepare,
-  deserializeIlpFulfill,
-  deserializeIlpReject,
-  Type,
+  IlpPacketType,
+  IlpAddress,
+  IlpError,
+  deserializeIlpReply,
 } from 'ilp-packet'
 import {
   generateFulfillment,
@@ -17,7 +18,7 @@ import {
   generateRandomCondition,
   hash,
 } from 'ilp-protocol-stream/dist/src/crypto'
-import { Frame, IlpPacketType, Packet } from 'ilp-protocol-stream/dist/src/packet'
+import { Frame, Packet } from 'ilp-protocol-stream/dist/src/packet'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import { PaymentError, isPaymentError } from '.'
 import {
@@ -38,10 +39,8 @@ import {
   ILP_ERROR_CODES,
   createTimeout,
   Int,
-  IlpError,
   RejectBuilder,
 } from './utils'
-import { IlpAddress } from './utils'
 import { AccountController } from './controllers/asset-details'
 
 /** Serialize & send, and receive & authenticate all ILP and STREAM packets */
@@ -89,7 +88,7 @@ export const createConnection = async (
       return createReject(IlpError.F06_UNEXPECTED_PAYMENT).serialize()
     }
 
-    if (streamRequest.ilpPacketType !== IlpPacketType.Prepare) {
+    if (+streamRequest.ilpPacketType !== IlpPacketType.Prepare) {
       log.warn('rejecting with F99: invalid STREAM packet type') // Recipient violated protocol, or intermediaries swapped valid STREAM packets
       return createReject(IlpError.F99_APPLICATION_ERROR).serialize()
     }
@@ -105,7 +104,7 @@ export const createConnection = async (
     controllers.get(FailureController).handleRemoteClose(streamRequest.frames, log)
 
     // No frames are necessary, since on connect we told the receive we can't receive money or data
-    const streamReply = new Packet(streamRequest.sequence, IlpPacketType.Reject, prepare.amount)
+    const streamReply = new Packet(streamRequest.sequence, +IlpPacketType.Reject, prepare.amount)
     const ilpData = await streamReply.serializeAndEncrypt(encryptionKey)
 
     log.debug('rejecting with F99: cannot receive money or data')
@@ -165,7 +164,7 @@ export const createConnection = async (
 
       const streamRequest = new Packet(
         sequence,
-        IlpPacketType.Prepare,
+        +IlpPacketType.Prepare,
         minDestinationAmount.toLong(), // TODO What if this exceeds max u64?
         requestFrames
       )
@@ -213,10 +212,7 @@ export const createConnection = async (
           .sendData(preparePacket)
           .then((data) => {
             try {
-              // Don't use `deserializeIlpReply` -- it returns ILP Prepares !
-              return data[0] === Type.TYPE_ILP_FULFILL
-                ? deserializeIlpFulfill(data)
-                : deserializeIlpReject(data)
+              return deserializeIlpReply(data)
             } catch (_) {
               return createReject(IlpError.F01_INVALID_PACKET)
             }

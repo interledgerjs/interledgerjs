@@ -8,7 +8,7 @@ describe('Parser', function () {
     describe('correctly serializes valid ilp prepare', function () {
       const validTests = loadTests({ type: 'ilp_prepare' })
 
-      for (let test of validTests) {
+      for (const test of validTests) {
         it(test.name, function () {
           const json = test.json
 
@@ -28,7 +28,7 @@ describe('Parser', function () {
     describe('correctly parses valid ilp prepare', function () {
       const validTests = loadTests({ type: 'ilp_prepare' })
 
-      for (let test of validTests) {
+      for (const test of validTests) {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
@@ -51,7 +51,7 @@ describe('Parser', function () {
     describe('correctly serializes valid ilp fulfill', function () {
       const validTests = loadTests({ type: 'ilp_fulfill' })
 
-      for (let test of validTests) {
+      for (const test of validTests) {
         it(test.name, function () {
           const json = test.json
 
@@ -70,7 +70,7 @@ describe('Parser', function () {
     describe('correctly parses valid ilp fulfill', function () {
       const validTests = loadTests({ type: 'ilp_fulfill' })
 
-      for (let test of validTests) {
+      for (const test of validTests) {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
@@ -90,7 +90,7 @@ describe('Parser', function () {
     describe('correctly serializes valid ilp reject', function () {
       const validTests = loadTests({ type: 'ilp_reject' })
 
-      for (let test of validTests) {
+      for (const test of validTests) {
         it(test.name, function () {
           const json = test.json
 
@@ -108,7 +108,7 @@ describe('Parser', function () {
     describe('correctly parses valid ilp reject', function () {
       const validTests = loadTests({ type: 'ilp_reject' })
 
-      for (let test of validTests) {
+      for (const test of validTests) {
         it(test.name, function () {
           const binary = Buffer.from(test.binary, 'hex')
 
@@ -128,21 +128,27 @@ describe('Parser', function () {
 
   describe('deserializeIlpPacket', function () {
     describe('correctly parses valid ilp packets', function () {
-      function testPackets (typeString: string, type: number) {
+      function testPackets(typeString: string, type: number) {
         const validTests = loadTests({ type: typeString })
-        for (let test of validTests) {
+        for (const test of validTests) {
           it('parses ' + typeString + ': ' + test.name, function () {
             const binary = Buffer.from(test.binary, 'hex')
             const packet = Parser.deserializeIlpPacket(binary)
             const data: { [key: string]: string } = {}
-            if (typeString === 'ilp_prepare' || typeString === 'ilp_fulfill' || typeString === 'ilp_reject') {
+            if (
+              typeString === 'ilp_prepare' ||
+              typeString === 'ilp_fulfill' ||
+              typeString === 'ilp_reject'
+            ) {
               data.data = packet.data.data.toString('base64')
             }
             if (typeString === 'ilp_prepare') {
               data.amount = (packet.data as Parser.IlpPrepare).amount
               data.destination = (packet.data as Parser.IlpPrepare).destination
               data.expiresAt = (packet.data as Parser.IlpPrepare).expiresAt.toISOString()
-              data.executionCondition = (packet.data as Parser.IlpPrepare).executionCondition.toString('base64')
+              data.executionCondition = (packet.data as Parser.IlpPrepare).executionCondition.toString(
+                'base64'
+              )
             }
             if (typeString === 'ilp_fulfill') {
               data.fulfillment = (packet.data as Parser.IlpFulfill).fulfillment.toString('base64')
@@ -152,7 +158,10 @@ describe('Parser', function () {
               data.message = (packet.data as Parser.IlpReject).message
               data.triggeredBy = (packet.data as Parser.IlpReject).triggeredBy
             }
-            assert.deepStrictEqual({ type: packet.type, typeString: packet.typeString, data }, { type, typeString, data: test.json })
+            assert.deepStrictEqual(
+              { type: packet.type, typeString: packet.typeString, data },
+              { type, typeString, data: test.json }
+            )
           })
         }
       }

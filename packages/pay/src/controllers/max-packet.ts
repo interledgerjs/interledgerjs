@@ -7,9 +7,10 @@ import {
   SendState,
   StreamRequestBuilder,
 } from './'
-import { Int, IlpError, PositiveInt, Ratio } from '../utils'
+import { Int, PositiveInt, Ratio } from '../utils'
 import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
+import { IlpError } from 'ilp-packet'
 
 /** How the maximum packet amount is known or discovered */
 enum MaxPacketState {

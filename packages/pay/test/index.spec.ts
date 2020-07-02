@@ -9,8 +9,13 @@ import { MirrorPlugin } from './helpers/plugin'
 import { fetchCoinCapRates } from '../src/rates/coincap'
 import { quote, PaymentError } from '../src'
 import { describe, it, expect, jest } from '@jest/globals'
-import { serializeIlpFulfill, deserializeIlpPrepare, serializeIlpReject } from 'ilp-packet'
-import { sleep, IlpError, Int, Ratio, PositiveInt } from '../src/utils'
+import {
+  serializeIlpFulfill,
+  deserializeIlpPrepare,
+  serializeIlpReject,
+  IlpError,
+} from 'ilp-packet'
+import { sleep, Int, Ratio, PositiveInt } from '../src/utils'
 import {
   randomBytes,
   generateFulfillment,

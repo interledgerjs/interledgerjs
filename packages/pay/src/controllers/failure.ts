@@ -1,5 +1,5 @@
 import { StreamController, StreamRequestBuilder, StreamReply, StreamRequest, SendState } from '.'
-import { ILP_ERROR_CODES, IlpError } from '../utils'
+import { ILP_ERROR_CODES } from '../utils'
 import {
   ConnectionCloseFrame,
   FrameType,
@@ -10,6 +10,7 @@ import {
 import { DEFAULT_STREAM_ID } from './amount'
 import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
+import { IlpError } from 'ilp-packet'
 
 /** Controller to cancel a payment if no more money is fulfilled */
 export class FailureController implements StreamController {

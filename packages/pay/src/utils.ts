@@ -1,38 +1,8 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import BigNumber from 'bignumber.js'
 import Long from 'long'
-import { IlpReject, serializeIlpReject } from 'ilp-packet'
+import { IlpReject, serializeIlpReject, IlpAddress, IlpError } from 'ilp-packet'
 import { hash } from 'ilp-protocol-stream/dist/src/crypto'
-
-const ILP_ADDRESS_SCHEMES = [
-  'g',
-  'private',
-  'example',
-  'test',
-  'test1',
-  'test2',
-  'test3',
-  'local',
-  'peer',
-  'self',
-] as const
-
-const ILP_ADDRESS_REGEX = /^(g|private|example|peer|self|test[1-3]?|local)([.][a-zA-Z0-9_~-]+)+$/
-const ILP_ADDRESS_MAX_LENGTH = 1023
-
-export type AssetScale = Brand<number, 'AssetScale'>
-
-export const isValidAssetScale = (o: unknown): o is AssetScale =>
-  typeof o === 'number' && o >= 0 && o <= 255 && Number.isInteger(o)
-
-/** Get prefix or allocation scheme of the given ILP address */
-export const getScheme = (address: IlpAddress): typeof ILP_ADDRESS_SCHEMES[number] =>
-  address.split('.')[0] as typeof ILP_ADDRESS_SCHEMES[number]
-
-export type IlpAddress = Brand<string, 'IlpAddress'>
-
-export const isValidIlpAddress = (o: unknown): o is IlpAddress =>
-  typeof o === 'string' && o.length <= ILP_ADDRESS_MAX_LENGTH && ILP_ADDRESS_REGEX.test(o)
 
 /** Promise that can be resolved or rejected outside its executor callback */
 export class PromiseResolver<T> {
@@ -86,34 +56,6 @@ export const ILP_ERROR_CODES = {
   R01: 'insufficient source amount',
   R02: 'insufficient timeout',
   R99: 'application error',
-}
-
-/** ILP Reject error codes */
-export enum IlpError {
-  // Final errors
-  F00_BAD_REQUEST = 'F00',
-  F01_INVALID_PACKET = 'F01',
-  F02_UNREACHABLE = 'F02',
-  F03_INVALID_AMOUNT = 'F03',
-  F04_INSUFFICIENT_DESTINATION_AMOUNT = 'F04',
-  F05_WRONG_CONDITION = 'F05',
-  F06_UNEXPECTED_PAYMENT = 'F06',
-  F07_CANNOT_RECEIVE = 'F07',
-  F08_AMOUNT_TOO_LARGE = 'F08',
-  F99_APPLICATION_ERROR = 'F99',
-  // Temporary errors
-  T00_INTERNAL_ERROR = 'T00',
-  T01_PEER_UNREACHABLE = 'T01',
-  T02_PEER_BUSY = 'T02',
-  T03_CONNECTOR_BUSY = 'T03',
-  T04_INSUFFICIENT_LIQUIDITY = 'T04',
-  T05_RATE_LIMITED = 'T05',
-  T99_APPLICATION_ERROR = 'T99',
-  // Relative errors
-  R00_TRANSFER_TIMED_OUT = 'R00',
-  R01_INSUFFICIENT_SOURCE_AMOUNT = 'R01',
-  R02_INSUFFICIENT_TIMEOUT = 'R02',
-  R99_APPLICATION_ERROR = 'R99',
 }
 
 /** Construct an ILP Reject packet */

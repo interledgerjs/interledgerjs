@@ -1,5 +1,5 @@
 import { StreamController, StreamReply, SendState } from '.'
-import { IlpError } from '../utils'
+import { IlpError } from 'ilp-packet'
 
 /**
  * Flow controller to send packets at a consistent cadence
