@@ -3513,6 +3513,11 @@ dir-glob@^3.0.1:
   dependencies:
     path-type "^4.0.0"
 
+docker-compose@^0.23.4:
+  version "0.23.4"
+  resolved "https://registry.yarnpkg.com/docker-compose/-/docker-compose-0.23.4.tgz#43bcabcde55a6ba2873b52fe0ccd99dd8fdceba8"
+  integrity sha512-yWdXby9uQ8o4syOfvoSJ9ZlTnLipvUmDn59uaYY5VGIUSUAfMPPGqE1DE3pOCnfSg9Tl9UOOFO0PCSAzuIHmuA==
+
 docker-modem@^1.0.8:
   version "1.0.9"
   resolved "https://registry.yarnpkg.com/docker-modem/-/docker-modem-1.0.9.tgz#a1f13e50e6afb6cf3431b2d5e7aac589db6aaba8"
@@ -9852,16 +9857,18 @@ test-exclude@^6.0.0:
     minimatch "^3.0.4"
 
 testcontainers@^2.12.0:
-  version "2.12.0"
-  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-2.12.0.tgz#a441049a0fbadc18be5ca5c5e2877432713a5235"
-  integrity sha512-fNQjRDW5re29SWYCNwZo+P0IoA5SUw9MBxh9KC4WygthvAm72gUBGKWdtJCdtLEBCraV1hPTYOJX1DGoxpFsoQ==
+  version "2.17.0"
+  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-2.17.0.tgz#309e01c7164910007200a7d7e3017f2c5168394a"
+  integrity sha512-iJNeObK6mvawxzP6u/o0sMDr6SLAi9JG7Ael/X3wtzjQKzkJFtcxGyK7u+yr5+5W+DeUoxBOqIHca/h4NQOpUg==
   dependencies:
     "@types/dockerode" "^2.5.24"
     byline "^5.0.0"
     debug "^4.1.1"
     default-gateway "^5.0.2"
+    docker-compose "^0.23.4"
     dockerode "^2.5.8"
     get-port "^4.2.0"
+    glob "^7.1.6"
     node-duration "^1.0.4"
     stream-to-array "^2.3.0"
     tar-fs "^2.0.0"
