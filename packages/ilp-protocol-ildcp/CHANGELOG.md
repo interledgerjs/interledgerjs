@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [2.2.0](https://github.com/interledgerjs/interledgerjs/compare/ilp-protocol-ildcp@2.1.4...ilp-protocol-ildcp@2.2.0) (2020-07-24)
+
+
+### Features
+
+* robust amount strategy, rate errors ([fdcb132](https://github.com/interledgerjs/interledgerjs/commit/fdcb1324e5e8285da528b60b5c23098324efb9dc))
+* **pay:** open payments support ([2d4ba19](https://github.com/interledgerjs/interledgerjs/commit/2d4ba19275b444e46845a9114537b624d939f5ae))
+* stateless stream receiver ([aed91d8](https://github.com/interledgerjs/interledgerjs/commit/aed91d85c06aa73af77a8c3891d388257b74ede8))
+* STREAM payment library alpha, ci updates ([#17](https://github.com/interledgerjs/interledgerjs/issues/17)) ([4e128bc](https://github.com/interledgerjs/interledgerjs/commit/4e128bcee372144c1324a73e8b51223a0b133f2e))
+
+
+
+
+
 ## [2.1.4](https://github.com/interledgerjs/interledgerjs/compare/ilp-protocol-ildcp@2.1.3...ilp-protocol-ildcp@2.1.4) (2020-01-21)
 
 **Note:** Version bump only for package ilp-protocol-ildcp

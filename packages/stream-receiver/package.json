@@ -1,7 +1,7 @@
 {
   "name": "@interledger/stream-receiver",
   "description": "Simple & composable stateless Interledger STREAM receiver",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "publishConfig": {
@@ -23,10 +23,10 @@
   },
   "dependencies": {
     "@types/long": "^4.0.1",
-    "ilp-logger": "^1.3.0-alpha.1",
-    "ilp-packet": "^3.1.0-alpha.0",
+    "ilp-logger": "^1.4.0",
+    "ilp-packet": "^3.1.0",
     "ilp-protocol-stream": "^2.6.4",
     "long": "^4.0.0",
-    "oer-utils": "^5.1.0-alpha.0"
+    "oer-utils": "^5.1.0"
   }
 }

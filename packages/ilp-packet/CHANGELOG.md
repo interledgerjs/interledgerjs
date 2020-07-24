@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [3.1.0](https://github.com/interledgerjs/interledgerjs/compare/ilp-packet@3.1.0-alpha.0...ilp-packet@3.1.0) (2020-07-24)
+
+
+### Features
+
+* stateless stream receiver ([aed91d8](https://github.com/interledgerjs/interledgerjs/commit/aed91d85c06aa73af77a8c3891d388257b74ede8))
+* STREAM payment library alpha, ci updates ([#17](https://github.com/interledgerjs/interledgerjs/issues/17)) ([4e128bc](https://github.com/interledgerjs/interledgerjs/commit/4e128bcee372144c1324a73e8b51223a0b133f2e))
+
+
+
+
+
 # 3.1.0-alpha.0 (2019-10-08)
 
 
