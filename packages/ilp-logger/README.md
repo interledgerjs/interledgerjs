@@ -1,4 +1,5 @@
 # ilp-logger
+
 > Debug Logging utility for Interledger modules
 
 [![NPM Package](https://img.shields.io/npm/v/ilp-logger.svg?style=flat)](https://npmjs.org/package/ilp-logger)
@@ -6,14 +7,17 @@
 
 ## Usage
 
-```js
-// Javascript
-const logger = require('ilp-logger')('DEBUG_NAMESPACE')
+### JavaScript
 
-//TypeScript
+```js
+const logger = require('ilp-logger')('DEBUG_NAMESPACE')
+```
+
+### TypeScript
+
+```ts
 import createLogger from 'ilp-logger'
 const logger = createLogger('DEBUG_NAMESPACE')
-
 
 logger.info('Informational output.')
 logger.warn('Something you want to warn for.')
@@ -34,8 +38,7 @@ The NPM package will not contain any TypeScript files (`*.ts`) but will have typ
 
 ### Scripts
 
-  - `clean` : Cleans the build folder and test output
-  - `build` : Build the project
-  - `lint`  : Run the linter over the project
-  - `test`  : Run the unit tests and produce a code coverage report
-  - `doc`   : Build the docs
+- `clean` : Cleans the build folder and test output
+- `build` : Build the project
+- `lint` : Run the linter over the project
+- `test` : Run the unit tests and produce a code coverage report
