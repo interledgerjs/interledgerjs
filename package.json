@@ -74,16 +74,15 @@
     "all": true
   },
   "devDependencies": {
-    "@types/chai": "^4.1.7",
+    "@types/chai": "^4.2.12",
     "@types/chai-as-promised": "^7.1.0",
     "@types/long": "^4.0.0",
     "@types/sinon": "^9.0.4",
-    "@typescript-eslint/eslint-plugin": "^3.4.0",
-    "@typescript-eslint/parser": "^3.4.0",
+    "@typescript-eslint/eslint-plugin": "^3.7.0",
+    "@typescript-eslint/parser": "^3.7.0",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
-    "codecov": "^3.5.0",
-    "eslint": "^7.3.1",
+    "eslint": "^7.5.0",
     "eslint-config-prettier": "^6.11.0",
     "eslint-config-standard": "^14.1.1",
     "eslint-plugin-import": "^2.21.2",
@@ -105,8 +104,8 @@
     "rimraf": "^3.0.2",
     "sinon": "^9.0.2",
     "source-map-support": "^0.5.19",
-    "ts-jest": "^26.1.1",
+    "ts-jest": "^26.1.3",
     "ts-node": "^8.10.2",
-    "typescript": "^3.5.2"
+    "typescript": "^3.9.7"
   }
 }

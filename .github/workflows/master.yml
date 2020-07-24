@@ -20,11 +20,6 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
-    - name: Authenticate with registry
-      run: echo "//registry.npmjs.org/:_authToken=$NPM_AUTH_TOKEN" > $GITHUB_WORKSPACE/.npmrc
-      shell: bash
-      env:
-        NPM_AUTH_TOKEN: ${{secrets.npm_token}}
     - name: Install dependencies
       run: yarn
     - name: Lint
@@ -39,6 +34,11 @@ jobs:
       run: yarn codecov
       env:
         CI: true
+    - name: Authenticate with registry
+      run: echo "//registry.npmjs.org/:_authToken=$NPM_AUTH_TOKEN" > $GITHUB_WORKSPACE/.npmrc
+      shell: bash
+      env:
+        NPM_AUTH_TOKEN: ${{secrets.npm_token}}
     - name: Publish
       run: yarn publish:release
       env:
