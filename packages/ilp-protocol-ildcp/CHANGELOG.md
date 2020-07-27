@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.2.2](https://github.com/interledgerjs/interledgerjs/compare/ilp-protocol-ildcp@2.2.1...ilp-protocol-ildcp@2.2.2) (2020-07-27)
+
+**Note:** Version bump only for package ilp-protocol-ildcp
+
+
+
+
+
 ## [2.2.1](https://github.com/interledgerjs/interledgerjs/compare/ilp-protocol-ildcp@2.2.0...ilp-protocol-ildcp@2.2.1) (2020-07-27)
 
 **Note:** Version bump only for package ilp-protocol-ildcp

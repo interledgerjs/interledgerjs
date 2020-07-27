@@ -1,6 +1,6 @@
 {
   "name": "ilp-protocol-ccp",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Implementation of the Connector-to-Connector Protocol (CCP)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +27,7 @@
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "dependencies": {
-    "ilp-packet": "^3.1.1",
-    "oer-utils": "^5.1.1"
+    "ilp-packet": "^3.1.2",
+    "oer-utils": "^5.1.2"
   }
 }

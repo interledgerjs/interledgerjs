@@ -1,6 +1,6 @@
 {
   "name": "@interledger/connection-tag-utils",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "description": "Utilities for encrypted STREAM connection tags",

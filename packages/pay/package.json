@@ -1,7 +1,7 @@
 {
   "name": "@interledger/pay",
   "description": "Send payments over Interledger",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "publishConfig": {
@@ -25,9 +25,9 @@
     "@rgrove/parse-xml": "^2.0.2",
     "axios": "^0.19.2",
     "bignumber.js": "^9.0.0",
-    "ilp-logger": "^1.4.1",
-    "ilp-packet": "^3.1.1",
-    "ilp-protocol-ildcp": "^2.2.1",
+    "ilp-logger": "^1.4.2",
+    "ilp-packet": "^3.1.2",
+    "ilp-protocol-ildcp": "^2.2.2",
     "ilp-protocol-stream": "^2.6.4",
     "long": "^4.0.0"
   },

@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.1.6](https://github.com/interledgerjs/interledgerjs/compare/ilp-spsp-payout@1.1.5...ilp-spsp-payout@1.1.6) (2020-07-27)
+
+**Note:** Version bump only for package ilp-spsp-payout
+
+
+
+
+
 ## [1.1.5](https://github.com/interledgerjs/interledgerjs/compare/ilp-spsp-payout@1.1.4...ilp-spsp-payout@1.1.5) (2020-07-27)
 
 **Note:** Version bump only for package ilp-spsp-payout
