@@ -1547,7 +1547,7 @@
   resolved "https://registry.yarnpkg.com/@types/debug/-/debug-4.1.5.tgz#b14efa8852b7768d898906613c23f688713e02cd"
   integrity sha512-Q1y515GcOdTHgagaVFhHnIFQ38ygs/kmxdNpvpou+raI9UO3YZcHDngBSYKQklcKlvA7iuQlmIKbzvmxcOE9CQ==
 
-"@types/dockerode@^2.5.33":
+"@types/dockerode@^2.5.34":
   version "2.5.34"
   resolved "https://registry.yarnpkg.com/@types/dockerode/-/dockerode-2.5.34.tgz#9adb884f7cc6c012a6eb4b2ad794cc5d01439959"
   integrity sha512-LcbLGcvcBwBAvjH9UrUI+4qotY+A5WCer5r43DR5XHv2ZIEByNXFdPLo1XxR+v/BjkGjlggW8qUiXuVEhqfkpA==
@@ -3368,13 +3368,6 @@ deepmerge@^4.2.2:
   resolved "https://registry.yarnpkg.com/deepmerge/-/deepmerge-4.2.2.tgz#44d2ea3679b8f4d4ffba33f03d865fc1e7bf4955"
   integrity sha512-FJ3UgI4gIl+PHZm53knsuSFpE+nESMr7M4v9QcgB7S63Kj/6WqMiFQJpBBYz1Pt+66bZpP3Q7Lye0Oo9MPKEdg==
 
-default-gateway@^6.0.1:
-  version "6.0.1"
-  resolved "https://registry.yarnpkg.com/default-gateway/-/default-gateway-6.0.1.tgz#a6b266196931bf27dfe763dec9e488573fe8c803"
-  integrity sha512-55Zt/cfV9OkkerJR3fECxhSk4+mVv6cq/npDz7n6255faTGh0/9HbEnTpUQdMMGJXclBCxEu1Kol3h362c2cbg==
-  dependencies:
-    execa "^4.0.2"
-
 default-require-extensions@^3.0.0:
   version "3.0.0"
   resolved "https://registry.yarnpkg.com/default-require-extensions/-/default-require-extensions-3.0.0.tgz#e03f93aac9b2b6443fc52e5e4a37b3ad9ad8df96"
@@ -3504,7 +3497,7 @@ dir-glob@^3.0.1:
   dependencies:
     path-type "^4.0.0"
 
-docker-compose@^0.23.4:
+docker-compose@^0.23.5:
   version "0.23.5"
   resolved "https://registry.yarnpkg.com/docker-compose/-/docker-compose-0.23.5.tgz#8dd338d1a89cfbc968faa4a61a7cfbbcece7138b"
   integrity sha512-y3swhij4q3pyX45kJH7OMHZjoHPfiaTe8RPAQQ9fbamKQHI+k+1HnZm0T9NbbMFusTn0het0eK4WjXGM+rcF2A==
@@ -4082,21 +4075,6 @@ execa@^4.0.0, execa@^4.0.1:
   version "4.0.2"
   resolved "https://registry.yarnpkg.com/execa/-/execa-4.0.2.tgz#ad87fb7b2d9d564f70d2b62d511bee41d5cbb240"
   integrity sha512-QI2zLa6CjGWdiQsmSkZoGtDx2N+cQIGb3yNolGTdjSQzydzLgYYf8LRuagp7S7fPimjcrzUDSUFd/MgzELMi4Q==
-  dependencies:
-    cross-spawn "^7.0.0"
-    get-stream "^5.0.0"
-    human-signals "^1.1.1"
-    is-stream "^2.0.0"
-    merge-stream "^2.0.0"
-    npm-run-path "^4.0.0"
-    onetime "^5.1.0"
-    signal-exit "^3.0.2"
-    strip-final-newline "^2.0.0"
-
-execa@^4.0.2:
-  version "4.0.3"
-  resolved "https://registry.yarnpkg.com/execa/-/execa-4.0.3.tgz#0a34dabbad6d66100bd6f2c576c8669403f317f2"
-  integrity sha512-WFDXGHckXPWZX19t1kCsXzOpqX9LWYNqn4C+HqZlk/V0imTkzJZqf87ZBhvpHaftERYknpk0fjSylnXVlVgI0A==
   dependencies:
     cross-spawn "^7.0.0"
     get-stream "^5.0.0"
@@ -9807,16 +9785,15 @@ test-exclude@^6.0.0:
     glob "^7.1.4"
     minimatch "^3.0.4"
 
-testcontainers@^2.12.0:
-  version "2.18.3"
-  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-2.18.3.tgz#81b4b7aed0fe776bd2339ea9df645e131d5381d9"
-  integrity sha512-P7h2nR4B43aiIigS1drOegpWrYWIxSKd8Zr/jvArN8tTVEsbhonsSxJlg9+tKyqA0ZGQBu/q5pUkDQJZrWhOjw==
+testcontainers@^3.2.0:
+  version "3.2.0"
+  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-3.2.0.tgz#71344aded6361b4674dfecf82edb934f865a1eb8"
+  integrity sha512-FHtoKnaQbTnjq5iSGoGJRGZ10KsepGfzSHtFsuZYcW2KqAHeP+HraYMZrOaZKo+ATFIwCaIL9tE5dhslS++UbQ==
   dependencies:
-    "@types/dockerode" "^2.5.33"
+    "@types/dockerode" "^2.5.34"
     byline "^5.0.0"
     debug "^4.1.1"
-    default-gateway "^6.0.1"
-    docker-compose "^0.23.4"
+    docker-compose "^0.23.5"
     dockerode "^3.2.0"
     get-port "^5.1.1"
     glob "^7.1.6"
