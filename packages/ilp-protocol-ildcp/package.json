@@ -1,6 +1,6 @@
 {
   "name": "ilp-protocol-ildcp",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "description": "Implementation of the Interledger Dynamic Configuration Protocol (IL-DCP)",
@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "debug": "^4.1.1",
-    "ilp-packet": "^3.1.0",
-    "oer-utils": "^5.1.0"
+    "ilp-packet": "^3.1.1",
+    "oer-utils": "^5.1.1"
   }
 }
