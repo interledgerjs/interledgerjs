@@ -17,8 +17,7 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "mocha --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
     "cover": "nyc --extension .ts --reporter=json --reporter=html --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register mocha test/*.test.ts",
-    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_protocol_ccp",
-    "version": "yarn"
+    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_protocol_ccp"
   },
   "keywords": [
     "ilp",

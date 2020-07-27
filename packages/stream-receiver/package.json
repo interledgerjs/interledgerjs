@@ -19,8 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "jest",
     "cover": "jest --coverage",
-    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F stream_receiver",
-    "version": "yarn"
+    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F stream_receiver"
   },
   "dependencies": {
     "@types/long": "^4.0.1",

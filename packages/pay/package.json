@@ -19,8 +19,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "jest",
     "cover": "jest --coverage",
-    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F pay",
-    "version": "yarn"
+    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F pay"
   },
   "dependencies": {
     "@rgrove/parse-xml": "^2.0.2",

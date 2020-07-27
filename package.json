@@ -10,12 +10,7 @@
   ],
   "keywords": [
     "ilp",
-    "interledger",
-    "packet",
-    "binary",
-    "serialization",
-    "format",
-    "convert"
+    "interledger"
   ],
   "author": "Interledger Team <info@interledger.org>",
   "bugs": {
@@ -36,7 +31,8 @@
     "publish:release": "lerna publish from-git --yes",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
-    "lint:staged": "lint-staged"
+    "lint:staged": "lint-staged",
+    "version": "yarn && git add yarn.lock"
   },
   "husky": {
     "hooks": {
