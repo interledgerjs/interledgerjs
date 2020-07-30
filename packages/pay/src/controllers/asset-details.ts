@@ -1,18 +1,18 @@
-import { StreamController, StreamReply, StreamRequestBuilder, SendState } from '.'
+import { StreamController, StreamReply, NextRequest, StreamRequest } from '.'
 import {
   ConnectionNewAddressFrame,
   ConnectionAssetDetailsFrame,
   FrameType,
-  StreamMaxMoneyFrame,
   ConnectionMaxDataFrame,
   ConnectionMaxStreamIdFrame,
   ErrorCode,
 } from 'ilp-protocol-stream/dist/src/packet'
-import { DEFAULT_STREAM_ID } from './amount'
+import { DEFAULT_STREAM_ID } from './payment'
 import { PaymentError } from '..'
-import { IlpAddress } from 'ilp-packet'
+import { IlpAddress, isValidIlpAddress } from 'ilp-packet'
 import { AssetScale } from 'ilp-protocol-ildcp'
 
+// TODO Remove this type?
 /** Asset and Interledger address for an account (sender or receiver) */
 export interface AccountDetails extends AssetDetails {
   /** Interledger address of the account */
@@ -27,92 +27,107 @@ export interface AssetDetails {
   assetCode: string
 }
 
-/** Controller for sharing source/destination account details */
-export class AccountController implements StreamController {
-  private remoteKnowsOurAccount = false
-  private sourceAccount: AccountDetails
+/**
+ * TODO Should these be stand-alone packets instead?
+ * e.g., since one of them will fail, it's taking up precious bandwidth
+ * in the WM case!
+ */
 
-  private destinationAddress: IlpAddress
+// TODO One problem with this: it will keep retrying the asset request, but
+//      the rate probe may never fail since it never gets to the "nextState" part of the probe
+//      (e.g. if it keeps encountering T04s and backs off a ton)
+
+/** Controller for sharing source/destination account details */
+export class AssetDetailsController implements StreamController {
   private destinationAsset?: AssetDetails
 
+  private remoteKnowsOurLimits = false
   private remoteAssetChanged = false
 
-  constructor(
-    sourceAccount: AccountDetails,
-    destinationAddress: IlpAddress,
-    destinationAsset?: AssetDetails
-  ) {
-    this.sourceAccount = sourceAccount
-    this.destinationAddress = destinationAddress
+  private sentAssetRequest = false
+  private sentRustAssetRequest = false
+
+  constructor(destinationAsset?: AssetDetails) {
     this.destinationAsset = destinationAsset
   }
 
-  getSourceAccount(): AccountDetails {
-    return this.sourceAccount
+  getDestinationAsset(): AssetDetails | undefined {
+    return this.destinationAsset
   }
 
-  getDestinationAccount(): AccountDetails | undefined {
-    if (this.destinationAsset) {
-      return {
-        ilpAddress: this.destinationAddress,
-        ...this.destinationAsset,
-      }
-    }
-  }
-
-  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
+  nextState(request: NextRequest): PaymentError | void {
     if (this.remoteAssetChanged) {
-      builder.sendConnectionClose(ErrorCode.ProtocolViolation)
+      request.addConnectionClose(ErrorCode.ProtocolViolation).send()
       return PaymentError.DestinationAssetConflict
     }
 
-    // We can't receive packets, so only send a `ConnectionNewAddress` for backwards
-    // compatibility to fetch asset details. If we already know asset details, skip this!
-    if (!this.destinationAsset) {
-      /**
-       * Interledger.rs, Interledger4j, and `ilp-protocol-stream` < 2.5.0
-       * base64 URL encode 18 random bytes for the connection token (length 24).
-       *
-       * But... `ilp-protocol-stream` >= 2.5.0 encrypts it using the server
-       * secret, identifying that version, which is widely used in production.
-       */
-      const connectionToken = this.destinationAddress.split('.').slice(-1)[0]
-      if (connectionToken.length === 24) {
-        /**
-         * Interledger.rs rejects with an F02 if we send a `ConnectionNewAddress` frame with an invalid (e.g. empty) address.
-         *
-         * Since both Rust & Java won't ever send any packets, we can use any address here, since it's just so they reply
-         * with asset details.
-         */
-        builder.addFrames(new ConnectionNewAddressFrame(this.sourceAccount.ilpAddress))
-      } else {
-        /**
-         * For `ilp-protocol-stream` >= 2.5.0, send `ConnectionNewAddress`
-         * with an empty address, which will (1) trigger a reply with asset details,
-         * and (2) not trigger a send loop.
-         */
-        builder.addFrames(new ConnectionNewAddressFrame(''))
-      }
-    }
-
-    // Notify the recipient of our limits
-    if (!this.remoteKnowsOurAccount) {
-      builder.addFrames(
-        // Disallow incoming money (JS auto opens a new stream for this)
-        new StreamMaxMoneyFrame(DEFAULT_STREAM_ID, 0, 0),
+    // Continue sending connection limits in each packet until we receive an authenticated response
+    if (!this.remoteKnowsOurLimits) {
+      request.addFrames(
+        // Disallow any new streams (and only the client can open streamId=1)
+        new ConnectionMaxStreamIdFrame(DEFAULT_STREAM_ID),
         // Disallow incoming data
-        new ConnectionMaxDataFrame(0),
-        // Disallow any new streams
-        new ConnectionMaxStreamIdFrame(DEFAULT_STREAM_ID)
+        new ConnectionMaxDataFrame(0)
       )
     }
 
-    return SendState.Ready
+    // If destination asset details are unknown, initially send 2 test packets to request them.
+    if (!this.destinationAsset) {
+      if (!this.sentAssetRequest) {
+        /**
+         * `ConnectionNewAddress` with an empty string will trigger `ilp-protocol-stream`
+         * to respond with asset details but *not* trigger a send loop.
+         *
+         * However, Interledger.rs will reject this packet since it considers the frame invalid.
+         */
+        request.addFrames(new ConnectionNewAddressFrame(''))
+      } else if (!this.sentRustAssetRequest) {
+        /**
+         * `ConnectionNewAddress` with a non-empty string is the only way to trigger Interledger.rs
+         * to respond with asset details.
+         *
+         * But since `ilp-protocol-stream` would trigger a send loop and terminate the payment
+         * to a send-only client, insert a dummy segment before the connection token.
+         * Interledger.rs should handle the packet, but `ilp-protocol-stream` should reject it
+         * without triggering a send loop.
+         */
+        const segments = request.destinationAddress.split('.')
+        const address = [...segments.slice(0, -1), '_', ...segments.slice(-1)].join('.')
+        if (isValidIlpAddress(address)) {
+          request
+            .setDestinationAddress(address)
+            .addFrames(new ConnectionNewAddressFrame('private.RECEIVE_ONLY_CLIENT'))
+        }
+      }
+    }
   }
 
-  applyRequest() {
+  applyRequest({ requestFrames }: StreamRequest): (reply: StreamReply) => void {
+    const addressFrame = requestFrames.find(
+      (f): f is ConnectionNewAddressFrame => f.type === FrameType.ConnectionNewAddress
+    )
+
+    const isAssetRequest = addressFrame?.sourceAccount === ''
+    if (isAssetRequest) {
+      this.sentAssetRequest = true
+    }
+
+    const isRustAssetRequest = addressFrame && addressFrame.sourceAccount.length > 0
+    if (isRustAssetRequest) {
+      this.sentRustAssetRequest = true
+    }
+
     return (reply: StreamReply): void => {
-      this.remoteKnowsOurAccount = this.remoteKnowsOurAccount || reply.isAuthentic()
+      // Retry sending the asset details request if they fail due to a non-final error
+      if (!reply.isAuthentic() && reply.isReject() && reply.ilpReject.code[0] !== 'F') {
+        if (isAssetRequest) {
+          this.sentAssetRequest = false
+        } else if (isRustAssetRequest) {
+          this.sentRustAssetRequest = false
+        }
+      }
+
+      this.remoteKnowsOurLimits = this.remoteKnowsOurLimits || reply.isAuthentic()
       this.handleDestinationDetails(reply)
     }
   }
@@ -128,6 +143,7 @@ export class AccountController implements StreamController {
 
         // Only set destination details if we don't already know them
         if (!this.destinationAsset) {
+          log.trace('got destination asset details: %s %s', assetCode, assetScale)
           // Packet deserialization should already ensure the asset scale is limited to u8:
           // https://github.com/interledgerjs/ilp-protocol-stream/blob/8551fd498f1ff313da72f63891b9fa428212c31a/src/packet.ts#L274
           this.destinationAsset = {

@@ -2,7 +2,7 @@ import { StreamController, StreamReply, StreamRequest } from '.'
 import { Ratio, PositiveInt, Int } from '../utils'
 import { Logger } from 'ilp-logger'
 
-/** Track exchange rates and calculate corresponding source/destination amounts */
+/** Track exchange rates and estimate source/destination amount */
 export class ExchangeRateCalculator {
   /** Realized exchange rate is less than this ratio (exclusive): destination / source */
   upperBoundRate: Ratio

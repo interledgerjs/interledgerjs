@@ -109,7 +109,12 @@ const serializeIldcpResponse = (response: IldcpResponse): Buffer => {
 const fetch = async (
   sendData: (data: Buffer) => Promise<Buffer>,
   request?: IldcpRequest
-): Promise<IldcpResponse> => {
+): Promise<
+  IldcpResponse & {
+    clientAddress: IlpPacket.IlpAddress
+    assetScale: AssetScale
+  }
+> => {
   const data = await sendData(serializeIldcpRequest(request || {}))
 
   if (data[0] === IlpPacket.IlpPacketType.Reject) {

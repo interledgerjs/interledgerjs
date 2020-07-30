@@ -1,5 +1,4 @@
-import { StreamController, StreamRequestBuilder, StreamReply, StreamRequest, SendState } from '.'
-import { ILP_ERROR_CODES } from '../utils'
+import { StreamController, StreamReply, StreamRequest, NextRequest } from '.'
 import {
   ConnectionCloseFrame,
   FrameType,
@@ -7,76 +6,50 @@ import {
   StreamCloseFrame,
   Frame,
 } from 'ilp-protocol-stream/dist/src/packet'
-import { DEFAULT_STREAM_ID } from './amount'
+import { DEFAULT_STREAM_ID } from './payment'
 import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
 import { IlpError } from 'ilp-packet'
 
 /** Controller to cancel a payment if no more money is fulfilled */
 export class FailureController implements StreamController {
-  /** Number of milliseconds since the last Fulfill was received before the payment should fail */
-  private static MAX_DURATION_SINCE_LAST_FULFILL = 10_000
-
-  /** UNIX timestamp when the last Fulfill was received. Begins when the first fulfillable Prepare is sent */
-  private lastFulfillTime?: number
-
   /** Should the payment end immediatey due to a terminal error? */
   private terminalReject = false
 
   /** Was the connection or stream closed by the recipient? */
   private remoteClosed = false
 
-  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
-    const { log } = builder
-
+  nextState(request: NextRequest): PaymentError | void {
     if (this.terminalReject) {
-      builder.sendConnectionClose()
+      request.addConnectionClose().send()
       return PaymentError.ConnectorError
     }
 
     if (this.remoteClosed) {
-      builder.sendConnectionClose()
+      request.addConnectionClose().send()
       return PaymentError.ClosedByRecipient
     }
-
-    if (this.lastFulfillTime) {
-      const deadline = this.lastFulfillTime + FailureController.MAX_DURATION_SINCE_LAST_FULFILL
-      if (Date.now() > deadline) {
-        log.error(
-          'ending payment: no Fulfill received before idle deadline. last fulfill: %s, deadline: %s',
-          this.lastFulfillTime,
-          deadline
-        )
-        builder.sendConnectionClose()
-        return PaymentError.IdleTimeout
-      }
-    }
-
-    return SendState.Ready
   }
 
-  applyRequest({ log, isFulfillable }: StreamRequest): (reply: StreamReply) => void {
-    // Initialize timer when first fulfillable packet is sent
-    // so the rate probe doesn't trigger an idle timeout
-    if (!this.lastFulfillTime && isFulfillable) {
-      this.lastFulfillTime = Date.now()
-    }
-
+  applyRequest({ log, requestFrames }: StreamRequest): (reply: StreamReply) => void {
     return (reply: StreamReply) => {
       const frames = reply.frames
       if (frames) {
         this.handleRemoteClose(frames, log)
       }
 
-      if (reply.isFulfill()) {
-        this.lastFulfillTime = Date.now()
-      }
-
       if (reply.isReject()) {
-        const { code, message, triggeredBy } = reply.ilpReject
+        const { code } = reply.ilpReject
 
-        // Ignore all temporary errors, F08, F99, & R01
+        // Ignore the error if the request included a `ConnectionNewAddress` frame,
+        // since a Final Reject may be expected (refer to explanation in account controller)
+        if (requestFrames.some((frame) => frame.type === FrameType.ConnectionNewAddress)) {
+          log.trace('ignoring %s reject in reply to asset details request.', code)
+          return
+        }
+
         if (code[0] === 'T') {
+          // Ignore all temporary errors, F08, F99, & R01
           return
         }
         switch (code) {
@@ -86,28 +59,15 @@ export class FailureController implements StreamController {
             return
         }
 
-        // TODO F02, R00 (and maybe even F00) tend to be routing errors.
-        //      Should it tolerate a few of these before ending the payment?
-        //      Timeout error could be a routing loop though?
-
         // On any other error, end the payment immediately
         this.terminalReject = true
-        log.error(
-          'ending payment: got %s %s error. message: %s, triggered by: %s',
-          code,
-          ILP_ERROR_CODES[code],
-          message,
-          triggeredBy
-        )
+        log.error('ending payment from %s error.', code)
       }
     }
   }
 
-  /**
-   * End the payment if the receiver closed the connection or the stream used to send money.
-   * Note: this is also called when we received incoming packets to check for close frames
-   */
-  handleRemoteClose(responseFrames: Frame[], log: Logger): void {
+  /** End the payment if the receiver closed the connection or the stream used to send money */
+  private handleRemoteClose(responseFrames: Frame[], log: Logger): void {
     const closeFrame = responseFrames.find(
       (frame): frame is ConnectionCloseFrame | StreamCloseFrame =>
         frame.type === FrameType.ConnectionClose ||

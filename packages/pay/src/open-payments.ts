@@ -93,7 +93,9 @@ const queryInvoice = async (invoiceUrl: string): Promise<PaymentDetails | Paymen
     })
 
 /** Query the payment pointer, Open Payments server, or SPSP server for credentials to establish a STREAM connection */
-const queryAccount = async (paymentPointer: string): Promise<PaymentDetails | PaymentError> => {
+export const queryAccount = async (
+  paymentPointer: string
+): Promise<PaymentDetails | PaymentError> => {
   const accountUrls = parsePaymentPointer(paymentPointer)
   if (!accountUrls) {
     log.debug('payment pointer or account url is invalid: %s', paymentPointer)

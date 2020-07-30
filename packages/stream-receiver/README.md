@@ -1,4 +1,4 @@
-## `stream-receiver` :moneybag:
+## `@interledger/stream-receiver` :moneybag:
 
 > Simple & composable stateless STREAM receiver
 

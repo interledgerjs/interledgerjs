@@ -1,6 +1,6 @@
-## `pay` :money_with_wings:
+## `@interledger/pay` :money_with_wings:
 
-> Send payments over Interledger using STREAM
+> Send discrete payments over Interledger using STREAM
 
 [![NPM Package](https://img.shields.io/npm/v/@interledger/pay.svg?style=flat&logo=npm)](https://npmjs.org/package/@interledger/pay)
 [![GitHub Actions](https://img.shields.io/github/workflow/status/interledgerjs/interledgerjs/master.svg?style=flat&logo=github)](https://github.com/interledgerjs/interledgerjs/actions?query=workflow%3Amaster)
@@ -171,12 +171,6 @@ Object of asset codes to prices in a standardized base asset to compute exchange
 ```
 
 If **[`prices`](#prices)** was not provided, rates are pulled from the [CoinCap API](https://docs.coincap.io/?version=latest) by default, which provides over 200 fiat and crypto currency prices.
-
-##### `getExpiry`
-
-> _Optional_: `(destination?: string) => Date`
-
-Callback function to set the expiration timestamp of each ILP Prepare packet. By default, the expiration is set to 30 seconds in the future.
 
 ##### `amountToDeliver`
 

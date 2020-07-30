@@ -1,12 +1,5 @@
-import {
-  ControllerMap,
-  StreamController,
-  StreamRequestBuilder,
-  StreamRequest,
-  StreamReply,
-  SendState,
-} from '.'
-import { Ratio, Int, PositiveInt } from '../utils'
+import { ControllerMap, StreamController, StreamRequest, StreamReply, NextRequest } from '.'
+import { Ratio, Int, PositiveInt, PromiseResolver } from '../utils'
 import {
   StreamMaxMoneyFrame,
   FrameType,
@@ -40,8 +33,8 @@ interface PaymentTarget {
   rateCalculator: ExchangeRateCalculator
 }
 
-/** Controller to track and calculate amounts to send and deliver */
-export class AmountController implements StreamController {
+/** Controller to track the payment status and compute amounts to send and deliver */
+export class PaymentController implements StreamController {
   /** Conditions that must be met for the payment to complete, and parameters of its execution */
   private target?: PaymentTarget
 
@@ -66,12 +59,8 @@ export class AmountController implements StreamController {
   /** Should the connection be closed because the receiver violated the STREAM protocol? */
   private encounteredProtocolViolation = false
 
-  /** Set of all STREAM controllers */
-  private controllers: ControllerMap
-
-  constructor(controllers: ControllerMap) {
-    this.controllers = controllers
-  }
+  /** Promise that resolves when the target is complete */
+  private paymentStatus = new PromiseResolver<void>()
 
   setPaymentTarget(
     targetAmount: PositiveInt,
@@ -167,19 +156,19 @@ export class AmountController implements StreamController {
     }
   }
 
-  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
+  nextState(request: NextRequest, controllers: ControllerMap): PaymentError | void {
     if (this.encounteredProtocolViolation) {
-      builder.sendConnectionClose(ErrorCode.ProtocolViolation)
+      request.addConnectionClose(ErrorCode.ProtocolViolation).send()
       return PaymentError.ReceiverProtocolViolation
     }
 
     // No fixed source or delivery amount set
     if (!this.target) {
-      return SendState.Ready
+      return
     }
 
     const { maxSourceAmount, minDeliveryAmount, minExchangeRate, rateCalculator } = this.target
-    const { log } = builder
+    const { log } = request
 
     // Is the recipient's advertised `receiveMax` less than the fixed destination amount?
     const incompatibleReceiveMax =
@@ -190,7 +179,7 @@ export class AmountController implements StreamController {
         minDeliveryAmount,
         this.remoteReceiveMax
       )
-      builder.sendConnectionClose(ErrorCode.ApplicationError)
+      request.addConnectionClose(ErrorCode.ApplicationError).send()
       return PaymentError.IncompatibleReceiveMax
     }
 
@@ -199,8 +188,8 @@ export class AmountController implements StreamController {
         this.amountSent.isEqualTo(maxSourceAmount) && !this.sourceAmountInFlight.isPositive()
       if (paidFixedSend) {
         log.debug('payment complete: paid fixed source amount. sent %s', this.amountSent)
-        builder.sendConnectionClose()
-        return SendState.End
+        this.paymentStatus.resolve()
+        return request.addConnectionClose().send()
       }
     }
 
@@ -209,11 +198,11 @@ export class AmountController implements StreamController {
       .subtract(this.amountSent)
       .subtract(this.sourceAmountInFlight)
     if (!availableToSend.isPositive()) {
-      return SendState.Ready
+      return
     }
 
     // Compute source amount (always positive)
-    const maxPacketAmount = this.controllers.get(MaxPacketAmountController).getNextMaxPacketAmount()
+    const maxPacketAmount = controllers.get(MaxPacketAmountController).getNextMaxPacketAmount()
     let sourceAmount: PositiveInt = availableToSend
       .orLesser(maxPacketAmount ?? Int.MAX_U64)
       .orLesser(Int.MAX_U64)
@@ -229,19 +218,19 @@ export class AmountController implements StreamController {
           this.amountDelivered,
           minDeliveryAmount
         )
-        builder.sendConnectionClose()
-        return SendState.End
+        this.paymentStatus.resolve()
+        return request.addConnectionClose().send()
       }
 
       const availableToDeliver = remainingToDeliver.subtract(this.destinationAmountInFlight)
       if (!availableToDeliver.isPositive()) {
-        return SendState.Ready
+        return
       }
 
       const sourceAmountDeliveryLimit = rateCalculator.estimateSourceAmount(availableToDeliver)?.[1]
       if (!sourceAmountDeliveryLimit) {
         log.warn('payment cannot complete: exchange rate dropped to 0')
-        builder.sendConnectionClose()
+        request.addConnectionClose().send()
         return PaymentError.InsufficientExchangeRate
       }
 
@@ -267,21 +256,19 @@ export class AmountController implements StreamController {
 
       if (this.availableDeliveryShortfall.isLessThan(deliveryDeficit) || !completesPayment) {
         log.warn('payment cannot complete: exchange rate dropped below minimum')
-        builder.sendConnectionClose()
+        request.addConnectionClose().send()
         return PaymentError.InsufficientExchangeRate
       }
 
       minDestinationAmount = estimatedDestinationAmount
     }
 
-    builder
+    request
       .setSourceAmount(sourceAmount)
       .setMinDestinationAmount(minDestinationAmount)
       .enableFulfillment()
       .addFrames(new StreamMoneyFrame(DEFAULT_STREAM_ID, 1))
       .send()
-
-    return SendState.Wait
   }
 
   applyRequest(request: StreamRequest): (reply: StreamReply) => void {
@@ -395,6 +382,10 @@ export class AmountController implements StreamController {
         // Remote receive max can only increase
         this.remoteReceiveMax = this.remoteReceiveMax?.orGreater(receiveMax) ?? receiveMax
       })
+  }
+
+  paymentComplete(): Promise<void> {
+    return this.paymentStatus.promise
   }
 
   getAmountSent(): Int {

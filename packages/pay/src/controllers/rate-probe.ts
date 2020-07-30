@@ -1,12 +1,5 @@
 import { PaymentError } from '..'
-import {
-  StreamController,
-  StreamRequestBuilder,
-  ControllerMap,
-  SendState,
-  StreamRequest,
-  StreamReply,
-} from '.'
+import { StreamController, ControllerMap, StreamRequest, StreamReply, NextRequest } from '.'
 import { Int } from '../utils'
 import { MaxPacketAmountController } from './max-packet'
 import { PromiseResolver } from '../utils'
@@ -25,9 +18,9 @@ export class RateProbe implements StreamController {
   private status = new PromiseResolver<RateProbeOutcome>()
 
   private deadline?: number
-  private controllers: ControllerMap
   private initialTestPacketAmounts = [
-    0,
+    0, // Asset request
+    0, // Interledger.rs asset request
     1e12,
     1e11,
     1e10,
@@ -49,52 +42,49 @@ export class RateProbe implements StreamController {
   /** Amounts sent that received an authentic reply */
   private ackedAmounts = new Set<bigint>()
 
-  constructor(controllers: ControllerMap) {
-    this.controllers = controllers
-  }
-
   done(): Promise<RateProbeOutcome> {
     return this.status.promise
   }
 
-  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
+  nextState(request: NextRequest, controllers: ControllerMap): PaymentError | void {
     if (this.deadline && Date.now() > this.deadline) {
+      // TODO Log here!
       return PaymentError.RateProbeFailed
     }
 
-    const nextTestPacket = this.initialTestPacketAmounts[0]
-    if (nextTestPacket) {
-      builder.setSourceAmount(nextTestPacket).send()
-      return SendState.Wait
-    }
-
-    // Max packet probe amount or discovered max packet amount
-
-    const knownMaxPacketAmount = this.controllers
+    const knownMaxPacketAmount = controllers
       .get(MaxPacketAmountController)
       .getDiscoveredMaxPacketAmount()
-    const rateCalculator = this.controllers.get(ExchangeRateController).state
+
+    const nextTestPacket = this.initialTestPacketAmounts[0]
+
+    // Send the next hardcoded test packet amount only if it's less than the already
+    // established max packet amount
+    if (
+      nextTestPacket &&
+      (!knownMaxPacketAmount || nextTestPacket.isLessThan(knownMaxPacketAmount))
+    ) {
+      return request.setSourceAmount(nextTestPacket).send()
+    }
+
+    // The rate probe is complete if we know the max packet amount, established a rate
+    // TODO Should this finish even if packets are still in-flight?
+    const rateCalculator = controllers.get(ExchangeRateController).state
     if (knownMaxPacketAmount && rateCalculator && this.inFlightAmounts.size === 0) {
-      this.status.resolve({
+      return this.status.resolve({
         maxPacketAmount: knownMaxPacketAmount,
         rateCalculator,
       })
-      return SendState.End
     }
 
-    const maxPacketProbeAmount = this.controllers
-      .get(MaxPacketAmountController)
-      .getNextMaxPacketAmount()
+    const maxPacketProbeAmount = controllers.get(MaxPacketAmountController).getNextMaxPacketAmount()
     if (
       maxPacketProbeAmount &&
       !this.inFlightAmounts.has(maxPacketProbeAmount.value) &&
       !this.ackedAmounts.has(maxPacketProbeAmount.value)
     ) {
-      builder.setSourceAmount(maxPacketProbeAmount).send()
-      return SendState.Wait
+      return request.setSourceAmount(maxPacketProbeAmount).send()
     }
-
-    return SendState.Wait
   }
 
   applyRequest({ sourceAmount }: StreamRequest): (reply: StreamReply) => void {

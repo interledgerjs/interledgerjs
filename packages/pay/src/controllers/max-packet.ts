@@ -1,12 +1,5 @@
 import { Reader } from 'oer-utils'
-import {
-  StreamController,
-  StreamReject,
-  StreamReply,
-  StreamRequest,
-  SendState,
-  StreamRequestBuilder,
-} from './'
+import { StreamController, StreamReject, StreamReply, StreamRequest, NextRequest } from './'
 import { Int, PositiveInt, Ratio } from '../utils'
 import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
@@ -57,13 +50,11 @@ export class MaxPacketAmountController implements StreamController {
   /** Is the max packet amount 0 and impossible to send value over this path? */
   private noCapacityAvailable = false
 
-  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
+  nextState(request: NextRequest): PaymentError | void {
     if (this.noCapacityAvailable) {
-      builder.sendConnectionClose()
+      request.addConnectionClose().send()
       return PaymentError.ConnectorError
     }
-
-    return SendState.Ready
   }
 
   /**

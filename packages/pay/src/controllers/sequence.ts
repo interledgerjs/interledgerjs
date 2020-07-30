@@ -1,4 +1,4 @@
-import { StreamController, StreamRequestBuilder, SendState, StreamReply, StreamRequest } from '.'
+import { StreamController, StreamRequest, NextRequest } from '.'
 import { PaymentError } from '..'
 
 /** Track the sequence number of outgoing packets */
@@ -6,22 +6,18 @@ export class SequenceController implements StreamController {
   private static PACKET_LIMIT = 2 ** 32
   private nextSequence = 0
 
-  nextState(builder: StreamRequestBuilder): SendState | PaymentError {
-    builder.setSequence(this.nextSequence)
+  nextState(request: NextRequest): PaymentError | void {
+    request.setSequence(this.nextSequence)
 
     // Destroy the connection after 2^32 packets are sent for encryption safety:
     // https://github.com/interledger/rfcs/blob/master/0029-stream/0029-stream.md#513-maximum-number-of-packets-per-connection
     if (this.nextSequence >= SequenceController.PACKET_LIMIT) {
-      builder.log.error('ending payment: cannot exceed max safe sequence number.')
+      request.log.error('ending payment: cannot exceed max safe sequence number.')
       return PaymentError.ExceededMaxSequence
     }
-
-    return SendState.Ready
   }
 
-  applyRequest(request: StreamRequest): (reply: StreamReply) => void {
+  applyRequest(request: StreamRequest): void {
     this.nextSequence = request.sequence + 1
-    // eslint-disable-next-line @typescript-eslint/no-empty-function
-    return () => {}
   }
 }

@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import BigNumber from 'bignumber.js'
 import Long from 'long'
-import { IlpReject, serializeIlpReject, IlpAddress, IlpError } from 'ilp-packet'
 import { hash } from 'ilp-protocol-stream/dist/src/crypto'
+import createLogger, { Logger } from 'ilp-logger'
 
 /** Promise that can be resolved or rejected outside its executor callback */
 export class PromiseResolver<T> {
@@ -14,75 +14,15 @@ export class PromiseResolver<T> {
   })
 }
 
-/** Compute short string to uniquely identify this connection in logs */
-export const getConnectionId = (destinationAddress: string): Promise<string> =>
-  hash(Buffer.from(destinationAddress)).then((image) => image.toString('hex').slice(0, 6))
-
-/** Default maximum duration that a ILP Prepare can be in-flight before it should be rejected */
-const DEFAULT_PACKET_TIMEOUT_MS = 30000
-
-/** Determine the expiration timestamp for a packet based on the default */
-export const getDefaultExpiry = (): Date => new Date(Date.now() + DEFAULT_PACKET_TIMEOUT_MS)
-
-/**
- * Duration between when an ILP Prepare expires and when a packet times out to undo its effects,
- * to prevent dropping a Fulfill if it was received right before the expiration time
- */
-export const MIN_MESSAGE_WINDOW = 1000
-
-/** Mapping of ILP error codes to its error message */
-export const ILP_ERROR_CODES = {
-  // Final errors
-  F00: 'bad request',
-  F01: 'invalid packet',
-  F02: 'unreachable',
-  F03: 'invalid amount',
-  F04: 'insufficient destination amount',
-  F05: 'wrong condition',
-  F06: 'unexpected payment',
-  F07: 'cannot receive',
-  F08: 'amount too large',
-  F99: 'application error',
-  // Temporary errors
-  T00: 'internal error',
-  T01: 'peer unreachable',
-  T02: 'peer busy',
-  T03: 'connector busy',
-  T04: 'insufficient liquidity',
-  T05: 'rate limited',
-  T99: 'application error',
-  // Relative errors
-  R00: 'transfer timed out',
-  R01: 'insufficient source amount',
-  R02: 'insufficient timeout',
-  R99: 'application error',
-}
-
-/** Construct an ILP Reject packet */
-export class RejectBuilder implements IlpReject {
-  code = IlpError.F00_BAD_REQUEST
-  message = ''
-  triggeredBy = ''
-  data = Buffer.alloc(0)
-
-  setCode(code: IlpError): this {
-    this.code = code
-    return this
-  }
-
-  setTriggeredBy(sourceAddress: IlpAddress): this {
-    this.triggeredBy = sourceAddress
-    return this
-  }
-
-  setData(data: Buffer): this {
-    this.data = data
-    return this
-  }
-
-  serialize(): Buffer {
-    return serializeIlpReject(this)
-  }
+// TODO Add this
+export const timeout = <T>(duration: number, promise: Promise<T>): Promise<T> => {
+  let timer: NodeJS.Timeout
+  return Promise.race([
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(reject, duration)
+    }),
+    promise.finally(() => clearTimeout(timer)),
+  ])
 }
 
 /** Create a cancellable Promise the resolves after the given duration */
@@ -104,11 +44,10 @@ export const createTimeout = (
 /** Wait and resolve after the given number of milliseconds */
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-declare class Tag<N extends string> {
-  protected __nominal: N
+export const getConnectionLogger = async (destinationAddress: string): Promise<Logger> => {
+  const connectionId = await hash(Buffer.from(destinationAddress))
+  return createLogger(`ilp-pay:${connectionId.toString('hex').slice(0, 6)}`)
 }
-
-export type Brand<T, N extends string> = T & Tag<N>
 
 // Buffer used to convert between Longs and BigInts (much more performant with single allocation)
 const LONG_BIGINT_BUFFER = new ArrayBuffer(8)
@@ -129,12 +68,15 @@ export class Int {
     this.value = n
   }
 
+  static from<T extends Int>(n: T): T
   static from(n: Long): Int
   static from(n: number): Int | undefined
   static from(n: string): Int | undefined
   static from(n: BigNumber): Int | undefined
-  static from(n: Long | number | string | BigNumber): Int | undefined {
-    if (typeof n === 'string') {
+  static from(n: Int | Long | number | string | BigNumber): Int | undefined {
+    if (n instanceof Int) {
+      return n
+    } else if (typeof n === 'string') {
       return Int.fromString(n)
     } else if (typeof n === 'number') {
       return Int.fromNumber(n)
@@ -259,10 +201,16 @@ export class Int {
     const low = LONG_BIGINT_DATAVIEW.getUint32(4)
     return new Long(low, high, true)
   }
+
+  // TODO Use valueOf instead?
+  toNumber(): number {
+    return Number(this.value)
+  }
 }
 
 /** Integer greater than 0 */
 export interface PositiveInt extends Int {
+  add(n: Int): PositiveInt
   multiply(n: PositiveInt): PositiveInt
   multiply(n: Int): Int
   multiplyCeil(r: PositiveRatio): PositiveInt
@@ -276,6 +224,12 @@ export interface PositiveInt extends Int {
   orLesser(n: Int): Int
   orGreater(n: Int): PositiveInt
 }
+
+declare class Tag<N extends string> {
+  protected __nominal: N
+}
+
+export type Brand<T, N extends string> = T & Tag<N>
 
 /** Finite number greater than or equal to 0 */
 export type NonNegativeNumber = Brand<number, 'NonNegativeNumber'>
@@ -297,7 +251,7 @@ export class Ratio {
     this.b = b
   }
 
-  static fromNumber(n: NonNegativeNumber): Ratio {
+  static from(n: NonNegativeNumber): Ratio {
     let e = 1
     while (!Number.isInteger(n * e)) {
       e *= 10
@@ -312,6 +266,12 @@ export class Ratio {
     if (this.a.isPositive()) {
       return new Ratio(this.b, this.a)
     }
+  }
+
+  multiply(r: Ratio): Ratio {
+    const a = this.a.multiply(r.a)
+    const b = this.b.multiply(r.b)
+    return new Ratio(a, b)
   }
 
   subtract(r: Ratio): Ratio {
@@ -353,7 +313,7 @@ export class Ratio {
 }
 
 /** Ratio of two integers greater than 0 */
-interface PositiveRatio extends Ratio {
+export interface PositiveRatio extends Ratio {
   a: PositiveInt
   b: PositiveInt
 

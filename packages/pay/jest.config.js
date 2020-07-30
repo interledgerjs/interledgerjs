@@ -6,6 +6,7 @@ module.exports = {
     '!src/rates/ecb.ts',
     '!src/controllers/liquidity-congestion.ts'
   ],
+  coverageReporters: ['text', 'lcov'],
   coverageDirectory: 'coverage',
   preset: 'ts-jest',
   testEnvironment: 'node',

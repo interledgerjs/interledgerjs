@@ -1,29 +1,33 @@
 import BigNumber from 'bignumber.js'
+import createLogger from 'ilp-logger'
+import { getScheme } from 'ilp-packet'
+import { fetch as sendIldcpRequest } from 'ilp-protocol-ildcp'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
+import { createConnection } from './connection'
 import { ControllerMap } from './controllers'
-import { AccountController, AccountDetails } from './controllers/asset-details'
-import { PendingRequestTracker } from './controllers/pending-requests'
-import { fetchCoinCapRates } from './rates/coincap'
-import { AmountController, PaymentType } from './controllers/amount'
+import { AccountDetails, AssetDetailsController } from './controllers/asset-details'
 import { ExchangeRateController } from './controllers/exchange-rate'
-import { SequenceController } from './controllers/sequence'
-import { PacingController } from './controllers/pacer'
+import { ExpiryController } from './controllers/expiry'
 import { FailureController } from './controllers/failure'
 import { MaxPacketAmountController } from './controllers/max-packet'
-import { createConnection } from './connection'
+import { PacingController } from './controllers/pacer'
+import { PaymentController, PaymentType } from './controllers/payment'
+import { PendingRequestTracker } from './controllers/pending-requests'
 import { RateProbe } from './controllers/rate-probe'
-import { fetch as sendIldcpRequest, isValidAssetScale } from 'ilp-protocol-ildcp'
+import { SequenceController } from './controllers/sequence'
+import { TimeoutController } from './controllers/timeout'
+import { fetchPaymentDetails } from './open-payments'
+import { fetchCoinCapRates } from './rates/coincap'
+import { createSendLoop } from './send-loop'
 import {
-  getConnectionId,
-  Ratio,
+  getConnectionLogger,
+  Int,
   isNonNegativeNumber,
   NonNegativeNumber,
   PositiveInt,
-  Int,
+  Ratio,
+  timeout,
 } from './utils'
-import createLogger from 'ilp-logger'
-import { fetchPaymentDetails } from './open-payments'
-import { isValidIlpAddress, getScheme } from 'ilp-packet'
 
 export { AccountDetails } from './controllers/asset-details'
 
@@ -46,8 +50,6 @@ export interface PaymentOptions {
   prices?: {
     [assetCode: string]: number
   }
-  /** Callback to set the expiration timestamp of each packet given the destination ILP address */
-  getExpiry?: (destination?: string) => Date
   /** For testing purposes: fixed amount to deliver to the recipient, in base units */
   amountToDeliver?: Int
   /** For testing purposes: ILP address of the STREAM receiver to send outgoing packets. Requires `sharedSecret` */
@@ -202,47 +204,58 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
   if (isPaymentError(recipientDetailsOrError)) {
     throw recipientDetailsOrError
   }
-  const { sharedSecret, destinationAddress, destinationAsset, invoice } = recipientDetailsOrError
+  const { sharedSecret, destinationAddress, invoice } = recipientDetailsOrError
+  const openPaymentsAsset = recipientDetailsOrError.destinationAsset
 
-  const connectionId = await getConnectionId(destinationAddress)
-  log = log.extend(connectionId)
+  log = await getConnectionLogger(destinationAddress)
 
-  // TODO Add timeout here?
-  await plugin.connect().catch((err: Error) => {
-    log.debug('error connecting plugin:', err)
-    throw PaymentError.Disconnected
+  const connectResult: PaymentError | void = await timeout(
+    10_000,
+    plugin.connect().catch((err: Error) => {
+      log.error('error connecting plugin:', err)
+      return PaymentError.Disconnected
+    })
+  ).catch(() => {
+    log.error('plugin failed to connect: timed out.')
+    return PaymentError.Disconnected
   })
+  if (isPaymentError(connectResult)) {
+    throw connectResult
+  }
 
   const close = async () => {
-    // TODO Add timeout here?
-    await plugin
-      .disconnect()
-      .then(() => log.debug('plugin disconnected.'))
-      .catch((err: Error) => log.error('error disconnecting plugin:', err))
+    await timeout(
+      5_000,
+      plugin
+        .disconnect()
+        .then(() => log.debug('plugin disconnected.'))
+        .catch((err: Error) => log.error('error disconnecting plugin:', err))
+    ).catch(() => log.error('plugin failed to disconnect: timed out.'))
     plugin.deregisterDataHandler()
   }
 
+  // TODO Add a longer `expiresAt` to the sendData call here?
+  // TODO Could IL-DCP be its own controller apart of the rate probe?
   // Fetch asset details of source account
-  // TODO Add timeout here?
-  const sourceAccount: AccountDetails = await sendIldcpRequest((data) => plugin.sendData(data))
-    .catch(async (err) => {
-      log.debug('quote failed: IL-DCP request to fetch source asset failed:', err)
-      await close()
-      throw PaymentError.UnknownSourceAsset
-    })
-    .then(async ({ assetCode, assetScale, clientAddress }) => {
-      if (!isValidAssetScale(assetScale) || !isValidIlpAddress(clientAddress)) {
-        log.debug('quote failed: source asset details from IL-DCP request are invalid')
-        await close()
-        throw PaymentError.UnknownSourceAsset
-      }
-
-      return {
-        assetCode,
-        assetScale,
-        ilpAddress: clientAddress,
-      }
-    })
+  const sourceAccount: AccountDetails | PaymentError = await timeout(
+    5_000,
+    sendIldcpRequest((data) => plugin.sendData(data))
+      .then(async ({ clientAddress: ilpAddress, ...info }) => ({
+        ...info,
+        ilpAddress,
+      }))
+      .catch(async (err) => {
+        log.debug('quote failed: failed to fetch source asset via IL-DCP.', err)
+        return PaymentError.UnknownSourceAsset
+      })
+  ).catch(() => {
+    log.debug('quote failed: timed out fetching source asset via IL-DCP.')
+    return PaymentError.UnknownSourceAsset
+  })
+  if (isPaymentError(sourceAccount)) {
+    await close()
+    throw sourceAccount
+  }
 
   // Sanity check to ensure sender and receiver use the same network/prefix
   if (getScheme(sourceAccount.ilpAddress) !== getScheme(destinationAddress)) {
@@ -278,6 +291,8 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
   }
   // Validate the target amount is non-zero and compatible with the precision of the accounts
   else if (options.amountToSend !== undefined) {
+    // TODO How was the consumer able to specify the amount if they didn't already know the asset scale?
+    //      If so, is there a better way to do this rather than fetch via IL-DCP?
     const amountToSend = Int.from(
       new BigNumber(options.amountToSend).shiftedBy(sourceAccount.assetScale)
     )
@@ -315,34 +330,23 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
   }
 
   const controllers: ControllerMap = new Map()
-  controllers
-    // First so all other controllers log the sequence number
-    .set(SequenceController, new SequenceController())
-    // Fail-fast on terminal rejects or timeouts
-    .set(FailureController, new FailureController())
-    // Fail-fast on destination asset detail conflict
-    .set(
-      AccountController,
-      new AccountController(sourceAccount, destinationAddress, destinationAsset)
-    )
-    // Fail-fast if max packet amount is 0
-    .set(MaxPacketAmountController, new MaxPacketAmountController())
-    // Limit how frequently packets are sent and early return
-    .set(PacingController, new PacingController())
-    .set(AmountController, new AmountController(controllers))
+    .set(SequenceController, new SequenceController()) // Log sequence number in subsequent controllers
+    .set(ExpiryController, new ExpiryController()) // Set expiry for all subsequent packets
+    .set(FailureController, new FailureController()) // Fail-fast on terminal rejects or connection closes
+    .set(TimeoutController, new TimeoutController()) // Fail-fast on timeouts
+    .set(MaxPacketAmountController, new MaxPacketAmountController()) // Fail-fast if the max packet amount is 0
+    .set(PacingController, new PacingController()) // Limit how frequently packets are sent and early return
+    .set(AssetDetailsController, new AssetDetailsController(openPaymentsAsset)) // Send initial packets to request asset details
+    .set(PaymentController, new PaymentController())
     .set(ExchangeRateController, new ExchangeRateController())
-    .set(RateProbe, new RateProbe(controllers))
-    // Ensure each controller processes reply before resolving Promises
-    .set(PendingRequestTracker, new PendingRequestTracker())
+    .set(RateProbe, new RateProbe())
+    .set(PendingRequestTracker, new PendingRequestTracker()) // Ensure each controller processes replies before Promises are resolved
+
+  // TODO Add liquidity congestion controller here
 
   // Register handlers for incoming packets and generate encryption keys
-  const connection = await createConnection(
-    plugin,
-    controllers,
-    sharedSecret,
-    destinationAddress,
-    options.getExpiry
-  )
+  const sendRequest = await createConnection(plugin, sharedSecret)
+  const sendLoop = createSendLoop(sendRequest, controllers, destinationAddress, log)
 
   log.debug('starting quote.')
 
@@ -352,21 +356,22 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
   // - Probe the realized exchange rate
   // - Discover path max packet amount
   const probeResult = await Promise.race([
-    connection.runSendLoop(),
+    sendLoop.start() as Promise<PaymentError>,
     controllers.get(RateProbe).done(),
   ])
   controllers.delete(RateProbe)
+  await sendLoop.stop()
 
   // If the send loop failed due to an error, end the payment/quote
-  if (typeof probeResult === 'string') {
+  if (isPaymentError(probeResult)) {
     await close()
     throw probeResult
   }
   const { rateCalculator, maxPacketAmount } = probeResult
 
   // Destination asset may not be known until now if it was shared over STREAM vs application layer
-  const destinationAccount = controllers.get(AccountController).getDestinationAccount()
-  if (!destinationAccount) {
+  const destinationAsset = controllers.get(AssetDetailsController).getDestinationAsset()
+  if (!destinationAsset) {
     log.debug('quote failed: receiver never shared destination asset details')
     await close()
     throw PaymentError.UnknownDestinationAsset
@@ -374,7 +379,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
 
   // Determine minimum exchange rate & pull prices from external API
   let externalRate = 1
-  if (sourceAccount.assetCode !== destinationAccount.assetCode) {
+  if (sourceAccount.assetCode !== destinationAsset.assetCode) {
     const prices =
       options.prices ??
       (await fetchCoinCapRates().catch(async (err) => {
@@ -384,7 +389,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
       }))
 
     const sourcePrice = prices[sourceAccount.assetCode]
-    const destinationPrice = prices[destinationAccount.assetCode]
+    const destinationPrice = prices[destinationAsset.assetCode]
 
     // Ensure the prices are defined, finite, and denominator > 0
     if (
@@ -395,7 +400,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
       log.debug(
         'quote failed: no external rate available from %s to %s',
         sourceAccount.assetCode,
-        destinationAccount.assetCode
+        destinationAsset.assetCode
       )
       await close()
       throw PaymentError.ExternalRateUnavailable
@@ -407,12 +412,12 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
   }
 
   const scaledExternalRate =
-    externalRate * 10 ** (destinationAccount.assetScale - sourceAccount.assetScale)
-  const minimumRate = Ratio.fromNumber((scaledExternalRate * (1 - slippage)) as NonNegativeNumber)
+    externalRate * 10 ** (destinationAsset.assetScale - sourceAccount.assetScale)
+  const minimumRate = Ratio.from((scaledExternalRate * (1 - slippage)) as NonNegativeNumber)
   log.debug('calculated min exchange rate of %s', minimumRate)
 
   const projectedOutcome = controllers
-    .get(AmountController)
+    .get(PaymentController)
     .setPaymentTarget(target.amount, target.type, minimumRate, rateCalculator, maxPacketAmount, log)
   if (isPaymentError(projectedOutcome)) {
     await close()
@@ -423,7 +428,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
 
   // Convert amounts & rates into normalized units
   const shiftRate = (rate: BigNumber) =>
-    rate.shiftedBy(-destinationAccount.assetScale).shiftedBy(sourceAccount.assetScale)
+    rate.shiftedBy(-destinationAsset.assetScale).shiftedBy(sourceAccount.assetScale)
   const lowerBoundRate = shiftRate(rateCalculator.lowerBoundRate.toBigNumber())
   const upperBoundRate = shiftRate(rateCalculator.upperBoundRate.toBigNumber())
   const minExchangeRate = shiftRate(minimumRate.toBigNumber())
@@ -432,7 +437,7 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     .shiftedBy(-sourceAccount.assetScale)
   const minDeliveryAmount = projectedOutcome.minDeliveryAmount
     .toBigNumber()
-    .shiftedBy(-destinationAccount.assetScale)
+    .shiftedBy(-destinationAsset.assetScale)
 
   // Estimate how long the payment may take based on max packet amount, RTT, and rate of packet sending
   const packetFrequency = controllers.get(PacingController).getPacketFrequency()
@@ -440,18 +445,21 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
 
   return {
     sourceAccount,
-    destinationAccount,
+    destinationAccount: {
+      ilpAddress: destinationAddress,
+      ...destinationAsset,
+    },
 
     invoice: invoice && {
       ...invoice,
-      assetCode: destinationAccount.assetCode,
-      assetScale: destinationAccount.assetScale,
+      assetCode: destinationAsset.assetCode,
+      assetScale: destinationAsset.assetScale,
       amountDelivered: invoice.amountDelivered
         .toBigNumber()
-        .shiftedBy(-destinationAccount.assetScale),
+        .shiftedBy(-destinationAsset.assetScale),
       amountToDeliver: invoice.amountToDeliver
         .toBigNumber()
-        .shiftedBy(-destinationAccount.assetScale),
+        .shiftedBy(-destinationAsset.assetScale),
     },
 
     estimatedExchangeRate: [lowerBoundRate, upperBoundRate],
@@ -465,28 +473,34 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     pay: async () => {
       log.debug('starting payment.')
 
-      // Start send loop to execute the payment
-      const finalState = await connection.runSendLoop()
+      const paymentResult = await Promise.race([
+        sendLoop.start() as Promise<PaymentError>,
+        controllers.get(PaymentController).paymentComplete(),
+      ])
+      await sendLoop.stop()
       await close()
 
       log.debug('payment ended.')
 
       return {
-        ...(isPaymentError(finalState) && { error: finalState }),
+        ...(isPaymentError(paymentResult) && { error: paymentResult }),
 
         amountSent: controllers
-          .get(AmountController)
+          .get(PaymentController)
           .getAmountSent()
           .toBigNumber()
           .shiftedBy(-sourceAccount.assetScale),
         amountDelivered: controllers
-          .get(AmountController)
+          .get(PaymentController)
           .getAmountDelivered()
           .toBigNumber()
-          .shiftedBy(-destinationAccount.assetScale),
+          .shiftedBy(-destinationAsset.assetScale),
 
         sourceAccount,
-        destinationAccount,
+        destinationAccount: {
+          ilpAddress: destinationAddress,
+          ...destinationAsset,
+        },
       }
     },
 

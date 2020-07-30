@@ -2,7 +2,7 @@
 import { it, expect } from '@jest/globals'
 import { MirrorPlugin } from './helpers/plugin'
 import { createConnection } from '../src/connection'
-import { ControllerMap, StreamReject } from '../src/controllers'
+import { StreamReject } from '../src/controllers'
 import { randomBytes } from 'crypto'
 import {
   Packet,
@@ -25,104 +25,23 @@ import {
   generateFulfillment,
   generatePskEncryptionKey,
   generateFulfillmentKey,
-  hash,
 } from 'ilp-protocol-stream/dist/src/crypto'
 import { Int } from '../src/utils'
-import { FailureController } from '../src/controllers/failure'
-import { AccountController } from '../src/controllers/asset-details'
-import { AssetScale } from 'ilp-protocol-ildcp'
+import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 
 const destinationAddress = 'private.bob' as IlpAddress
 const sharedSecret = randomBytes(32)
-
-const controllers: ControllerMap = new Map()
-controllers.set(
-  AccountController,
-  new AccountController(
-    {
-      ilpAddress: 'private.alice' as IlpAddress,
-      assetScale: 2 as AssetScale,
-      assetCode: 'ABC',
-    },
-    destinationAddress
-  )
-)
-controllers.set(FailureController, new FailureController())
+const expiresAt = new Date(Date.now() + 30000)
+const log = createLogger('ilp-pay')
 
 describe('handles requests', () => {
-  it('acknowledges authentic incoming ILP Prepare packets', async () => {
+  it('rejects all incoming packets', async () => {
     const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
-
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-    const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
-
-    const streamRequest = await new Packet(1, IlpPacketType.Prepare, 46).serializeAndEncrypt(
-      encryptionKey
-    )
-
-    // Send this as a fulfillable packet to test/ensure that i's not fulfilled
-    const fulfillment = await generateFulfillment(fulfillmentKey, streamRequest)
-    const executionCondition = await hash(fulfillment)
-
-    const ilpPrepare: IlpPrepare = {
-      amount: '46',
-      destination: destinationAddress,
-      expiresAt: new Date(Date.now() + 30000),
-      executionCondition,
-      data: streamRequest,
-    }
-
-    const ilpReply = await senderPlugin
-      .sendData(serializeIlpPrepare(ilpPrepare))
-      .then(deserializeIlpReject)
-
-    expect(ilpReply.code).toBe(IlpError.F99_APPLICATION_ERROR)
-
-    const streamReply = await Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
-
-    expect(streamReply.ilpPacketType).toBe(IlpPacketType.Reject)
-    expect(+streamReply.prepareAmount).toBe(46)
-    expect(+streamReply.sequence).toEqual(1)
-    expect(streamReply.frames.length).toBe(0)
-  })
-
-  it('rejects incoming data that is not an ILP Prepare', async () => {
-    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
-
-    await senderPlugin.connect()
-    await receiverPlugin.connect()
-
-    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
-
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-
-    const ilpReply = await senderPlugin
-      .sendData(
-        serializeIlpFulfill({
-          fulfillment: randomBytes(32),
-          data: randomBytes(50),
-        })
-      )
-      .then(deserializeIlpReject)
-
-    expect(ilpReply.code).toBe(IlpError.F01_INVALID_PACKET)
-
-    const streamReply = Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
-    await expect(streamReply).rejects.toBeInstanceOf(Error)
-  })
-
-  it('rejects incoming ILP Prepare packets that fail decryption', async () => {
-    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
-
-    await senderPlugin.connect()
-    await receiverPlugin.connect()
-
-    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
+    await createConnection(receiverPlugin, sharedSecret)
 
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
 
@@ -138,37 +57,7 @@ describe('handles requests', () => {
       .sendData(serializeIlpPrepare(ilpPrepare))
       .then(deserializeIlpReject)
 
-    expect(ilpReply.code).toBe(IlpError.F06_UNEXPECTED_PAYMENT)
-
-    const streamReply = Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
-    await expect(streamReply).rejects.toBeInstanceOf(Error)
-  })
-
-  it('rejects incoming ILP Prepare packets with an invalid STREAM packet type', async () => {
-    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
-
-    await senderPlugin.connect()
-    await receiverPlugin.connect()
-
-    await createConnection(receiverPlugin, controllers, sharedSecret, destinationAddress)
-
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-
-    const streamRequest = new Packet(1, IlpPacketType.Reject, 2333)
-
-    const ilpPrepare: IlpPrepare = {
-      amount: '46',
-      destination: destinationAddress,
-      expiresAt: new Date(Date.now() + 30000),
-      executionCondition: randomBytes(32),
-      data: await streamRequest.serializeAndEncrypt(encryptionKey),
-    }
-
-    const ilpReply = await senderPlugin
-      .sendData(serializeIlpPrepare(ilpPrepare))
-      .then(deserializeIlpReject)
-
-    expect(ilpReply.code).toBe(IlpError.F99_APPLICATION_ERROR)
+    expect(ilpReply.code).toBe(IlpError.F02_UNREACHABLE)
 
     const streamReply = Packet.decryptAndDeserialize(encryptionKey, ilpReply.data)
     await expect(streamReply).rejects.toBeInstanceOf(Error)
@@ -182,12 +71,7 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const connection = await createConnection(
-      senderPlugin,
-      controllers,
-      sharedSecret,
-      destinationAddress
-    )
+    const sendRequest = await createConnection(senderPlugin, sharedSecret)
 
     receiverPlugin.registerDataHandler(async () =>
       serializeIlpPrepare({
@@ -199,13 +83,15 @@ describe('validates replies', () => {
       })
     )
 
-    const reply = await connection.sendRequest({
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt,
       sequence: 20,
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
-      log: createLogger('ilp-pay'),
+      log,
     })
 
     expect(reply.destinationAmount).toBeUndefined()
@@ -221,24 +107,20 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const connection = await createConnection(
-      senderPlugin,
-      controllers,
-      sharedSecret,
-      destinationAddress,
-      () => new Date(Date.now() + 3000) // Short expiry so test doesn't take forever
-    )
+    const sendRequest = await createConnection(senderPlugin, sharedSecret)
 
     // Data handler never resolves
     receiverPlugin.registerDataHandler(() => new Promise(() => {}))
 
-    const reply = await connection.sendRequest({
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt: new Date(Date.now() + 1000), // Short expiry so test completes quickly
       sequence: 31,
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
-      log: createLogger('ilp-pay'),
+      log,
     })
 
     expect(reply.destinationAmount).toBeUndefined()
@@ -254,24 +136,56 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const connection = await createConnection(
-      senderPlugin,
-      controllers,
-      sharedSecret,
-      destinationAddress
-    )
+    const sendRequest = await createConnection(senderPlugin, sharedSecret)
 
     receiverPlugin.registerDataHandler(() => {
       throw new Error('Unable to process request')
     })
 
-    const reply = await connection.sendRequest({
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt,
       sequence: 20,
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
-      log: createLogger('ilp-pay'),
+      log,
+    })
+
+    expect(reply.destinationAmount).toBeUndefined()
+    expect(reply.frames).toBeUndefined()
+
+    expect(reply.isReject())
+    expect((reply as StreamReject).ilpReject.code).toBe(IlpError.T00_INTERNAL_ERROR)
+  })
+
+  it('returns T00 if plugin is not connected', async () => {
+    const plugin: Plugin = {
+      async connect() {},
+      async disconnect() {},
+      isConnected() {
+        return false
+      },
+      sendData() {
+        // Promise never resolves
+        return new Promise<Buffer>(() => {})
+      },
+      registerDataHandler() {},
+      deregisterDataHandler() {},
+    }
+
+    const sendRequest = await createConnection(plugin, sharedSecret)
+
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt,
+      sequence: 1000,
+      sourceAmount: Int.ONE,
+      minDestinationAmount: Int.ONE,
+      isFulfillable: true,
+      requestFrames: [],
+      log,
     })
 
     expect(reply.destinationAmount).toBeUndefined()
@@ -287,12 +201,7 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const connection = await createConnection(
-      senderPlugin,
-      controllers,
-      sharedSecret,
-      destinationAddress
-    )
+    const sendRequest = await createConnection(senderPlugin, sharedSecret)
 
     receiverPlugin.registerDataHandler(async () =>
       serializeIlpFulfill({
@@ -301,13 +210,15 @@ describe('validates replies', () => {
       })
     )
 
-    const reply = await connection.sendRequest({
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt,
       sequence: 20,
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
-      log: createLogger('ilp-pay'),
+      log,
     })
 
     expect(reply.destinationAmount).toBeUndefined()
@@ -326,12 +237,7 @@ describe('validates replies', () => {
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
-    const connection = await createConnection(
-      senderPlugin,
-      controllers,
-      sharedSecret,
-      destinationAddress
-    )
+    const sendRequest = await createConnection(senderPlugin, sharedSecret)
 
     receiverPlugin.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
@@ -346,13 +252,15 @@ describe('validates replies', () => {
       })
     })
 
-    const reply = await connection.sendRequest({
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt,
       sequence: 20,
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
-      log: createLogger('ilp-pay'),
+      log,
     })
 
     // Discards reply since the sequence # is not the same as the request
@@ -371,12 +279,7 @@ describe('validates replies', () => {
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
-    const connection = await createConnection(
-      senderPlugin,
-      controllers,
-      sharedSecret,
-      destinationAddress
-    )
+    const sendRequest = await createConnection(senderPlugin, sharedSecret)
 
     receiverPlugin.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
@@ -392,13 +295,15 @@ describe('validates replies', () => {
       })
     })
 
-    const reply = await connection.sendRequest({
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt,
       sequence: 1,
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
-      log: createLogger('ilp-pay'),
+      log,
     })
 
     // Discards reply since packet type was invalid
@@ -414,12 +319,7 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const connection = await createConnection(
-      senderPlugin,
-      controllers,
-      sharedSecret,
-      destinationAddress
-    )
+    const sendRequest = await createConnection(senderPlugin, sharedSecret)
 
     const replyData = randomBytes(100)
     receiverPlugin.registerDataHandler(async () =>
@@ -431,13 +331,15 @@ describe('validates replies', () => {
       })
     )
 
-    const reply = await connection.sendRequest({
+    const reply = await sendRequest({
+      destinationAddress,
+      expiresAt,
       sequence: 1,
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
       requestFrames: [],
-      log: createLogger('ilp-pay'),
+      log,
     })
 
     // No STREAM packet could be decrypted

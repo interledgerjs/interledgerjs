@@ -1,46 +1,48 @@
 /* eslint-disable prefer-const, @typescript-eslint/no-empty-function, @typescript-eslint/no-non-null-assertion */
-import { createApp } from 'ilp-connector'
+import { StreamServer } from '@interledger/stream-receiver'
+import { describe, expect, it, jest } from '@jest/globals'
+import Axios from 'axios'
 import BigNumber from 'bignumber.js'
-import { Connection, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
-import Long from 'long'
-import reduct from 'reduct'
-import { CustomBackend } from './helpers/rate-backend'
-import { MirrorPlugin } from './helpers/plugin'
-import { fetchCoinCapRates } from '../src/rates/coincap'
-import { quote, PaymentError } from '../src'
-import { describe, it, expect, jest } from '@jest/globals'
+import getPort from 'get-port'
+import { createApp } from 'ilp-connector'
+import createLogger from 'ilp-logger'
 import {
-  serializeIlpFulfill,
   deserializeIlpPrepare,
-  serializeIlpReject,
+  IlpAddress,
   IlpError,
+  isIlpReply,
+  serializeIlpFulfill,
+  serializeIlpReject,
+  serializeIlpReply,
 } from 'ilp-packet'
-import { sleep, Int, Ratio, PositiveInt } from '../src/utils'
+import PluginHttp from 'ilp-plugin-http'
+import { Connection, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
 import {
-  randomBytes,
   generateFulfillment,
   generateFulfillmentKey,
   generatePskEncryptionKey,
   hash,
+  randomBytes,
 } from 'ilp-protocol-stream/dist/src/crypto'
-import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { serializeIldcpResponse } from 'ilp-protocol-ildcp'
 import {
-  Packet,
-  IlpPacketType,
   ConnectionAssetDetailsFrame,
+  IlpPacketType,
+  Packet,
 } from 'ilp-protocol-stream/dist/src/packet'
-import { GenericContainer, Wait, Network } from 'testcontainers'
-import Axios from 'axios'
-import PluginHttp from 'ilp-plugin-http'
-import getPort from 'get-port'
-import { Writer } from 'oer-utils'
+import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
+import Long from 'long'
 import nock from 'nock'
+import { Writer } from 'oer-utils'
+import reduct from 'reduct'
+import { GenericContainer, Network, Wait } from 'testcontainers'
 import { v4 as uuid } from 'uuid'
-import { fetchPaymentDetails } from '../src/open-payments'
+import { PaymentError, quote } from '../src'
+import { NextRequest } from '../src/controllers'
 import { SequenceController } from '../src/controllers/sequence'
-import { StreamRequestBuilder } from '../src/controllers'
-import createLogger from 'ilp-logger'
+import { fetchPaymentDetails } from '../src/open-payments'
+import { Int, PositiveInt, Ratio, sleep } from '../src/utils'
+import { MirrorPlugin } from './helpers/plugin'
+import { CustomBackend } from './helpers/rate-backend'
 
 describe('open payments', () => {
   const destinationAddress = 'g.wallet.receiver.12345'
@@ -546,7 +548,7 @@ describe('quoting flow', () => {
           },
           { 'Content-Type': 'application/spsp4+json' },
         ]
-    })
+      })
 
     const details = await quote({
       paymentPointer: 'https://example.com',
@@ -639,35 +641,6 @@ describe('quoting flow', () => {
       })
     ).rejects.toBe(PaymentError.UnknownSourceAsset)
     expect(!plugin.isConnected())
-  })
-
-  it('fails if source account details are invalid', async () => {
-    const plugin: Plugin = {
-      async connect() {},
-      async disconnect() {},
-      isConnected() {
-        return true
-      },
-      async sendData() {
-        // Handle IL-DCP requests
-        // Return invalid ILP address
-        return serializeIldcpResponse({
-          clientAddress: 'private',
-          assetCode: 'USD',
-          assetScale: 2,
-        })
-      },
-      registerDataHandler() {},
-      deregisterDataHandler() {},
-    }
-
-    await expect(
-      quote({
-        plugin,
-        sharedSecret: Buffer.alloc(32),
-        destinationAddress: 'private.someone',
-      })
-    ).rejects.toBe(PaymentError.UnknownSourceAsset)
   })
 
   it('fails on incompatible address schemes', async () => {
@@ -1046,7 +1019,8 @@ describe('quoting flow', () => {
   })
 
   it('fails if recipient never shared destination asset details', async () => {
-    const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
     const app = createApp({
       ilpAddress: 'private.larry',
@@ -1057,28 +1031,47 @@ describe('quoting flow', () => {
           relation: 'child',
           assetCode: 'ABC',
           assetScale: 3,
-          plugin: connectorPlugin,
+          plugin: senderPlugin2,
+        },
+        receiver: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 3,
+          plugin: receiverPlugin1,
         },
       },
     })
     await app.listen()
 
-    // If the recipient never tells us their destination asset,
-    // we can't enforce exchange rates, so it should fail.
+    const server = new StreamServer({
+      serverAddress: 'private.larry.receiver',
+      serverSecret: randomBytes(32),
+    })
 
-    // To test this, the STREAM sender sends packets to itself,
-    // which are all ACKed with F99 rejects. Since the "recipient"
-    // never replies with its asset details, the quote should fail
+    // Accept incoming money
+    receiverPlugin2.registerDataHandler(async (data) => {
+      const prepare = deserializeIlpPrepare(data)
+      const moneyOrReply = server.createReply(prepare)
+      if (isIlpReply(moneyOrReply)) {
+        return serializeIlpReply(moneyOrReply)
+      }
+
+      return serializeIlpReply(moneyOrReply.accept())
+    })
+
+    // Server will not reply with asset details since they weren't
+    // provided here
+    const credentials = server.generateCredentials()
 
     await expect(
       quote({
-        plugin: senderPlugin,
+        plugin: senderPlugin1,
         amountToSend: 100,
-        destinationAddress: 'private.larry.sender',
-        sharedSecret: randomBytes(32),
+        destinationAddress: credentials.ilpAddress,
+        sharedSecret: credentials.sharedSecret,
       })
     ).rejects.toBe(PaymentError.UnknownDestinationAsset)
-    expect(!senderPlugin.isConnected())
+    expect(!senderPlugin1.isConnected())
 
     await app.shutdown()
   })
@@ -1776,36 +1769,26 @@ describe('fixed source payments', () => {
     const [alice1, alice2] = MirrorPlugin.createPair(0, 0)
     const [bob1, bob2] = MirrorPlugin.createPair(0, 0)
 
-    const prices = await fetchCoinCapRates()
-
-    // Override with rate backend for custom rates
-    let backend: CustomBackend
-    const deps = reduct((Constructor) => Constructor.name === 'RateBackend' && backend)
-    backend = new CustomBackend(deps)
-    backend.setPrices(prices)
-
-    const app = createApp(
-      {
-        ilpAddress: 'test.larry',
-        spread: 0,
-        accounts: {
-          alice: {
-            relation: 'child',
-            plugin: alice2,
-            assetCode: 'XYZ',
-            assetScale: 0,
-            maxPacketAmount: '1',
-          },
-          bob: {
-            relation: 'child',
-            plugin: bob1,
-            assetCode: 'XYZ',
-            assetScale: 0,
-          },
+    const app = createApp({
+      ilpAddress: 'test.larry',
+      backend: 'one-to-one',
+      spread: 0,
+      accounts: {
+        alice: {
+          relation: 'child',
+          plugin: alice2,
+          assetCode: 'XYZ',
+          assetScale: 0,
+          maxPacketAmount: '1',
+        },
+        bob: {
+          relation: 'child',
+          plugin: bob1,
+          assetCode: 'XYZ',
+          assetScale: 0,
         },
       },
-      deps
-    )
+    })
     await app.listen()
 
     // Waiting before fulfilling packets tests whether the number of packets in-flight is capped
@@ -2680,35 +2663,39 @@ describe('payment execution', () => {
     let sentFirstInvalidReply = false
     let sentSecondInvalidReply = false
     receiverPlugin2.registerDataHandler(async (data) => {
-      if (!sentFirstInvalidReply) {
-        sentFirstInvalidReply = true
+      const prepare = deserializeIlpPrepare(data)
+      if (+prepare.amount > 10) {
+        if (!sentFirstInvalidReply) {
+          sentFirstInvalidReply = true
 
-        const writer = new Writer(16)
-        writer.writeUInt64(0) // Amount received
-        writer.writeUInt64(1) // Maximum
+          const writer = new Writer(16)
+          writer.writeUInt64(0) // Amount received
+          writer.writeUInt64(1) // Maximum
 
-        return serializeIlpReject({
-          code: IlpError.F08_AMOUNT_TOO_LARGE,
-          message: '',
-          triggeredBy: '',
-          data: writer.getBuffer(),
-        })
-      } else if (!sentSecondInvalidReply) {
-        sentSecondInvalidReply = true
+          return serializeIlpReject({
+            code: IlpError.F08_AMOUNT_TOO_LARGE,
+            message: '',
+            triggeredBy: '',
+            data: writer.getBuffer(),
+          })
+        } else if (!sentSecondInvalidReply) {
+          sentSecondInvalidReply = true
 
-        const writer = new Writer(16)
-        writer.writeUInt64(1) // Amount received
-        writer.writeUInt64(1) // Maximum
+          const writer = new Writer(16)
+          writer.writeUInt64(1) // Amount received
+          writer.writeUInt64(1) // Maximum
 
-        return serializeIlpReject({
-          code: IlpError.F08_AMOUNT_TOO_LARGE,
-          message: '',
-          triggeredBy: '',
-          data: writer.getBuffer(),
-        })
-      } else {
-        return streamServerPlugin.dataHandler(data)
+          return serializeIlpReject({
+            code: IlpError.F08_AMOUNT_TOO_LARGE,
+            message: '',
+            triggeredBy: '',
+            data: writer.getBuffer(),
+          })
+        }
       }
+
+      // Otherwise, the STREAM server should handle the packet
+      return streamServerPlugin.dataHandler(data)
     })
 
     const streamServer = await createServer({
@@ -2763,11 +2750,11 @@ describe('payment execution', () => {
           assetCode: 'ABC',
           assetScale: 0,
           plugin: senderPlugin2,
-          // Limit to 1 packet / 200ms
+          // Limit to 2 packets / 200ms
           // should ensure a T05 error is encountered
           rateLimit: {
-            capacity: 1,
-            refillCount: 1,
+            capacity: 2,
+            refillCount: 2,
             refillPeriod: 200,
           },
           maxPacketAmount: '1',
@@ -2878,7 +2865,9 @@ describe('payment execution', () => {
     const controller = new SequenceController()
 
     controller.applyRequest({
-      sequence: 2 ** 32 - 1,
+      destinationAddress: 'example.test' as IlpAddress,
+      expiresAt: new Date(),
+      sequence: 2 ** 32 - 1, // Just below the max sequence number
       sourceAmount: Int.ZERO,
       minDestinationAmount: Int.ZERO,
       requestFrames: [],
@@ -2886,9 +2875,14 @@ describe('payment execution', () => {
       log,
     })
 
-    expect(controller.nextState(new StreamRequestBuilder(log, () => {}))).toBe(
-      PaymentError.ExceededMaxSequence
-    )
+    expect(
+      controller.nextState(({
+        log,
+        setSequence() {
+          return this
+        },
+      } as unknown) as NextRequest)
+    ).toBe(PaymentError.ExceededMaxSequence)
   })
 
   it('ends payment if receiver closes the stream', async () => {
@@ -3030,7 +3024,7 @@ describe('payment execution', () => {
 })
 
 describe('interledger.rs integration', () => {
-  it('pays to SPSP server', async () => {
+  it.skip('pays to SPSP server', async () => {
     // TODO Switch all of this over to custom Docker network after this PR is merged:
     // https://github.com/testcontainers/testcontainers-node/pull/76
     // (Note: don't use the default bridge network since it doesn't resolve
@@ -3038,24 +3032,33 @@ describe('interledger.rs integration', () => {
     //  won't give me access to that... even `getContainerIpAddress()` just returns
     //  localhost!)
 
+    const network = await new Network().start()
+
     // Setup Redis
-    const redisContainer = await new GenericContainer('redis').withExposedPorts(6379).start()
-    const redisPort = redisContainer.getMappedPort(6379)
+    const redisContainer = await new GenericContainer('redis')
+      .withExposedPorts(6379)
+      .withName('redis')
+      .withNetworkMode(network.getName())
+      .start()
 
     // Setup the Rust connector
     const adminAuthToken = 'admin'
     const rustNodeContainer = await new GenericContainer('interledgerrs/ilp-node', 'latest')
       .withEnv('ILP_SECRET_SEED', randomBytes(32).toString('hex'))
       .withEnv('ILP_ADMIN_AUTH_TOKEN', adminAuthToken)
-      .withEnv('ILP_DATABASE_URL', `redis://localhost:${redisPort}`)
+      .withEnv('ILP_DATABASE_URL', `redis://redis:6379`)
       .withEnv('ILP_ILP_ADDRESS', 'g.corp')
-      .withNetworkMode('host')
+      .withNetworkMode(network.getName())
       .withWaitStrategy(Wait.forLogMessage('HTTP API listening'))
       .start()
 
+    const host = `${rustNodeContainer.getContainerIpAddress()}:${rustNodeContainer.getMappedPort(
+      7770
+    )}`
+
     // Create receiver account
     await Axios.post(
-      `http://localhost:7770/accounts`,
+      `http://${host}/accounts`,
       {
         username: 'receiver',
         asset_code: 'EUR',
@@ -3078,7 +3081,7 @@ describe('interledger.rs integration', () => {
         staticToken: 'password',
       },
       outgoing: {
-        url: `http://localhost:7770/accounts/sender/ilp`,
+        url: `http://${host}/accounts/sender/ilp`,
         staticToken: 'password',
       },
     })
@@ -3086,7 +3089,7 @@ describe('interledger.rs integration', () => {
 
     // Create account for sender to connect to
     await Axios.post(
-      `http://localhost:7770/accounts`,
+      `http://${host}/accounts`,
       {
         username: 'sender',
         asset_code: 'EUR',
@@ -3107,7 +3110,7 @@ describe('interledger.rs integration', () => {
     const amountToSend = 0.1 // ~50 packets @ max packet amount of 2000
     const { pay } = await quote({
       plugin,
-      paymentPointer: `http://localhost:7770/accounts/receiver/spsp`,
+      paymentPointer: `http://${host}/accounts/receiver/spsp`,
       amountToSend,
     })
 
@@ -3119,7 +3122,7 @@ describe('interledger.rs integration', () => {
     // Check the balance
     const { data } = await Axios({
       method: 'GET',
-      url: `http://localhost:7770/accounts/receiver/balance`,
+      url: `http://${host}/accounts/receiver/balance`,
       headers: {
         Authorization: 'Bearer password',
       },
@@ -3131,11 +3134,13 @@ describe('interledger.rs integration', () => {
 
     await redisContainer.stop()
     await rustNodeContainer.stop()
+
+    await network.stop()
   }, 30000)
 })
 
 describe('interledger4j integration', () => {
-  it('pays to SPSP server', async () => {
+  it.skip('pays to SPSP server', async () => {
     // Setup Redis
     const redisContainer = await new GenericContainer('redis').withExposedPorts(6379).start()
     const redisPort = redisContainer.getMappedPort(6379)
@@ -3254,9 +3259,14 @@ describe('interledger4j integration', () => {
 
 describe('utils', () => {
   it('Int#from', () => {
-    expect(Int.from('1000000000000000000000000000000000000')).toBeInstanceOf(Int)
-    expect(Int.from('1')).toBeInstanceOf(Int)
-    expect(Int.from('0')).toBeInstanceOf(Int)
+    expect(Int.from(Int.ONE)).toEqual(Int.ONE)
+    expect(Int.from(Int.MAX_U64)).toEqual(Int.MAX_U64)
+
+    expect(Int.from('1000000000000000000000000000000000000')?.value).toBe(
+      BigInt('1000000000000000000000000000000000000')
+    )
+    expect(Int.from('1')?.value).toBe(BigInt('1'))
+    expect(Int.from('0')?.value).toBe(BigInt('0'))
     expect(Int.from('-2')).toBeUndefined()
     expect(Int.from('2.14')).toBeUndefined()
   })

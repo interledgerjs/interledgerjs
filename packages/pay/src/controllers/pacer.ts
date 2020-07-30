@@ -1,5 +1,7 @@
-import { StreamController, StreamReply, SendState } from '.'
+import { StreamController, StreamReply, NextRequest, ControllerMap } from '.'
 import { IlpError } from 'ilp-packet'
+import { sleep } from '../utils'
+import { PendingRequestTracker } from './pending-requests'
 
 /**
  * Flow controller to send packets at a consistent cadence
@@ -53,17 +55,17 @@ export class PacingController implements StreamController {
     return this.lastPacketSentTime + delayDuration
   }
 
-  nextState(): SendState {
+  nextState(_: NextRequest, controllers: ControllerMap): Promise<unknown> | void {
     const exceedsMaxInFlight = this.numberInFlight + 1 > PacingController.MAX_INFLIGHT_PACKETS
     if (exceedsMaxInFlight) {
-      return SendState.Wait
+      const pendingRequests = controllers.get(PendingRequestTracker).getPendingRequests()
+      return Promise.race(pendingRequests)
     }
 
-    if (this.getNextPacketSendTime() > Date.now()) {
-      return SendState.Wait
+    const durationUntilNextPacket = this.getNextPacketSendTime() - Date.now()
+    if (durationUntilNextPacket > 0) {
+      return sleep(durationUntilNextPacket)
     }
-
-    return SendState.Ready
   }
 
   applyRequest(): (reply: StreamReply) => void {
@@ -86,7 +88,7 @@ export class PacingController implements StreamController {
       // exponentially backoff the rate of packet sending
       if (
         reply.isReject() &&
-        reply.ilpReject.code[0] === 'T' &&
+        reply.ilpReject.code[0] === 'T' && // TODO add this back
         reply.ilpReject.code !== IlpError.T04_INSUFFICIENT_LIQUIDITY
       ) {
         const reducedRate = Math.max(
@@ -96,7 +98,7 @@ export class PacingController implements StreamController {
         reply.log.debug(
           'handling %s. backing off to %s packets / second',
           reply.ilpReject.code,
-          reducedRate
+          reducedRate.toFixed(3)
         )
         this.packetsPerSecond = reducedRate
       }

@@ -1,12 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { IlpReject } from 'ilp-packet'
-import { Frame, ConnectionCloseFrame, ErrorCode } from 'ilp-protocol-stream/dist/src/packet'
+import { IlpReject, IlpAddress } from 'ilp-packet'
+import { Frame, ErrorCode } from 'ilp-protocol-stream/dist/src/packet'
 import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
 import { Int } from '../utils'
 
 /** Amounts and data to send a unique ILP Prepare over STREAM */
 export interface StreamRequest {
+  /** ILP address of the recipient account */
+  destinationAddress: IlpAddress
+  /** Expiration timestamp when the ILP Prepare is void */
+  expiresAt: Date
   /** Sequence number of the STREAM packet (u32) */
   sequence: number
   /** Amount to send in the ILP Prepare */
@@ -39,41 +43,59 @@ export interface StreamReply {
   isFulfill(): this is StreamFulfill
 }
 
-/** Next state as signaled by each controller */
-export enum SendState {
-  /** Ready to send money and apply the next ILP Prepare */
-  Ready = 'Ready',
-  /** Temporarily pause sending money until any request finishes or some time elapses */
-  Wait = 'Wait',
-  /** Stop the payment */
-  End = 'End',
+/** Builder to construct the next ILP Prepare and STREAM request */
+export interface NextRequest extends StreamRequest {
+  /** Set the ILP address of the destination of the ILP Prepare */
+  setDestinationAddress(address: IlpAddress): this
+  /** Set the expiration time of the ILP Prepare */
+  setExpiry(expiry: Date): this
+  /** Set the sequence number of STREAM packet, to correlate the reply */
+  setSequence(sequence: number): this
+  /** Set the source amount of the ILP Prepare */
+  setSourceAmount(amount: Int): this
+  /** Set the minimum destination amount for the receiver to fulfill the ILP Prepare */
+  setMinDestinationAmount(amount: Int): this
+  /** Add frames to include for the STREAM receiver */
+  addFrames(...frames: Frame[]): this
+  /** Add a `ConnectionClose` frame to indicate to the receiver that no more packets will be sent. */
+  addConnectionClose(error?: ErrorCode): this
+  /** Enable the STREAM receiver to fulfill this ILP Prepare. By default, a random, unfulfillable condition is used. */
+  enableFulfillment(): this
+  /** Finalize and apply this request (synchronously) and queue it to be sent asynchronously */
+  send(): void
 }
 
 /**
  * Controllers orchestrate when to send packets, their amounts, and data.
- * Each controller implements its own business logic to handle a different piece
- * of the payment or STREAM protocol
+ * Each controller implements its own business logic to handle a different part of the payment or STREAM protocol.
  */
 export interface StreamController {
   /**
-   * Signal if sending should continue and iteratively compose the next packet.
-   * - Any controller can choose to immediately end the entire STREAM payment
-   *   with an error, or choose to wait before sending the next packet.
-   * - Note: the packet may not be sent if other controllers decline, so don't apply side effects.
-   * @param builder Builder to construct the next ILP Prepare and STREAM request
+   * Each controller iteratively constructs the next request and can optionally send it
+   * using `request.send()`. The send loop advances through each controller until
+   * the request is sent or cancelled.
+   *
+   * To cancel this request, a controller can return an error to end the entire payment,
+   * or return a Promise which is awaited before another request is attempted.
+   *
+   * Note: other controllers may change the request or cancel it, so no side effects
+   * should be performed (unless they're within the controller which calls `send` on the request).
+   *
+   * @param request Builder to construct the next ILP Prepare and STREAM request
+   * @param controllers Set of all other controllers
    */
-  nextState?(builder: StreamRequestBuilder): SendState | PaymentError
+  nextState?(request: NextRequest, controllers: ControllerMap): Promise<any> | PaymentError | void
 
   /**
-   * Apply side effects before sending an ILP Prepare over STREAM.
-   * Return an optional callback function to apply side effects from the
-   * corresponding reply (ILP Fulfill or ILP Reject) received over STREAM.
+   * Apply side effects before sending an ILP Prepare over STREAM. Return a callback function to apply
+   * side effects from the corresponding ILP Fulfill or ILP Reject and STREAM reply.
    *
-   * `applyRequest` is called synchronously after `nextState` for all controllers.
+   * `applyRequest` is called for all controllers synchronously after a request is sent
+   * within `nextState`.
    *
-   * @param request Finalized amounts and data of the ILP Prepare
+   * @param request Finalized amounts and data of the ILP Prepare and STREAM request
    */
-  applyRequest(request: StreamRequest): (reply: StreamFulfill | StreamReject) => void
+  applyRequest?(request: StreamRequest): ((reply: StreamFulfill | StreamReject) => void) | void
 }
 
 /** Set of all controllers keyed by their constructor */
@@ -129,63 +151,5 @@ export class StreamReject implements StreamReply {
 
   isFulfill(): this is StreamFulfill {
     return false
-  }
-}
-
-export class StreamRequestBuilder {
-  private request: StreamRequest
-  private sendRequest: (request: StreamRequest) => void
-
-  constructor(log: Logger, sendRequest: (request: StreamRequest) => void) {
-    this.request = {
-      sequence: 0,
-      sourceAmount: Int.ZERO,
-      minDestinationAmount: Int.ZERO,
-      requestFrames: [],
-      isFulfillable: false,
-      log,
-    }
-    this.sendRequest = sendRequest
-  }
-
-  get log(): Logger {
-    return this.request.log
-  }
-
-  setSequence(sequence: number): this {
-    this.request.sequence = sequence
-    this.request.log = this.log.extend(sequence.toString())
-    return this
-  }
-
-  setSourceAmount(sourceAmount: Int): this {
-    this.request.sourceAmount = sourceAmount
-    return this
-  }
-
-  setMinDestinationAmount(minDestinationAmount: Int): this {
-    this.request.minDestinationAmount = minDestinationAmount
-    return this
-  }
-
-  addFrames(...frames: Frame[]): this {
-    this.request.requestFrames.push(...frames)
-    return this
-  }
-
-  enableFulfillment(): this {
-    this.request.isFulfillable = true
-    return this
-  }
-
-  send(): StreamRequest {
-    this.sendRequest(this.request)
-    return this.request
-  }
-
-  sendConnectionClose(code = ErrorCode.NoError): StreamRequest {
-    this.request.requestFrames.push(new ConnectionCloseFrame(code, ''))
-    this.sendRequest(this.request)
-    return this.request
   }
 }
