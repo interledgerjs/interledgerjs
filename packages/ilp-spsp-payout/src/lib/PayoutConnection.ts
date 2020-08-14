@@ -34,6 +34,7 @@ export class PayoutConnection {
 
   private state = State.DISCONNECTED
   private closing = false
+  private safeSendTimer?: NodeJS.Timer
 
   private target = 0
   private sent = 0
@@ -76,6 +77,9 @@ export class PayoutConnection {
 
   async close() {
     this.closing = true
+    if (this.safeSendTimer) {
+      clearTimeout(this.safeSendTimer)
+    }
     if (this.connection) {
       await this.connection.destroy()
     }
@@ -111,10 +115,11 @@ export class PayoutConnection {
   }
 
   private async safeTrySending() {
-    this.trySending().catch(() => {
+    this.trySending().catch((err) => {
+      if (this.closing) return
       // TODO: backoff
       this.setState(State.DISCONNECTED)
-      setTimeout(() => {
+      this.safeSendTimer = setTimeout(() => {
         this.safeTrySending()
       }, 2000)
     })
