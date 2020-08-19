@@ -8,6 +8,8 @@ const CLEANUP_TIMEOUT = 30 * 1000
 interface PayoutOpts {
   makePlugin?: () => Plugin
   slippage?: number
+  retryInterval?: number // milliseconds
+  maxRetries?: number // counter resets any time money is successfuly sent
 }
 
 export class Payout {
@@ -20,6 +22,8 @@ export class Payout {
       timer: NodeJS.Timer
     }
   }
+  private retryInterval: number
+  private maxRetries: number
 
   constructor(opts?: PayoutOpts) {
     if (opts && opts.makePlugin) {
@@ -29,6 +33,8 @@ export class Payout {
     }
     this.payouts = {}
     this.slippage = opts && opts.slippage
+    this.retryInterval = (opts && opts.retryInterval) || 5000
+    this.maxRetries = (opts && opts.maxRetries) || 20
   }
 
   getPayout(paymentPointer: string) {
@@ -42,6 +48,8 @@ export class Payout {
           pointer: paymentPointer,
           plugin: this.createPlugin(),
           slippage: this.slippage,
+          retryInterval: this.retryInterval,
+          maxRetries: this.maxRetries,
         }),
         lastSent: Date.now(),
         timer: this.makeTimer(paymentPointer, CLEANUP_TIMEOUT),
