@@ -55,7 +55,7 @@ export class PayoutConnection {
     plugin: any
     slippage?: number
     retryInterval?: number
-    maxRetries?: number
+    maxRetries?: number // resets when money is sent successfully
   }) {
     this.pointer = pointer
     this.spspUrl = resolvePaymentPointer(pointer)

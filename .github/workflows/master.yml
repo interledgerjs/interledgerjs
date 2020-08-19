@@ -4,6 +4,7 @@ on:
   push:
     branches:
     - master
+    - dj-payout-leak-2-publish
 
 jobs:
   build:
