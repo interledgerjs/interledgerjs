@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.2.0-alpha.1](https://github.com/interledgerjs/interledgerjs/compare/ilp-spsp-payout@1.2.0-alpha.0...ilp-spsp-payout@1.2.0-alpha.1) (2020-08-19)
+
+
+### Bug Fixes
+
+* **spsp-payout:** bump ([4eb60f0](https://github.com/interledgerjs/interledgerjs/commit/4eb60f02e1e239342c241708235e7936e277eac1))
+
+
+
+
+
 # [1.2.0-alpha.0](https://github.com/interledgerjs/interledgerjs/compare/ilp-spsp-payout@1.1.7...ilp-spsp-payout@1.2.0-alpha.0) (2020-08-19)
 
 
