@@ -2,6 +2,7 @@
 import { createConnection, Connection, DataAndMoneyStream } from 'ilp-protocol-stream'
 import { URL } from 'url'
 import axios from 'axios'
+import { Logger, defaultLogger } from './Logger'
 
 export const resolvePaymentPointer = (pointer: string) => {
   if (!pointer.startsWith('$')) {
@@ -40,6 +41,7 @@ export class PayoutConnection {
   private retryInterval: number // milliseconds
   private retries = 0
   private maxRetries: number
+  private logger: Logger
 
   private target = 0
   private sent = 0
@@ -50,12 +52,14 @@ export class PayoutConnection {
     slippage,
     retryInterval,
     maxRetries,
+    logger,
   }: {
     pointer: string
     plugin: any
     slippage?: number
     retryInterval: number
     maxRetries: number
+    logger?: Logger
   }) {
     this.pointer = pointer
     this.spspUrl = resolvePaymentPointer(pointer)
@@ -63,6 +67,7 @@ export class PayoutConnection {
     this.slippage = slippage
     this.retryInterval = retryInterval
     this.maxRetries = maxRetries
+    this.logger = logger || defaultLogger
   }
 
   getDebugInfo() {
@@ -90,11 +95,11 @@ export class PayoutConnection {
     }
   }
 
-  isIdle() {
+  isIdle(): boolean {
     return this.getState() === State.IDLE || this.getState() === State.ABORTED
   }
 
-  async close() {
+  async close(): Promise<void> {
     this.closing = true
     if (this.safeSendTimer) {
       clearTimeout(this.safeSendTimer)
@@ -136,8 +141,8 @@ export class PayoutConnection {
   private async safeTrySending() {
     if (this.retries++ >= this.maxRetries) {
       this.setState(State.ABORTED)
-      console.warn(
-        'aborted PayoutConnection pointer=%s target=%d sent=%d',
+      this.logger.warn(
+        'PayoutConnection aborting: pointer="%s" target=%d sent=%d',
         this.pointer,
         this.target,
         this.sent
@@ -145,6 +150,13 @@ export class PayoutConnection {
       return
     }
     this.trySending().catch((err) => {
+      this.logger.warn(
+        'PayoutConnection.trySending error err="%s" pointer="%s" target=%d sent=%d',
+        err.message,
+        this.pointer,
+        this.target,
+        this.sent
+      )
       if (this.closing) return
       // TODO: backoff
       this.setState(State.DISCONNECTED)
@@ -204,7 +216,16 @@ export class PayoutConnection {
     }
 
     const onClose = () => cleanUp()
-    const onError = () => cleanUp()
+    const onError = (err: Error) => {
+      this.logger.warn(
+        'PayoutConnection.trySending connection error err="%s" pointer="%s" target=%d sent=%d',
+        err.message,
+        this.pointer,
+        this.target,
+        this.sent
+      )
+      cleanUp()
+    }
     const onOutgoingMoney = (amount: string) => {
       this.retries = 0
       totalStreamAmount += Number(amount)
