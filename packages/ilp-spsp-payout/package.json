@@ -1,6 +1,6 @@
 {
   "name": "ilp-spsp-payout",
-  "version": "1.1.7",
+  "version": "1.2.0",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "description": "Payout utility for SPSP servers",

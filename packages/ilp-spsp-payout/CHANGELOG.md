@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [1.2.0](https://github.com/interledgerjs/interledgerjs/compare/ilp-spsp-payout@1.1.7...ilp-spsp-payout@1.2.0) (2020-08-21)
+
+
+### Bug Fixes
+
+* **spsp-payout:** add tests and logging ([cbc8f29](https://github.com/interledgerjs/interledgerjs/commit/cbc8f29e4220d1e19d319ac7ebb57b85a4f73876))
+
+
+### Features
+
+* **spsp-payout:** fix another memory leak ([2074b38](https://github.com/interledgerjs/interledgerjs/commit/2074b38842ad0fcb149aa2edc441fb30daa68308))
+
+
+
+
+
 ## [1.1.7](https://github.com/interledgerjs/interledgerjs/compare/ilp-spsp-payout@1.1.6...ilp-spsp-payout@1.1.7) (2020-08-14)
 
 
