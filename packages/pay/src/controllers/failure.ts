@@ -20,7 +20,7 @@ export class FailureController implements StreamController {
   /** UNIX timestamp when the last Fulfill was received. Begins when the first fulfillable Prepare is sent */
   private lastFulfillTime?: number
 
-  /** Should the payment end immediatey due to a terminal error? */
+  /** Should the payment end immediately due to a terminal error? */
   private terminalReject = false
 
   /** Was the connection or stream closed by the recipient? */

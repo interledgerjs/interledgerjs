@@ -12,6 +12,7 @@ import { FailureController } from './controllers/failure'
 import { MaxPacketAmountController } from './controllers/max-packet'
 import { createConnection } from './connection'
 import { RateProbe } from './controllers/rate-probe'
+import { PaymentProgress, PaymentProgressHandler } from './controllers/payment-progress'
 import { fetch as sendIldcpRequest, isValidAssetScale } from 'ilp-protocol-ildcp'
 import {
   getConnectionId,
@@ -54,6 +55,8 @@ export interface PaymentOptions {
   destinationAddress?: string
   /** For testing purposes: symmetric key to encrypt STREAM messages. Requires `destinationAddress` */
   sharedSecret?: Buffer
+  /** Payment progress event handler */
+  onProgress?: PaymentProgressHandler
 }
 
 /** [Open Payments invoice](https://docs.openpayments.dev/invoices) metadata */
@@ -334,6 +337,9 @@ export const quote = async ({ plugin, ...options }: PaymentOptions): Promise<Quo
     .set(RateProbe, new RateProbe(controllers))
     // Ensure each controller processes reply before resolving Promises
     .set(PendingRequestTracker, new PendingRequestTracker())
+  if (options.onProgress) {
+    controllers.set(PaymentProgress, new PaymentProgress(controllers, options.onProgress))
+  }
 
   // Register handlers for incoming packets and generate encryption keys
   const connection = await createConnection(

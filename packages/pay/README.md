@@ -100,7 +100,7 @@ try {
 }
 ```
 
-Similarily, if an error was encountered during the payment itself, it will include an `error` property on the receipt which is a [`PaymentError`](#paymenterror) variant.
+Similarly, if an error was encountered during the payment itself, it will include an `error` property on the receipt which is a [`PaymentError`](#paymenterror) variant.
 
 ### API
 

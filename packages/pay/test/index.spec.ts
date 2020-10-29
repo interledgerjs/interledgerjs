@@ -7,7 +7,7 @@ import reduct from 'reduct'
 import { CustomBackend } from './helpers/rate-backend'
 import { MirrorPlugin } from './helpers/plugin'
 import { fetchCoinCapRates } from '../src/rates/coincap'
-import { quote, PaymentError } from '../src'
+import { quote, PaymentError, Receipt } from '../src'
 import { describe, it, expect, jest } from '@jest/globals'
 import {
   serializeIlpFulfill,
@@ -1992,6 +1992,8 @@ describe('fixed delivery payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
+    let lastSent: BigNumber | null = null
+    let lastDelivered: BigNumber | null = null
     const { pay, ...quoteDetails } = await quote({
       amountToDeliver,
       destinationAddress,
@@ -1999,6 +2001,14 @@ describe('fixed delivery payments', () => {
       slippage: 0.015,
       plugin: alice1,
       prices,
+      onProgress: (progress: Receipt) => {
+        if (lastSent && lastDelivered) {
+          expect(+progress.amountSent).toBeGreaterThan(+lastSent)
+          expect(+progress.amountDelivered).toBeGreaterThan(+lastDelivered)
+        }
+        lastSent = progress.amountSent
+        lastDelivered = progress.amountDelivered
+      },
     })
 
     const receipt = await pay()
@@ -2010,6 +2020,8 @@ describe('fixed delivery payments', () => {
     expect(+totalReceived).toBe(+amountToDeliver)
     expect(+receipt.amountDelivered).toBe(0.00107643)
     expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+    expect(+receipt.amountDelivered).toBe(+(lastDelivered || 0))
+    expect(+receipt.amountSent).toBe(+(lastSent || 0))
 
     await app.shutdown()
     await streamServer.close()
