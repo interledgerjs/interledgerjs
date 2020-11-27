@@ -1,33 +1,29 @@
-import { StreamController, NextRequest, StreamReply, StreamRequest } from '.'
+import { StreamController } from '.'
 import { PaymentError } from '..'
-
-// TODO Problem: this still enables the payment to go on indefinitely, which should probably be prevented...
+import { StreamReply, StreamRequest } from '../request'
 
 export class TimeoutController implements StreamController {
   /** Number of milliseconds since the last Fulfill was received before the payment should fail */
   private static MAX_DURATION_SINCE_LAST_FULFILL = 10_000
 
-  /** UNIX timestamp when the last Fulfill was received. Begins when the first fulfillable Prepare is sent */
-  private fulfillDeadline?: number
+  /** UNIX millisecond timestamp after which the payment should fail is no fulfill was received */
+  private deadline?: number
 
-  nextState(request: NextRequest): PaymentError | void {
-    if (this.fulfillDeadline && Date.now() > this.fulfillDeadline) {
-      request.log.error(
-        'ending payment: no Fulfill received before idle deadline. deadline: %s',
-        this.fulfillDeadline
-      )
-      request.addConnectionClose().send()
+  nextState(request: StreamRequest): StreamRequest | PaymentError {
+    if (this.deadline && Date.now() > this.deadline) {
+      request.log.error('ending payment: no fulfill received before idle deadline.')
       return PaymentError.IdleTimeout
+    } else {
+      return request
     }
   }
 
-  applyRequest({ isFulfillable }: StreamRequest): (reply: StreamReply) => void {
-    // Set the initial deadline after the first fulfillable packet is sent
-    if (isFulfillable && !this.fulfillDeadline) {
+  applyRequest(): (reply: StreamReply) => void {
+    if (!this.deadline) {
       this.resetDeadline()
     }
 
-    return (reply: StreamReply) => {
+    return (reply: StreamReply): void => {
       if (reply.isFulfill()) {
         this.resetDeadline()
       }
@@ -35,6 +31,6 @@ export class TimeoutController implements StreamController {
   }
 
   private resetDeadline(): void {
-    this.fulfillDeadline = Date.now() + TimeoutController.MAX_DURATION_SINCE_LAST_FULFILL
+    this.deadline = Date.now() + TimeoutController.MAX_DURATION_SINCE_LAST_FULFILL
   }
 }

@@ -22,19 +22,17 @@
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F pay"
   },
   "dependencies": {
-    "@interledger/stream-receiver": "^0.2.2",
-    "@rgrove/parse-xml": "^2.0.2",
-    "axios": "^0.19.2",
-    "bignumber.js": "^9.0.0",
+    "abort-controller": "^3.0.0",
     "ilp-logger": "^1.4.2",
     "ilp-packet": "^3.1.2",
-    "ilp-protocol-ildcp": "^2.2.2",
     "ilp-protocol-stream": "^2.6.4",
-    "long": "^4.0.0"
+    "long": "^4.0.0",
+    "node-fetch": "2.6.1"
   },
   "devDependencies": {
+    "@interledger/stream-receiver": "^0.2.2",
     "@types/long": "^4.0.1",
-    "@types/rgrove__parse-xml": "^1.1.0",
+    "@types/node-fetch": "^2.5.7",
     "@types/uuid": "^8.0.0",
     "get-port": "^5.1.1",
     "ilp-connector": "^23.0.1",

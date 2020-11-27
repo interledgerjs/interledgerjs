@@ -1,69 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { IlpReject, IlpAddress } from 'ilp-packet'
-import { Frame, ErrorCode } from 'ilp-protocol-stream/dist/src/packet'
-import { Logger } from 'ilp-logger'
-import { PaymentError } from '..'
-import { Int } from '../utils'
+import { PaymentError, isPaymentError } from '..'
+import { PromiseResolver } from '../utils'
+import { StreamRequest, StreamReply, DEFAULT_REQUEST } from '../request'
+import { StreamConnection } from '../connection'
 
-/** Amounts and data to send a unique ILP Prepare over STREAM */
-export interface StreamRequest {
-  /** ILP address of the recipient account */
-  destinationAddress: IlpAddress
-  /** Expiration timestamp when the ILP Prepare is void */
-  expiresAt: Date
-  /** Sequence number of the STREAM packet (u32) */
-  sequence: number
-  /** Amount to send in the ILP Prepare */
-  sourceAmount: Int
-  /** Minimum destination amount to tell the recipient ("prepare amount") */
-  minDestinationAmount: Int
-  /** Frames to load within the STREAM packet */
-  requestFrames: Frame[]
-  /** Should the recipient be allowed to fulfill this request, or should it use a random condition? */
-  isFulfillable: boolean
-  /** Logger namespaced to this connection and request sequence number */
-  log: Logger
-}
-
-export interface StreamReply {
-  /** Logger namespaced to this connection and request sequence number */
-  readonly log: Logger
-  /** Parsed frames from the STREAM response packet. Omitted if no authentic STREAM reply */
-  readonly frames?: Frame[]
-  /** Amount the recipient claimed to receive. Omitted if no authentic STREAM reply */
-  readonly destinationAmount?: Int
-  /**
-   * Did the recipient authenticate that they received the STREAM request packet?
-   * If they responded with a Fulfill or valid STREAM reply, they necessarily decoded the request
-   */
-  isAuthentic(): boolean
-  /** Is this an ILP Reject packet? */
-  isReject(): this is StreamReject
-  /** Is this an ILP Fulfill packet? */
-  isFulfill(): this is StreamFulfill
-}
-
-/** Builder to construct the next ILP Prepare and STREAM request */
-export interface NextRequest extends StreamRequest {
-  /** Set the ILP address of the destination of the ILP Prepare */
-  setDestinationAddress(address: IlpAddress): this
-  /** Set the expiration time of the ILP Prepare */
-  setExpiry(expiry: Date): this
-  /** Set the sequence number of STREAM packet, to correlate the reply */
-  setSequence(sequence: number): this
-  /** Set the source amount of the ILP Prepare */
-  setSourceAmount(amount: Int): this
-  /** Set the minimum destination amount for the receiver to fulfill the ILP Prepare */
-  setMinDestinationAmount(amount: Int): this
-  /** Add frames to include for the STREAM receiver */
-  addFrames(...frames: Frame[]): this
-  /** Add a `ConnectionClose` frame to indicate to the receiver that no more packets will be sent. */
-  addConnectionClose(error?: ErrorCode): this
-  /** Enable the STREAM receiver to fulfill this ILP Prepare. By default, a random, unfulfillable condition is used. */
-  enableFulfillment(): this
-  /** Finalize and apply this request (synchronously) and queue it to be sent asynchronously */
-  send(): void
-}
+// TODO Update these comments !!!
 
 /**
  * Controllers orchestrate when to send packets, their amounts, and data.
@@ -71,85 +12,214 @@ export interface NextRequest extends StreamRequest {
  */
 export interface StreamController {
   /**
+   * TODO fix
    * Each controller iteratively constructs the next request and can optionally send it
    * using `request.send()`. The send loop advances through each controller until
    * the request is sent or cancelled.
    *
    * To cancel this request, a controller can return an error to end the entire payment,
-   * or return a Promise which is awaited before another request is attempted.
+   * or return a Promise to delay trying another request until it resolves.
    *
    * Note: other controllers may change the request or cancel it, so no side effects
-   * should be performed (unless they're within the controller which calls `send` on the request).
+   * should be performed here.
    *
    * @param request Builder to construct the next ILP Prepare and STREAM request
-   * @param controllers Set of all other controllers
    */
-  nextState?(request: NextRequest, controllers: ControllerMap): Promise<any> | PaymentError | void
+  nextState?(request: StreamRequest): StreamRequest | PromiseLike<any> | PaymentError
 
   /**
    * Apply side effects before sending an ILP Prepare over STREAM. Return a callback function to apply
    * side effects from the corresponding ILP Fulfill or ILP Reject and STREAM reply.
    *
-   * `applyRequest` is called for all controllers synchronously after a request is sent
-   * within `nextState`.
+   * `applyRequest` is called for all controllers synchronously when the sending controller queues the
+   * request to be sent.
+   *
+   * Any of the reply handlers can also return an error to end the payment.
    *
    * @param request Finalized amounts and data of the ILP Prepare and STREAM request
    */
-  applyRequest?(request: StreamRequest): ((reply: StreamFulfill | StreamReject) => void) | void
+  applyRequest?(request: StreamRequest): ((reply: StreamReply) => PaymentError | void) | undefined
 }
+
+// TODO Does this need to await pending requests first somewhere before completing?
+
+type Constructor<T> = new (...args: any[]) => T
 
 /** Set of all controllers keyed by their constructor */
-export interface ControllerMap
-  extends Map<new (...args: any[]) => StreamController, StreamController> {
-  get<T extends StreamController>(key: new (...args: any[]) => T): T
+interface ControllerMap extends Map<Constructor<StreamController>, StreamController> {
+  get<T extends StreamController>(key: Constructor<T>): T
 }
 
-export class StreamFulfill implements StreamReply {
-  readonly log: Logger
-  readonly frames?: Frame[]
-  readonly destinationAmount?: Int
+export class ControllerSet {
+  private readonly map = new Map() as ControllerMap
 
-  constructor(log: Logger, frames?: Frame[], destinationAmount?: Int) {
-    this.log = log
-    this.frames = frames
-    this.destinationAmount = destinationAmount
+  add(controller: StreamController): this {
+    this.map.set(Object.getPrototypeOf(controller).constructor, controller)
+    return this
   }
 
-  isAuthentic(): boolean {
-    return true
-  }
+  get<T extends StreamController>(Constructor: Constructor<T>): T {
+    const existingController = this.map.get(Constructor)
+    if (existingController) {
+      return existingController // TODO
+    }
 
-  isReject(): this is StreamReject {
-    return false
-  }
-
-  isFulfill(): this is StreamFulfill {
-    return true
+    const controller = new Constructor()
+    this.map.set(Constructor, controller)
+    return controller
   }
 }
 
-export class StreamReject implements StreamReply {
-  readonly log: Logger
-  readonly frames?: Frame[]
-  readonly destinationAmount?: Int
-  readonly ilpReject: IlpReject
+/**
+ * TODO What if this handled in-flight requests too? So no floating promise,
+ *      and everything was treated as psuedo-synchronous!?
+ */
 
-  constructor(log: Logger, ilpReject: IlpReject, frames?: Frame[], destinationAmount?: Int) {
-    this.log = log
-    this.ilpReject = ilpReject
-    this.frames = frames
-    this.destinationAmount = destinationAmount
+export abstract class SendLoop<T> {
+  /** TODO */
+  // private readonly replyError = new PromiseResolver<T | PaymentError>()
+
+  /** TODO. This is used to schedule the side effects so they aren't immediately applied */
+  private readonly pendingRequestEffects = new Set<Promise<() => PaymentError | void>>()
+
+  constructor(
+    private readonly connection: StreamConnection,
+    protected readonly controllers: ControllerSet
+  ) {}
+
+  /** TODO explain */
+  protected send(
+    request: StreamRequest
+    // handler?: (reply: StreamReply) => PaymentError | void // TODO Keep this? that way all side effects are synchronous
+  ): void {
+    // Synchronously apply the request
+    const replyHandlers = this.order.map((c) => this.controllers.get(c).applyRequest?.(request))
+    // replyHandlers.push(handler)
+
+    // Asynchronously send the request
+    const promise = this.connection.sendRequest(request).then((reply) => () => {
+      // Apply all reply handlers, then end loop if a payment error was encountered
+      // (must be applied through all handlers, but only the first error is returned)
+      const error = replyHandlers.map((applyReply) => applyReply?.(reply)).find(isPaymentError)
+      this.pendingRequestEffects.delete(promise)
+      return error
+    })
+    this.pendingRequestEffects.add(promise)
   }
 
-  isAuthentic(): boolean {
-    return !!this.frames && !!this.destinationAmount
+  // TODO remove this?
+  // resolve(value: T): void {
+  //   this.replyError.resolve(value)
+  // }
+
+  // TODO Add back the `resolve` method so e.g. the payment controller can call it imperatively?
+  //      Or is there a better way that could be implemented? Promise.race in `trySending`?
+  //      Or should I move the "payment is finished" checks back to the beginning of `trySending`?
+  //      (e.g. is it good for the reply handler to get called multiple times before it ends...?)
+  //      But won't it be called multiple times anyways...?
+
+  // TODO Should this also wait for all pending requests to complete, or not?
+  //      Do I need a separately entry point function to do this?
+
+  async queue(task: Promise<() => PaymentError | void>): Promise<T | PaymentError> {
+    // Wait the delay or for any pending requests to complete
+    // Apply side effects from the reply, which may end the payment
+    const apply = await Promise.race([...this.pendingRequestEffects, task])
+    const result = apply() // TODO Really, this should be the task function, right?
+    if (isPaymentError(result)) {
+      return Promise.all(this.pendingRequestEffects).then(() => result)
+    }
+
+    // TODO This won't work, since initially no requests will be in-flight...
+
+    // If no requests are in flight, check if the send loop can be resolved
+    if (this.pendingRequestEffects.size === 0) {
+      const result = this.finalize()
+      if (result) {
+        // TODO No pending requests to await
+        return result
+      }
+    }
+
+    // TODO What to do next? Indefinite queue?
   }
 
-  isReject(): this is StreamReject {
-    return true
+  /**
+   * TODO Note that this DOESN'T run the send loop recursively because it calls try sending ---
+   * "mutual recursion"
+   *
+   * Schedule another request to be attempted after the given promise resolves.
+   * If the send loop ends before then (such as if a reply is received), resolve with that value.
+   *
+   * Return a Promise that resolves the send loop.
+   */
+  async run(delay: Promise<any>): Promise<T | PaymentError> {
+    // TODO Wait for delay OR any pending request to complete?
+
+    // Wait the delay or for any pending requests to complete
+    // Apply side effects from the reply, which may end the payment
+    const applyReply = await Promise.race([
+      ...this.pendingRequestEffects,
+      delay.then(() => undefined), // TODO The initial delay would have to be immediate
+    ])
+    const result = applyReply?.()
+    if (isPaymentError(result)) {
+      return Promise.all(this.pendingRequestEffects).then(() => result)
+    }
+
+    // TODO This won't work, since initially no requests will be in-flight...
+
+    // If no requests are in flight, check if the send loop can be resolved
+    if (this.pendingRequestEffects.size === 0) {
+      const result = this.isDone()
+      if (result) {
+        return result
+      }
+    }
+
+    // TODO What about the resolved state...?
+
+    // TODO What if this called a method to imperatively check if the payment is complete!?
+    //      Also, that should ensure it's only called once,
+    //      and only called it no requests are currently in-flight.
+
+    // const error = await Promise.race([this.replyError.promise, delay])
+    // if (isPaymentError(error)) {
+    //   return error
+    // }
+
+    // Iteratively let each controller build the request, end with an error, or reschedule the attempt
+    const state = this.order
+      .map((c) => this.controllers.get(c))
+      .reduce<StreamRequest | PromiseLike<void> | PaymentError>(
+        (res, controller) =>
+          isPaymentError(res) || isPromiseLike(res) ? res : controller.nextState?.(res) ?? res,
+        {
+          ...DEFAULT_REQUEST,
+          log: this.connection.log,
+        }
+      )
+
+    // If an error is encountered, immediately end the send loop
+    return isPaymentError(state)
+      ? state // TODO Wait for pending requests to complete?
+      : // If a Promise, schedule next attempt
+      isPromiseLike(state)
+      ? this.run(state)
+      : // Otherwise, try to send or apply this request
+        this.trySending(state)
   }
 
-  isFulfill(): this is StreamFulfill {
-    return false
-  }
+  /** Order of controllers to build each request, signal next state, and apply side effects */
+  protected abstract readonly order: Constructor<StreamController>[]
+
+  /** TODO explain */
+  protected abstract trySending(request: StreamRequest): Promise<T | PaymentError>
+
+  /** TODO only called if no requests are in-flight ... */
+  protected abstract finalize(): T | PaymentError
 }
+
+// eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+export const isPromiseLike = (o: any): o is Promise<any> =>
+  typeof o === 'object' && 'then' in o && typeof o.then === 'function'

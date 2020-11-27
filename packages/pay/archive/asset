@@ -1,0 +1,132 @@
+import { Int, NonNegativeInteger, isNonNegativeInteger, PositiveInt } from './utils'
+
+enum ExtraPrecision {
+  /** Round the extra precision down, toward 0 */
+  Floor,
+  /** Round the extra precision up, away from 0 */
+  Ceil,
+  /** Reject numbers with too much precision for the underlying denomination */
+  Reject,
+}
+
+enum RoundingMode {
+  /** Round the extra precision down, toward 0 */
+  Floor,
+  /** Round the extra precision up, away from 0 */
+  Ceil,
+}
+
+class Denomination {
+  readonly scale: NonNegativeInteger // TODO How to enforce this?
+  readonly assetCode: string
+
+  constructor(scale: number, assetCode: string) {
+    this.scale = scale
+    this.assetCode = assetCode
+  }
+
+  // TODO What about accepting strings?
+  // TODO What about accepting bigints/base units?
+  createAmount(n: NonNegativeInteger, mode?: ExtraPrecision): Amount
+  createAmount(n: number, mode = ExtraPrecision.Reject): Amount | undefined {
+    // Scale into base units
+    const scaled = n * 10 ** this.scale
+
+    // Round up in ceiling mode, otherwise round down
+    const rounded = mode === ExtraPrecision.Ceil ? Math.ceil(scaled) : Math.floor(scaled)
+    if (mode === ExtraPrecision.Reject && rounded !== scaled) {
+      // Given number has too much precision for this denomination and should be rejected
+      return
+    }
+
+    const amount = Int.from(rounded)
+    if (!amount) {
+      // Invalid number, e.g. `NaN`, `Infinity`, or negative
+      return
+    }
+
+    return new Amount(this, amount)
+  }
+}
+
+/**
+ * TODO -----
+ *
+ * How does a frontend actually want to use, represent/parse these denominations?
+ */
+
+// TODO NOTE: amount is not designed for computations, only for displaying or saving !
+class Amount {
+  readonly denomination: Denomination
+  readonly amount: Int
+
+  constructor(denomination: Denomination, amount: Int) {
+    this.denomination = denomination
+    this.amount = amount
+  }
+
+  // TODO fromString?
+  // TODO fromNumber?
+
+  // TODO Allow this specify a different number of decimal places? App uses USD 2, but ILP uses USD 9
+
+  // TODO -----
+  /**
+   * Serialize a decimal string in normal units of the asset.
+   * If no parameters are supplied, uses the same digits as the scale of the underyling denomination
+   * and no rounding. Alternatively, fewer decimal places with a rounding mode may be supplied.
+   */
+  toString(): string
+  toString(mode?: RoundingMode, decimalPlaces?: NonNegativeInteger): string
+  toString(mode?: RoundingMode, decimalPlaces?: number): string | undefined {
+    mode = mode ?? RoundingMode.Floor
+    decimalPlaces = decimalPlaces ?? this.denomination.scale
+
+    if (!isNonNegativeInteger(decimalPlaces)) {
+      return
+    }
+
+    if (this.amount.isEqualTo(Int.ZERO)) {
+      return '0'
+    }
+
+    let formatted: string
+
+    if (decimalPlaces < this.denomination.scale) {
+      // Decimal places is less than scale, so round or truncate the number
+      // (essentially, change the scale to `decimalPlaces`)
+      const k = this.denomination.scale - decimalPlaces // Always >= 1
+      const d = Int.from(10 ** k) as PositiveInt
+      const scaledAmount =
+        mode === RoundingMode.Floor ? this.amount.divide(d) : this.amount.divideCeil(d)
+      if (scaledAmount.isEqualTo(Int.ZERO)) {
+        return '0'
+      }
+
+      formatted = scaledAmount.toString()
+    } else {
+      // Decimal places >= scale, so append 0s to the end of the string
+      formatted = this.amount.toString() + '0'.repeat(decimalPlaces - this.denomination.scale)
+    }
+
+    // TODO What if the amount is 0? Then what to do?
+
+    if (decimalPlaces === 0) {
+      return formatted // No decimal point
+    }
+
+    // Prepend 0s for each decimal place, and for the ones column, if necessary
+    formatted = formatted.padStart(decimalPlaces + 1, '0')
+
+    // Insert decimal point
+    return formatted.slice(-decimalPlaces - 1) + '.' + formatted.slice(-decimalPlaces)
+  }
+
+  toBaseUnits(): bigint {
+    return this.amount.value
+  }
+
+  toJSON(): string {
+    return this.amount.value.toString()
+  }
+}

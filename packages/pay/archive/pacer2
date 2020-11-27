@@ -1,0 +1,234 @@
+import { StreamController, StreamReply, NextRequest, ControllerMap } from '.'
+import { IlpError } from 'ilp-packet'
+import { sleep } from '../utils'
+import { PendingRequestTracker } from './pending-requests'
+import createLogger from 'ilp-logger'
+
+enum Outcome {
+  Ack,
+  Error,
+}
+
+/**
+ * Flow controller to send packets at a consistent cadence
+ * and prevent sending more packets than the network can handle
+ */
+export class PacingController implements StreamController {
+  private requests: {
+    type: Outcome
+    timestamp: number
+  }[] = []
+
+  /** Maximum number of packets to have in-flight, yet to receive a Fulfill or Reject */
+  private static MAX_INFLIGHT_PACKETS = 20
+
+  /** Initial number of packets to send in 1 second interval (25ms delay between packets) */
+  private static DEFAULT_PACKETS_PER_SECOND = 40
+
+  /** Always try to send at least 1 packet in 1 second (unless RTT is very high) */
+  private static MIN_PACKETS_PER_SECOND = 1
+
+  /** Maximum number of packets to send in a 1 second interval, after ramp up (5ms delay) */
+  private static MAX_PACKETS_PER_SECOND = 200
+
+  /** RTT to use for pacing before an average can be ascertained */
+  private static DEFAULT_ROUND_TRIP_TIME_MS = 200
+
+  /** Weight to compute next RTT average. Halves weight of past round trips every ~5 flights */
+  private static ROUND_TRIP_AVERAGE_WEIGHT = 0.9
+
+  /** UNIX timestamp when most recent packet was sent */
+  private lastPacketSentTime = 0
+
+  /** Number of packets currently in flight */
+  private numberInFlight = 0
+
+  /** Exponential weighted moving average of the round trip time */
+  private averageRoundTrip = PacingController.DEFAULT_ROUND_TRIP_TIME_MS
+
+  /** Rate of packets to send per ms. This shouldn't ever be 0, but may become a small fraction */
+  private packetsPerMs = PacingController.DEFAULT_PACKETS_PER_SECOND / 1000
+
+  /**
+   * Rate to send packets, in packets / millisecond, using packet rate limit and round trip time.
+   * Corresponds to the ms delay between each packet
+   */
+  getPacketFrequency(): number {
+    const maxInFlightDelay = this.averageRoundTrip / PacingController.MAX_INFLIGHT_PACKETS
+    const packetRateDelay = 1 / this.packetsPerMs // Converts packets/ms -> ms/packet
+    if (this.requests.length < 1) {
+      return Math.max(packetRateDelay, maxInFlightDelay)
+    }
+
+    this.pruneWindow()
+
+    // If we sent at the discovered rate limit, compute the limit on # of packets
+    // we should have sent within the window
+    const windowDuration = Date.now() - this.requests[0].timestamp
+    const windowPacketLimit = Math.floor(windowDuration * this.packetsPerMs)
+
+    // Compute the number of packets we've utilized of the rate limit within the window
+
+    //
+
+    // TODO only tracks utilized in the most recent 3 seconds
+    const windowPacketUtilized =
+      this.requests.filter((req) => req.type === Outcome.Ack).length + this.numberInFlight
+    const windowRemaining = windowPacketLimit - windowPacketUtilized
+    const packetsPerMsDelay =
+      windowRemaining > 0 ? 1 / this.packetsPerMs : Date.now() - this.lastPacketSentTime + 20
+
+    // TODO What is the remaining amount in the window...?
+
+    return Math.max(packetsPerMsDelay, maxInFlightDelay)
+  }
+
+  /** Earliest UNIX timestamp when the pacer will allow the next packet to be sent */
+  getNextPacketSendTime(): number {
+    const delayDuration = this.getPacketFrequency()
+    return this.lastPacketSentTime + delayDuration
+  }
+
+  nextState(_: NextRequest, controllers: ControllerMap): Promise<unknown> | void {
+    const exceedsMaxInFlight = this.numberInFlight + 1 > PacingController.MAX_INFLIGHT_PACKETS
+    if (exceedsMaxInFlight) {
+      const pendingRequests = controllers.get(PendingRequestTracker).getPendingRequests()
+      return Promise.race(pendingRequests)
+    }
+
+    const durationUntilNextPacket = this.getNextPacketSendTime() - Date.now()
+    if (durationUntilNextPacket > 0) {
+      return sleep(durationUntilNextPacket)
+    }
+  }
+
+  applyRequest(): (reply: StreamReply) => void {
+    const sentTime = Date.now()
+    this.lastPacketSentTime = sentTime
+    this.numberInFlight++
+
+    return (reply: StreamReply) => {
+      this.numberInFlight--
+
+      // Only update the RTT if we know the request got to the recipient
+      if (reply.isAuthentic()) {
+        const roundTripTime = Math.max(Date.now() - sentTime, 0)
+        this.averageRoundTrip =
+          this.averageRoundTrip * PacingController.ROUND_TRIP_AVERAGE_WEIGHT +
+          roundTripTime * (1 - PacingController.ROUND_TRIP_AVERAGE_WEIGHT)
+      }
+
+      if (reply.isReject() && reply.ilpReject.code[0] === 'T') {
+        this.requests.push({
+          type: Outcome.Error,
+          timestamp: Date.now(),
+        })
+      } else if (reply.isAuthentic()) {
+        this.requests.push({
+          type: Outcome.Ack,
+          timestamp: Date.now(),
+        })
+      }
+
+      this.pruneWindow()
+
+      if (this.requests.length < 2) {
+        return
+      }
+
+      // TODO Recompute packets / second
+      // this.packetsPerMs = Math.max(
+      //   PacingController.MIN_PACKETS_PER_SECOND,
+      //   ((this.requests.reduce(
+      //     (total, { type }) => (type === Outcome.Ack ? total + 1 : total * 0.667),
+      //     0
+      //   ) *
+      //     1.1) /
+      //     duration) *
+      //     1000
+      // )
+
+      const requests = this.requests // TODO
+      const latestRequests = requests.slice().reverse()
+      const errorIndex = latestRequests.findIndex((req) => req.type === Outcome.Error)
+      if (!errorIndex) {
+        return
+      }
+
+      const duration = latestRequests[0].timestamp - requests[0].timestamp
+
+      // TODO Additionally, should this have a "penalty" timeout when if it
+      //      readjusts the limit and realizes it exceeds it?
+
+      this.packetsPerMs =
+        (latestRequests.slice(errorIndex).filter((req) => req.type === Outcome.Ack).length * 0.8 +
+          latestRequests.slice(0, errorIndex).filter((req) => req.type === Outcome.Ack).length *
+            2) /
+        duration
+
+      // this.packetsPerMs =
+      //   latestRequests.reduce(
+      //     (total, { type }) => (type === Outcome.Ack ? total * 1.1 : total * 0.8),
+      //     0
+      //   ) / duration
+
+      reply.log.debug(this.requests.map((x) => x.type).join(','))
+      reply.log.debug(this.packetsPerMs * 1000)
+
+      // TODO Add min/max frequencey limits here, too ?
+
+      return
+
+      // If we encounter a temporary error that's not related to liquidity,
+      // exponentially backoff the rate of packet sending
+      // if (
+      //   reply.isReject() &&
+      //   reply.ilpReject.code[0] === 'T' // TODO add this back
+      //   // reply.ilpReject.code !== IlpError.T04_INSUFFICIENT_LIQUIDITY
+      // ) {
+      //   const reducedRate = Math.max(
+      //     PacingController.MIN_PACKETS_PER_SECOND,
+      //     this.packetsPerMs / 2 // Fractional rates are fine
+      //   )
+      //   reply.log.debug(
+      //     'handling %s. backing off to %s packets / second',
+      //     reply.ilpReject.code,
+      //     reducedRate.toFixed(3)
+      //   )
+      //   this.packetsPerMs = reducedRate
+      // }
+      // // If the packet got through, additive increase of sending rate, up to some maximum
+      // else if (reply.isAuthentic()) {
+      //   this.packetsPerMs = Math.min(
+      //     PacingController.MAX_PACKETS_PER_SECOND,
+      //     this.packetsPerMs + 0.1
+      //   )
+      // }
+    }
+  }
+
+  private pruneWindow() {
+    // TODO
+
+    // Preserve 3 temporary errors or the last 2 seconds of requests, whichever is greater
+    // const startIndex1 = this.requests
+    //   .map((req, index): [number, { type: Outcome }] => [index, req])
+    //   .filter(([i, { type }]) => type === Outcome.Error)
+    //   .slice(-3)[0]?.[0]
+    const startIndex2 = this.requests.findIndex(({ timestamp }) => timestamp > Date.now() - 2000)
+
+    // startIndex1 ?? 0
+    this.requests.splice(0, Math.min(20, startIndex2 === -1 ? 0 : startIndex2))
+
+    // const errorIndex = this.requests.findIndex(({ type }) => type === Outcome.Error)
+    // const requestsToRemove = Math.max(0, Math.min(errorIndex, this.requests.length - 40)) // TODO Does this sometimes NOT include a T04..? That could be bad!
+    // this.requests.splice(0, requestsToRemove)
+
+    // TODO Maybe this should be pruned based on duration instead?
+    // Window encompasses requests in the last 20 round trips
+    // const windowStartTime = Date.now() - this.averageRoundTrip * 20
+    // this.requests = this.requests.filter(({ timestamp }) => timestamp > windowStartTime)
+    // const requestsToRemove = Math.max(0, this.requests.length - 40) // TODO Does this sometimes NOT include a T04..? That could be bad!
+    // this.requests.splice(0, requestsToRemove)
+  }
+}

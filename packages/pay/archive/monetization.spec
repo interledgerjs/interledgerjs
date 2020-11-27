@@ -1,5 +1,5 @@
 import { monetize } from '../src/web-monetization'
-import { MirrorPlugin } from './helpers/plugin'
+import { MirrorPlugin } from '../test/helpers/plugin'
 import nock from 'nock'
 import { StreamServer } from '@interledger/stream-receiver'
 import { randomBytes } from 'ilp-protocol-stream/dist/src/crypto'
@@ -8,6 +8,125 @@ import { deserializeIlpPrepare, isIlpReply, serializeIlpReply } from 'ilp-packet
 import { sleep } from '../src/utils'
 import { describe, it } from '@jest/globals'
 import { performance } from 'perf_hooks'
+
+describe('pacing', () => {
+  it.only('competes fairly', async () => {
+    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
+    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+
+    const server = new StreamServer({
+      serverAddress: 'private.larry.receiver',
+      serverSecret: randomBytes(32),
+    })
+
+    receiverPlugin2.registerDataHandler(async (data) => {
+      const prepare = deserializeIlpPrepare(data)
+      const moneyOrReply = server.createReply(prepare)
+      return serializeIlpReply(isIlpReply(moneyOrReply) ? moneyOrReply : moneyOrReply.accept())
+    })
+    await receiverPlugin2.connect()
+
+    nock('https://alice.mywallet.com')
+      .get('/.well-known/pay')
+      .matchHeader('Accept', (v) => v.includes('application/spsp4+json'))
+      .thrice()
+      .reply(200, () => {
+        const credentials = server.generateCredentials({
+          asset: {
+            code: 'ABC',
+            scale: 0,
+          },
+        })
+
+        return {
+          shared_secret: credentials.sharedSecret.toString('base64'),
+          destination_account: credentials.ilpAddress,
+        }
+      })
+
+    const app = createApp({
+      ilpAddress: 'private.larry',
+      backend: 'one-to-one',
+      spread: 0,
+      defaultRoute: 'receiver',
+      accounts: {
+        sender: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 0,
+          plugin: senderPlugin2,
+          rateLimit: {
+            refillPeriod: 1000,
+            refillCount: 20,
+            capacity: 20, // 3 packets / second
+            // refillPeriod: 1000,
+            // incomingAmount: '58200', // Limit 3,000 units / second
+          },
+        },
+        receiver: {
+          relation: 'child',
+          assetCode: 'ABC',
+          assetScale: 0,
+          plugin: receiverPlugin1,
+        },
+      },
+    })
+    await app.listen()
+
+    const stream1 = await monetize({
+      paymentPointer: '$alice.mywallet.com/',
+      plugin: senderPlugin1,
+      initialPacketAmount: 100,
+    })
+
+    const stream2 = await monetize({
+      paymentPointer: '$alice.mywallet.com/',
+      plugin: senderPlugin1,
+      initialPacketAmount: 100,
+    })
+
+    stream1.start()
+    stream2.start()
+
+    await sleep(4_000)
+
+    const stream3 = await monetize({
+      paymentPointer: '$alice.mywallet.com/',
+      plugin: senderPlugin1,
+      initialPacketAmount: 100,
+    })
+    stream3.start()
+
+    await sleep(4_000) // Allow some time to achieve fairness
+
+    let stream1Packets = 0
+    stream1.on('progress', () => {
+      stream1Packets++
+    })
+
+    let stream2Packets = 0
+    stream3.on('progress', () => {
+      stream2Packets++
+    })
+
+    let stream3Packets = 0
+    stream3.on('progress', () => {
+      stream3Packets++
+    })
+
+    await sleep(15_000)
+
+    console.log(stream1Packets)
+    console.log(stream2Packets)
+    console.log(stream3Packets)
+
+    await Promise.all([stream1.stop(), stream2.stop(), stream3.stop()])
+
+    // TODO Assert these are all +/- 5% of one another
+
+    await app.shutdown()
+  }, 35_000)
+})
 
 describe('congestion control', () => {
   it('discovers available bandwidth', async () => {
@@ -94,7 +213,7 @@ describe('congestion control', () => {
     await app.shutdown()
   }, 30_000)
 
-  it.only('competes fairly', async () => {
+  it('competes fairly', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
@@ -157,7 +276,7 @@ describe('congestion control', () => {
     const stream1 = await monetize({
       paymentPointer: '$alice.mywallet.com/',
       plugin: senderPlugin1,
-      initialPacketAmount: 8_000, // TODO What should this be?
+      initialPacketAmount: 10_000, // TODO What should this be?
     })
     stream1.start()
 
@@ -166,9 +285,11 @@ describe('congestion control', () => {
     const stream2 = await monetize({
       paymentPointer: '$alice.mywallet.com/',
       plugin: senderPlugin1,
-      initialPacketAmount: 8_000, // TODO What should this be?
+      initialPacketAmount: 10_000, // TODO What should this be?
     })
     stream2.start()
+
+    await sleep(10_000)
 
     let stream1Total = 0
     stream1.on('progress', ({ amount }) => {
@@ -180,7 +301,7 @@ describe('congestion control', () => {
       stream2Total += +amount
     })
 
-    await sleep(20_000)
+    await sleep(10_000)
 
     await Promise.all([stream1.stop(), stream2.stop()])
 

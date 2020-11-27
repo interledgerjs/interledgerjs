@@ -2,9 +2,7 @@ module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
     '!**/node_modules/**',
-    // Exclude unused functionality
-    '!src/rates/ecb.ts',
-    '!src/controllers/liquidity-congestion.ts'
+    '!src/utils.ts' // TODO remove this!
   ],
   coverageReporters: ['text', 'lcov'],
   coverageDirectory: 'coverage',

@@ -1,16 +1,14 @@
-import { StreamController, StreamReply, NextRequest, ControllerMap } from '.'
+import { StreamController } from '.'
 import { IlpError } from 'ilp-packet'
 import { sleep } from '../utils'
-import { PendingRequestTracker } from './pending-requests'
+import { InFlightTracker } from './pending-requests'
+import { StreamReply, StreamRequest } from '../request'
 
 /**
  * Flow controller to send packets at a consistent cadence
  * and prevent sending more packets than the network can handle
  */
 export class PacingController implements StreamController {
-  /** Maximum number of packets to have in-flight, yet to receive a Fulfill or Reject */
-  private static MAX_INFLIGHT_PACKETS = 20
-
   /** Initial number of packets to send in 1 second interval (25ms delay between packets) */
   private static DEFAULT_PACKETS_PER_SECOND = 40
 
@@ -29,9 +27,6 @@ export class PacingController implements StreamController {
   /** UNIX timestamp when most recent packet was sent */
   private lastPacketSentTime = 0
 
-  /** Number of packets currently in flight */
-  private numberInFlight = 0
-
   /** Exponential weighted moving average of the round trip time */
   private averageRoundTrip = PacingController.DEFAULT_ROUND_TRIP_TIME_MS
 
@@ -44,7 +39,7 @@ export class PacingController implements StreamController {
    */
   getPacketFrequency(): number {
     const packetsPerSecondDelay = 1000 / this.packetsPerSecond
-    const maxInFlightDelay = this.averageRoundTrip / PacingController.MAX_INFLIGHT_PACKETS
+    const maxInFlightDelay = this.averageRoundTrip / InFlightTracker.MAX_INFLIGHT_PACKETS
 
     return Math.max(packetsPerSecondDelay, maxInFlightDelay)
   }
@@ -55,27 +50,16 @@ export class PacingController implements StreamController {
     return this.lastPacketSentTime + delayDuration
   }
 
-  nextState(_: NextRequest, controllers: ControllerMap): Promise<unknown> | void {
-    const exceedsMaxInFlight = this.numberInFlight + 1 > PacingController.MAX_INFLIGHT_PACKETS
-    if (exceedsMaxInFlight) {
-      const pendingRequests = controllers.get(PendingRequestTracker).getPendingRequests()
-      return Promise.race(pendingRequests)
-    }
-
+  nextState(request: StreamRequest): StreamRequest | Promise<unknown> {
     const durationUntilNextPacket = this.getNextPacketSendTime() - Date.now()
-    if (durationUntilNextPacket > 0) {
-      return sleep(durationUntilNextPacket)
-    }
+    return durationUntilNextPacket > 0 ? sleep(durationUntilNextPacket) : request
   }
 
   applyRequest(): (reply: StreamReply) => void {
     const sentTime = Date.now()
     this.lastPacketSentTime = sentTime
-    this.numberInFlight++
 
     return (reply: StreamReply) => {
-      this.numberInFlight--
-
       // Only update the RTT if we know the request got to the recipient
       if (reply.isAuthentic()) {
         const roundTripTime = Math.max(Date.now() - sentTime, 0)
@@ -88,7 +72,7 @@ export class PacingController implements StreamController {
       // exponentially backoff the rate of packet sending
       if (
         reply.isReject() &&
-        reply.ilpReject.code[0] === 'T' && // TODO add this back
+        reply.ilpReject.code[0] === 'T' &&
         reply.ilpReject.code !== IlpError.T04_INSUFFICIENT_LIQUIDITY
       ) {
         const reducedRate = Math.max(

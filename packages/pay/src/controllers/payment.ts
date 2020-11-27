@@ -1,23 +1,25 @@
-import { ControllerMap, StreamController, StreamRequest, StreamReply, NextRequest } from '.'
-import { Ratio, Int, PositiveInt, PromiseResolver } from '../utils'
+import { SendLoop, ControllerSet } from '.'
+import { Ratio, Int, PositiveInt } from '../utils'
 import {
   StreamMaxMoneyFrame,
   FrameType,
   StreamMoneyFrame,
-  ErrorCode,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { MaxPacketAmountController } from './max-packet'
-import { ExchangeRateCalculator } from './exchange-rate'
-import { PaymentError } from '..'
+import { ExchangeRateCalculator, ExchangeRateController } from './exchange-rate'
+import { PaymentError, Receipt } from '..'
 import { Logger } from 'ilp-logger'
-
-export const DEFAULT_STREAM_ID = 1
-
-export interface EstimatedPaymentOutcome {
-  estimatedNumberOfPackets: PositiveInt
-  maxSourceAmount: PositiveInt
-  minDeliveryAmount: Int
-}
+import { StreamReply, RequestBuilder, StreamRequest } from '../request'
+import { ReceiptController } from './receipt'
+import { InFlightTracker } from './pending-requests'
+import { PacingController } from './pacer'
+import { AssetDetailsController } from './asset-details'
+import { TimeoutController } from './timeout'
+import { FailureController } from './failure'
+import { ExpiryController } from './expiry'
+import { EstablishmentController } from './establishment'
+import { SequenceController } from './sequence'
+import { StreamConnection } from '../connection'
 
 export enum PaymentType {
   FixedSend,
@@ -31,12 +33,12 @@ interface PaymentTarget {
   minDeliveryAmount: Int
   minExchangeRate: Ratio
   rateCalculator: ExchangeRateCalculator
+  sourceRoundingError: PositiveInt
 }
 
 /** Controller to track the payment status and compute amounts to send and deliver */
-export class PaymentController implements StreamController {
-  /** Conditions that must be met for the payment to complete, and parameters of its execution */
-  private target?: PaymentTarget
+export class PaymentController extends SendLoop<Receipt> {
+  static DEFAULT_STREAM_ID = 1
 
   /** Total amount sent and fulfilled, in scaled units of the sending account */
   private amountSent = Int.ZERO
@@ -50,26 +52,55 @@ export class PaymentController implements StreamController {
   /** Estimate of the amount that may be delivered from in-flight packets, in scaled units of the receiving account */
   private destinationAmountInFlight = Int.ZERO
 
-  /** Amount in destination units allowed to be lost to rounding, below the enforced exchange rate */
-  private availableDeliveryShortfall = Int.ZERO
+  /** Remaining amount allowed to be lost to rounding below the enforced exchange rate, in destination units */
+  private availableDeliveryShortfall: Int
 
   /** Maximum amount the recipient can receive on the default stream */
   private remoteReceiveMax?: Int
 
-  /** Should the connection be closed because the receiver violated the STREAM protocol? */
-  private encounteredProtocolViolation = false
+  constructor(
+    connection: StreamConnection,
+    controllers: ControllerSet,
 
-  /** Promise that resolves when the target is complete */
-  private paymentStatus = new PromiseResolver<void>()
+    /** Conditions that must be met for the payment to complete, and parameters of its execution */
+    private readonly target: PaymentTarget,
 
-  setPaymentTarget(
+    /** Callback to pass updates as packets are sent and received */
+    private readonly progressHandler?: (status: Receipt) => void
+  ) {
+    super(connection, controllers)
+
+    // TODO Change this
+    // Tolerate up to 1 source unit, converted into destination units, to be lost, below the enforced
+    // minimum destination amounts. This enables reliable delivery of the final payment packet.
+    this.availableDeliveryShortfall = target.sourceRoundingError.multiplyCeil(
+      target.minExchangeRate
+    ) // TODO Is this floor or ceil?
+  }
+
+  // TODO Add explanation for this ordering
+  order = [
+    SequenceController,
+    EstablishmentController,
+    ExpiryController,
+    FailureController,
+    TimeoutController,
+    MaxPacketAmountController,
+    AssetDetailsController,
+    PacingController,
+    ReceiptController,
+    ExchangeRateController,
+    InFlightTracker,
+  ]
+
+  static createPaymentTarget(
     targetAmount: PositiveInt,
     targetType: PaymentType,
     minExchangeRate: Ratio,
     rateCalculator: ExchangeRateCalculator,
     maxSourcePacketAmount: Int,
     log: Logger
-  ): EstimatedPaymentOutcome | PaymentError {
+  ): PaymentTarget | PaymentError {
     const { lowerBoundRate, upperBoundRate } = rateCalculator
 
     if (!lowerBoundRate.isPositive() || !upperBoundRate.isPositive()) {
@@ -80,7 +111,7 @@ export class PaymentController implements StreamController {
     const marginOfError = lowerBoundRate.subtract(minExchangeRate)
     if (!marginOfError.isPositive()) {
       log.debug(
-        'quote failed: probed exchange rate of %s is not greater than minimum of %s',
+        'quote failed: probed exchange rate of %s is below minimum of %s',
         lowerBoundRate,
         minExchangeRate
       )
@@ -88,46 +119,45 @@ export class PaymentController implements StreamController {
     }
 
     // Assuming we accurately know the real exchange rate, if the actual destination amount is less than the
-    // min destination amount set by the sender, the packet fails due to a rounding error,
-    // since intermediaries round down, but senders round up:
-    // - realDestinationAmount = floor(sourceAmount * realExchangeRate) --- Determined by intermediaries
-    // - minDestinationAmount  =  ceil(sourceAmount * minExchangeRate)  --- Determined by sender
+    // min destination amount set by the sender, the packet fails due to a rounding error, since intermediaries round down, but senders round up:
+    // - realDestinationAmount = floor(sourceAmount * realExchangeRate) <--- Determined by intermediaries
+    // - minDestinationAmount  =  ceil(sourceAmount * minExchangeRate)  <--- Determined by sender
 
     // Packets that aren't at least this minimum source amount *may* fail due to rounding.
-    // If the max packet amount is insufficient, fail fast, since the payment is unlikely to succeed.
-    const minSourcePacketAmount = Int.ONE.multiplyCeil(marginOfError.reciprocal())
+    // If the max packet does doesn't allow sufficient precision, fail fast, since the payment is unlikely to succeed.
+    const minSourcePacketAmount = marginOfError.reciprocal().ceil()
     if (!maxSourcePacketAmount.isGreaterThanOrEqualTo(minSourcePacketAmount)) {
       log.debug(
-        'quote failed: rate enforcement may incur rounding errors. max packet amount of %s is below proposed minimum of %s',
+        'quote failed: rate enforcement may incur rounding errors. max packet amount of %s is below %s',
         maxSourcePacketAmount,
         minSourcePacketAmount
       )
       return PaymentError.ExchangeRateRoundingError
     }
 
-    // To prevent the final packet from failing due to rounding, account for a small
-    // "shortfall" of 1 source unit, converted to destination units,
-    // to tolerate below the enforced destination amounts from the minimum exchange rate.
-    this.availableDeliveryShortfall = Int.ONE.multiplyCeil(minExchangeRate)
+    // If a packet is sent with too low of an amount, the amount lost to rounding,
+    // at each hop, is 1 unit of the local asset before the conversion.
+    // prettier-ignore
+    const sourceRoundingError =
+      Int.ONE // Tolerate one packet rounding error from source unit to next hop
+        .add(
+          // Tolerate one packet rounding error for 2 intermediary hops.
+          // Assume remote max packet size is no less than 10,000 foreign units,
+          // to estimate the number of source units equal to a foreign unit.
+          maxSourcePacketAmount.divideCeil(Int.from(10_000) as PositiveInt).multiply(Int.TWO)
+        )
+    // TODO What if max packet amount is huge, e.g. max u64? How should this be capped?
+
+    // TODO Alternatively... maybe it could be, e.g., "up to 100x the valueof one source unit--in the foreign unit--can be lost to rounding"
+
+    // const deliveryShortfall = sourceAmountError.multiplyCeil(minExchangeRate)
+
+    let maxSourceAmount: PositiveInt
+    let minDeliveryAmount: Int
 
     if (targetType === PaymentType.FixedSend) {
-      const estimatedNumberOfPackets = targetAmount.divideCeil(maxSourcePacketAmount)
-      const maxSourceAmount = targetAmount
-      const minDeliveryAmount = targetAmount.subtract(Int.ONE).multiplyCeil(minExchangeRate)
-
-      this.target = {
-        type: PaymentType.FixedSend,
-        maxSourceAmount,
-        minDeliveryAmount,
-        minExchangeRate,
-        rateCalculator,
-      }
-
-      return {
-        maxSourceAmount,
-        minDeliveryAmount,
-        estimatedNumberOfPackets,
-      }
+      maxSourceAmount = targetAmount
+      minDeliveryAmount = targetAmount.subtract(sourceRoundingError).multiplyCeil(minExchangeRate)
     } else {
       if (!minExchangeRate.isPositive()) {
         log.debug('quote failed: unenforceable payment delivery. min exchange rate is 0')
@@ -136,61 +166,35 @@ export class PaymentController implements StreamController {
 
       // The final packet may be less than the minimum source packet amount, but if the minimum rate is enforced,
       // it would fail due to rounding. To account for this, increase max source amount by 1 unit.
-      const maxSourceAmount = targetAmount.multiplyCeil(minExchangeRate.reciprocal()).add(Int.ONE)
-      const minDeliveryAmount = targetAmount
-      const estimatedNumberOfPackets = maxSourceAmount.divideCeil(maxSourcePacketAmount)
+      maxSourceAmount = targetAmount
+        .multiplyCeil(minExchangeRate.reciprocal())
+        .add(sourceRoundingError)
+      minDeliveryAmount = targetAmount
+    }
 
-      this.target = {
-        type: PaymentType.FixedDelivery,
-        minDeliveryAmount,
-        maxSourceAmount,
-        minExchangeRate,
-        rateCalculator,
-      }
-
-      return {
-        maxSourceAmount,
-        minDeliveryAmount,
-        estimatedNumberOfPackets,
-      }
+    return {
+      type: targetType,
+      minDeliveryAmount,
+      maxSourceAmount,
+      minExchangeRate,
+      rateCalculator,
+      sourceRoundingError,
     }
   }
 
-  nextState(request: NextRequest, controllers: ControllerMap): PaymentError | void {
-    if (this.encounteredProtocolViolation) {
-      request.addConnectionClose(ErrorCode.ProtocolViolation).send()
-      return PaymentError.ReceiverProtocolViolation
-    }
-
-    // No fixed source or delivery amount set
-    if (!this.target) {
-      return
-    }
+  protected async trySending(request: StreamRequest): Promise<Receipt | PaymentError> {
+    const pendingRequests = this.controllers.get(InFlightTracker).getPendingRequests()
 
     const { maxSourceAmount, minDeliveryAmount, minExchangeRate, rateCalculator } = this.target
     const { log } = request
 
-    // Is the recipient's advertised `receiveMax` less than the fixed destination amount?
-    const incompatibleReceiveMax =
-      this.remoteReceiveMax && minDeliveryAmount.isGreaterThan(this.remoteReceiveMax)
-    if (incompatibleReceiveMax) {
-      log.error(
-        'ending payment: minimum delivery amount is too much for recipient. minimum delivery amount: %s, receive max: %s',
-        minDeliveryAmount,
-        this.remoteReceiveMax
-      )
-      request.addConnectionClose(ErrorCode.ApplicationError).send()
-      return PaymentError.IncompatibleReceiveMax
-    }
-
-    if (this.target.type === PaymentType.FixedSend) {
-      const paidFixedSend =
-        this.amountSent.isEqualTo(maxSourceAmount) && !this.sourceAmountInFlight.isPositive()
-      if (paidFixedSend) {
-        log.debug('payment complete: paid fixed source amount. sent %s', this.amountSent)
-        this.paymentStatus.resolve()
-        return request.addConnectionClose().send()
-      }
+    const paidFixedSend =
+      this.target.type === PaymentType.FixedSend &&
+      this.amountSent.isEqualTo(maxSourceAmount) &&
+      !this.sourceAmountInFlight.isPositive()
+    if (paidFixedSend) {
+      log.debug('payment complete: paid fixed source amount.')
+      return this.buildReceipt()
     }
 
     // Ensure we never overpay the maximum source amount
@@ -198,39 +202,33 @@ export class PaymentController implements StreamController {
       .subtract(this.amountSent)
       .subtract(this.sourceAmountInFlight)
     if (!availableToSend.isPositive()) {
-      return
+      // If we've sent as much as we can, schedule next attempt after any in-flight request finishes
+      return this.run(Promise.race(pendingRequests))
     }
 
     // Compute source amount (always positive)
-    const maxPacketAmount = controllers.get(MaxPacketAmountController).getNextMaxPacketAmount()
-    let sourceAmount: PositiveInt = availableToSend
-      .orLesser(maxPacketAmount ?? Int.MAX_U64)
-      .orLesser(Int.MAX_U64)
+    const maxPacketAmount = this.controllers.get(MaxPacketAmountController).getNextMaxPacketAmount()
+    let sourceAmount = availableToSend.orLesser(maxPacketAmount).orLesser(Int.MAX_U64)
 
-    // Check if fixed delivery payment is complete, and apply limits
+    // Apply fixed delivery limits
     if (this.target.type === PaymentType.FixedDelivery) {
       const remainingToDeliver = minDeliveryAmount.subtract(this.amountDelivered)
       const paidFixedDelivery =
-        remainingToDeliver.isLessThanOrEqualTo(Int.ZERO) && !this.sourceAmountInFlight.isPositive()
+        remainingToDeliver.isEqualTo(Int.ZERO) && !this.sourceAmountInFlight.isPositive()
       if (paidFixedDelivery) {
-        log.debug(
-          'payment complete: paid fixed destination amount. delivered %s of %s',
-          this.amountDelivered,
-          minDeliveryAmount
-        )
-        this.paymentStatus.resolve()
-        return request.addConnectionClose().send()
+        log.debug('payment complete: paid fixed destination amount.')
+        return this.buildReceipt()
       }
 
       const availableToDeliver = remainingToDeliver.subtract(this.destinationAmountInFlight)
       if (!availableToDeliver.isPositive()) {
-        return
+        // If we've sent as much as we can, schedule next attempt after any in-flight request finishes
+        return this.run(Promise.race(pendingRequests))
       }
 
       const sourceAmountDeliveryLimit = rateCalculator.estimateSourceAmount(availableToDeliver)?.[1]
       if (!sourceAmountDeliveryLimit) {
         log.warn('payment cannot complete: exchange rate dropped to 0')
-        request.addConnectionClose().send()
         return PaymentError.InsufficientExchangeRate
       }
 
@@ -239,11 +237,14 @@ export class PaymentController implements StreamController {
 
     // Enforce the minimum exchange rate, and estimate how much will be received
     let minDestinationAmount = sourceAmount.multiplyCeil(minExchangeRate)
-    const estimatedDestinationAmount = rateCalculator.estimateDestinationAmount(sourceAmount)[0]
+    const [
+      projectedDestinationAmount,
+      highEndDestinationAmount,
+    ] = rateCalculator.estimateDestinationAmount(sourceAmount)
 
     // Only allow a destination shortfall within the allowed margins *on the final packet*.
     // If the packet is insufficient to complete the payment, the rate dropped and cannot be completed.
-    const deliveryDeficit = minDestinationAmount.subtract(estimatedDestinationAmount)
+    const deliveryDeficit = minDestinationAmount.subtract(projectedDestinationAmount)
     if (deliveryDeficit.isPositive()) {
       // Is it probable that this packet will complete the payment?
       const completesPayment =
@@ -251,148 +252,133 @@ export class PaymentController implements StreamController {
           ? sourceAmount.isEqualTo(availableToSend)
           : this.amountDelivered
               .add(this.destinationAmountInFlight)
-              .add(estimatedDestinationAmount)
+              .add(projectedDestinationAmount)
               .isGreaterThanOrEqualTo(minDeliveryAmount)
 
       if (this.availableDeliveryShortfall.isLessThan(deliveryDeficit) || !completesPayment) {
         log.warn('payment cannot complete: exchange rate dropped below minimum')
-        request.addConnectionClose().send()
         return PaymentError.InsufficientExchangeRate
       }
 
-      minDestinationAmount = estimatedDestinationAmount
+      minDestinationAmount = projectedDestinationAmount
     }
 
-    request
+    // Update in-flight amounts (request will be queued & applied synchronously)
+    this.sourceAmountInFlight = this.sourceAmountInFlight.add(sourceAmount)
+    this.destinationAmountInFlight = this.destinationAmountInFlight.add(highEndDestinationAmount)
+    this.availableDeliveryShortfall = this.availableDeliveryShortfall.subtract(deliveryDeficit)
+    this.emitProgressEvent()
+
+    request = new RequestBuilder(request)
       .setSourceAmount(sourceAmount)
       .setMinDestinationAmount(minDestinationAmount)
       .enableFulfillment()
-      .addFrames(new StreamMoneyFrame(DEFAULT_STREAM_ID, 1))
-      .send()
-  }
+      .addFrames(new StreamMoneyFrame(PaymentController.DEFAULT_STREAM_ID, 1))
+      .build()
 
-  applyRequest(request: StreamRequest): (reply: StreamReply) => void {
-    const { sourceAmount, minDestinationAmount, isFulfillable, log } = request
-
-    let highEndDestinationAmount = Int.ZERO
-    let deliveryDeficit = Int.ZERO
-
-    if (this.target && isFulfillable) {
-      // Estimate the most that this packet will deliver
-      highEndDestinationAmount = minDestinationAmount.orGreater(
-        this.target.rateCalculator.estimateDestinationAmount(sourceAmount)[1]
-      )
-
-      // Update in-flight amounts
-      this.sourceAmountInFlight = this.sourceAmountInFlight.add(sourceAmount)
-      this.destinationAmountInFlight = this.destinationAmountInFlight.add(highEndDestinationAmount)
-
-      // Update the delivery shoftfall, if applicable
-      const baselineMinDestinationAmount = sourceAmount.multiplyCeil(this.target.minExchangeRate)
-      deliveryDeficit = baselineMinDestinationAmount.subtract(minDestinationAmount)
-      if (deliveryDeficit.isPositive()) {
-        this.availableDeliveryShortfall = this.availableDeliveryShortfall.subtract(deliveryDeficit)
-      }
-    }
-
-    return (reply: StreamReply) => {
-      let { destinationAmount } = reply
+    this.send(request).then((reply) => {
+      // Delivered amount must be *at least* the minimum acceptable amount we told the receiver
+      // No matter what, since they fulfilled it, we must assume they got at least the minimum
+      const destinationAmount = minDestinationAmount.orGreater(reply.destinationAmount)
 
       if (reply.isFulfill()) {
-        // Delivered amount must be *at least* the minimum acceptable amount we told the receiver
-        // No matter what, since they fulfilled it, we must assume they got at least the minimum
-        if (!destinationAmount) {
-          // Technically, an intermediary could strip the data so we can't ascertain whose fault this is
-          log.warn('ending payment: packet fulfilled with no authentic STREAM data')
-          destinationAmount = minDestinationAmount
-          this.encounteredProtocolViolation = true
-        } else if (destinationAmount.isLessThan(minDestinationAmount)) {
-          log.warn(
-            'ending payment: receiver violated protocol. packet below minimum exchange rate was fulfilled. delivered: %s, min destination amount: %s',
-            destinationAmount,
-            minDestinationAmount
-          )
-          destinationAmount = minDestinationAmount
-          this.encounteredProtocolViolation = true
-        } else {
-          log.trace(
-            'packet sent: %s, packet delivered: %s, min destination amount: %s',
-            sourceAmount,
-            destinationAmount,
-            minDestinationAmount
-          )
-        }
-
         this.amountSent = this.amountSent.add(sourceAmount)
         this.amountDelivered = this.amountDelivered.add(destinationAmount)
-      } else if (destinationAmount?.isLessThan(minDestinationAmount)) {
+
         log.debug(
-          'packet rejected for insufficient rate: min destination amount: %s, received amount: %s',
-          minDestinationAmount,
-          destinationAmount
+          'accounted for fulfill. sent=%s delivered=%s minDestination=%s',
+          sourceAmount,
+          destinationAmount,
+          minDestinationAmount
         )
       }
 
-      if (isFulfillable) {
-        this.sourceAmountInFlight = this.sourceAmountInFlight.subtract(sourceAmount)
-        this.destinationAmountInFlight = this.destinationAmountInFlight.subtract(
-          highEndDestinationAmount
+      if (reply.isReject() && reply.destinationAmount?.isLessThan(minDestinationAmount)) {
+        log.debug(
+          'packet rejected for insufficient rate. received=%s minDestination=%s',
+          destinationAmount,
+          minDestinationAmount
         )
-
-        // If this packet failed, "refund" the delivery deficit so it may be retried
-        if (deliveryDeficit.isPositive() && reply.isReject()) {
-          this.availableDeliveryShortfall = this.availableDeliveryShortfall.add(deliveryDeficit)
-        }
       }
 
-      if (this.target?.type === PaymentType.FixedSend) {
-        log.trace(
-          'payment has sent %s of %s, %s in-flight',
+      // Update in-flight amounts
+      this.sourceAmountInFlight = this.sourceAmountInFlight.subtract(sourceAmount)
+      this.destinationAmountInFlight = this.destinationAmountInFlight.subtract(
+        highEndDestinationAmount
+      )
+      // If this packet failed, "refund" the delivery deficit so it may be retried
+      if (reply.isReject()) {
+        this.availableDeliveryShortfall = this.availableDeliveryShortfall.add(deliveryDeficit)
+      }
+
+      if (this.target.type === PaymentType.FixedSend) {
+        log.debug(
+          'payment sent %s of %s. inflight=%s',
           this.amountSent,
           this.target.maxSourceAmount,
           this.sourceAmountInFlight
         )
-      } else if (this.target?.type === PaymentType.FixedDelivery) {
-        log.trace(
-          'payment has delivered %s of %s, %s in-flight',
+      } else {
+        log.debug(
+          'payment delivered %s of %s. inflight=%s (destination units)',
           this.amountDelivered,
           this.target.minDeliveryAmount,
           this.destinationAmountInFlight
         )
       }
 
-      this.updateReceiveMax(reply)
-    }
-  }
+      this.emitProgressEvent()
 
-  private updateReceiveMax({ frames, log }: StreamReply) {
-    frames
-      ?.filter((frame): frame is StreamMaxMoneyFrame => frame.type === FrameType.StreamMaxMoney)
-      .filter((frame) => frame.streamId.equals(DEFAULT_STREAM_ID))
-      .forEach((frame) => {
-        log.trace(
-          'recipient told us the stream has received %s of up to %s',
-          frame.totalReceived,
-          frame.receiveMax
+      // Handle protocol violations after all accounting has been performed
+      if (reply.isFulfill()) {
+        if (!reply.destinationAmount) {
+          // Technically, an intermediary could strip the data so we can't ascertain whose fault this is
+          log.warn('ending payment: packet fulfilled with no authentic STREAM data')
+          return PaymentError.ReceiverProtocolViolation
+        } else if (reply.destinationAmount.isLessThan(minDestinationAmount)) {
+          log.warn(
+            'ending payment: receiver violated procotol. packet fulfilled below min exchange rate. delivered=%s minDestination=%s',
+            destinationAmount,
+            minDestinationAmount
+          )
+          return PaymentError.ReceiverProtocolViolation
+        }
+      }
+
+      this.remoteReceiveMax =
+        this.updateReceiveMax(reply)?.orGreater(this.remoteReceiveMax) ?? this.remoteReceiveMax
+      if (this.remoteReceiveMax?.isLessThan(this.target.minDeliveryAmount)) {
+        log.error(
+          'ending payment: minimum delivery amount is too much for recipient. minDelivery=%s receiveMax=%s',
+          this.target.minDeliveryAmount,
+          this.remoteReceiveMax
         )
+        return PaymentError.IncompatibleReceiveMax
+      }
+    })
 
-        // Note: totalReceived *can* be greater than receiveMax! (`ilp-protocol-stream` allows receiving 1% more than the receiveMax)
-        const receiveMax = Int.from(frame.receiveMax)
-
-        // Remote receive max can only increase
-        this.remoteReceiveMax = this.remoteReceiveMax?.orGreater(receiveMax) ?? receiveMax
-      })
+    // Immediately schedule another request to be sent
+    return this.run()
   }
 
-  paymentComplete(): Promise<void> {
-    return this.paymentStatus.promise
+  private updateReceiveMax({ frames }: StreamReply): Int | undefined {
+    return frames
+      ?.filter((frame): frame is StreamMaxMoneyFrame => frame.type === FrameType.StreamMaxMoney)
+      .filter((frame) => frame.streamId.equals(PaymentController.DEFAULT_STREAM_ID))
+      .map((frame) => Int.from(frame.receiveMax))?.[0]
   }
 
-  getAmountSent(): Int {
-    return this.amountSent
+  private emitProgressEvent(): void {
+    this.progressHandler?.(this.buildReceipt())
   }
 
-  getAmountDelivered(): Int {
-    return this.amountDelivered
+  private buildReceipt(): Receipt {
+    return {
+      streamReceipt: this.controllers.get(ReceiptController).getReceipt(),
+      amountSent: this.amountSent,
+      amountDelivered: this.amountDelivered,
+      sourceAmountInFlight: this.sourceAmountInFlight,
+      destinationAmountInFlight: this.destinationAmountInFlight,
+    }
   }
 }

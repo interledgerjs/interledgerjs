@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import axios, { AxiosResponse } from 'axios'
-import { NonNegativeNumber, isNonNegativeNumber } from '../utils'
+import { NonNegativeRational, isNonNegativeRational } from '../utils'
 
 const DAY_DURATION_MS = 24 * 60 * 60 * 1000
 
@@ -38,7 +38,7 @@ const isValidResponse = (o: any): o is CoinCapResponse =>
 const parseResponse = ({
   data,
 }: AxiosResponse<any>): {
-  [symbol: string]: NonNegativeNumber
+  [symbol: string]: NonNegativeRational
 } => {
   const minimumUpdatedTimestamp = Date.now() - DAY_DURATION_MS
   if (!isValidResponse(data) || data.timestamp < minimumUpdatedTimestamp) {
@@ -50,7 +50,7 @@ const parseResponse = ({
       pair.symbol,
       'priceUsd' in pair ? +pair.priceUsd : +pair.rateUsd,
     ])
-    .filter((pair): pair is [string, NonNegativeNumber] => isNonNegativeNumber(pair[1]))
+    .filter((pair): pair is [string, NonNegativeRational] => isNonNegativeRational(pair[1]))
     .reduce(
       (acc, [symbol, price]) => ({
         ...acc,
@@ -61,7 +61,7 @@ const parseResponse = ({
 }
 
 export const fetchCoinCapRates = async (): Promise<{
-  [symbol: string]: NonNegativeNumber
+  [symbol: string]: NonNegativeRational
 }> => ({
   ...parseResponse(
     await axios.get(COINCAP_ASSETS_URL, {

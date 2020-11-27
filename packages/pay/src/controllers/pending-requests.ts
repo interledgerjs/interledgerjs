@@ -1,8 +1,13 @@
 import { StreamController } from '.'
-import { PromiseResolver, sleep } from '../utils'
+import { PromiseResolver } from '../utils'
+import { StreamRequest } from '../request'
 
 /** Wrap all pending requests in Promises to await their completion */
-export class PendingRequestTracker implements StreamController {
+export class InFlightTracker implements StreamController {
+  /** Maximum number of packets to have in-flight, yet to receive a Fulfill or Reject */
+  static MAX_INFLIGHT_PACKETS = 20
+
+  /** Set of all in-flight requests, with promises that resolve after their side effects are applied */
   private readonly inFlightRequests = new Set<Promise<void>>()
 
   /** Returns array of in-flight request Promises that resolve when each finishes */
@@ -10,8 +15,9 @@ export class PendingRequestTracker implements StreamController {
     return [...this.inFlightRequests]
   }
 
-  nextState(): Promise<void> | void {
-    return this.inFlightRequests.size > 0 ? Promise.race(this.getPendingRequests()) : sleep(5)
+  nextState(request: StreamRequest): StreamRequest | Promise<void> {
+    const exceedsMaxInFlight = this.inFlightRequests.size >= InFlightTracker.MAX_INFLIGHT_PACKETS
+    return exceedsMaxInFlight ? Promise.race(this.getPendingRequests()) : request
   }
 
   applyRequest(): () => void {

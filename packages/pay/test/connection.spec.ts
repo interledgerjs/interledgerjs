@@ -1,47 +1,143 @@
 /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/no-non-null-assertion */
-import { it, expect } from '@jest/globals'
-import { MirrorPlugin } from './helpers/plugin'
-import { createConnection } from '../src/connection'
-import { StreamReject } from '../src/controllers'
+import { expect, it } from '@jest/globals'
 import { randomBytes } from 'crypto'
-import {
-  Packet,
-  IlpPacketType,
-  ConnectionMaxStreamIdFrame,
-  ConnectionDataBlockedFrame,
-} from 'ilp-protocol-stream/dist/src/packet'
 import createLogger from 'ilp-logger'
 import {
-  serializeIlpReject,
   deserializeIlpPrepare,
-  serializeIlpFulfill,
-  serializeIlpPrepare,
   deserializeIlpReject,
-  IlpPrepare,
   IlpAddress,
   IlpError,
+  IlpPrepare,
+  serializeIlpFulfill,
+  serializeIlpPrepare,
+  serializeIlpReject,
 } from 'ilp-packet'
 import {
   generateFulfillment,
-  generatePskEncryptionKey,
   generateFulfillmentKey,
+  generatePskEncryptionKey,
 } from 'ilp-protocol-stream/dist/src/crypto'
-import { Int } from '../src/utils'
+import {
+  ConnectionDataBlockedFrame,
+  ConnectionMaxStreamIdFrame,
+  IlpPacketType,
+  Packet,
+} from 'ilp-protocol-stream/dist/src/packet'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
+import { createConnection, StreamConnection } from '../src/connection'
+import { StreamReject } from '../src/request'
+import { Int } from '../src/utils'
+import { MirrorPlugin } from './helpers/plugin'
+import { PaymentError } from '../src'
 
 const destinationAddress = 'private.bob' as IlpAddress
 const sharedSecret = randomBytes(32)
 const expiresAt = new Date(Date.now() + 30000)
 const log = createLogger('ilp-pay')
 
-describe('handles requests', () => {
+describe('connection', () => {
+  it('catches error if plugin fails to connect', async () => {
+    const plugin = {
+      async connect() {
+        throw new Error('Failed to connect')
+      },
+      async disconnect() {},
+      async sendData() {
+        return Buffer.alloc(0)
+      },
+      registerDataHandler() {},
+      deregisterDataHandler() {},
+      isConnected() {
+        return true
+      },
+    }
+
+    const error = (await createConnection(plugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as PaymentError
+    expect(error).toBe(PaymentError.Disconnected)
+  })
+
+  it('times out if plugin never connects', async () => {
+    const plugin = {
+      connect() {
+        return new Promise<void>(() => {})
+      },
+      async disconnect() {},
+      async sendData() {
+        return Buffer.alloc(0)
+      },
+      registerDataHandler() {},
+      deregisterDataHandler() {},
+      isConnected() {
+        return true
+      },
+    }
+
+    const error = (await createConnection(plugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as PaymentError
+    expect(error).toBe(PaymentError.Disconnected)
+  }, 15_000)
+
+  it('catches plugin disconnect errors', async () => {
+    const plugin = {
+      async connect() {},
+      async disconnect() {
+        throw new Error('Failed to disconnect')
+      },
+      async sendData() {
+        return Buffer.alloc(0)
+      },
+      registerDataHandler() {},
+      deregisterDataHandler() {},
+      isConnected() {
+        return true
+      },
+    }
+
+    const { close } = (await createConnection(plugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
+    await close()
+  })
+
+  it('times out if plugin never disconnects', async () => {
+    const plugin = {
+      async connect() {},
+      disconnect() {
+        return new Promise<void>(() => {})
+      },
+      async sendData() {
+        return Buffer.alloc(0)
+      },
+      registerDataHandler() {},
+      deregisterDataHandler() {},
+      isConnected() {
+        return true
+      },
+    }
+
+    const { close } = (await createConnection(plugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
+    await close()
+  }, 10_000)
+
   it('rejects all incoming packets', async () => {
     const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    await createConnection(receiverPlugin, sharedSecret)
+    await createConnection(receiverPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })
 
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
 
@@ -71,7 +167,10 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const sendRequest = await createConnection(senderPlugin, sharedSecret)
+    const { sendRequest } = (await createConnection(senderPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     receiverPlugin.registerDataHandler(async () =>
       serializeIlpPrepare({
@@ -90,7 +189,7 @@ describe('validates replies', () => {
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 
@@ -107,7 +206,10 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const sendRequest = await createConnection(senderPlugin, sharedSecret)
+    const { sendRequest } = (await createConnection(senderPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     // Data handler never resolves
     receiverPlugin.registerDataHandler(() => new Promise(() => {}))
@@ -119,7 +221,7 @@ describe('validates replies', () => {
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 
@@ -136,7 +238,10 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const sendRequest = await createConnection(senderPlugin, sharedSecret)
+    const { sendRequest } = (await createConnection(senderPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     receiverPlugin.registerDataHandler(() => {
       throw new Error('Unable to process request')
@@ -149,7 +254,7 @@ describe('validates replies', () => {
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 
@@ -175,7 +280,10 @@ describe('validates replies', () => {
       deregisterDataHandler() {},
     }
 
-    const sendRequest = await createConnection(plugin, sharedSecret)
+    const { sendRequest } = (await createConnection(plugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     const reply = await sendRequest({
       destinationAddress,
@@ -184,7 +292,7 @@ describe('validates replies', () => {
       sourceAmount: Int.ONE,
       minDestinationAmount: Int.ONE,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 
@@ -201,7 +309,10 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const sendRequest = await createConnection(senderPlugin, sharedSecret)
+    const { sendRequest } = (await createConnection(senderPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     receiverPlugin.registerDataHandler(async () =>
       serializeIlpFulfill({
@@ -217,7 +328,7 @@ describe('validates replies', () => {
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 
@@ -237,7 +348,10 @@ describe('validates replies', () => {
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
-    const sendRequest = await createConnection(senderPlugin, sharedSecret)
+    const { sendRequest } = (await createConnection(senderPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     receiverPlugin.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
@@ -259,7 +373,7 @@ describe('validates replies', () => {
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 
@@ -279,7 +393,10 @@ describe('validates replies', () => {
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
-    const sendRequest = await createConnection(senderPlugin, sharedSecret)
+    const { sendRequest } = (await createConnection(senderPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     receiverPlugin.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
@@ -302,7 +419,7 @@ describe('validates replies', () => {
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 
@@ -319,7 +436,10 @@ describe('validates replies', () => {
     await senderPlugin.connect()
     await receiverPlugin.connect()
 
-    const sendRequest = await createConnection(senderPlugin, sharedSecret)
+    const { sendRequest } = (await createConnection(senderPlugin, {
+      sharedSecret,
+      destinationAddress,
+    })) as StreamConnection
 
     const replyData = randomBytes(100)
     receiverPlugin.registerDataHandler(async () =>
@@ -338,7 +458,7 @@ describe('validates replies', () => {
       sourceAmount: Int.from(100)!,
       minDestinationAmount: Int.from(99)!,
       isFulfillable: true,
-      requestFrames: [],
+      frames: [],
       log,
     })
 

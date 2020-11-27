@@ -1,6 +1,6 @@
 import { StreamController, StreamRequest, StreamReply, ControllerMap, NextRequest } from '.'
 import { IlpError } from 'ilp-packet'
-import { Int, PositiveInt, Ratio, NonNegativeNumber, PositiveRatio } from '../utils'
+import { Int, PositiveInt, Ratio, NonNegativeRational, PositiveRatio } from '../utils'
 import { PendingRequestTracker } from './pending-requests'
 import createLogger from 'ilp-logger'
 import { sleep } from '../utils'
@@ -20,7 +20,7 @@ export class SimpleCongestionController implements StreamController {
   private nextBackoff = 0
   private amountInFlight = Int.ZERO
 
-  private static DECREASE_FACTOR = Ratio.from(0.5 as NonNegativeNumber) as PositiveRatio
+  private static DECREASE_FACTOR = Ratio.from(0.5 as NonNegativeRational) as PositiveRatio
 
   constructor(initialWindow: PositiveInt) {
     this.defaultWindowSize = initialWindow
@@ -190,7 +190,7 @@ export class CongestionController implements StreamController {
     }
   }
 
-  // TODO FOr efficiency, update the bandwidth limit right here?
+  // TODO For efficiency, update the bandwidth limit right here?
 
   /** Remove old requests from throughput calculations */
   private pruneWindow() {
@@ -200,7 +200,7 @@ export class CongestionController implements StreamController {
     // - # of errors?
     // - # or requests (ack or error)? -> TODO This might be the way to go, preferable to time?
 
-    const requestsToPrune = Math.max(0, this.requests.length - 20) // TODO ?
+    const requestsToPrune = Math.max(0, this.requests.length - 40) // TODO ?
     this.requests.splice(0, requestsToPrune)
     return
 

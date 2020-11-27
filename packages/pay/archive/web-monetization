@@ -3,56 +3,69 @@ import EventEmitter from 'eventemitter3'
 import { isPaymentError, PaymentError } from '.'
 import { AssetDetails, AssetDetailsController } from './controllers/asset-details'
 import { queryAccount } from './open-payments'
-import { ControllerMap, StreamController, StreamReply, NextRequest } from './controllers'
+import {
+  ControllerMap,
+  StreamController,
+  StreamReply,
+  NextRequest,
+  StreamRequest,
+} from './controllers'
 import { SequenceController } from './controllers/sequence'
 import { FailureController } from './controllers/failure'
 import { MaxPacketAmountController } from './controllers/max-packet'
 import { PacingController } from './controllers/pacer'
 import { PendingRequestTracker } from './controllers/pending-requests'
-import {
-  SimpleCongestionController,
-  CongestionController,
-} from './controllers/liquidity-congestion'
+import { CongestionController } from './controllers/liquidity-congestion'
 import { createConnection } from './connection'
-import { Int, PositiveInt, getConnectionLogger, timeout } from './utils'
+import { Int, getConnectionLogger, timeout, PromiseResolver } from './utils'
 import {
   StreamMoneyFrame,
   FrameType,
   StreamReceiptFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { DEFAULT_STREAM_ID } from './controllers/payment'
-import { createSendLoop, SendLoop } from './send-loop'
+import { createSendLoop } from './send-loop'
 import { ExpiryController } from './controllers/expiry'
 import createLogger from 'ilp-logger'
+import BigNumber from 'bignumber.js'
+import Long from 'long'
 
 /** Event when additional funds delivered after a packet is fulfilled */
 export interface MoneyEvent {
+  /** TODO */
+  amountSent: string
   /** Amount delivered to the recipient payment pointer, in the destination asset and units */
-  amount: string
+  amountDelivered: string
   /** STREAM receipt attesting the amount delivered to a third-party verifier */
   receipt?: string
 }
 
-// TODO `SimpleAmountController`, `SendInfinityController` ...
-/** TODO explain, rename this? "lossy" "fast + simple" "QuickDirtyAmountController" */
-class UnlimitedAmountController implements StreamController {
-  private initialPacketAmount: PositiveInt
+class SimpleAmountController implements StreamController {
+  private amountToSend = Int.ZERO
+  private amountSent = Int.ZERO
+  private amountInFlight = Int.ZERO
 
   public progressEmitter = new EventEmitter<{
     progress: [MoneyEvent]
   }>()
 
-  constructor(initialPacketAmount: PositiveInt) {
-    this.initialPacketAmount = initialPacketAmount
+  private getAvailableToSend(): Int {
+    return this.amountToSend.subtract(this.amountSent).subtract(this.amountInFlight)
+  }
+
+  queueAmount(amount: Int) {
+    this.amountToSend = this.amountToSend.add(amount)
   }
 
   nextState(request: NextRequest, controllers: ControllerMap): void {
-    const sourceAmount = (
-      controllers.get(MaxPacketAmountController).getNextMaxPacketAmount() ??
-      this.initialPacketAmount
-    )
+    const availableToSend = this.getAvailableToSend()
+    if (!availableToSend.isPositive()) {
+      return
+    }
+
+    const sourceAmount = availableToSend
       .orLesser(controllers.get(CongestionController).getRemainingInWindow())
-      .orLesser(Int.MAX_U64)
+      .orLesser(controllers.get(MaxPacketAmountController).getNextMaxPacketAmount() ?? Int.MAX_U64)
 
     request
       .setSourceAmount(sourceAmount)
@@ -62,11 +75,21 @@ class UnlimitedAmountController implements StreamController {
       .send()
   }
 
-  applyRequest() {
+  applyRequest({ sourceAmount, isFulfillable }: StreamRequest) {
+    if (!isFulfillable) {
+      return
+    }
+
+    this.amountInFlight = this.amountInFlight.add(sourceAmount)
+
     return (reply: StreamReply) => {
-      if (!reply.isFulfill() || !reply.destinationAmount) {
+      this.amountInFlight = this.amountInFlight.subtract(sourceAmount)
+
+      if (!reply.isFulfill()) {
         return
       }
+
+      this.amountSent = this.amountSent.add(sourceAmount)
 
       // Since there's no delivery enforcement, no verification of the receipt is possible
       const receipt = reply.frames
@@ -74,26 +97,56 @@ class UnlimitedAmountController implements StreamController {
         ?.receipt.toString('base64')
 
       this.progressEmitter.emit('progress', {
-        amount: reply.destinationAmount.toString(),
+        // TODO Include totals here, too? Or just total sent?
+        amountSent: sourceAmount.toString(),
+        amountDelivered: reply.destinationAmount?.toString() ?? '0',
         receipt,
       })
     }
   }
 }
 
-// TODO Rename this to something else?
+/** TODO Explain */
+class ConnectionCloseController implements StreamController {
+  private shouldClose = false
+  private closeStatus = new PromiseResolver<void>()
+
+  nextState(request: NextRequest) {
+    if (this.shouldClose) {
+      request.addConnectionClose().send()
+      this.closeStatus.resolve() // Safe to apply side effects
+    }
+  }
+
+  close(): Promise<void> {
+    this.shouldClose = true
+    return this.closeStatus.promise
+  }
+}
+
+// TODO Rename this to something else? `PaymentStream`?
 export interface MonetizationStream
   extends EventEmitter<{
-      progress: [MoneyEvent]
-    }>,
-    SendLoop {
+    progress: [MoneyEvent] // TODO Also include the amount sent here?
+  }> {
+  /** TODO expalin */
+  addAmount(amount: number): void
+  /** TODO explain */
+  start(): Promise<PaymentError | void>
+  /** TODO explain */
+  pause(): Promise<PaymentError | void>
+  /** Tell the receiver the connection is closed */
+  end(): Promise<PaymentError | void>
+  /** TODO explain */
   destinationAsset: AssetDetails | undefined
 }
 
+// TODO rename this?
 export const monetize = async (options: {
   paymentPointer: string
   plugin: Plugin
-  initialPacketAmount: number // TODO What type should this be? BigNumber.Value? // Optional, but recommended so an F08 isn't required
+  // TODO Should this be optional/only used in the "send unlimited" case? Or does should is it okay to default to max u64?
+  // initialPacketAmount: number // TODO What type should this be? BigNumber.Value? // Optional, but recommended so an F08 isn't required
   useFarFutureExpiry?: boolean
 }): Promise<MonetizationStream> => {
   const { plugin, useFarFutureExpiry } = options
@@ -115,16 +168,6 @@ export const monetize = async (options: {
     throw connectResult
   }
 
-  const initialPacketAmount = Int.from(options.initialPacketAmount)
-  if (
-    !initialPacketAmount ||
-    !initialPacketAmount.isPositive() ||
-    !initialPacketAmount.isLessThanOrEqualTo(Int.MAX_U64)
-  ) {
-    log.debug('invalid config: initial packet amount is not a positive int in the u64 range')
-    throw PaymentError.InvalidSourceAmount // TODO Add a new error type here?
-  }
-
   const credentialsOrError = await queryAccount(options.paymentPointer)
   if (isPaymentError(credentialsOrError)) {
     throw credentialsOrError
@@ -136,23 +179,52 @@ export const monetize = async (options: {
   const controllers: ControllerMap = new Map()
     .set(SequenceController, new SequenceController())
     .set(ExpiryController, new ExpiryController(useFarFutureExpiry))
+    .set(ConnectionCloseController, new ConnectionCloseController())
     .set(FailureController, new FailureController())
     .set(MaxPacketAmountController, new MaxPacketAmountController())
     .set(PacingController, new PacingController())
     .set(AssetDetailsController, new AssetDetailsController(destinationAsset))
     .set(CongestionController, new CongestionController()) // TODO
-    .set(UnlimitedAmountController, new UnlimitedAmountController(initialPacketAmount))
+    .set(SimpleAmountController, new SimpleAmountController())
     .set(PendingRequestTracker, new PendingRequestTracker())
 
   const sendRequest = await createConnection(plugin, sharedSecret)
   const sendLoop = createSendLoop(sendRequest, controllers, destinationAddress, log)
 
-  const { progressEmitter } = controllers.get(UnlimitedAmountController)
+  const { progressEmitter } = controllers.get(SimpleAmountController)
 
   // Combine the event emitter and send loop into the "monetization stream"
-  return Object.assign(progressEmitter, sendLoop, {
+  return Object.assign(progressEmitter, {
     get destinationAsset() {
       return controllers.get(AssetDetailsController).getDestinationAsset()
+    },
+
+    // TODO Should this take a number, Long, string, BigNumber, BigInt...!?!?!?
+    //      Why make it so complex?
+    addAmount(amount: string | number | Long | BigNumber) {
+      // TODO Fix this?
+      const parsedAmount = Int.from(amount)
+      const a = Int.from(Long.UONE)
+      if (parsedAmount) {
+        controllers.get(SimpleAmountController).sendMore(parsedAmount)
+      }
+    },
+
+    start() {
+      return sendLoop.start()
+    },
+
+    pause() {
+      return sendLoop.stop()
+    },
+
+    async end() {
+      await Promise.race([
+        sendLoop.start() as Promise<PaymentError>,
+        controllers.get(ConnectionCloseController).close(),
+      ])
+
+      return sendLoop.stop()
     },
   })
 }

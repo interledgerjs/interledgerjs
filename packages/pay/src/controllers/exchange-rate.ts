@@ -1,6 +1,7 @@
-import { StreamController, StreamReply, StreamRequest } from '.'
-import { Ratio, PositiveInt, Int } from '../utils'
 import { Logger } from 'ilp-logger'
+import { StreamController } from '.'
+import { StreamReply, StreamRequest } from '../request'
+import { Int, PositiveInt, Ratio } from '../utils'
 
 /** Track exchange rates and estimate source/destination amount */
 export class ExchangeRateCalculator {
@@ -19,7 +20,7 @@ export class ExchangeRateCalculator {
   constructor(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger) {
     this.upperBoundRate = new Ratio(receivedAmount.add(Int.ONE), sourceAmount)
     this.lowerBoundRate = new Ratio(receivedAmount, sourceAmount)
-    log.trace('setting initial rate to [%s, %s]', this.lowerBoundRate, this.upperBoundRate)
+    log.debug('setting initial rate to [%s, %s]', this.lowerBoundRate, this.upperBoundRate)
 
     this.sentAmounts.set(receivedAmount.value, sourceAmount)
     this.receivedAmounts.set(sourceAmount.value, receivedAmount)
@@ -41,7 +42,7 @@ export class ExchangeRateCalculator {
       packetUpperBoundRate.isLessThanOrEqualTo(this.lowerBoundRate) ||
       packetLowerBoundRate.isGreaterThanOrEqualTo(this.upperBoundRate)
     if (shouldResetExchangeRate) {
-      log.trace(
+      log.debug(
         'exchange rate changed. resetting to [%s, %s]',
         packetLowerBoundRate,
         packetUpperBoundRate
@@ -53,7 +54,7 @@ export class ExchangeRateCalculator {
     }
 
     if (packetLowerBoundRate.isGreaterThan(this.lowerBoundRate)) {
-      log.trace(
+      log.debug(
         'increasing probed rate lower bound from %s to %s',
         this.lowerBoundRate,
         packetLowerBoundRate
@@ -62,7 +63,7 @@ export class ExchangeRateCalculator {
     }
 
     if (packetUpperBoundRate.isLessThan(this.upperBoundRate)) {
-      log.trace(
+      log.debug(
         'reducing probed rate upper bound from %s to %s',
         this.upperBoundRate,
         packetUpperBoundRate
@@ -127,7 +128,11 @@ export class ExchangeRateCalculator {
 
 /** Compute the realized exchange rate from STREAM replies */
 export class ExchangeRateController implements StreamController {
-  state?: ExchangeRateCalculator
+  private state?: ExchangeRateCalculator
+
+  getRateCalculator(): ExchangeRateCalculator | undefined {
+    return this.state
+  }
 
   applyRequest({ sourceAmount, log }: StreamRequest): (reply: StreamReply) => void {
     return ({ destinationAmount }: StreamReply) => {

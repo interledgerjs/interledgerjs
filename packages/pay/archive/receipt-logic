@@ -1,0 +1,22 @@
+const alreadyDelivered = lookup(PaymentController).getAmountDelivered() ?? Int.ZERO
+
+// At the time the receipt is signed, the recipient *always* will have received:
+// the total amount delivered before we sent that packet, plus any amount that packet delivered
+// (Since in-flight Prepares may be received out-of-order from their corresponding Fulfills,
+//  we can't check the receipt amount against the total delivered amount after the reply is received).
+
+// It's unclear if a known invalid (under-reported) receipt is any worse than a stale or out-of-date receipt,
+// so right now, a warning is logged but the receipt is still saved.
+
+// Also, the verifier trusts the recipient wallet to not over-report a receipt,
+// and the sender is not incentivized to catch that error.
+
+const packetDelivered = reply.isFulfill()
+  ? request.minDestinationAmount.orGreater(reply.destinationAmount ?? Int.ZERO)
+  : Int.ZERO
+const minimumTotalDelivered = alreadyDelivered.add(packetDelivered)
+
+const newTotalReceived = Int.fromLong(receipt.totalReceived)
+if (newTotalReceived.isLessThan(minimumTotalDelivered)) {
+  reply.log.warn('received stream receipt for less than known received amount')
+}

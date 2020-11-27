@@ -2,7 +2,6 @@
 import { StreamServer } from '@interledger/stream-receiver'
 import { describe, expect, it, jest } from '@jest/globals'
 import Axios from 'axios'
-import BigNumber from 'bignumber.js'
 import getPort from 'get-port'
 import { createApp } from 'ilp-connector'
 import createLogger from 'ilp-logger'
@@ -14,9 +13,10 @@ import {
   serializeIlpFulfill,
   serializeIlpReject,
   serializeIlpReply,
+  IlpReply,
 } from 'ilp-packet'
 import PluginHttp from 'ilp-plugin-http'
-import { Connection, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
+import { Connection, createServer, DataAndMoneyStream, createReceipt } from 'ilp-protocol-stream'
 import {
   generateFulfillment,
   generateFulfillmentKey,
@@ -28,6 +28,7 @@ import {
   ConnectionAssetDetailsFrame,
   IlpPacketType,
   Packet,
+  StreamReceiptFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 import Long from 'long'
@@ -36,13 +37,15 @@ import { Writer } from 'oer-utils'
 import reduct from 'reduct'
 import { GenericContainer, Network, Wait } from 'testcontainers'
 import { v4 as uuid } from 'uuid'
-import { PaymentError, quote } from '../src'
-import { NextRequest } from '../src/controllers'
+import { PaymentError, setupPayment } from '../src'
 import { SequenceController } from '../src/controllers/sequence'
 import { fetchPaymentDetails } from '../src/open-payments'
 import { Int, PositiveInt, Ratio, sleep } from '../src/utils'
 import { MirrorPlugin } from './helpers/plugin'
 import { CustomBackend } from './helpers/rate-backend'
+import { StreamFulfill, DEFAULT_REQUEST } from '../src/request'
+import { PaymentController } from '../src/controllers/payment'
+import { ReceiptController } from '../src/controllers/receipt'
 
 describe('open payments', () => {
   const destinationAddress = 'g.wallet.receiver.12345'
@@ -121,28 +124,34 @@ describe('open payments', () => {
         sharedSecret: sharedSecret.toString('base64'),
       })
 
-    const details = await quote({
+    const { quote, invoice, destinationAsset, destinationAddress } = await setupPayment({
       invoiceUrl,
       plugin: senderPlugin1,
-      prices,
     })
-    expect(details.minDeliveryAmount).toEqual(new BigNumber(4.5601))
-    expect(details.invoice).toMatchObject({
+    const { minDeliveryAmount, close } = await quote({
+      prices,
+      sourceAsset: {
+        assetCode: 'EUR',
+        assetScale: 4,
+      },
+    })
+    expect(minDeliveryAmount.value).toBe(45601n)
+    expect(invoice).toMatchObject({
       invoiceUrl,
       accountUrl,
       expiresAt,
       description,
-      amountDelivered: new BigNumber(0),
-      amountToDeliver: new BigNumber(4.5601),
+      amountDelivered: Int.ZERO,
+      amountToDeliver: Int.from(45601),
     })
-    expect(details.destinationAccount).toMatchObject({
+    expect(destinationAsset).toMatchObject({
       assetCode: 'USD',
       assetScale: 4,
     })
-    expect(typeof details.destinationAccount.ilpAddress).toBe('string')
+    expect(destinationAddress).toBe(destinationAccount)
     expect(connectionHandler).toBeCalledTimes(1)
 
-    await details.cancel()
+    await close()
     expect(!senderPlugin1.isConnected())
 
     await app.shutdown()
@@ -189,10 +198,16 @@ describe('open payments', () => {
         sharedSecret: sharedSecret.toString('base64'),
       })
 
+    const { quote } = await setupPayment({
+      invoiceUrl,
+      plugin: senderPlugin,
+    })
     await expect(
       quote({
-        invoiceUrl,
-        plugin: senderPlugin,
+        sourceAsset: {
+          assetCode: 'EUR',
+          assetScale: 3,
+        },
       })
     ).rejects.toBe(PaymentError.InvoiceAlreadyPaid)
 
@@ -214,7 +229,7 @@ describe('open payments', () => {
     ).resolves.toBe(PaymentError.InvalidCredentials)
   })
 
-  it('fails if no way to fetch STREAM credentials was provided', async () => {
+  it('fails if no mechanism to fetch STREAM credentials was provided', async () => {
     await expect(fetchPaymentDetails({ plugin: new MirrorPlugin() })).resolves.toBe(
       PaymentError.InvalidCredentials
     )
@@ -337,7 +352,7 @@ describe('open payments', () => {
   it('resolves credentials from an Open Payments account', async () => {
     const scope = nock('https://open.mywallet.com')
       .get('/accounts/alice')
-      .matchHeader('Accept', (v) => v.includes('application/ilp-stream+json'))
+      .matchHeader('Accept', /application\/ilp-stream\+json*./)
       .reply(200, {
         id: 'https://open.mywallet.com/accounts/alice',
         accountServicer: 'https://open.mywallet.com/',
@@ -361,19 +376,10 @@ describe('open payments', () => {
     scope.done()
   })
 
-  it('resolves credentials from SPSP as fallback', async () => {
-    // Open Payments response is invalid
-    const scope1 = nock('https://alice.mywallet.com')
-      .get('/.well-known/open-payments')
-      .matchHeader('Accept', (v) => v.includes('application/ilp-stream+json'))
-      .reply(200, {
-        errorMessage: 'CRITICAL ERROR',
-      })
-
-    // SPSP response is valid, but is returned after Open Payments response
-    const scope2 = nock('https://alice.mywallet.com')
+  it('resolves credentials from SPSP', async () => {
+    const scope = nock('https://alice.mywallet.com')
       .get('/.well-known/pay')
-      .matchHeader('Accept', (v) => v.includes('application/spsp4+json'))
+      .matchHeader('Accept', /application\/spsp4\+json*./)
       .delay(1000)
       .reply(200, {
         destination_account: destinationAddress,
@@ -386,20 +392,19 @@ describe('open payments', () => {
       sharedSecret,
       destinationAddress,
     })
-    scope1.done()
-    scope2.done()
+    scope.done()
   })
 
-  it('fails if both account queries fail', async () => {
-    const scope = nock('https://open.mywallet.com').get(/.*/).twice().reply(500)
+  it('fails if account query fails', async () => {
+    const scope = nock('https://open.mywallet.com').get(/.*/).reply(500)
     await expect(fetchPaymentDetails({ paymentPointer: '$open.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope.done()
   })
 
-  it('fails if both account queries timeout', async () => {
-    const scope = nock('https://open.mywallet.com').get(/.*/).twice().delay(7000).reply(500)
+  it('fails if account query times out', async () => {
+    const scope = nock('https://open.mywallet.com').get(/.*/).delay(7000).reply(500)
     await expect(fetchPaymentDetails({ paymentPointer: '$open.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
@@ -407,20 +412,12 @@ describe('open payments', () => {
     nock.abortPendingRequests()
   })
 
-  it('fails if both account queries return invalid responses', async () => {
-    const scope = nock('https://example.com/foo').get(/.*/).reply(200, 'this is a string')
+  it('fails if account query returns an invalid response', async () => {
+    const scope1 = nock('https://example.com/foo').get(/.*/).reply(200, 'this is a string')
     await expect(fetchPaymentDetails({ paymentPointer: '$example.com/foo' })).resolves.toBe(
       PaymentError.QueryFailed
     )
-    scope.done()
-
-    // Invalid Open Payments response, doesn't support credentials/ilp+stream accept header
-    const scope1 = nock('https://alice.mywallet.com').get('/.well-known/open-payments').reply(200, {
-      id: 'https://alice.mywallet.com/',
-      accountServicer: 'https://mywallet.com/',
-      assetCode: 'RMB',
-      assetScale: 10,
-    })
+    scope1.done()
 
     // Invalid shared secret in SPSP response
     const scope2 = nock('https://alice.mywallet.com').get('/.well-known/pay').reply(200, {
@@ -431,13 +428,12 @@ describe('open payments', () => {
     await expect(fetchPaymentDetails({ paymentPointer: '$alice.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
-    scope1.done()
     scope2.done()
   })
 
   it('follows spsp redirect', async () => {
     const scope1 = nock('https://wallet1.example/').get('/.well-known/pay').reply(
-      301,
+      307, // Temporary redirect
       {},
       {
         Location: 'https://wallet2.example/.well-known/pay',
@@ -446,7 +442,7 @@ describe('open payments', () => {
 
     const scope2 = nock('https://wallet2.example/')
       .get('/.well-known/pay')
-      .matchHeader('Accept', (v) => v.includes('application/spsp4+json'))
+      .matchHeader('Accept', /application\/spsp4\+json*./)
       .reply(200, { destination_account: destinationAddress, shared_secret: sharedSecretBase64 })
 
     const credentials = await fetchPaymentDetails({ paymentPointer: 'https://wallet1.example' })
@@ -460,13 +456,13 @@ describe('open payments', () => {
 })
 
 // TODO Where to have these?
-it.todo('fails if the invoice was already paid')
+it.todo('quotes remaining amount to deliver in the invoice')
 it.todo('fails if the invoice expires before the payment can complete')
 
-describe('quoting flow', () => {
+describe('setup flow', () => {
   it('fails if given no payment pointer or STREAM credentials', async () => {
     await expect(
-      quote({
+      setupPayment({
         plugin: new MirrorPlugin(),
       })
     ).rejects.toBe(PaymentError.InvalidCredentials)
@@ -474,7 +470,7 @@ describe('quoting flow', () => {
 
   it('fails given a semantically invalid payment pointer', async () => {
     await expect(
-      quote({
+      setupPayment({
         plugin: new MirrorPlugin(),
         paymentPointer: 'ht$tps://example.com',
       })
@@ -483,7 +479,7 @@ describe('quoting flow', () => {
 
   it('fails if payment pointer cannot resolve', async () => {
     await expect(
-      quote({
+      setupPayment({
         plugin: new MirrorPlugin(),
         paymentPointer: 'https://example.com/foo/bar',
       })
@@ -494,7 +490,7 @@ describe('quoting flow', () => {
     const scope = nock('http://example.com').get('/foo').reply(200, { meh: 'why?' })
 
     await expect(
-      quote({
+      setupPayment({
         plugin: new MirrorPlugin(),
         paymentPointer: `http://example.com/foo`,
       })
@@ -536,7 +532,7 @@ describe('quoting flow', () => {
 
     const scope = nock('https://example.com')
       .get('/.well-known/pay')
-      .matchHeader('Accept', (v) => v.includes('application/spsp4+json'))
+      .matchHeader('Accept', /application\/spsp4\+json*./)
       .reply(() => {
         const credentials = streamServer.generateAddressAndSecret()
 
@@ -550,59 +546,20 @@ describe('quoting flow', () => {
         ]
       })
 
-    const details = await quote({
+    const details = await setupPayment({
       paymentPointer: 'https://example.com',
       plugin: senderPlugin1,
-      amountToSend: new BigNumber(1000),
     })
 
     // Connection should be able to be established after resolving payment pointer
     expect(connectionHandler.mock.calls.length).toBe(1)
     scope.done()
 
-    await details.cancel()
+    await details.close()
     expect(!senderPlugin1.isConnected())
 
     await app.shutdown()
     await streamServer.close()
-  })
-
-  it('fails if the slippage is invalid', async () => {
-    await expect(
-      quote({
-        plugin: new MirrorPlugin(),
-        sharedSecret: Buffer.alloc(32),
-        destinationAddress: 'g.recipient',
-        slippage: NaN,
-      })
-    ).rejects.toBe(PaymentError.InvalidSlippage)
-
-    await expect(
-      quote({
-        plugin: new MirrorPlugin(),
-        sharedSecret: Buffer.alloc(32),
-        destinationAddress: 'g.recipient',
-        slippage: Infinity,
-      })
-    ).rejects.toBe(PaymentError.InvalidSlippage)
-
-    await expect(
-      quote({
-        plugin: new MirrorPlugin(),
-        sharedSecret: Buffer.alloc(32),
-        destinationAddress: 'g.recipient',
-        slippage: 1.2,
-      })
-    ).rejects.toBe(PaymentError.InvalidSlippage)
-
-    await expect(
-      quote({
-        plugin: new MirrorPlugin(),
-        sharedSecret: Buffer.alloc(32),
-        destinationAddress: 'g.recipient',
-        slippage: -0.0001,
-      })
-    ).rejects.toBe(PaymentError.InvalidSlippage)
   })
 
   it('fails if plugin cannot connect', async () => {
@@ -622,7 +579,7 @@ describe('quoting flow', () => {
     }
 
     await expect(
-      quote({
+      setupPayment({
         plugin,
         destinationAddress: 'g.me',
         sharedSecret: Buffer.alloc(32),
@@ -630,243 +587,15 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.Disconnected)
   })
 
-  it('fails if plugin cannot handle IL-DCP requests', async () => {
-    const plugin = new MirrorPlugin()
-
-    await expect(
-      quote({
-        plugin,
-        destinationAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
-      })
-    ).rejects.toBe(PaymentError.UnknownSourceAsset)
-    expect(!plugin.isConnected())
-  })
-
-  it('fails on incompatible address schemes', async () => {
-    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'g.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        default: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
-          plugin: receiverPlugin,
-        },
-      },
-    })
-    await app.listen()
-
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        amountToSend: 10,
-        destinationAddress: 'test.unknown',
-        sharedSecret: Buffer.alloc(32),
-      })
-    ).rejects.toBe(PaymentError.IncompatibleInterledgerNetworks)
-    expect(!senderPlugin.isConnected())
-
-    await app.shutdown()
-  })
-
-  it('fails if amount to send is not a positive integer', async () => {
-    const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 4,
-          plugin: connectorPlugin,
-        },
-      },
-    })
-    await app.listen()
-
-    // Fails with negative source amount
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        amountToSend: -3.14,
-        destinationAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
-      })
-    ).rejects.toBe(PaymentError.InvalidSourceAmount)
-    expect(!senderPlugin.isConnected())
-
-    // Fails with 0 source amount
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        amountToSend: 0,
-        destinationAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
-      })
-    ).rejects.toBe(PaymentError.InvalidSourceAmount)
-    expect(!senderPlugin.isConnected())
-
-    // Fails with `NaN` source amount
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        amountToSend: NaN,
-        destinationAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
-      })
-    ).rejects.toBe(PaymentError.InvalidSourceAmount)
-    expect(!senderPlugin.isConnected())
-
-    // Fails with `Infinity` source amount
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        amountToSend: Infinity,
-        destinationAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
-      })
-    ).rejects.toBe(PaymentError.InvalidSourceAmount)
-    expect(!senderPlugin.isConnected())
-
-    await app.shutdown()
-  })
-
-  it('fails if amount to send is more precise than source account', async () => {
-    const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 3, // Asset scale only allows 3 units of precision
-          plugin: connectorPlugin,
-        },
-      },
-    })
-    await app.listen()
-
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        amountToSend: 100.0001,
-        destinationAddress: 'private.receiver',
-        sharedSecret: randomBytes(32),
-      })
-    ).rejects.toBe(PaymentError.InvalidSourceAmount)
-    expect(!senderPlugin.isConnected())
-
-    await app.shutdown()
-  })
-
-  it('fails if amount to deliver is not a positive integer', async () => {
-    const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 4,
-          plugin: connectorPlugin,
-        },
-      },
-    })
-    await app.listen()
-
-    // Fails with 0 delivery amount
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        amountToDeliver: Int.ZERO,
-        destinationAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
-      })
-    ).rejects.toBe(PaymentError.InvalidDestinationAmount)
-    expect(!senderPlugin.isConnected())
-
-    await app.shutdown()
-  })
-
-  it('fails if no amount to send or deliver was provided', async () => {
-    const [senderPlugin, connectorPlugin] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 3,
-          plugin: connectorPlugin,
-        },
-      },
-    })
-    await app.listen()
-
-    await expect(
-      quote({
-        plugin: senderPlugin,
-        destinationAddress: 'private.receiver',
-        sharedSecret: randomBytes(32),
-      })
-    ).rejects.toBe(PaymentError.UnknownPaymentTarget)
-    expect(!senderPlugin.isConnected())
-
-    await app.shutdown()
-  })
-
   it('fails on asset detail conflicts', async () => {
-    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
-    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 4,
-          plugin: senderPlugin2,
-        },
-        receiver: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 4,
-          plugin: receiverPlugin1,
-        },
-      },
-    })
-    await app.listen()
-
-    const streamServer = await createServer({
-      plugin: receiverPlugin2,
-    })
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
     const sharedSecret = randomBytes(32)
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
 
     // Create simple STREAM receiver that acks test packets,
     // but replies with conflicting asset details
-    receiverPlugin2.registerDataHandler(async (data) => {
+    receiverPlugin.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
 
       const streamRequest = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
@@ -886,46 +615,171 @@ describe('quoting flow', () => {
     })
 
     await expect(
-      quote({
-        plugin: senderPlugin1,
-        amountToDeliver: Int.from(100_0000),
+      setupPayment({
+        plugin: senderPlugin,
         destinationAddress: 'private.larry.receiver',
         sharedSecret,
       })
     ).rejects.toBe(PaymentError.DestinationAssetConflict)
+    expect(!senderPlugin.isConnected())
+  })
+})
 
-    expect(!senderPlugin1.isConnected())
+describe('quoting flow', () => {
+  it('fails if amount to send is not a positive integer', async () => {
+    const plugin = new MirrorPlugin()
+    const asset = {
+      assetCode: 'ABC',
+      assetScale: 4,
+    }
+    const { quote } = await setupPayment({
+      plugin,
+      destinationAsset: asset,
+      destinationAddress: 'private.foo',
+      sharedSecret: Buffer.alloc(32),
+    })
 
-    await app.shutdown()
-    await streamServer.close()
+    // Fails with negative source amount
+    await expect(
+      quote({
+        amountToSend: -2n,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSourceAmount)
+    expect(!plugin.isConnected())
+
+    // Fails with fractional source amount
+    await expect(
+      quote({
+        amountToSend: '3.14',
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSourceAmount)
+
+    // Fails with 0 source amount
+    await expect(
+      quote({
+        amountToSend: 0,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSourceAmount)
+
+    // Fails with `NaN` source amount
+    await expect(
+      quote({
+        amountToSend: NaN,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSourceAmount)
+
+    // Fails with `Infinity` source amount
+    await expect(
+      quote({
+        amountToSend: Infinity,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSourceAmount)
+
+    // Fails with Int if source amount is 0
+    await expect(
+      quote({
+        amountToSend: Int.ZERO,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSourceAmount)
   })
 
-  it('fails if no test packets are delivered', async () => {
-    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
-    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
-          plugin: senderPlugin2,
-        },
-        receiver: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
-          plugin: receiverPlugin1,
-        },
-      },
+  it('fails if amount to deliver is not a positive integer', async () => {
+    const plugin = new MirrorPlugin()
+    const asset = {
+      assetCode: 'ABC',
+      assetScale: 4,
+    }
+    const { quote } = await setupPayment({
+      plugin,
+      destinationAsset: asset,
+      destinationAddress: 'private.foo',
+      sharedSecret: Buffer.alloc(32),
     })
-    await app.listen()
 
-    receiverPlugin2.registerDataHandler(async () =>
+    // Fails with negative source amount
+    await expect(
+      quote({
+        amountToDeliver: -2n,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidDestinationAmount)
+    expect(!plugin.isConnected())
+
+    // Fails with fractional source amount
+    await expect(
+      quote({
+        amountToDeliver: '3.14',
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidDestinationAmount)
+
+    // Fails with 0 source amount
+    await expect(
+      quote({
+        amountToDeliver: 0,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidDestinationAmount)
+
+    // Fails with `NaN` source amount
+    await expect(
+      quote({
+        amountToDeliver: NaN,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidDestinationAmount)
+
+    // Fails with `Infinity` source amount
+    await expect(
+      quote({
+        amountToDeliver: Infinity,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidDestinationAmount)
+
+    // Fails with Int if source amount is 0
+    await expect(
+      quote({
+        amountToDeliver: Int.ZERO,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidDestinationAmount)
+  })
+
+  it('fails if no invoice, nor amount to send/deliver was provided', async () => {
+    const plugin = new MirrorPlugin()
+    const asset = {
+      assetCode: 'ABC',
+      assetScale: 3,
+    }
+
+    const { quote } = await setupPayment({
+      plugin,
+      destinationAddress: 'private.receiver',
+      destinationAsset: asset,
+      sharedSecret: randomBytes(32),
+    })
+    await expect(
+      quote({
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.UnknownPaymentTarget)
+    expect(!plugin.isConnected())
+  })
+
+  // TODO Also ensure there's a test of the asset probe,
+  //      if no packets are delivered
+  //      Should the error be different if no packets were delivered?
+  it('fails if no test packets are delivered', async () => {
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
+
+    receiverPlugin.registerDataHandler(async () =>
       serializeIlpReject({
         code: IlpError.T01_PEER_UNREACHABLE,
         message: '',
@@ -934,59 +788,39 @@ describe('quoting flow', () => {
       })
     )
 
+    const asset = {
+      assetCode: 'USD',
+      assetScale: 6,
+    }
+
+    const { quote } = await setupPayment({
+      plugin: senderPlugin,
+      destinationAddress: 'private.larry.receiver',
+      destinationAsset: asset,
+      sharedSecret: Buffer.alloc(32),
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
         amountToSend: '1000',
-        destinationAddress: 'private.larry.receiver',
-        sharedSecret: Buffer.alloc(32),
+        sourceAsset: asset,
       })
     ).rejects.toBe(PaymentError.RateProbeFailed)
-    expect(!senderPlugin1.isConnected())
-
-    await app.shutdown()
+    expect(!senderPlugin.isConnected())
   }, 15000)
 
   it('fails if max packet amount is 0', async () => {
-    const [senderPlugin1, maxPacketPlugin] = MirrorPlugin.createPair()
-    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
-    const senderPlugin2 = new MirrorPlugin()
-    senderPlugin2.mirror = senderPlugin1
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
-          plugin: senderPlugin2,
-        },
-        receiver: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
-          plugin: receiverPlugin1,
-        },
-      },
-    })
-    await app.listen()
-
-    const streamServer = await createServer({
-      plugin: receiverPlugin2,
+    const streamServer = new StreamServer({
+      serverSecret: randomBytes(32),
+      serverAddress: 'private.receiver',
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
 
     // `ilp-connector` doesn't support 0 max packet amount,
     // so use a custom middleware to test this
-    maxPacketPlugin.registerDataHandler(async (data) => {
+    receiverPlugin.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
       if (+prepare.amount > 0) {
         const writer = new Writer(16)
@@ -1000,48 +834,41 @@ describe('quoting flow', () => {
           data: writer.getBuffer(),
         })
       } else {
-        return senderPlugin2.dataHandler(data)
+        // TODO Is this necessary if it never gets past here?
+        const moneyOrReply = streamServer.createReply(prepare)
+        if (isIlpReply(moneyOrReply)) {
+          return serializeIlpReply(moneyOrReply)
+        }
+
+        return serializeIlpReply(moneyOrReply.accept())
       }
     })
 
+    const { quote } = await setupPayment({
+      plugin: senderPlugin,
+      destinationAddress,
+      destinationAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
+      sharedSecret,
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
-        amountToSend: 100,
-        destinationAddress,
-        sharedSecret,
+        amountToSend: 1000,
+        sourceAsset: {
+          assetCode: 'ABC',
+          assetScale: 0,
+        },
       })
     ).rejects.toBe(PaymentError.ConnectorError)
-    expect(!senderPlugin1.isConnected())
-
-    await app.shutdown()
-    await streamServer.close()
+    expect(!senderPlugin.isConnected())
   })
 
+  // TODO SHould have different test if authenticated replies are received,
+  //      but no asset details, vs no auth reply is received
   it('fails if recipient never shared destination asset details', async () => {
-    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
-    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
-
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 3,
-          plugin: senderPlugin2,
-        },
-        receiver: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 3,
-          plugin: receiverPlugin1,
-        },
-      },
-    })
-    await app.listen()
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
     const server = new StreamServer({
       serverAddress: 'private.larry.receiver',
@@ -1049,7 +876,7 @@ describe('quoting flow', () => {
     })
 
     // Accept incoming money
-    receiverPlugin2.registerDataHandler(async (data) => {
+    receiverPlugin.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
       const moneyOrReply = server.createReply(prepare)
       if (isIlpReply(moneyOrReply)) {
@@ -1059,21 +886,18 @@ describe('quoting flow', () => {
       return serializeIlpReply(moneyOrReply.accept())
     })
 
-    // Server will not reply with asset details since they weren't
-    // provided here
+    // Server will not reply with asset details
+    // since none were provided
     const credentials = server.generateCredentials()
 
     await expect(
-      quote({
-        plugin: senderPlugin1,
-        amountToSend: 100,
+      setupPayment({
+        plugin: senderPlugin,
         destinationAddress: credentials.ilpAddress,
         sharedSecret: credentials.sharedSecret,
       })
     ).rejects.toBe(PaymentError.UnknownDestinationAsset)
-    expect(!senderPlugin1.isConnected())
-
-    await app.shutdown()
+    expect(!senderPlugin.isConnected())
   })
 
   it('fails if price api is unavailable', async () => {
@@ -1111,12 +935,18 @@ describe('quoting flow', () => {
         destinationAccount: destinationAddress,
       } = streamServer.generateAddressAndSecret()
 
+      const { quote } = await setupPayment({
+        plugin: senderPlugin1,
+        destinationAddress,
+        sharedSecret,
+      })
       await expect(
         quote({
-          plugin: senderPlugin1,
           amountToSend: 100,
-          destinationAddress,
-          sharedSecret,
+          sourceAsset: {
+            assetCode: 'JPY',
+            assetScale: 0,
+          },
         })
       ).rejects.toBe(PaymentError.ExternalRateUnavailable)
       expect(!senderPlugin1.isConnected())
@@ -1159,100 +989,182 @@ describe('quoting flow', () => {
     nock.abortPendingRequests()
   })
 
-  it('fails if no external price for the source asset exists', async () => {
-    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
-    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+  it.todo('any invoice tests here?')
 
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'some really weird currency',
-          assetScale: 0,
-          plugin: senderPlugin2,
-        },
-        receiver: {
-          relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
-          plugin: receiverPlugin1,
-        },
-      },
+  it('fails if slippage is invalid', async () => {
+    const asset = {
+      assetCode: 'ABC',
+      assetScale: 2,
+    }
+
+    const plugin = new MirrorPlugin()
+    const { quote } = await setupPayment({
+      plugin,
+      sharedSecret: Buffer.alloc(32),
+      destinationAddress: 'g.recipient',
+      destinationAsset: asset,
     })
-    await app.listen()
-
-    const streamServer = await createServer({
-      plugin: receiverPlugin2,
-    })
-
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
 
     await expect(
       quote({
-        plugin: senderPlugin1,
+        slippage: NaN,
+        amountToSend: 10,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSlippage)
+    expect(!plugin.isConnected())
+
+    await expect(
+      quote({
+        slippage: Infinity,
+        amountToSend: 10,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSlippage)
+
+    await expect(
+      quote({
+        slippage: 1.2,
+        amountToSend: 10,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSlippage)
+
+    await expect(
+      quote({
+        slippage: -0.0001,
+        amountToSend: 10,
+        sourceAsset: asset,
+      })
+    ).rejects.toBe(PaymentError.InvalidSlippage)
+  })
+
+  it('fails if source asset details are invalid', async () => {
+    const asset = {
+      assetCode: 'ABC',
+      assetScale: 2,
+    }
+
+    const plugin = new MirrorPlugin()
+    const { quote } = await setupPayment({
+      plugin,
+      sharedSecret: Buffer.alloc(32),
+      destinationAddress: 'g.recipient',
+      destinationAsset: asset,
+    })
+
+    await expect(
+      quote({
+        amountToSend: 10,
+        sourceAsset: {
+          assetCode: 'ABC',
+          assetScale: NaN,
+        },
+      })
+    ).rejects.toBe(PaymentError.UnknownSourceAsset)
+    expect(!plugin.isConnected())
+
+    await expect(
+      quote({
+        amountToSend: 10,
+        sourceAsset: {
+          assetCode: 'KRW',
+          assetScale: Infinity,
+        },
+      })
+    ).rejects.toBe(PaymentError.UnknownSourceAsset)
+
+    await expect(
+      quote({
+        amountToSend: 10,
+        sourceAsset: {
+          assetCode: 'CNY',
+          assetScale: -20,
+        },
+      })
+    ).rejects.toBe(PaymentError.UnknownSourceAsset)
+
+    await expect(
+      quote({
+        amountToSend: 10,
+        sourceAsset: {
+          assetCode: 'USD',
+          assetScale: 256,
+        },
+      })
+    ).rejects.toBe(PaymentError.UnknownSourceAsset)
+  })
+
+  it('fails if no external price for the source asset exists', async () => {
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
+
+    const streamServer = new StreamServer({
+      serverSecret: randomBytes(32),
+      serverAddress: 'private.larry',
+    })
+
+    const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials({
+      asset: {
+        code: 'ABC',
+        scale: 0,
+      },
+    })
+
+    receiverPlugin.registerDataHandler(async (data) =>
+      serializeIlpReply(streamServer.createReply(deserializeIlpPrepare(data)) as IlpReply)
+    )
+
+    const { quote } = await setupPayment({
+      plugin: senderPlugin,
+      destinationAddress,
+      sharedSecret,
+    })
+    await expect(
+      quote({
         amountToSend: 100,
-        destinationAddress,
-        sharedSecret,
+        sourceAsset: {
+          assetCode: 'some really weird currency',
+          assetScale: 0,
+        },
       })
     ).rejects.toBe(PaymentError.ExternalRateUnavailable)
-    expect(!senderPlugin1.isConnected())
-
-    await app.shutdown()
-    await streamServer.close()
+    expect(!senderPlugin.isConnected())
   })
 
   it('fails if no external price for the destination asset exists', async () => {
-    const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
-    const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
-    const app = createApp({
-      ilpAddress: 'private.larry',
-      backend: 'one-to-one',
-      spread: 0,
-      accounts: {
-        sender: {
-          relation: 'child',
-          assetCode: 'USD',
-          assetScale: 3,
-          plugin: senderPlugin2,
-        },
-        receiver: {
-          relation: 'child',
-          assetCode: 'THIS_ASSET_CODE_DOES_NOT_EXIST',
-          assetScale: 3,
-          plugin: receiverPlugin1,
-        },
+    const streamServer = new StreamServer({
+      serverSecret: randomBytes(32),
+      serverAddress: 'private.larry',
+    })
+
+    const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials({
+      asset: {
+        code: 'THIS_ASSET_CODE_DOES_NOT_EXIST',
+        scale: 0,
       },
     })
-    await app.listen()
 
-    const streamServer = await createServer({
-      plugin: receiverPlugin2,
-    })
+    receiverPlugin.registerDataHandler(async (data) =>
+      serializeIlpReply(streamServer.createReply(deserializeIlpPrepare(data)) as IlpReply)
+    )
 
-    const {
+    const { quote } = await setupPayment({
+      plugin: senderPlugin,
+      destinationAddress,
       sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
-
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
-        amountToSend: 303.222,
-        destinationAddress,
-        sharedSecret,
+        amountToSend: 100,
+        sourceAsset: {
+          assetCode: 'USD',
+          assetScale: 3,
+        },
       })
     ).rejects.toBe(PaymentError.ExternalRateUnavailable)
-    expect(!senderPlugin1.isConnected())
-
-    await app.shutdown()
-    await streamServer.close()
+    expect(!senderPlugin.isConnected())
   })
 
   it('fails if the external exchange rate is 0', async () => {
@@ -1289,12 +1201,18 @@ describe('quoting flow', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
+    const { quote } = await setupPayment({
+      plugin: senderPlugin1,
+      destinationAddress,
+      sharedSecret,
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
         amountToSend: '1000',
-        destinationAddress,
-        sharedSecret,
+        sourceAsset: {
+          assetCode: 'ABC',
+          assetScale: 0,
+        },
         prices: {
           // Computing this rate would be a divide-by-0 error,
           // so the rate is "unavailable" rather than quoted as 0
@@ -1313,6 +1231,11 @@ describe('quoting flow', () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
+    const sourceAsset = {
+      assetCode: 'ABC',
+      assetScale: 4,
+    }
+
     const app = createApp({
       ilpAddress: 'private.larry',
       backend: 'one-to-one',
@@ -1320,9 +1243,8 @@ describe('quoting flow', () => {
       accounts: {
         sender: {
           relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 4,
           plugin: senderPlugin2,
+          ...sourceAsset,
         },
         receiver: {
           relation: 'child',
@@ -1343,12 +1265,15 @@ describe('quoting flow', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
+    const { quote } = await setupPayment({
+      plugin: senderPlugin1,
+      destinationAddress,
+      sharedSecret,
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
         amountToSend: '1000',
-        destinationAddress,
-        sharedSecret,
+        sourceAsset,
         slippage: 0.01,
       })
     ).rejects.toBe(PaymentError.InsufficientExchangeRate)
@@ -1373,6 +1298,11 @@ describe('quoting flow', () => {
     backend = new CustomBackend(deps)
     backend.setPrices(prices)
 
+    const sourceAsset = {
+      assetCode: 'BTC',
+      assetScale: 8,
+    }
+
     const app = createApp(
       {
         ilpAddress: 'private.larry',
@@ -1380,10 +1310,9 @@ describe('quoting flow', () => {
         accounts: {
           sender: {
             relation: 'child',
-            assetCode: 'BTC',
-            assetScale: 8,
             plugin: senderPlugin2,
             maxPacketAmount: '1000',
+            ...sourceAsset,
           },
           receiver: {
             relation: 'child',
@@ -1406,12 +1335,15 @@ describe('quoting flow', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
+    const { quote } = await setupPayment({
+      plugin: senderPlugin1,
+      destinationAddress,
+      sharedSecret,
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
         amountToSend: '1000',
-        destinationAddress,
-        sharedSecret,
+        sourceAsset,
         prices,
       })
     ).rejects.toBe(PaymentError.InsufficientExchangeRate)
@@ -1436,6 +1368,11 @@ describe('quoting flow', () => {
     backend = new CustomBackend(deps)
     backend.setPrices(prices)
 
+    const sourceAsset = {
+      assetCode: 'BTC',
+      assetScale: 8,
+    }
+
     const app = createApp(
       {
         ilpAddress: 'private.larry',
@@ -1443,10 +1380,9 @@ describe('quoting flow', () => {
         accounts: {
           sender: {
             relation: 'child',
-            assetCode: 'BTC',
-            assetScale: 8,
             plugin: senderPlugin2,
             maxPacketAmount: '1000',
+            ...sourceAsset,
           },
           receiver: {
             relation: 'child',
@@ -1469,12 +1405,15 @@ describe('quoting flow', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
+    const { quote } = await setupPayment({
+      plugin: senderPlugin1,
+      destinationAddress,
+      sharedSecret,
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
         amountToSend: 100_000,
-        destinationAddress,
-        sharedSecret,
+        sourceAsset,
         // Slippage/minExchangeRate is far too close to the real spread/rate
         // to perform the payment without rounding errors, since the max packet
         // amount of 1000 doesn't allow more precision.
@@ -1495,6 +1434,11 @@ describe('quoting flow', () => {
     const streamServerPlugin = new MirrorPlugin()
     streamServerPlugin.mirror = receiverPlugin1
 
+    const sourceAsset = {
+      assetCode: 'ABC',
+      assetScale: 0,
+    }
+
     const app = createApp({
       ilpAddress: 'private.larry',
       backend: 'one-to-one',
@@ -1502,9 +1446,8 @@ describe('quoting flow', () => {
       accounts: {
         sender: {
           relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
           plugin: senderPlugin2,
+          ...sourceAsset,
           // This tests the max packet state transition from precise -> imprecise
           maxPacketAmount: '1000000',
         },
@@ -1553,14 +1496,17 @@ describe('quoting flow', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const { cancel } = await quote({
+    const { quote } = await setupPayment({
       plugin: senderPlugin1,
-      amountToSend: 40_000_000,
       sharedSecret,
       destinationAddress,
     })
+    const { close } = await quote({
+      amountToSend: 40_000_000,
+      sourceAsset,
+    })
 
-    await cancel()
+    await close()
 
     // If STREAM did discover the max packet amount,
     // since the rate is 1:1, the largest packet the receiver got
@@ -1630,37 +1576,36 @@ describe('fixed source payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const amountToSend = new BigNumber(1.00427)
-    const { pay, ...quoteDetails } = await quote({
-      amountToSend,
+    const amountToSend = 100427n
+    const resolved = await setupPayment({
       destinationAddress,
       sharedSecret,
       plugin: alice1,
+    })
+    const { pay, ...quoteDetails } = await resolved.quote({
+      amountToSend,
+      sourceAsset: {
+        assetCode: 'USD',
+        assetScale: 6,
+      },
       slippage: 0.015,
       prices,
     })
 
-    expect(quoteDetails.sourceAccount).toEqual({
-      assetCode: 'USD',
-      assetScale: 6,
-      ilpAddress: 'test.larry.alice',
-    })
-    expect(quoteDetails.destinationAccount).toEqual({
+    expect(resolved.destinationAsset).toEqual({
       assetCode: 'XRP',
       assetScale: 9,
-      ilpAddress: destinationAddress,
     })
-    expect(quoteDetails.maxSourceAmount).toEqual(amountToSend)
+    expect(resolved.destinationAddress).toBe(destinationAddress)
+    expect(quoteDetails.maxSourceAmount.value).toBe(amountToSend)
 
     const receipt = await pay()
 
     expect(receipt.error).toBeUndefined()
+    expect(receipt.amountSent.value).toBe(amountToSend)
 
     const serverConnection = await connectionPromise
-    expect(new BigNumber(serverConnection.totalReceived)).toEqual(
-      receipt.amountDelivered.shiftedBy(9)
-    )
-    expect(receipt.amountSent).toEqual(amountToSend)
+    expect(BigInt(serverConnection.totalReceived)).toBe(receipt.amountDelivered.value)
 
     await app.shutdown()
     await streamServer.close()
@@ -1743,23 +1688,29 @@ describe('fixed source payments', () => {
       }
     })
 
-    const { pay, ...details } = await quote({
+    const { quote } = await setupPayment({
       plugin: senderPlugin1,
+      destinationAddress,
+      sharedSecret,
+    })
+    const { pay, ...details } = await quote({
       // Send 100,002 sats
       // Max packet amount of 1000 means the final packet will try to send 2 units
       // This rounds down to 0, but the delivery shortfall should ensure this is acceptable
-      amountToSend: 0.00100002,
-      destinationAddress,
-      sharedSecret,
+      amountToSend: 100_002,
+      sourceAsset: {
+        assetCode: 'BTC',
+        assetScale: 8,
+      },
       slippage: 0.002,
       prices,
     })
-    expect(+details.maxSourceAmount).toBe(0.00100002)
+    expect(details.maxSourceAmount.value).toBe(100002n)
 
     const receipt = await pay()
     expect(receipt.error).toBeUndefined()
-    expect(+receipt.amountSent).toBe(0.00100002)
-    expect(+receipt.amountDelivered).toBeGreaterThanOrEqual(+details.minDeliveryAmount)
+    expect(receipt.amountSent.value).toBe(100002n)
+    expect(receipt.amountDelivered.value).toBeGreaterThanOrEqual(details.minDeliveryAmount.value)
 
     await app.shutdown()
     await streamServer.close()
@@ -1817,11 +1768,17 @@ describe('fixed source payments', () => {
     } = streamServer.generateAddressAndSecret()
 
     // Send 100 total packets
-    const { pay } = await quote({
-      amountToSend: 100,
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
       plugin: alice1,
+    })
+    const { pay } = await quote({
+      amountToSend: 100,
+      sourceAsset: {
+        assetCode: 'XYZ',
+        assetScale: 0,
+      },
       slippage: 1,
       prices: {},
     })
@@ -1830,7 +1787,7 @@ describe('fixed source payments', () => {
 
     expect(receipt.error).toBeUndefined()
     expect(highestNumberPacketsInFlight).toBe(20)
-    expect(+receipt.amountSent).toEqual(100)
+    expect(receipt.amountSent.value).toBe(100n)
 
     await app.shutdown()
     await streamServer.close()
@@ -1890,21 +1847,27 @@ describe('fixed source payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const amountToSend = new BigNumber(10_000)
-    const { pay, minExchangeRate } = await quote({
-      amountToSend,
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
       plugin: alice1,
+    })
+    const amountToSend = 10_000n
+    const { pay, minExchangeRate } = await quote({
+      amountToSend,
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
       slippage: 1, // Disables rate enforcement
       prices,
     })
-    expect(minExchangeRate).toEqual(new BigNumber(0))
+    expect(minExchangeRate).toBe(0)
 
     const receipt = await pay()
     expect(receipt.error).toBeUndefined()
-    expect(receipt.amountSent).toEqual(amountToSend)
-    expect(receipt.amountDelivered.isGreaterThan(0))
+    expect(receipt.amountSent.value).toBe(amountToSend)
+    expect(receipt.amountDelivered.value).toBeGreaterThan(0n)
 
     await app.shutdown()
     await streamServer.close()
@@ -1975,12 +1938,18 @@ describe('fixed delivery payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const { pay, ...quoteDetails } = await quote({
-      amountToDeliver,
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
-      slippage: 0.015,
       plugin: alice1,
+    })
+    const { pay, maxSourceAmount } = await quote({
+      amountToDeliver,
+      sourceAsset: {
+        assetCode: 'ETH',
+        assetScale: 9,
+      },
+      slippage: 0.015,
       prices,
     })
 
@@ -1989,10 +1958,10 @@ describe('fixed delivery payments', () => {
     expect(receipt.error).toBeUndefined()
 
     const serverConnection = await connectionPromise
-    const totalReceived = new BigNumber(serverConnection.totalReceived)
-    expect(+totalReceived).toBe(+amountToDeliver)
-    expect(+receipt.amountDelivered).toBe(0.00107643)
-    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+    const totalReceived = BigInt(serverConnection.totalReceived)
+    expect(totalReceived).toBe(amountToDeliver.value)
+    expect(receipt.amountDelivered.value).toBe(amountToDeliver.value)
+    expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
 
     await app.shutdown()
     await streamServer.close()
@@ -2101,11 +2070,17 @@ describe('fixed delivery payments', () => {
     // Sender accepts up to: 0.85%
 
     const amountToDeliver = Int.from(10_000_000_000)! // 10 XRP, ~$2 at given prices
-    const { pay, ...quoteDetails } = await quote({
-      plugin: alicePlugin1,
-      amountToDeliver,
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
+      plugin: alicePlugin1,
+    })
+    const { pay, maxSourceAmount, minExchangeRate } = await quote({
+      amountToDeliver,
+      sourceAsset: {
+        assetCode: 'BTC',
+        assetScale: 8,
+      },
       slippage: 0.0085,
       prices,
     })
@@ -2115,22 +2090,24 @@ describe('fixed delivery payments', () => {
     expect(receipt.error).toBeUndefined()
 
     const serverConnection = await connectionPromise
-    const totalReceived = new BigNumber(serverConnection.totalReceived).shiftedBy(-9)
-    expect(receipt.amountDelivered).toEqual(totalReceived)
+    const totalReceived = BigInt(serverConnection.totalReceived)
+    expect(receipt.amountDelivered.value).toBe(totalReceived)
 
     // Ensure at least the invoice amount was delivered
-    expect(+receipt.amountDelivered).toBeGreaterThanOrEqual(10)
+    expect(receipt.amountDelivered.value).toBeGreaterThanOrEqual(amountToDeliver.value)
 
-    // Ensure over-delivery is minimized to the equivalent of a single source unit, 1 satoshi:
-    const maxOverDeliveryAmount = new BigNumber(1)
-      .shiftedBy(-8) // Sats -> BTC
-      .times(quoteDetails.minExchangeRate) // BTC -> XRP
-      .shiftedBy(9) // XRP -> drops
-      .integerValue(BigNumber.ROUND_CEIL)
-      .plus(amountToDeliver.toString())
-    expect(+receipt.amountDelivered).toBeLessThanOrEqual(+maxOverDeliveryAmount)
+    // Ensure over-delivery is minimized to the equivalent of a single source unit, 1 satoshi,
+    // converted into destination units:
+    const maxOverDeliveryAmount =
+      BigInt(
+        Math.ceil(
+          // 1 sat -> BTC -> XRP -> drops
+          minExchangeRate * 10 ** (9 - 8)
+        )
+      ) + amountToDeliver.value
 
-    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+    expect(receipt.amountDelivered.value).toBeLessThanOrEqual(maxOverDeliveryAmount)
+    expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
 
     await aliceConnector.shutdown()
     await bobConnector.shutdown()
@@ -2138,7 +2115,6 @@ describe('fixed delivery payments', () => {
     await streamServer.close()
   }, 10000)
 
-  // TODO This should error during the quoting flow, but JS stream only returns `StreamMaxMoney` if the packet sent money!
   it('fails if receive max is incompatible on fixed delivery payment', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
@@ -2180,13 +2156,20 @@ describe('fixed delivery payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const { pay } = await quote({
+    const { quote } = await setupPayment({
       plugin: senderPlugin1,
-      amountToDeliver: Int.from(100_0000),
       destinationAddress,
       sharedSecret,
     })
+    const { pay } = await quote({
+      amountToDeliver: Int.from(100_0000),
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 4,
+      },
+    })
 
+    // Note: ilp-protocol-stream only returns `StreamMaxMoney` if the packet sent money, so it can't error during the quoting flow!
     const receipt = await pay()
     expect(receipt.error).toBe(PaymentError.IncompatibleReceiveMax)
 
@@ -2235,12 +2218,18 @@ describe('fixed delivery payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
+    const { quote } = await setupPayment({
+      plugin: senderPlugin1,
+      destinationAddress,
+      sharedSecret,
+    })
     await expect(
       quote({
-        plugin: senderPlugin1,
         amountToDeliver: Int.from(100_0000),
-        destinationAddress,
-        sharedSecret,
+        sourceAsset: {
+          assetCode: 'ABC',
+          assetScale: 4,
+        },
         slippage: 1,
         prices: {
           ABC: 1,
@@ -2286,7 +2275,7 @@ describe('fixed delivery payments', () => {
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
     // STREAM "receiver" that just fulfills packets
-    let totalReceived = 0
+    let totalReceived = 0n
     receiverPlugin2.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
 
@@ -2297,7 +2286,7 @@ describe('fixed delivery payments', () => {
 
       if (isFulfillable) {
         // On fulfillable packets, fulfill *without valid STREAM data*
-        totalReceived += +streamPacket.prepareAmount
+        totalReceived += Int.from(streamPacket.prepareAmount)!.value
         return serializeIlpFulfill({
           fulfillment,
           data: randomBytes(200),
@@ -2316,20 +2305,26 @@ describe('fixed delivery payments', () => {
       }
     })
 
-    const { pay, ...quoteDetails } = await quote({
+    const { quote } = await setupPayment({
       plugin: senderPlugin1,
-      // Amount much larger than max packet, so test will fail unless sender fails fast
-      amountToDeliver: Int.from(1000000),
       destinationAddress,
       sharedSecret,
+    })
+    const { pay, maxSourceAmount } = await quote({
+      // Amount much larger than max packet, so test will fail unless sender fails fast
+      amountToDeliver: Int.from(1000000),
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
       slippage: 0.1,
       prices: {},
     })
 
     const receipt = await pay()
     expect(receipt.error).toBe(PaymentError.ReceiverProtocolViolation)
-    expect(+receipt.amountDelivered).toEqual(totalReceived)
-    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+    expect(receipt.amountDelivered.value).toBe(totalReceived)
+    expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
 
     await app.shutdown()
   }, 10000)
@@ -2367,7 +2362,7 @@ describe('fixed delivery payments', () => {
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
     // STREAM "receiver" that fulfills packets
-    let totalReceived = 0
+    let totalReceived = 0n
     receiverPlugin2.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
 
@@ -2378,7 +2373,7 @@ describe('fixed delivery payments', () => {
 
       if (isFulfillable) {
         // On fulfillable packets, fulfill, but lie and say we only received 1 unit
-        totalReceived += +streamPacket.prepareAmount
+        totalReceived += Int.from(streamPacket.prepareAmount)!.value
         const streamReply = new Packet(streamPacket.sequence, IlpPacketType.Fulfill, 1)
         return serializeIlpFulfill({
           fulfillment,
@@ -2398,24 +2393,30 @@ describe('fixed delivery payments', () => {
       }
     })
 
-    const { pay, ...quoteDetails } = await quote({
+    const { quote } = await setupPayment({
       plugin: senderPlugin1,
-      // Amount much larger than max packet, so test will fail unless sender fails fast
-      amountToDeliver: Int.from(100000),
       destinationAddress,
       sharedSecret,
+    })
+    const { pay, maxSourceAmount } = await quote({
+      // Amount much larger than max packet, so test will fail unless sender fails fast
+      amountToDeliver: Int.from(100000),
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
       slippage: 0.2,
     })
 
     const receipt = await pay()
     expect(receipt.error).toBe(PaymentError.ReceiverProtocolViolation)
-    expect(+receipt.amountDelivered).toEqual(totalReceived)
-    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+    expect(receipt.amountDelivered.value).toEqual(totalReceived)
+    expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
 
     await app.shutdown()
   })
 
-  it('fails if the exchange rate drops to 0 during the payment', async () => {
+  it('fails if the exchange rate drops to 0 during payment', async () => {
     const [senderPlugin1, senderPlugin2] = MirrorPlugin.createPair()
     const [receiverPlugin1, receiverPlugin2] = MirrorPlugin.createPair()
 
@@ -2470,12 +2471,18 @@ describe('fixed delivery payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const { pay, ...quoteDetails } = await quote({
-      amountToDeliver: Int.from(10_0000), // 10 EUR
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
-      slippage: 0.015, // 1.5% slippage allowed
       plugin: senderPlugin1,
+    })
+    const { pay } = await quote({
+      amountToDeliver: Int.from(10_0000), // 10 EUR
+      sourceAsset: {
+        assetCode: 'USD',
+        assetScale: 4,
+      },
+      slippage: 0.015, // 1.5% slippage allowed
       prices,
     })
 
@@ -2486,9 +2493,9 @@ describe('fixed delivery payments', () => {
 
     const receipt = await pay()
     expect(receipt.error).toBe(PaymentError.InsufficientExchangeRate)
-    expect(+receipt.amountDelivered).toBe(0)
-    expect(+receipt.amountDelivered).toBe(+serverConnection.totalReceived / 10000)
-    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+    expect(receipt.amountSent.value).toBe(0n)
+    expect(receipt.amountDelivered.value).toBe(0n)
+    expect(serverConnection.totalReceived).toBe('0')
 
     await app.shutdown()
     await streamServer.close()
@@ -2555,12 +2562,18 @@ describe('fixed delivery payments', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const { pay, ...quoteDetails } = await quote({
-      amountToDeliver: Int.from(10_0000), // 10 EUR
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
-      slippage: 0.015, // 1.5% slippage allowed
       plugin: senderPlugin1,
+    })
+    const { pay, maxSourceAmount } = await quote({
+      amountToDeliver: Int.from(10_0000), // 10 EUR
+      sourceAsset: {
+        assetCode: 'USD',
+        assetScale: 4,
+      },
+      slippage: 0.015, // 1.5% slippage allowed
       prices,
     })
 
@@ -2568,9 +2581,9 @@ describe('fixed delivery payments', () => {
 
     const receipt = await pay()
     expect(receipt.error).toBe(PaymentError.InsufficientExchangeRate)
-    expect(+receipt.amountDelivered).toBeLessThan(10)
-    expect(+receipt.amountDelivered).toBe(+serverConnection.totalReceived / 10000)
-    expect(+receipt.amountSent).toBeLessThanOrEqual(+quoteDetails.maxSourceAmount)
+    expect(receipt.amountDelivered.value).toBeLessThan(10_0000n)
+    expect(receipt.amountDelivered.value).toBe(BigInt(serverConnection.totalReceived))
+    expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
 
     await app.shutdown()
     await streamServer.close()
@@ -2581,6 +2594,10 @@ describe('payment execution', () => {
   it('fails on final Reject errors', async () => {
     const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
+    const asset = {
+      assetCode: 'ABC',
+      assetScale: 0,
+    }
     const app = createApp({
       ilpAddress: 'private.larry',
       backend: 'one-to-one',
@@ -2588,45 +2605,27 @@ describe('payment execution', () => {
       accounts: {
         default: {
           relation: 'child',
-          assetCode: 'ABC',
-          assetScale: 0,
+          ...asset,
           plugin: receiverPlugin,
         },
       },
     })
     await app.listen()
 
+    const { quote } = await setupPayment({
+      plugin: senderPlugin,
+      destinationAddress: 'private.unknown', // Non-routable address
+      destinationAsset: asset,
+      sharedSecret: Buffer.alloc(32),
+    })
     await expect(
       quote({
-        plugin: senderPlugin,
-        amountToSend: 10,
-        destinationAddress: 'private.unknown', // Non-routable address
-        sharedSecret: Buffer.alloc(32),
+        amountToSend: 12_345,
+        sourceAsset: asset,
       })
     ).rejects.toBe(PaymentError.ConnectorError)
 
     await app.shutdown()
-  })
-
-  it('handles plugin disconnect errors', async () => {
-    const plugin = {
-      async connect() {},
-      async disconnect() {
-        throw new Error('Failed to disconnect')
-      },
-      async sendData() {
-        return Buffer.alloc(0)
-      },
-      registerDataHandler() {},
-      deregisterDataHandler() {},
-      isConnected() {
-        return true
-      },
-    }
-
-    await expect(
-      quote({ plugin, sharedSecret: Buffer.alloc(32), destinationAddress: 'private.foo' })
-    ).rejects.toBe(PaymentError.UnknownSourceAsset)
   })
 
   it('handles invalid F08 errors', async () => {
@@ -2664,7 +2663,7 @@ describe('payment execution', () => {
     let sentSecondInvalidReply = false
     receiverPlugin2.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
-      if (+prepare.amount > 10) {
+      if (+prepare.amount >= 1) {
         if (!sentFirstInvalidReply) {
           sentFirstInvalidReply = true
 
@@ -2719,18 +2718,24 @@ describe('payment execution', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const { pay } = await quote({
-      amountToSend: new BigNumber(1),
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
       plugin: senderPlugin1,
+    })
+    const { pay } = await quote({
+      amountToSend: 100,
+      sourceAsset: {
+        assetCode: 'USD',
+        assetScale: 2,
+      },
       slippage: 1,
       prices: {},
     })
     const receipt = await pay()
     expect(receipt.error).toBeUndefined()
-    expect(+receipt.amountSent).toEqual(1)
-    expect(+receipt.amountDelivered).toEqual(1)
+    expect(receipt.amountSent.value).toBe(100n)
+    expect(receipt.amountDelivered.value).toBe(100n)
 
     await app.shutdown()
     await streamServer.close()
@@ -2786,11 +2791,17 @@ describe('payment execution', () => {
 
     // 20 units / 1 max packet amount => at least 20 packets
     const amountToSend = 20
-    const { pay } = await quote({
+    const { quote } = await setupPayment({
       plugin: senderPlugin1,
-      amountToSend,
       sharedSecret,
       destinationAddress,
+    })
+    const { pay } = await quote({
+      amountToSend,
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
       slippage: 1,
       prices: {},
     })
@@ -2845,16 +2856,22 @@ describe('payment execution', () => {
       destinationAccount: destinationAddress,
     } = streamServer.generateAddressAndSecret()
 
-    const { pay } = await quote({
+    const { quote } = await setupPayment({
       plugin: senderPlugin1,
-      amountToSend: 10,
-      destinationAddress,
       sharedSecret,
+      destinationAddress,
+    })
+    const { pay } = await quote({
+      amountToSend: 10,
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
     })
 
     const receipt = await pay()
     expect(receipt.error).toBe(PaymentError.IdleTimeout)
-    expect(receipt.amountSent).toEqual(new BigNumber(0))
+    expect(receipt.amountSent.value).toBe(0n)
 
     await app.shutdown()
     await streamServer.close()
@@ -2870,19 +2887,12 @@ describe('payment execution', () => {
       sequence: 2 ** 32 - 1, // Just below the max sequence number
       sourceAmount: Int.ZERO,
       minDestinationAmount: Int.ZERO,
-      requestFrames: [],
+      frames: [],
       isFulfillable: false,
       log,
     })
 
-    expect(
-      controller.nextState(({
-        log,
-        setSequence() {
-          return this
-        },
-      } as unknown) as NextRequest)
-    ).toBe(PaymentError.ExceededMaxSequence)
+    expect(controller.nextState(DEFAULT_REQUEST)).toBe(PaymentError.ExceededMaxSequence)
   })
 
   it('ends payment if receiver closes the stream', async () => {
@@ -2936,19 +2946,25 @@ describe('payment execution', () => {
     // Since we're sending $100,000, test will fail due to timeout
     // if the connection isn't closed quickly
 
-    const { pay } = await quote({
-      amountToSend: new BigNumber(10000000),
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
       plugin: alice1,
+    })
+    const { pay } = await quote({
+      amountToSend: 1000000000,
+      sourceAsset: {
+        assetCode: 'USD',
+        assetScale: 2,
+      },
       slippage: 1,
       prices: {},
     })
     const receipt = await pay()
 
     expect(receipt.error).toBe(PaymentError.ClosedByRecipient)
-    expect(receipt.amountSent).toEqual(new BigNumber(0.2)) // Only $0.20 was received
-    expect(receipt.amountDelivered).toEqual(new BigNumber(0.2)) // Only $0.20 was received
+    expect(receipt.amountSent.value).toBe(20n) // Only $0.20 was sent & received
+    expect(receipt.amountDelivered.value).toBe(20n)
 
     await app.shutdown()
     await streamServer.close()
@@ -2999,12 +3015,18 @@ describe('payment execution', () => {
     // Since we're sending such a large payment, test will fail due to timeout
     // if the payment doesn't end promptly
 
-    const { pay } = await quote({
-      amountToSend: new BigNumber(100000000000),
+    const { quote } = await setupPayment({
       destinationAddress,
       sharedSecret,
-      slippage: 1,
       plugin: alice1,
+    })
+    const { pay } = await quote({
+      amountToSend: 100000000000,
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
+      slippage: 1,
       prices: {},
     })
 
@@ -3014,13 +3036,181 @@ describe('payment execution', () => {
 
     const receipt = await pay()
     expect(receipt.error).toBe(PaymentError.ClosedByRecipient)
-    expect(receipt.amountSent.isGreaterThan(1))
-    expect(receipt.amountSent.isLessThan(100))
-    expect(receipt.amountSent).toEqual(receipt.amountDelivered)
+    expect(receipt.amountSent.value).toBeGreaterThan(1n)
+    expect(receipt.amountSent.value).toBeLessThan(100n)
+    expect(receipt.amountSent.value).toBe(receipt.amountDelivered.value) // 1:1 rate
 
     await app.shutdown()
     await streamServer.close()
   }, 10000)
+})
+
+describe('stream receipts', () => {
+  it('reports receipts from ilp-protocol-stream server', async () => {
+    const [alice1, alice2] = MirrorPlugin.createPair()
+    const [bob1, bob2] = MirrorPlugin.createPair()
+
+    const app = createApp({
+      ilpAddress: 'test.larry',
+      backend: 'one-to-one',
+      spread: 0.05, // 5%
+      accounts: {
+        alice: {
+          relation: 'child',
+          plugin: alice2,
+          assetCode: 'ABC',
+          assetScale: 0,
+          maxPacketAmount: '1000',
+        },
+        bob: {
+          relation: 'child',
+          plugin: bob1,
+          assetCode: 'ABC',
+          assetScale: 0,
+        },
+      },
+    })
+    await app.listen()
+
+    const streamServer = await createServer({
+      plugin: bob2,
+    })
+
+    const connectionPromise = streamServer.acceptConnection()
+    streamServer.on('connection', (connection: Connection) => {
+      connection.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(Long.MAX_UNSIGNED_VALUE)
+      })
+    })
+
+    const receiptNonce = randomBytes(16)
+    const receiptSecret = randomBytes(32)
+    const {
+      sharedSecret,
+      destinationAccount: destinationAddress,
+    } = streamServer.generateAddressAndSecret({
+      receiptNonce,
+      receiptSecret,
+    })
+
+    const amountToSend = 10_000n // 10,000 units, 1,000 max packet => ~10 packets
+    const { quote } = await setupPayment({
+      destinationAddress,
+      sharedSecret,
+      plugin: alice1,
+    })
+    const { pay } = await quote({
+      amountToSend,
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 0,
+      },
+      slippage: 0.1, // 10%
+    })
+
+    const receipt = await pay()
+
+    const serverConnection = await connectionPromise
+    const totalReceived = BigInt(serverConnection.totalReceived)
+
+    expect(receipt.error).toBeUndefined()
+    expect(receipt.amountSent.value).toBe(amountToSend)
+    expect(receipt.amountDelivered.value).toBe(totalReceived)
+    expect(receipt.streamReceipt).toEqual(
+      createReceipt({
+        nonce: receiptNonce,
+        secret: receiptSecret,
+        streamId: PaymentController.DEFAULT_STREAM_ID,
+        totalReceived: receipt.amountDelivered.toLong(),
+      })
+    )
+
+    await app.shutdown()
+    await streamServer.close()
+  })
+
+  it('reports receipts received out of order', async () => {
+    const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
+
+    const server = new StreamServer({
+      serverSecret: randomBytes(32),
+      serverAddress: 'private.larry',
+    })
+
+    const receiptNonce = randomBytes(16)
+    const receiptSecret = randomBytes(32)
+    const { sharedSecret, ilpAddress: destinationAddress } = server.generateCredentials({
+      receiptSetup: {
+        nonce: receiptNonce,
+        secret: receiptSecret,
+      },
+    })
+
+    let signedFirstReceipt = false
+    receiverPlugin.registerDataHandler(async (data) => {
+      const prepare = deserializeIlpPrepare(data)
+
+      // 10 unit max packet size -> 2 packets to complete payment
+      if (+prepare.amount > 10) {
+        return serializeIlpReject({
+          code: IlpError.F08_AMOUNT_TOO_LARGE,
+          message: '',
+          triggeredBy: '',
+          data: Buffer.alloc(0),
+        })
+      }
+
+      const moneyOrReply = server.createReply(prepare)
+      if (isIlpReply(moneyOrReply)) {
+        return serializeIlpReply(moneyOrReply)
+      }
+
+      // First, sign a STREAM receipt for 10 units, then a receipt for 5 units
+      moneyOrReply.setTotalReceived(signedFirstReceipt ? 10 : 5)
+      signedFirstReceipt = true
+      return serializeIlpReply(moneyOrReply.accept())
+    })
+
+    const { quote } = await setupPayment({
+      plugin: senderPlugin,
+      sharedSecret,
+      destinationAddress,
+      destinationAsset: {
+        assetCode: 'ABC',
+        assetScale: 4,
+      },
+    })
+    const { pay } = await quote({
+      amountToDeliver: 20,
+      sourceAsset: {
+        assetCode: 'ABC',
+        assetScale: 4,
+      },
+      slippage: 0.5,
+    })
+
+    const { amountDelivered, streamReceipt } = await pay()
+    expect(amountDelivered.value).toBe(20n)
+    expect(streamReceipt).toEqual(
+      createReceipt({
+        nonce: receiptNonce,
+        secret: receiptSecret,
+        streamId: PaymentController.DEFAULT_STREAM_ID,
+        totalReceived: 10, // Greatest of receipts for 10 and 5
+      })
+    )
+  })
+
+  it('discards invalid receipts', async () => {
+    const controller = new ReceiptController()
+    const log = createLogger('ilp-pay')
+
+    // Mock sending a requset, reply with invalid STREAM receipt
+    const handler = controller.applyRequest()
+    handler(new StreamFulfill(log, [new StreamReceiptFrame(1, randomBytes(32))], Int.ZERO))
+
+    expect(controller.getReceipt()).toBeUndefined()
+  })
 })
 
 describe('interledger.rs integration', () => {
@@ -3107,17 +3297,23 @@ describe('interledger.rs integration', () => {
       }
     )
 
-    const amountToSend = 0.1 // ~50 packets @ max packet amount of 2000
-    const { pay } = await quote({
+    const amountToSend = 100_000n // 0.1 EUR, ~50 packets @ max packet amount of 2000
+    const { quote } = await setupPayment({
       plugin,
       paymentPointer: `http://${host}/accounts/receiver/spsp`,
+    })
+    const { pay } = await quote({
       amountToSend,
+      sourceAsset: {
+        assetCode: 'EUR',
+        assetScale: 6,
+      },
     })
 
     const receipt = await pay()
     expect(receipt.error).toBeUndefined()
-    expect(+receipt.amountSent).toBe(amountToSend)
-    expect(+receipt.amountDelivered).toBe(amountToSend) // Exchange rate is 1:1
+    expect(receipt.amountSent.value).toBe(amountToSend)
+    expect(receipt.amountDelivered.value).toBe(amountToSend) // Exchange rate is 1:1
 
     // Check the balance
     const { data } = await Axios({
@@ -3221,23 +3417,25 @@ describe('interledger4j integration', () => {
       }
     )
 
-    const amountToSend = 98 // $98
-    const { pay, ...details } = await quote({
+    const amountToSend = 98_000_000n // $98
+    const { quote, destinationAsset } = await setupPayment({
       plugin,
       paymentPointer: `http://localhost:8080/receiver`,
+    })
+    const { pay, maxSourceAmount, minDeliveryAmount } = await quote({
       amountToSend,
+      sourceAsset: {
+        assetCode: 'USD',
+        assetScale: 6,
+      },
     })
 
     const receipt = await pay()
     expect(receipt.error).toBeUndefined()
-    expect(receipt.amountSent.isEqualTo(amountToSend))
-    expect(receipt.amountSent.isLessThanOrEqualTo(details.maxSourceAmount))
-    expect(receipt.sourceAccount.assetCode).toBe('USD')
-    expect(receipt.sourceAccount.assetScale).toBe(6)
-    expect(receipt.destinationAccount.assetCode).toBe('XRP')
-    expect(receipt.destinationAccount.assetScale).toBe(9)
+    expect(receipt.amountSent.value).toBe(amountToSend)
+    expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
 
-    // // Check the balance
+    // Check the balance
     const { data } = await Axios({
       method: 'GET',
       url: `http://localhost:8080/accounts/receiver/balance`,
@@ -3247,8 +3445,9 @@ describe('interledger4j integration', () => {
       },
     })
 
-    expect(+data.accountBalance.netBalance).toEqual(+receipt.amountDelivered.shiftedBy(9))
-    expect(+data.accountBalance.netBalance).toBeGreaterThanOrEqual(+details.minDeliveryAmount)
+    const netBalance = BigInt(data.accountBalance.netBalance)
+    expect(receipt.amountDelivered.value).toEqual(netBalance)
+    expect(minDeliveryAmount.value).toBeLessThanOrEqual(netBalance)
 
     await plugin.disconnect()
 
@@ -3257,16 +3456,17 @@ describe('interledger4j integration', () => {
   }, 60000)
 })
 
+// TODO Move this to a separate file
 describe('utils', () => {
   it('Int#from', () => {
     expect(Int.from(Int.ONE)).toEqual(Int.ONE)
     expect(Int.from(Int.MAX_U64)).toEqual(Int.MAX_U64)
 
     expect(Int.from('1000000000000000000000000000000000000')?.value).toBe(
-      BigInt('1000000000000000000000000000000000000')
+      1000000000000000000000000000000000000n
     )
-    expect(Int.from('1')?.value).toBe(BigInt('1'))
-    expect(Int.from('0')?.value).toBe(BigInt('0'))
+    expect(Int.from('1')?.value).toBe(1n)
+    expect(Int.from('0')?.value).toBe(0n)
     expect(Int.from('-2')).toBeUndefined()
     expect(Int.from('2.14')).toBeUndefined()
   })
@@ -3280,6 +3480,6 @@ describe('utils', () => {
   it('Ratio#toString', () => {
     expect(new Ratio(Int.from(4)!, Int.ONE).toString()).toBe('4')
     expect(new Ratio(Int.ONE, Int.TWO).toString()).toBe('0.5')
-    expect(new Ratio(Int.ONE, Int.from(3) as PositiveInt).toString()).toBe('0.3333333333')
+    expect(new Ratio(Int.ONE, Int.from(3) as PositiveInt).toString()).toBe((1 / 3).toString())
   })
 })
