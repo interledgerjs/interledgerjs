@@ -186,6 +186,7 @@ export class Connection extends EventEmitter {
   protected maxStreamId: number
   protected log: any
   protected sending: boolean
+  protected looping: boolean = false // whether there is a running send-loop
   protected congestion: CongestionController
   protected minExchangeRatePrecision: number
   protected connected: boolean
@@ -969,7 +970,11 @@ export class Connection extends EventEmitter {
    * @private
    */
   protected async startSendLoop () {
-    if (this.sending) {
+    if (this.looping) {
+      // `sending` may be `false`, but the loop has not yet exited.
+      // Setting `true` ensures that it will try to loop at least once more before stopping,
+      // ensuring whatever changes triggered this `startSendLoop` call are sent.
+      this.sending = true
       return
     }
     if (this.remoteState === RemoteState.Closed) {
@@ -983,6 +988,7 @@ export class Connection extends EventEmitter {
       return
     }
 
+    this.looping = true
     this.sending = true
     this.log.debug('starting send loop')
 
@@ -997,7 +1003,9 @@ export class Connection extends EventEmitter {
           await this.loadAndSendPacket()
         }
       }
+      this.looping = false
     } catch (err) {
+      this.looping = false
       // TODO should a connection error be an error on all of the streams?
       return this.destroy(err)
     }
