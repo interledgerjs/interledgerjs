@@ -25,7 +25,9 @@ const generateCredentials = (opts?: any) => {
 
   if (process.env.ILP_BTP_SERVER) {
     const url = new URL(process.env.ILP_BTP_SERVER)
-    return { server: `${url.protocol}//${name}:${secret}@${url.host}` }
+    url.username = name
+    url.password = secret
+    return { server: url.href }
   }
 
   return { server: `btp+ws://${name}:${secret}@localhost:7768` }
