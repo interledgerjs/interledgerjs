@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.5.3](https://github.com/interledgerjs/interledgerjs/compare/ilp-plugin@3.5.2...ilp-plugin@3.5.3) (2021-02-04)
+
+
+### Bug Fixes
+
+* **ilp-plugin:** don't drop ILP_BTP_SERVER path ([5d4843b](https://github.com/interledgerjs/interledgerjs/commit/5d4843b947c8b1bb4237ff83083c084b71620a52))
+
+
+
+
+
 ## [3.5.2](https://github.com/interledgerjs/interledgerjs/compare/ilp-plugin@3.5.1...ilp-plugin@3.5.2) (2020-07-27)
 
 **Note:** Version bump only for package ilp-plugin

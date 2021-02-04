@@ -1,6 +1,6 @@
 {
   "name": "ilp-plugin",
-  "version": "3.5.2",
+  "version": "3.5.3",
   "description": "> A generic handle to ILP",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
