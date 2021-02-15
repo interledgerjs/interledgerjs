@@ -8,7 +8,7 @@
     "strict": true,
     "pretty": true,
     "esModuleInterop": true,
-    "target": "ES2020",
+    "target": "ES2019",
     "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
   },
   "include": ["src", "test"]

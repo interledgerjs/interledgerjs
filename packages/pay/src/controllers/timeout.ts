@@ -1,4 +1,4 @@
-import { StreamController } from '.'
+import { RequestState, StreamController } from '.'
 import { PaymentError } from '..'
 import { StreamReply, StreamRequest } from '../request'
 
@@ -9,12 +9,12 @@ export class TimeoutController implements StreamController {
   /** UNIX millisecond timestamp after which the payment should fail is no fulfill was received */
   private deadline?: number
 
-  nextState(request: StreamRequest): StreamRequest | PaymentError {
+  buildRequest(request: StreamRequest): RequestState {
     if (this.deadline && Date.now() > this.deadline) {
       request.log.error('ending payment: no fulfill received before idle deadline.')
-      return PaymentError.IdleTimeout
+      return RequestState.Error(PaymentError.IdleTimeout)
     } else {
-      return request
+      return RequestState.Ready()
     }
   }
 

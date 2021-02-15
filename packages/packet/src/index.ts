@@ -239,7 +239,7 @@ class Decoder {
     }
   }
 
-  // TODO Add/decode varuint up to u64? Some uses in STREAM
+  // TODO Add/decode varuint up to u64? Some uses in STREAM (?)
 }
 
 // TODO Create separate classes
@@ -327,6 +327,19 @@ class IlpPrepareDecoder extends Decoder {
  * - ConnectionClose
  * - ConnectionMaxStreamId
  */
+
+// TODO Or could this internally be, MultiFieldEncoder(Uint64Encoder, Uint64Encoder) ?
+class MaxPacketAmountEncoder extends Encoder {
+  get byteLength(): number {
+    return 16
+  }
+
+  write(buffer: ArrayBuffer, offset: number) {
+    const view = new DataView(buffer, offset)
+    view.setBigUint64(0, BigInt(0)) // TODO Add this as property
+    view.setBigUint64(8, BigInt(1)) // TODO Add this as property
+  }
+}
 
 class Uint8Encoder extends Encoder {
   private value: number

@@ -1,5 +1,5 @@
-import { StreamController } from '.'
-import { StreamRequest, RequestBuilder } from '../request'
+import { RequestState, StreamController } from '.'
+import { RequestBuilder } from '../request'
 
 export class ExpiryController implements StreamController {
   /**
@@ -9,9 +9,8 @@ export class ExpiryController implements StreamController {
    */
   private static DEFAULT_PACKET_EXPIRY_MS = 20_000
 
-  nextState(request: StreamRequest): StreamRequest {
-    return new RequestBuilder(request)
-      .setExpiry(new Date(Date.now() + ExpiryController.DEFAULT_PACKET_EXPIRY_MS))
-      .build()
+  buildRequest(request: RequestBuilder): RequestState {
+    request.setExpiry(new Date(Date.now() + ExpiryController.DEFAULT_PACKET_EXPIRY_MS))
+    return RequestState.Ready()
   }
 }

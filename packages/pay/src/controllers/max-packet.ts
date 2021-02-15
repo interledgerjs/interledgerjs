@@ -5,6 +5,7 @@ import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
 import { IlpError } from 'ilp-packet'
 import { StreamReject, StreamReply, StreamRequest } from '../request'
+import { RateProbe } from './rate-probe'
 
 /** How the maximum packet amount is known or discovered */
 enum MaxPacketState {
@@ -69,24 +70,21 @@ export class MaxPacketAmountController implements StreamController {
     }
   }
 
-  /**
-   * Return a verified limit on the max packet amount, TODO
-   *
-   * Requires that the precise max packet amount has been verified (acked
-   * by receiver) or no F08 has been encountered yet.
-   */
-  getDiscoveredMaxPacketAmount(): PositiveInt | undefined {
-    if (
+  // TODO Move this to rate-probe & publicly export state?
+  /** Did we verify the precise max packet amount or a large path capacity? */
+  isProbeComplete(): boolean {
+    const verifiedPreciseMax =
       this.state.type === MaxPacketState.PreciseMax &&
-      this.state.maxPacketAmount.isEqualTo(this.verifiedPathCapacity)
-    ) {
-      return this.state.maxPacketAmount
-    } else if (
+      this.verifiedPathCapacity.isEqualTo(this.state.maxPacketAmount)
+    const verifiedLargeCapacity =
       this.state.type === MaxPacketState.UnknownMax &&
-      this.verifiedPathCapacity.isPositive()
-    ) {
-      return Int.MAX_U64
-    }
+      this.verifiedPathCapacity.isGreaterThanOrEqualTo(RateProbe.MAX_PROBE_AMOUNT)
+    return verifiedPreciseMax || verifiedLargeCapacity
+  }
+
+  /** Return the current upper bound on the max packet amount */
+  getMaxPacketAmountLimit(): PositiveInt {
+    return this.state.type === MaxPacketState.UnknownMax ? Int.MAX_U64 : this.state.maxPacketAmount
   }
 
   applyRequest({ sourceAmount }: StreamRequest) {

@@ -1,39 +1,31 @@
-import { SendLoop } from '.'
+import { StreamSender, SenderContext, SendState } from '.'
 import { ConnectionCloseFrame, ErrorCode } from 'ilp-protocol-stream/dist/src/packet'
 import { EstablishmentController } from './establishment'
-import { StreamRequest } from '../request'
-import { PaymentError } from '..'
 import { SequenceController } from './sequence'
-import { InFlightTracker } from './pending-requests'
 import { ExpiryController } from './expiry'
 
-export class ConnectionCloser extends SendLoop<true> {
+export class ConnectionCloser implements StreamSender<boolean> {
   // prettier-ignore
-  order = [
+  readonly order = [
     SequenceController,
     EstablishmentController,
     ExpiryController,
-    InFlightTracker // TODO remove?
   ]
 
-  async trySending(request: StreamRequest): Promise<void | PaymentError> {
-    const didConnect = this.controllers.get(EstablishmentController).didConnect()
-    if (didConnect) {
-      // Try to send connection close frame
-      // (wait for reply so plugin isn't accidentally closed before this is sent)
-      await this.send({
-        ...request,
-        frames: [new ConnectionCloseFrame(ErrorCode.NoError, '')],
-      })
+  nextState({ request, send, lookup }: SenderContext<boolean>): SendState<boolean> {
+    const didEstablish = lookup(EstablishmentController).didConnect()
+    if (!didEstablish) {
+      return SendState.Done(false)
     }
 
-    // TODO What to do if it KNOWS no more requests will be sent?
+    // Try to send connection close frame on best-effort basis
+    request.log.debug('trying to send connection close frame.')
+    request.addFrames(new ConnectionCloseFrame(ErrorCode.NoError, ''))
+    send(() =>
+      // After request completes, finish send loop
+      SendState.Done(true)
+    )
 
-    // return this.resolve()
-  }
-
-  finalize(): true | PaymentError | false {
-    // TODO
-    return true
+    return SendState.Yield() // Don't schedule another attempt
   }
 }

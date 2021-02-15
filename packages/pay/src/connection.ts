@@ -1,7 +1,6 @@
 import createLogger, { Logger } from 'ilp-logger'
 import {
   deserializeIlpReply,
-  IlpAddress,
   IlpError,
   IlpPacketType,
   IlpReject,
@@ -9,7 +8,6 @@ import {
   isFulfill,
   isReject,
   serializeIlpPrepare,
-  serializeIlpReject,
 } from 'ilp-packet'
 import {
   generateFulfillment,
@@ -19,8 +17,6 @@ import {
   hash,
 } from 'ilp-protocol-stream/dist/src/crypto'
 import { Frame, FrameType, Packet } from 'ilp-protocol-stream/dist/src/packet'
-import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { isPaymentError, PaymentError } from '.'
 import { StreamFulfill, StreamReject, StreamReply, StreamRequest } from './request'
 import { Int, timeout } from './utils'
 import { PaymentDestination } from './open-payments'
@@ -30,58 +26,29 @@ export interface StreamConnection {
   /** Send an ILP Prepare over STREAM, then parse and authenticate the reply */
   sendRequest: (request: StreamRequest) => Promise<StreamReply>
 
-  /** Disconnect the plugin and unregister handlers (note: does not send `ConnectionClose` frame) */
-  close(): Promise<void>
-
   /** Logger namespaced to this connection */
   log: Logger
+
+  /** Unique details to establish the connection to the recipient */
+  destinationDetails: PaymentDestination
 }
 
 /** Connect the given plugin, generate keys, register handlers, and setup ILP connection so STREAM requests may be sent */
 export const createConnection = async (
-  plugin: Plugin, // TODO Replace with a sendData function?
-  { sharedSecret, destinationAddress }: PaymentDestination
-): // TODO Should this take in a payment destination instead...?
-Promise<StreamConnection | PaymentError> => {
+  sendData: (data: Buffer) => Promise<Buffer>,
+  destinationDetails: PaymentDestination
+): Promise<StreamConnection> => {
+  const { sharedSecret, destinationAddress } = destinationDetails
+
   const encryptionKey = await generatePskEncryptionKey(sharedSecret)
   const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
   const connectionId = await hash(Buffer.from(destinationAddress))
   const log = createLogger(`ilp-pay:${connectionId.toString('hex').slice(0, 6)}`)
 
-  const connectResult = await timeout(
-    10_000,
-    plugin.connect().catch((err: Error) => {
-      log.error('error connecting plugin:', err)
-      return PaymentError.Disconnected
-    })
-  ).catch(() => {
-    log.error('plugin failed to connect: timed out.')
-    return PaymentError.Disconnected
-  })
-  if (isPaymentError(connectResult)) {
-    return connectResult
-  }
-
-  // Incoming packets *should* never be received since our source address is never shared
-  // with the STREAM receiver. Therefore, these are likely only packets mistakenly routed to us.
-  plugin.deregisterDataHandler()
-  plugin.registerDataHandler(async () => serializeIlpReject(createReject(IlpError.F02_UNREACHABLE)))
-
   return {
     log,
-
-    close: () =>
-      timeout(
-        5_000,
-        plugin
-          .disconnect()
-          .then(() => log.debug('plugin disconnected.'))
-          .catch((err: Error) => log.error('error disconnecting plugin:', err))
-      )
-        .catch(() => log.error('plugin failed to disconnect: timed out.'))
-        .finally(() => plugin.deregisterDataHandler()),
-
+    destinationDetails,
     sendRequest: async (request: StreamRequest): Promise<StreamReply> => {
       // Create the STREAM request packet
       const {
@@ -98,7 +65,7 @@ Promise<StreamConnection | PaymentError> => {
       const streamRequest = new Packet(
         sequence,
         IlpPacketType.Prepare.valueOf(),
-        minDestinationAmount.toLong(), // TODO What if this exceeds max u64?
+        minDestinationAmount.toLong(),
         frames
       )
 
@@ -137,41 +104,31 @@ Promise<StreamConnection | PaymentError> => {
       })
 
       // Send the packet!
-      const pendingReply: Promise<IlpReply> = plugin.isConnected()
-        ? plugin
-            .sendData(preparePacket)
-            .then((data) => {
-              try {
-                return deserializeIlpReply(data)
-              } catch (_) {
-                return createReject(IlpError.F01_INVALID_PACKET)
-              }
-            })
-            .catch((err) => {
-              log.error('failed to send Prepare:', err)
-              return createReject(IlpError.T00_INTERNAL_ERROR)
-            })
-            .then((ilpReply) => {
-              if (
-                !isFulfill(ilpReply) ||
-                !fulfillment ||
-                ilpReply.fulfillment.equals(fulfillment)
-              ) {
-                return ilpReply
-              }
+      const pendingReply = sendData(preparePacket)
+        .then((data) => {
+          try {
+            return deserializeIlpReply(data)
+          } catch (_) {
+            return createReject(IlpError.F01_INVALID_PACKET)
+          }
+        })
+        .catch((err) => {
+          log.error('failed to send Prepare:', err)
+          return createReject(IlpError.T00_INTERNAL_ERROR)
+        })
+        .then((ilpReply) => {
+          if (!isFulfill(ilpReply) || !fulfillment || ilpReply.fulfillment.equals(fulfillment)) {
+            return ilpReply
+          }
 
-              log.error(
-                'got invalid fulfillment: %h. expected: %h, condition: %h',
-                ilpReply.fulfillment,
-                fulfillment,
-                executionCondition
-              )
-              return createReject(IlpError.F05_WRONG_CONDITION)
-            })
-        : // Don't send a packet if the plugin is not connected, but handle it as a temporary failure.
-          // For example: ilp-plugin-btp would still try to send the request, but if fails, still waits until it times out.
-          // (This assumes plugins automatically attempt to reconnect in the background.)
-          Promise.resolve(createReject(IlpError.T00_INTERNAL_ERROR))
+          log.error(
+            'got invalid fulfillment: %h. expected: %h, condition: %h',
+            ilpReply.fulfillment,
+            fulfillment,
+            executionCondition
+          )
+          return createReject(IlpError.F05_WRONG_CONDITION)
+        })
 
       // Await reply and timeout if the packet expires
       const timeoutDuration = expiresAt.getTime() - Date.now()

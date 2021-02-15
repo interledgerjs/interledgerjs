@@ -79,6 +79,8 @@ export class ExchangeRateCalculator {
    * Estimate the delivered amount from the given source amount.
    * (1) Low-end estimate: at least this amount will get delivered, if the rate hasn't fluctuated.
    * (2) High-end estimate: no more than this amount will get delivered, if the rate hasn't fluctuated.
+   *
+   * Cap the destination amounts at the max U64, since that's the most that an ILP packet can credit.
    */
   estimateDestinationAmount(sourceAmount: Int): [Int, Int] {
     // If we already sent a packet for this amount, return how much the recipient got
@@ -87,12 +89,15 @@ export class ExchangeRateCalculator {
       return [amountReceived, amountReceived]
     }
 
-    const lowEndDestination = sourceAmount.multiplyFloor(this.lowerBoundRate)
+    const lowEndDestination = sourceAmount.multiplyFloor(this.lowerBoundRate).orLesser(Int.MAX_U64)
 
     // Since upper bound exchange rate is exclusive:
     // If source amount converts exactly to an integer, destination amount MUST be 1 unit less
     // If source amount doesn't convert precisely, we can't narrow it any better than that amount, floored ¯\_(ツ)_/¯
-    const highEndDestination = sourceAmount.multiplyCeil(this.upperBoundRate).subtract(Int.ONE)
+    const highEndDestination = sourceAmount
+      .multiplyCeil(this.upperBoundRate)
+      .subtract(Int.ONE)
+      .orLesser(Int.MAX_U64)
 
     return [lowEndDestination, highEndDestination]
   }
@@ -103,6 +108,7 @@ export class ExchangeRateCalculator {
    *     that *may* deliver the given destination amount, if the rate hasn't fluctuated.
    * (2) High-end estimate (won't under-deliver, may over-deliver): lowest source amount that
    *     delivers at least the given destination amount, if the rate hasn't fluctuated.
+   *
    * Returns `undefined` if the rate is 0 and it may not be possible to deliver anything.
    */
   estimateSourceAmount(destinationAmount: PositiveInt): [PositiveInt, PositiveInt] | undefined {
@@ -112,13 +118,13 @@ export class ExchangeRateCalculator {
       return [amountSent, amountSent]
     }
 
-    // If the exchange rate is a packet that delivered 0, the source amount is undefined
-    if (!this.lowerBoundRate.isPositive() || !this.upperBoundRate.isPositive()) {
-      return
-    }
-
     const lowerBoundRate = this.lowerBoundRate.reciprocal()
     const upperBoundRate = this.upperBoundRate.reciprocal()
+
+    // If the exchange rate is a packet that delivered 0, the source amount is undefined
+    if (!lowerBoundRate || !upperBoundRate) {
+      return
+    }
 
     const lowEndSource = destinationAmount.multiplyFloor(upperBoundRate).add(Int.ONE)
     const highEndSource = destinationAmount.multiplyCeil(lowerBoundRate)

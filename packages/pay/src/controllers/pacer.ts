@@ -1,8 +1,7 @@
-import { StreamController } from '.'
+import { RequestState, StreamController } from '.'
 import { IlpError } from 'ilp-packet'
 import { sleep } from '../utils'
-import { InFlightTracker } from './pending-requests'
-import { StreamReply, StreamRequest } from '../request'
+import { StreamReply } from '../request'
 
 /**
  * Flow controller to send packets at a consistent cadence
@@ -18,11 +17,20 @@ export class PacingController implements StreamController {
   /** Maximum number of packets to send in a 1 second interval, after ramp up (5ms delay) */
   private static MAX_PACKETS_PER_SECOND = 200
 
+  /** Additive increase of packets per second rate on authentic reply */
+  private static PACKETS_PER_SECOND_INCREASE_TERM = 0.5
+
+  /** Multiplicative decrease of packets per second rate on trasient error */
+  private static PACKETS_PER_SECOND_DECREASE_FACTOR = 0.5
+
   /** RTT to use for pacing before an average can be ascertained */
   private static DEFAULT_ROUND_TRIP_TIME_MS = 200
 
   /** Weight to compute next RTT average. Halves weight of past round trips every ~5 flights */
   private static ROUND_TRIP_AVERAGE_WEIGHT = 0.9
+
+  /** Maximum number of packets to have in-flight, yet to receive a Fulfill or Reject */
+  private static MAX_INFLIGHT_PACKETS = 20
 
   /** UNIX timestamp when most recent packet was sent */
   private lastPacketSentTime = 0
@@ -33,13 +41,16 @@ export class PacingController implements StreamController {
   /** Rate of packets to send per second. This shouldn't ever be 0, but may become a small fraction */
   private packetsPerSecond = PacingController.DEFAULT_PACKETS_PER_SECOND
 
+  /** Number of in-flight requests */
+  private inFlightCount = 0
+
   /**
    * Rate to send packets, in packets / millisecond, using packet rate limit and round trip time.
    * Corresponds to the ms delay between each packet
    */
   getPacketFrequency(): number {
     const packetsPerSecondDelay = 1000 / this.packetsPerSecond
-    const maxInFlightDelay = this.averageRoundTrip / InFlightTracker.MAX_INFLIGHT_PACKETS
+    const maxInFlightDelay = this.averageRoundTrip / PacingController.MAX_INFLIGHT_PACKETS
 
     return Math.max(packetsPerSecondDelay, maxInFlightDelay)
   }
@@ -50,16 +61,24 @@ export class PacingController implements StreamController {
     return this.lastPacketSentTime + delayDuration
   }
 
-  nextState(request: StreamRequest): StreamRequest | Promise<unknown> {
+  buildRequest(): RequestState {
     const durationUntilNextPacket = this.getNextPacketSendTime() - Date.now()
-    return durationUntilNextPacket > 0 ? sleep(durationUntilNextPacket) : request
+    return durationUntilNextPacket > 0
+      ? RequestState.Schedule(sleep(durationUntilNextPacket))
+      : this.inFlightCount >= PacingController.MAX_INFLIGHT_PACKETS
+      ? RequestState.Yield() // Assumes sender will schedule another attempt when in-flight requests complete
+      : RequestState.Ready()
   }
 
   applyRequest(): (reply: StreamReply) => void {
     const sentTime = Date.now()
     this.lastPacketSentTime = sentTime
 
+    this.inFlightCount++
+
     return (reply: StreamReply) => {
+      this.inFlightCount--
+
       // Only update the RTT if we know the request got to the recipient
       if (reply.isAuthentic()) {
         const roundTripTime = Math.max(Date.now() - sentTime, 0)
@@ -70,14 +89,11 @@ export class PacingController implements StreamController {
 
       // If we encounter a temporary error that's not related to liquidity,
       // exponentially backoff the rate of packet sending
-      if (
-        reply.isReject() &&
-        reply.ilpReject.code[0] === 'T' &&
-        reply.ilpReject.code !== IlpError.T04_INSUFFICIENT_LIQUIDITY
-      ) {
+      // TODO For now, backoff in time on T04s, but add separate liquidity congestion controller/logic
+      if (reply.isReject() && reply.ilpReject.code[0] === 'T') {
         const reducedRate = Math.max(
           PacingController.MIN_PACKETS_PER_SECOND,
-          this.packetsPerSecond / 2 // Fractional rates are fine
+          this.packetsPerSecond * PacingController.PACKETS_PER_SECOND_DECREASE_FACTOR // Fractional rates are fine
         )
         reply.log.debug(
           'handling %s. backing off to %s packets / second',
@@ -90,7 +106,7 @@ export class PacingController implements StreamController {
       else if (reply.isAuthentic()) {
         this.packetsPerSecond = Math.min(
           PacingController.MAX_PACKETS_PER_SECOND,
-          this.packetsPerSecond + 0.5
+          this.packetsPerSecond + PacingController.PACKETS_PER_SECOND_INCREASE_TERM
         )
       }
     }

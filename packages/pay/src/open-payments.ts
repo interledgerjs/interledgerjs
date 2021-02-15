@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/no-empty-function */
 import { Int, isNonNegativeRational, PositiveInt, sleep } from './utils'
-import fetch from 'node-fetch'
+import fetch, { Response } from 'node-fetch'
 import { PaymentError, SetupOptions } from '.'
 import createLogger from 'ilp-logger'
 import { AssetDetails, isValidAssetScale, isValidAssetDetails } from './controllers/asset-details'
@@ -26,6 +26,12 @@ export interface PaymentDestination {
   destinationAsset?: AssetDetails
   /** Open Payments invoice metadata, if the payment pays into an invoice */
   invoice?: Invoice
+  /**
+   * URL of the recipient Open Payments/SPSP account, identifying a unique payment recipient.
+   * Each account URL can also be represented as a payment pointer, and vice-versa.
+   * Not application is STREAM credentials were provided directly.
+   */
+  accountUrl?: string
 }
 
 /** [Open Payments invoice](https://docs.openpayments.dev/invoices) metadata */
@@ -65,7 +71,7 @@ export const fetchPaymentDetails = async (
   else if (
     isSharedSecretBuffer(sharedSecret) &&
     isValidIlpAddress(destinationAddress) &&
-    (typeof destinationAsset === 'undefined' || isValidAssetDetails(destinationAsset))
+    (!destinationAsset || isValidAssetDetails(destinationAsset))
   ) {
     log.warn(
       'using custom STREAM credentials. invoice or payment pointer is recommended to setup a STREAM payment'
@@ -84,13 +90,19 @@ export const fetchPaymentDetails = async (
 }
 
 /** Fetch an invoice and STREAM credentials from an Open Payments */
-const queryInvoice = async (invoiceUrl: string): Promise<PaymentDestination | PaymentError> =>
-  fetchJson(invoiceUrl, INVOICE_QUERY_ACCEPT_HEADER)
+const queryInvoice = async (invoiceUrl: string): Promise<PaymentDestination | PaymentError> => {
+  if (!isHttpsUrl(invoiceUrl)) {
+    log.debug('invoice query failed: invoice URL not HTTPS.')
+    return PaymentError.QueryFailed
+  }
+
+  return fetchJson(invoiceUrl, INVOICE_QUERY_ACCEPT_HEADER)
     .then(async (data) => {
       const invoice = validateOpenPaymentsInvoice(data)
       const credentials = validateOpenPaymentsCredentials(data)
       if (invoice && credentials) {
         return {
+          accountUrl: invoice.accountUrl,
           invoice,
           ...credentials,
         }
@@ -98,8 +110,9 @@ const queryInvoice = async (invoiceUrl: string): Promise<PaymentDestination | Pa
 
       log.debug('invoice query returned an invalid response.')
     })
-    .catch((err) => log.debug('invoice query failed: %s', err))
+    .catch((err) => log.debug('invoice query failed.', err?.message))
     .then((res) => res || PaymentError.QueryFailed)
+}
 
 /** Query the payment pointer, Open Payments server, or SPSP server for credentials to establish a STREAM connection */
 export const queryAccount = async (
@@ -119,7 +132,35 @@ export const queryAccount = async (
         log.debug('payment pointer query returned no valid STREAM credentials.')
     )
     .catch((err) => log.debug('payment pointer query failed: %s', err))
-    .then((res) => res || PaymentError.QueryFailed)
+    .then((res) => (res ? { ...res, accountUrl } : PaymentError.QueryFailed))
+}
+
+/** Validate and convert a payment pointer into account URLs for an Open Payments or SPSP server */
+export const parsePaymentPointer = (pointer: string): string | undefined => {
+  try {
+    const endpoint = pointer.startsWith('$')
+      ? new URL('https://' + pointer.substring(1))
+      : new URL(pointer)
+
+    if (endpoint.pathname === '/') {
+      endpoint.pathname = '/.well-known/pay'
+    }
+
+    // Per spec on paymentpointers.org:
+    // - Only HTTPS
+    // - No query part
+    // - No fragment part
+    //
+    // "Payment Pointers that do not meet the limited syntax of this profile MUST be
+    //  considered invalid and should not be used to resolve a URL."
+    if (endpoint.protocol !== 'https:' || endpoint.search !== '' || endpoint.hash !== '') {
+      return
+    }
+
+    return endpoint.toString()
+  } catch (_) {
+    // No-op if the URL is invalid
+  }
 }
 
 /** Perform an HTTP request using `fetch` with timeout and retries. Resolve with parsed JSON, reject otherwise. */
@@ -135,29 +176,43 @@ const fetchJson = async (
   const retryDelay = remainingRetries.shift()
 
   return fetch(url, {
+    redirect: 'follow',
     headers: {
       Accept: acceptHeader,
     },
     signal: controller.signal,
   })
-    .then(async (res) => {
-      if ((res.status >= 500 || res.status === 429) && retryDelay) {
-        await sleep(retryDelay)
-        return fetchJson(url, acceptHeader, timeout, remainingRetries)
-      }
+    .then(
+      async (res: Response) => {
+        // If server error, retry after delay
+        if ((res.status >= 500 || res.status === 429) && retryDelay) {
+          await sleep(retryDelay)
+          return fetchJson(url, acceptHeader, timeout, remainingRetries)
+        }
 
-      return res.ok ? res.json() : Promise.reject(res.status)
-    })
-    .catch(async (err) => {
-      // If connection error
-      if (err.name !== 'AbortError' && retryDelay) {
-        await sleep(retryDelay)
-        return fetchJson(url, acceptHeader, timeout, remainingRetries)
-      }
+        // Parse JSON on HTTP 2xx, otherwise error
+        return res.ok ? res.json() : Promise.reject()
+      },
+      async (err: Error) => {
+        // Only handle timeout (abort) errors. Use two `then` callbacks instead
+        // of then/catch so JSON parsing errors, etc. are not caught here.
+        if (err.name !== 'AbortError' && retryDelay) {
+          await sleep(retryDelay)
+          return fetchJson(url, acceptHeader, timeout, remainingRetries)
+        }
 
-      throw err
-    })
+        throw err
+      }
+    )
     .finally(() => clearTimeout(timer))
+}
+
+const isHttpsUrl = (url: string): boolean => {
+  try {
+    return new URL(url).protocol === 'https:'
+  } catch (_) {
+    return false
+  }
 }
 
 const validateSharedSecretBase64 = (o: any): Buffer | undefined => {
@@ -171,28 +226,6 @@ const validateSharedSecretBase64 = (o: any): Buffer | undefined => {
 
 const isSharedSecretBuffer = (o: any): o is Buffer =>
   Buffer.isBuffer(o) && o.byteLength === SHARED_SECRET_BYTE_LENGTH
-
-/** Validate and convert a payment pointer into account URLs for an Open Payments & SPSP server */
-const parsePaymentPointer = (pointer: string): string | undefined => {
-  try {
-    let endpoint: URL
-    if (pointer.startsWith('$')) {
-      endpoint = new URL('https://' + pointer.substring(1))
-      endpoint.search = '' // TODO test that it removes query params & fragments
-      endpoint.hash = ''
-    } else {
-      endpoint = new URL(pointer)
-    }
-
-    if (endpoint.pathname === '/') {
-      endpoint.pathname = '/.well-known/pay'
-    }
-
-    return endpoint.toString()
-  } catch (_) {
-    // No-op if the URL is invalid
-  }
-}
 
 /** Validate the input is a number or string in the range of a u64 integer, and transform into `Int` */
 const validateUInt64 = (o: any): Int | undefined => {
@@ -229,6 +262,8 @@ const validateOpenPaymentsInvoice = (o: any): Invoice | undefined => {
     typeof invoiceUrl !== 'string' ||
     typeof accountUrl !== 'string' ||
     typeof description !== 'string' ||
+    !isHttpsUrl(invoiceUrl) ||
+    !parsePaymentPointer(accountUrl) ||
     !isNonNegativeRational(expiresAt) ||
     !amountToDeliver ||
     !amountToDeliver.isPositive() ||

@@ -1,7 +1,7 @@
 import { Int } from './utils'
 import { Frame } from 'ilp-protocol-stream/dist/src/packet'
 import { Logger } from 'ilp-logger'
-import { IlpReject, IlpAddress } from 'ilp-packet'
+import { IlpAddress, IlpReject } from 'ilp-packet'
 
 /** Amounts and data to send a unique ILP Prepare over STREAM */
 export interface StreamRequest {
@@ -23,27 +23,54 @@ export interface StreamRequest {
   log: Logger
 }
 
-export const DEFAULT_REQUEST: StreamRequest = {
-  destinationAddress: 'private.example' as IlpAddress,
-  expiresAt: new Date(),
-  sequence: 0,
-  sourceAmount: Int.ZERO,
-  minDestinationAmount: Int.ZERO,
-  frames: [],
-  isFulfillable: false,
-  log: new Logger('ilp-pay'),
-}
-
 /** Builder to construct the next ILP Prepare and STREAM request */
-export class RequestBuilder {
+export class RequestBuilder implements StreamRequest {
   private request: StreamRequest
 
-  // TODO Does this need to take a partial? Where is this used?
   constructor(request?: Partial<StreamRequest>) {
     this.request = {
-      ...DEFAULT_REQUEST,
+      destinationAddress: 'private.example' as IlpAddress,
+      expiresAt: new Date(),
+      sequence: 0,
+      sourceAmount: Int.ZERO,
+      minDestinationAmount: Int.ZERO,
+      frames: [],
+      isFulfillable: false,
+      log: new Logger('ilp-pay'),
       ...request,
     }
+  }
+
+  get destinationAddress(): IlpAddress {
+    return this.request.destinationAddress
+  }
+
+  get expiresAt(): Date {
+    return this.request.expiresAt
+  }
+
+  get sequence(): number {
+    return this.request.sequence
+  }
+
+  get sourceAmount(): Int {
+    return this.request.sourceAmount
+  }
+
+  get minDestinationAmount(): Int {
+    return this.request.minDestinationAmount
+  }
+
+  get frames(): Frame[] {
+    return this.request.frames
+  }
+
+  get isFulfillable(): boolean {
+    return this.request.isFulfillable
+  }
+
+  get log(): Logger {
+    return this.request.log
   }
 
   /** Set the ILP address of the destination of the ILP Prepare */

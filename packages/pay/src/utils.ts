@@ -1,29 +1,7 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
 import Long from 'long'
 
-/**
- * Promise that can be resolved or rejected outside its executor callback.
- * Also enables a synchronously getting the resolved value of the Promise
- */
-export class PromiseResolver<T> {
-  private isSettled = false
-  value?: T
-  resolve!: (value: T) => void
-  reject!: () => void
-  readonly promise = new Promise<T>((resolve, reject) => {
-    this.resolve = (value: T) => {
-      if (!this.isSettled) {
-        this.isSettled = true
-        this.value = value
-        resolve(value)
-      }
-    }
-    this.reject = () => {
-      this.isSettled = true
-      reject()
-    }
-  })
-}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Constructor<T> = new (...args: any[]) => T
 
 /**
  * Return a rejected Promise if the given Promise does not resolve within the timeout,
@@ -44,12 +22,12 @@ export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeou
 
 /** Integer greater than or equal to 0 */
 export class Int {
-  readonly value: bigint // TODO Is there a way to prevent consumers from setting this?
+  readonly value: bigint
 
-  static ZERO = new Int(0n)
-  static ONE = new Int(1n) as PositiveInt
-  static TWO = new Int(2n) as PositiveInt
-  static MAX_U64 = new Int(18446744073709551615n) as PositiveInt
+  static ZERO = new Int(BigInt(0))
+  static ONE = new Int(BigInt(1)) as PositiveInt
+  static TWO = new Int(BigInt(2)) as PositiveInt
+  static MAX_U64 = new Int(BigInt('18446744073709551615')) as PositiveInt
 
   private constructor(n: bigint) {
     this.value = n
@@ -100,7 +78,7 @@ export class Int {
   private static fromLong(n: Long): Int {
     const lsb = BigInt(n.getLowBitsUnsigned())
     const gsb = BigInt(n.getHighBitsUnsigned())
-    return new Int(lsb + 4294967296n * gsb)
+    return new Int(lsb + BigInt(4294967296) * gsb)
   }
 
   add(n: PositiveInt): PositiveInt
@@ -132,7 +110,7 @@ export class Int {
 
   divideCeil(d: PositiveInt): Int {
     // Simple algorithm with no modulo/conditional: https://medium.com/@arunistime/how-div-round-up-works-179f1a2113b5
-    return new Int((this.value + d.value - 1n) / d.value)
+    return new Int((this.value + d.value - BigInt(1)) / d.value)
   }
 
   modulo(n: PositiveInt): Int {
@@ -179,9 +157,13 @@ export class Int {
     return this.value.toString()
   }
 
-  toLong(): Long {
+  toLong(): Long | undefined {
+    if (this.isGreaterThan(Int.MAX_U64)) {
+      return
+    }
+
     const lsb = BigInt.asIntN(32, this.value)
-    const gsb = (this.value - lsb) / 4294967296n
+    const gsb = (this.value - lsb) / BigInt(4294967296)
     return new Long(Number(lsb), Number(gsb), true)
   }
 
@@ -258,14 +240,14 @@ export class Ratio {
       e *= 10
     }
 
-    const a = Int.from(n * e)!
-    const b = Int.from(e)!
-    return new Ratio(a, b as PositiveInt)
+    const a = Int.from(n * e) as Int
+    const b = Int.from(e) as PositiveInt
+    return new Ratio(a, b)
   }
 
-  reciprocal(): Ratio | undefined {
+  reciprocal(): PositiveRatio | undefined {
     if (this.a.isPositive()) {
-      return new Ratio(this.b, this.a)
+      return new Ratio(this.b, this.a) as PositiveRatio
     }
   }
 

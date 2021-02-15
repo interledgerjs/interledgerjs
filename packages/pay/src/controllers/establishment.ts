@@ -1,40 +1,44 @@
-import { StreamController } from '.'
+import { RequestState, StreamController } from '.'
 import { IlpAddress } from 'ilp-packet'
-import { StreamReply, StreamRequest, RequestBuilder } from '../request'
+import { StreamReply, RequestBuilder } from '../request'
 import {
   ConnectionMaxDataFrame,
   ConnectionMaxStreamIdFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { PaymentController } from './payment'
+import { PaymentDestination } from '../open-payments'
 
 /** Direct packets to the receiver to establish the connection and share limits */
 export class EstablishmentController implements StreamController {
+  private readonly destinationAddress: IlpAddress
   private isConnected = false
 
-  constructor(private readonly destinationAddress: IlpAddress) {}
+  constructor({ destinationAddress }: PaymentDestination) {
+    this.destinationAddress = destinationAddress
+  }
 
   didConnect(): boolean {
     return this.isConnected
   }
 
-  nextState(request: StreamRequest): StreamRequest {
-    const builder = new RequestBuilder(request).setDestinationAddress(this.destinationAddress)
+  buildRequest(request: RequestBuilder): RequestState {
+    request.setDestinationAddress(this.destinationAddress)
 
     if (!this.isConnected) {
-      builder.addFrames(
-        // Disallow any new streams (and only the client can open streamId=1)
+      request.addFrames(
+        // Disallow any new streams (and only the client can open stream 1)
         new ConnectionMaxStreamIdFrame(PaymentController.DEFAULT_STREAM_ID),
         // Disallow incoming data
         new ConnectionMaxDataFrame(0)
       )
     }
 
-    return builder.build()
+    return RequestState.Ready()
   }
 
   applyRequest(): (reply: StreamReply) => void {
     return (reply: StreamReply) => {
-      // Continue sending connection limits in each packet until we receive an authenticated response
+      // Ready sending connection limits in each packet until we receive an authenticated response
       this.isConnected = this.isConnected || reply.isAuthentic()
     }
   }

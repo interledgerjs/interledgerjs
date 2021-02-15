@@ -26,7 +26,7 @@ export class FailureController implements StreamController {
           ErrorCode[closeFrame.errorCode],
           closeFrame.errorMessage
         )
-        return PaymentError.ClosedByRecipient
+        return PaymentError.ClosedByReceiver
       }
 
       // Ignore Fulfills, temporary errors, F08, F99, R01

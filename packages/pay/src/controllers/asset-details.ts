@@ -1,6 +1,7 @@
 import { ConnectionAssetDetailsFrame, FrameType } from 'ilp-protocol-stream/dist/src/packet'
 import { StreamController } from '.'
 import { PaymentError } from '..'
+import { PaymentDestination } from '../open-payments'
 import { StreamReply } from '../request'
 
 // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/no-explicit-any
@@ -26,7 +27,11 @@ export interface AssetDetails {
  * check for conflicts with existing asset details
  */
 export class AssetDetailsController implements StreamController {
-  constructor(private destinationAsset?: AssetDetails) {}
+  private destinationAsset?: AssetDetails
+
+  constructor({ destinationAsset }: PaymentDestination) {
+    this.destinationAsset = destinationAsset
+  }
 
   getDestinationAsset(): AssetDetails | undefined {
     return this.destinationAsset

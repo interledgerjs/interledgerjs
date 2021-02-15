@@ -1,4 +1,4 @@
-## `@interledger/pay` :money_with_wings:
+## `pay` :money_with_wings:
 
 > Send payments over Interledger using STREAM
 
@@ -21,7 +21,7 @@ yarn add @interledger/pay
 
 ### Guide
 
-TODO Add section to this explaining amounts & `Int`
+TODO Add section to this explaining amounts, scales & `Int`
 
 #### Flow
 
@@ -71,7 +71,7 @@ async function run() {
 }
 ```
 
-#### Send money to a Payment Pointer
+#### Pay to [payment pointer](https://paymentpointers.org/)
 
 > Fixed source amount payment
 
@@ -123,17 +123,50 @@ async function run() {
 }
 ```
 
+#### Units
+
+On Interledger assets and denominations, from the [Settlement Engines RFC](https://interledger.org/rfcs/0038-settlement-engines/#units-and-quantities):
+
+> Asset amounts may be represented using any arbitrary denomination. For example, one U.S. dollar may be represented as \$1 or 100 cents, each of which is equivalent in value. Likewise, one Bitcoin may be represented as 1 BTC or 100,000,000 satoshis.
+>
+> A **standard unit** is the typical unit of value for a particular asset, such as \$1 in the case of U.S. dollars, or 1 BTC in the case of Bitcoin.
+>
+> A **fractional unit** represents some unit smaller than the standard unit, but with greater precision. Examples of fractional monetary units include one cent (\$0.01 USD), or 1 satoshi (0.00000001 BTC).
+>
+> An **asset scale** is the difference in orders of magnitude between the standard unit and a corresponding fractional unit. More formally, the asset scale is a non-negative integer (0, 1, 2, …) such that one standard unit equals the value of `10^(scale)` corresponding fractional units. If the fractional unit equals the standard unit, then the asset scale is 0.
+>
+> For example, one cent represents an asset scale of 2 in the case of USD, whereas one satoshi represents an asset scale of 8 in the case of Bitcoin.
+
+To simplify accounting, all amounts are represented as unsigned integers in a fractional unit of the asset corresponding to the source asset scale provided, or the destination asset scale resolved from the receiver.
+
+Since applications need to debit the source amount in their own system before executing a payment, this assumes they also know their own source asset and denomination. Therefore, it's not useful to resolve this information dynamically, such as using [IL-DCP](https://interledger.org/rfcs/0031-dynamic-configuration-protocol/), which also delays connection establishment.
+
 #### Amounts
 
-TODO explain
+`pay` leverages JavaScript [`BigInt`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)s for arbitrarily large integers, exporting its own wrapper for strongly typed arithmetic operations.
 
-#### Rates
+All amounts returned by `pay` use these exported classes and interfaces:
 
-TODO explain
+- [`Int`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L24) &mdash; Class representing non-negative integers.
+- [`PostiiveInt`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L180) &mdash; Interface narrowing `Int`, representing non-negative, non-zero integers. (In this context, zero is not considered signed).
+- [`Ratio`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L221) &mdash; Class representing a ratio of two integers: a non-negative numerator, and a non-negative, non-zero denominator.
+- [`PositiveRatio`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L306) &mdash; Interface narrowing `Ratio`, representing a ratio of two non-negative, non-zero integers.
+
+`Int` and `Ratio` offer utility methods for integer operations and comparisons. They may also be converted to/from `number`, `string`, `bigint`, and [`Long`](https://github.com/dcodeIO/Long.js/).
+
+`Int` and `Ratio` enforce handling of all divide-by-zero errors and the internal `bigint` is always non-negative. They also provide type guards for `PositiveInt` to reduce unnecessary code paths. For example, if one integer is greater than another, that integer must always be non-zero, and can be safely used as a ratio denominator without any divide-by-zero branch.
+
+#### Exchange Rates
+
+`pay` is designed to provide strong guarantees of the amount that will be delivered.
+
+During the `quote` step, the application provides `pay` with prices for the source and destination assets and it's own acceptable slippage percentage, which `pay` uses to calculate a minimum exchange rate and corresponding minimum destination amount it will enforce for the payment. Exchange rates are also defined in terms of the ratio between a destination amount and a source amount, in fractional units.
+
+Then, `pay` probes the recipient to determine the real exchange rate over that path. If it sufficiently exceeds the minimum exchange rate, `pay` will allow the payment to proceed. Otherwise, it's not possible to complete the payment. For instance, connectors may have applied a poor rate or charged too much in fees, the max packet size might be too small to avoid rounding errors, or incorrect assets/scales were provided.
+
+Since STREAM payments are packetized, `pay` cannot prevent partial completion, but guarantees payments will never exhaust their quoted maximum source amount without already satisfying their quoted minimum delivery amount. Every\* delivered packet meets or exceeds the quoted minimum exchange rate.
 
 #### Error Handling
-
-TODO update this example
 
 If setup or quoting fails, it will reject the Promise with a variant of the [`PaymentError`](#paymenterror) enum. For example:
 
@@ -161,18 +194,6 @@ Similarly, if an error was encountered during the payment itself, it will includ
 
 TODO: Update this description
 
-Quote and prepare to perform a payment:
-
-- Query the recipient's payment pointer or invoice to setup the payment
-- Fetch the asset and details of the sending account
-- Ensure there's a viable payment path to the recipient
-- Probe the realized exchange rate to the recipient
-- Enforce minimum exchange rates by comparing against rates pulled from external sources, and compute a maximum amount that will be sent
-
-After the quote is complete, the consumer will have the option to execute or cancel the payment.
-
-If the quote fails, the returned Promise will reject with a [`PaymentError`](#paymenterror) variant.
-
 #### `SetupOptions`
 
 > Interface
@@ -183,7 +204,7 @@ Parameters to setup and resolve payment details from the recipient.
 
 > [`Plugin`](https://github.com/interledger/rfcs/blob/master/deprecated/0024-ledger-plugin-interface-2/0024-ledger-plugin-interface-2.md)
 
-Plugin to send packets over a connected Interledger network.
+Plugin to send packets over a connected Interledger network (no receive functionality is necessary). Pay does not call `connect` or `disconnect` on the plugin, so the user must perform that manually.
 
 ##### `paymentPointer`
 
@@ -207,7 +228,12 @@ Resolved destination details of a proposed payment.
 
 > (options: QuoteOptions) => Promise<Quote>
 
-Perform a rate probe to ensure the recipient is routable, discover the path max packet size, probe the realized exchange rate, and compute the bounds of the payment.
+Perform a rate probe:
+
+- Ensure the recipient is routable
+- Discover the path max packet size
+- Probe the real exchange rate
+- compute the minimum exchange rate adn bounds of the payment
 
 ##### `close`
 
@@ -217,9 +243,9 @@ Close the connection, if it was established, and disconnect the plugin.
 
 ##### `destinationAddress`
 
-> `string`
+> `string` (`IlpAddress` type from `[ilp-packet](../ilp-packet)`)
 
-ILP address of the destination STREAM recipient, identifying this connection
+ILP address of the destination STREAM recipient, uniquely identifying this connection
 
 ##### `destinationAsset`
 
@@ -356,17 +382,16 @@ Payment error states
 
 ##### Errors likely caused by the user
 
-| Variant                        | Description                                                             |
-| :----------------------------- | :---------------------------------------------------------------------- |
-| **`InvalidPaymentPointer`**    | Payment pointer is formatted incorrectly                                |
-| **`InvalidCredentials`**       | No valid STREAM credentials or URL to fetch them was provided           |
-| **`Disconnected`**             | Plugin failed to connect or is disconnected from the Interleder network |
-| **`InvalidSlippage`**          | Slippage percentage is not between 0 and 1 (inclusive)                  |
-| **`UnknownSourceAsset`**       | Source asset or denomination was not provided                           |
-| **`UnknownPaymentTarget`**     | No fixed source amount or fixed destination amount was provided         |
-| **`InvalidSourceAmount`**      | Fixed source amount is not a positive integer                           |
-| **`InvalidDestinationAmount`** | Fixed delivery amount is not a positive integer                         |
-| **`UnenforceableDelivery`**    | Minimum exchange rate of 0 cannot enforce a fixed-delivery payment      |
+| Variant                        | Description                                                        |
+| :----------------------------- | :----------------------------------------------------------------- |
+| **`InvalidPaymentPointer`**    | Payment pointer is formatted incorrectly                           |
+| **`InvalidCredentials`**       | No valid STREAM credentials or URL to fetch them was provided      |
+| **`InvalidSlippage`**          | Slippage percentage is not between 0 and 1 (inclusive)             |
+| **`UnknownSourceAsset`**       | Source asset or denomination was not provided                      |
+| **`UnknownPaymentTarget`**     | No fixed source amount or fixed destination amount was provided    |
+| **`InvalidSourceAmount`**      | Fixed source amount is not a positive integer                      |
+| **`InvalidDestinationAmount`** | Fixed delivery amount is not a positive integer                    |
+| **`UnenforceableDelivery`**    | Minimum exchange rate of 0 cannot enforce a fixed-delivery payment |
 
 ##### Errors likely caused by the receiver, connectors, or other externalities
 
@@ -375,7 +400,7 @@ Payment error states
 | **`QueryFailed`**               | Failed to query the Open Payments or SPSP server, or received an invalid response          |
 | **`InvoiceAlreadyPaid`**        | Invoice was already fully paid or overpaid, so no payment is necessary                     |
 | **`ConnectorError`**            | Cannot send over this path due to an ILP Reject error                                      |
-| **`EstablishmentFailed`**       | No authentic reply from receiver, packets may not have been delivered                      |
+| **`EstablishmentFailed`**       | No authentic reply from receiver: packets may not have been delivered                      |
 | **`UnknownDestinationAsset`**   | Destination asset details are unknown or the receiver never provided them                  |
 | **`DestinationAssetConflict`**  | Receiver sent conflicting destination asset details                                        |
 | **`ExternalRateUnavailable`**   | Failed to compute a minimum exchange rate                                                  |
@@ -383,7 +408,7 @@ Payment error states
 | **`InsufficientExchangeRate`**  | Real exchange rate is less than minimum exchange rate with slippage                        |
 | **`ExchangeRateRoundingError`** | Exchange rate is too close to minimum to deliver max packet amount without rounding errors |
 | **`IdleTimeout`**               | No packets were fulfilled within timeout                                                   |
-| **`ClosedByRecipient`**         | The recipient closed the connection or stream, terminating the payment                     |
-| **`IncompatibleReceiveMax`**    | Receiver's advertised limit is incompatible with the amount we may deliver                 |
+| **`ClosedByReceiver`**          | Receiver closed the connection or stream, terminating the payment                          |
+| **`IncompatibleReceiveMax`**    | Estimated destination amount exceeds the receiver's limit                                  |
 | **`ReceiverProtocolViolation`** | Receiver violated the STREAM protocol, misrepresenting delivered amounts                   |
 | **`ExceededMaxSequence`**       | Encrypted maximum number of packets using the key for this connection                      |
