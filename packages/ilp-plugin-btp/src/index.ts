@@ -148,6 +148,7 @@ export interface IlpPluginBtpConstructorOptions {
   responseTimeout?: number
   btpAccount?: string
   btpToken?: string
+  btpAuthFlags?: Record<string, string | Buffer | Object>
 }
 
 export interface WebSocketServerConstructor {
@@ -229,6 +230,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
   private _server?: string
   private _btpToken?: string
   private _btpAccount?: string
+  private _flags?: Record<string, string | Buffer | Object>
 
   /**
    * Refer to `ws-reconnect` module.
@@ -264,6 +266,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
       this._btpToken = parsedToken || options.btpToken || ''
       this._btpAccount = parsedAccount || options.btpAccount || ''
+      this._flags = options.btpAuthFlags
     }
 
     modules = modules || {}
@@ -382,7 +385,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
           this._log.trace('connection authenticated')
           socket.on('message', this._handleIncomingWsMessage.bind(this, socket))
-          this._emitConnect()
+          this._emitConnect(authPacket)
         })
       })
       this._log.info(`listening for BTP connections on ${this._listener.port}`)
@@ -401,26 +404,18 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
         clearTryTimeout: this._reconnectClearTryTimeout
       })
 
-      const protocolData = [{
-        protocolName: 'auth',
-        contentType: BtpPacket.MIME_APPLICATION_OCTET_STREAM,
-        data: Buffer.from([])
-      }, {
-        protocolName: 'auth_username',
-        contentType: BtpPacket.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from(account, 'utf8')
-      }, {
-        protocolName: 'auth_token',
-        contentType: BtpPacket.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from(token, 'utf8')
-      }]
+      const protocolMap = Object.assign({
+        auth: Buffer.from([]),
+        auth_username: account,
+        auth_token: token
+      }, this._flags)
 
       this._ws.on('open', async () => {
         this._log.trace('connected to server')
         this._call('', {
           type: BtpPacket.TYPE_MESSAGE,
           requestId: await _requestId(),
-          data: { protocolData }
+          data: { protocolData: ilpAndCustomToProtocolData({ protocolMap }) }
         }).then(() => {
           this._emitConnect()
         }).catch((err) => {
@@ -439,20 +434,20 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       this._ws.on('message', this._handleIncomingWsMessage.bind(this, this._ws))
     }
 
-    await new Promise((resolve, reject) => {
+    const flags = await new Promise((resolve, reject) => {
       const onDisconnect = () => {
         if (this._ws) this._ws.close()
         reject(new Error('connection aborted'))
       }
       this.once('disconnect', onDisconnect)
-      this.once('_first_time_connect', () => {
+      this.once('_first_time_connect', (authPacket?: BtpPacket) => {
         this.removeListener('disconnect', onDisconnect)
-        resolve()
+        resolve(authPacket ? protocolDataToIlpAndCustom(authPacket.data).protocolMap : {})
       })
     })
 
     /* To be overriden. */
-    await this._connect()
+    await this._connect(flags)
 
     this._readyState = ReadyState.READY_TO_EMIT
     this._emitConnect()
@@ -638,7 +633,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * Converts protocol map to Btp packet. Reference in
    * procotol-data-converter.ts.
    */
-  ilpAndCustomToProtocolData (obj: { ilp?: Buffer, custom?: Object , protocolMap?: Map<string, Buffer | string | Object> }) {
+  ilpAndCustomToProtocolData (obj: { ilp?: Buffer, custom?: Object, protocolMap?: Record<string, Buffer | string | Object> }) {
     return ilpAndCustomToProtocolData(obj)
   }
 
@@ -749,7 +744,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       throw new Error('no request handler registered')
     }
 
-    const response = await this._dataHandler(ilp)
+    const response = ilp && await this._dataHandler(ilp)
     return ilpAndCustomToProtocolData({ ilp: response })
   }
 
@@ -795,9 +790,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * registered listeners (i.e. connected before) and is in the appropriate
    * ready state then emit a normal 'connect' event.
    */
-  private _emitConnect () {
+  private _emitConnect (authPacket?: BtpPacket) {
     if (this._readyState === ReadyState.CONNECTING) {
-      this.emit('_first_time_connect')
+      this.emit('_first_time_connect', authPacket)
     } else if (this._readyState === ReadyState.READY_TO_EMIT || this._readyState === ReadyState.DISCONNECTED) {
       this._readyState = ReadyState.CONNECTED
       this.emit('connect')

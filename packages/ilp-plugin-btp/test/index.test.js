@@ -185,6 +185,37 @@ describe('BtpPlugin', function () {
 
       await this.client.disconnect()
     })
+
+    it('supports custom flags', async function () {
+      this.client = new Plugin({
+        server: 'btp+ws://localhost:9000',
+        btpAccount: 'bob',
+        btpToken: 'secret',
+        reconnectInterval: 100,
+        responseTimeout: 100,
+        btpAuthFlags: { foo: 123 }
+      })
+      let gotFlags
+      this.server._connect = (flags) => { gotFlags = flags }
+
+      await Promise.all([
+        this.server.connect(),
+        this.client.connect()
+      ])
+      assert.strictEqual(this.server.isConnected(), true)
+      assert.strictEqual(this.client.isConnected(), true)
+
+      this.server.registerDataHandler((ilp) => {
+        assert.deepEqual(ilp, Buffer.from('foo'))
+        return Buffer.from('bar')
+      })
+
+      const response = await this.client.sendData(Buffer.from('foo'))
+      assert.deepEqual(response, Buffer.from('bar'))
+      assert.equal(gotFlags.foo, 123)
+
+      await this.client.disconnect()
+    })
   })
 
   describe('connect (server)', function () {

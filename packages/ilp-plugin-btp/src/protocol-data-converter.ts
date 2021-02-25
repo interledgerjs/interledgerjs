@@ -1,12 +1,18 @@
 import { BtpSubProtocol } from '.'
 const Btp = require('btp-packet')
 
+export interface Protocols {
+  ilp?: Buffer
+  custom?: Object
+  protocolMap?: Record<string, Buffer | string | Object>
+}
+
 /**
  * Convert BTP protocol array to a protocol map of all the protocols inside the
  * BTP sub protocol array. Also specifically extract the `ilp` and `custom` protocols
  * from the map.
  */
-export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubProtocol> }) {
+export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubProtocol> }): Protocols {
   const protocolMap = {}
   const { protocolData } = data
 
@@ -34,7 +40,7 @@ export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubPr
  * array is: `ilp`, any explicitly defined sub protocols (the ones in the
  * protocol map), and finally `custom`.
  */
-export function ilpAndCustomToProtocolData (data: { ilp?: Buffer, custom?: Object , protocolMap?: Map<string, Buffer | string | Object> }): Array<BtpSubProtocol> {
+export function ilpAndCustomToProtocolData (data: Protocols): Array<BtpSubProtocol> {
   const protocolData = []
   const { ilp, custom, protocolMap } = data
 
@@ -50,25 +56,25 @@ export function ilpAndCustomToProtocolData (data: { ilp?: Buffer, custom?: Objec
 
   // explicitly specified sub-protocols come next
   if (protocolMap) {
-    const sideProtocols = Object.keys(protocolMap)
-    for (const protocol of sideProtocols) {
-      if (Buffer.isBuffer(protocolMap[protocol])) {
+    for (const protocolName in protocolMap) {
+      const data = protocolMap[protocolName]
+      if (Buffer.isBuffer(data)) {
         protocolData.push({
-          protocolName: protocol,
+          protocolName,
           contentType: Btp.MIME_APPLICATION_OCTET_STREAM,
-          data: protocolMap[protocol]
+          data
         })
-      } else if (typeof protocolMap[protocol] === 'string') {
+      } else if (typeof data === 'string') {
         protocolData.push({
-          protocolName: protocol,
+          protocolName,
           contentType: Btp.MIME_TEXT_PLAIN_UTF8,
-          data: Buffer.from(protocolMap[protocol])
+          data: Buffer.from(data)
         })
       } else {
         protocolData.push({
-          protocolName: protocol,
+          protocolName,
           contentType: Btp.MIME_APPLICATION_JSON,
-          data: Buffer.from(JSON.stringify(protocolMap[protocol]))
+          data: Buffer.from(JSON.stringify(data))
         })
       }
     }
