@@ -35,7 +35,7 @@ yarn add @interledger/pay
 > Fixed delivery amount payment
 
 ```js
-import { quote } from '@interledger/pay'
+import { setupPayment } from '@interledger/pay'
 
 async function run() {
   const { startQuote } = await setupPayment({
@@ -71,7 +71,7 @@ async function run() {
 
 ### Pay to a [Payment Pointer](https://paymentpointers.org/)
 
-#### Fixed source amount payment
+> Fixed source amount payment
 
 ```js
 import { setupPayment } from '@interledger/pay'
@@ -94,7 +94,7 @@ async function run() {
 }
 ```
 
-#### Fixed delivery amount payment
+> Fixed delivery amount payment
 
 ```js
 import { setupPayment } from '@interledger/pay'
@@ -141,28 +141,28 @@ Since applications need to debit the source amount in their own system before ex
 
 ### Amounts
 
-Pay leverages JavaScript [`BigInt`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)s for arbitrarily large integers, exporting its own wrapper for strongly typed arithmetic operations.
+Pay leverages JavaScript [`BigInt`](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt) for arbitrarily large integers using its own wrapper for strongly-typed arithmetic operations.
 
-All amounts returned by Pay use these exported classes and interfaces:
+Amounts returned by Pay use these exported classes and interfaces:
 
 - **[`Int`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L24)** &mdash; Class representing non-negative integers.
 - **[`PositiveInt`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L179)** &mdash; Interface narrowing **`Int`**, representing non-negative, non-zero integers. (In this context, zero is not considered signed).
 - **[`Ratio`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L220)** &mdash; Class representing a ratio of two integers: a non-negative numerator, and a non-negative, non-zero denominator.
-- **[`PositiveRatio`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L300)** &mdash; Interface narrowing **`Ratio`**, representing a ratio of two non-negative, non-zero integers.
+- **[`PositiveRatio`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/utils.ts#L308)** &mdash; Interface narrowing **`Ratio`**, representing a ratio of two non-negative, non-zero integers.
 
 **`Int`** and **`Ratio`** offer utility methods for integer operations and comparisons. They may also be converted to/from `number`, `string`, `bigint`, and [`Long`](https://github.com/dcodeIO/Long.js/).
 
-**`Int`** and **`Ratio`** enforce handling of all divide-by-zero errors and the internal `bigint` is always non-negative. They also provide type guards for **`PositiveInt`** to reduce unnecessary code paths. For example, if one integer is greater than another, that integer must always be non-zero, and can be safely used as a ratio denominator without any divide-by-zero branch.
+**`Int`** and **`Ratio`** prevent divide-by-zero errors and enforce the internal `bigint` is always non-negative. They also provide type guards for **`PositiveInt`** to reduce unnecessary code paths. For example, if one integer is greater than another, that integer must always be non-zero, and can be safely used as a ratio denominator without any divide-by-zero branch.
 
 ### Exchange Rates
 
-Pay is designed to provide strong guarantees of the amount that will be delivered.
+Pay is designed to provide strict guarantees of the amount that will be delivered.
 
-During the quote step, the application provides Pay with prices for the source and destination assets and it's own acceptable slippage percentage, which Pay uses to calculate a minimum exchange rate and corresponding minimum destination amount it will enforce for the payment. Exchange rates are also defined in terms of the ratio between a destination amount and a source amount, in fractional units.
+During the quote step, the application provides Pay with prices for the source and destination assets and it's own acceptable slippage percentage, which Pay uses to calculate a minimum exchange rate and corresponding minimum destination amount it will enforce for the payment. Exchange rates are represented as the ratio between a destination amount and a source amount, in fractional units.
 
 Then, Pay probes the recipient to determine the real exchange rate over that path. If it sufficiently exceeds the minimum exchange rate, Pay will allow the payment to proceed. Otherwise, it's not possible to complete the payment. For instance, connectors may have applied a poor rate or charged too much in fees, the max packet size might be too small to avoid rounding errors, or incorrect assets/scales were provided.
 
-Since STREAM payments are packetized, Pay cannot prevent partial completion, but guarantees payments will never exhaust their quoted maximum source amount without already satisfying their quoted minimum delivery amount. Every delivered packet meets or exceeds the quoted minimum exchange rate (\*with the exception of the final one, if necessary).
+Since STREAM payments are packetized, Pay may not be able to complete a payment if, for instance, the sender and receiver become disconnected during the payment. However, Pay guarantees payments never exhaust their quoted maximum source amount without satisfying their quoted minimum delivery amount. Every delivered packet meets or exceeds the quoted minimum exchange rate (\*with the exception of the final one, as necessary).
 
 ### Error Handling
 
@@ -192,13 +192,13 @@ Pay exports the **[`AccountUrl`](https://github.com/interledgerjs/interledgerjs/
 
 ## API
 
-### `setupPayment`
+#### `setupPayment`
 
-> `(options:`**[`SetupOptions`](#setupoptions)**`) => Promise<`**[ResolvedPayment](#resolvedpayment)**`>`
+> `(options:`**[`SetupOptions`](#setupoptions)**`) => Promise<`**[`ResolvedPayment`](#resolvedpayment)**`>`
 
 Resolve destination details and asset of the payment in order to establish a STREAM connection.
 
-### `SetupOptions`
+#### `SetupOptions`
 
 > Interface
 
@@ -206,11 +206,11 @@ Parameters to setup and resolve payment details from the recipient.
 
 | Property                          | Type                                                                                                                                    | Description                                                                                                                                                                                                                                                                                                                                                          |
 | :-------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`plugin`**                      | [`Plugin`](https://github.com/interledger/rfcs/blob/master/deprecated/0024-ledger-plugin-interface-2/0024-ledger-plugin-interface-2.md) | Plugin to send packets over a connected Interledger network (no receive functionality is necessary). Library does not call `connect` or `disconnect` on the plugin, so the application must perform that manually.                                                                                                                                                   |
+| **`plugin`**                      | [`Plugin`](https://github.com/interledger/rfcs/blob/master/deprecated/0024-ledger-plugin-interface-2/0024-ledger-plugin-interface-2.md) | Plugin to send packets over a connected Interledger network (no receive functionality is necessary). Pay does not call `connect` or `disconnect` on the plugin, so the application must perform that manually.                                                                                                                                                       |
 | **`paymentPointer`** (_Optional_) | `string`                                                                                                                                | Payment pointer, [Open Payments account URL](https://docs.openpayments.dev/accounts), or SPSP account URL to query STREAM connection credentials and exchange asset details. Automatically falls back to using SPSP if the server doesn't support Open Payments. Example: `$rafiki.money/p/alice`. Either **`paymentPointer`** or **`invoiceUrl`** must be provided. |
 | **`invoiceUrl`** (_Optional_)     | `string`                                                                                                                                | [Open Payments invoice URL](https://docs.openpayments.dev/invoices) to query the details for a fixed-delivery payment. The amount to deliver and destination asset details will automatically be resolved from the invoice.                                                                                                                                          |
 
-### `ResolvedPayment`
+#### `ResolvedPayment`
 
 > Interface
 
@@ -221,13 +221,13 @@ Resolved destination details of a proposed payment, such as the destination asse
 | **`startQuote`**                  | `(options:`**[`QuoteOptions`](#quoteoptions)**`) => Promise<`**[`Quote`](#quote)**`>` | Perform a rate probe: discover path max packet amount, probe the real exchange rate, and compute the minimum exchange rate and bounds of the payment.                                                                                                           |
 | **`close`**                       | `() => Promise<void>`                                                                 | Cancel the payment: if connection was established, notify receiver to close the connection.                                                                                                                                                                     |
 | **`destinationAsset`**            | **[`AssetDetails`](#assetdetails)**                                                   | Destination asset and denomination, resolved using Open Payments or STREAM, or provided directly.                                                                                                                                                               |
-| **`destinationAddress`**          | `string` (`IlpAddress` from [`ilp-packet`](../ilp-packet))                            | ILP address of the destination STREAM recipient, uniquely identifying this connection.                                                                                                                                                                          |
+| **`destinationAddress`**          | `string`                                                                              | ILP address of the destination STREAM recipient, uniquely identifying this connection.                                                                                                                                                                          |
 | **`sharedSecret`**                | `Uint8Array`                                                                          | 32-byte seed to derive keys to encrypt STREAM messages and generate ILP packet fulfillments.                                                                                                                                                                    |
 | **`invoice`** (_Optional_)        | **[`Invoice`](#invoice)**                                                             | Open Payments invoice metadata, if the payment pays into an invoice.                                                                                                                                                                                            |
 | **`accountUrl`** (_Optional_)     | `string`                                                                              | URL of the recipient Open Payments/SPSP account (with well-known path, and stripped trailing slash). Each payment pointer and its corresponding account URL identifies a unique payment recipient. Not applicable if STREAM credentials were provided directly. |
 | **`paymentPointer`** (_Optional_) | `string`                                                                              | Payment pointer, prefixed with "\$", corresponding to the recipient Open Payments/SPSP account. Each payment pointer and its corresponding account URL identifies a unique payment recipient. Not applicable if STREAM credentials were provided directly.      |
 
-### `QuoteOptions`
+#### `QuoteOptions`
 
 > Interface
 
@@ -241,7 +241,7 @@ Limits and target to quote a payment and probe the rate.
 | **`prices`** (_Optional_)          | `{ [assetCode: string]: number }`                     | Object of asset codes to prices in a standardized base asset to compute exchange rates. FOr example, using U.S. dollars as a base asset: `{ USD: 1, EUR: 1.09, BTC: 8806.94 }`.<br><br>If the source and destination assets are the same, a 1:1 rate will be used as the basis, so **`prices`** doesn't need to be provided. It may also be omitted if the slippage is set to 100%, since no minimum exchange rates will be enforced.                                  |
 | **`slippage`** (_Optional_)        | `number`                                              | Percentage to subtract from the external exchange rate to determine the minimum acceptable exchange rate and destination amount for each packet, between `0` and `1` (inclusive). Defaults to `0.01`, or 1% slippage below the exchange rate computed from the given **`prices`**.<br><br>If `1` is provided for a fixed source amount payment, no minimum exchange rate will be enforced. For fixed delivery payments, slippage cannot be 100%.                       |
 
-### `Quote`
+#### `Quote`
 
 > Interface
 
@@ -258,7 +258,7 @@ Parameters of payment execution and the projected outcome of a payment.
 | **`minExchangeRate`**       | **[`Ratio`](#amounts)**                                                                | Aggregate exchange rate the payment is guaranteed to meet, as a ratio of destination base units to source base units. Corresponds to the minimum exchange rate enforced on each packet (\*except for the final packet) to ensure sufficient money gets delivered. For strict bookkeeping, use `maxSourceAmount` instead. |
 | **`estimatedDuration`**     | `number`                                                                               | Estimated payment duration in milliseconds, based on max packet amount, round trip time, and rate of packet throttling.                                                                                                                                                                                                  |
 
-### `PayOptions`
+#### `PayOptions`
 
 > Interface
 
@@ -283,7 +283,7 @@ Intermediate state or outcome of the payment, to account for sent/delivered amou
 | **`destinationAmountInFlight`**  | **[`Int`](#amounts)**               | Estimate of the amount that may be delivered from in-flight packets, in base units of the destination asset.                      |
 | **`streamReceipt`** (_Optional_) | `Uint8Array`                        | Latest [STREAM receipt](https://interledger.org/rfcs/0039-stream-receipts/) to provide proof-of-delivery to a 3rd party verifier. |
 
-### `Invoice`
+#### `Invoice`
 
 > Interface
 
@@ -299,7 +299,7 @@ Intermediate state or outcome of the payment, to account for sent/delivered amou
 | **`description`**     | `string`                            | Human-readable description of what is provided in return for completion of the invoice.                                                                                                                                                  |
 | **`asset`**           | **[`AssetDetails`](#assetdetails)** | Asset and denomination of recipient account.                                                                                                                                                                                             |
 
-### `AssetDetails`
+#### `AssetDetails`
 
 > Interface
 
@@ -310,13 +310,13 @@ Asset and denominated for an Interledger account (source or destination asset)
 | **`scale`** | `number` | Precision of the asset denomination: number of decimal places of the ordinary unit. |
 | **`code`**  | `string` | Asset code or symbol identifying the currency of the account.                       |
 
-### `PaymentError`
+#### `PaymentError`
 
 > String enum
 
 Payment error states
 
-#### Errors likely caused by the user
+##### Errors likely caused by the user
 
 | Variant                        | Description                                                        |
 | :----------------------------- | :----------------------------------------------------------------- |
@@ -329,7 +329,7 @@ Payment error states
 | **`InvalidDestinationAmount`** | Fixed delivery amount is not a positive integer                    |
 | **`UnenforceableDelivery`**    | Minimum exchange rate of 0 cannot enforce a fixed-delivery payment |
 
-#### Errors likely caused by the receiver, connectors, or other externalities
+##### Errors likely caused by the receiver, connectors, or other externalities
 
 | Variant                         | Description                                                                                          |
 | :------------------------------ | :--------------------------------------------------------------------------------------------------- |
