@@ -1,125 +1,29 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-import BigNumber from 'bignumber.js'
 import Long from 'long'
-import { IlpReject, serializeIlpReject, IlpAddress, IlpError } from 'ilp-packet'
-import { hash } from 'ilp-protocol-stream/dist/src/crypto'
 
-/** Promise that can be resolved or rejected outside its executor callback */
-export class PromiseResolver<T> {
-  resolve!: (value?: T | PromiseLike<T>) => void
-  reject!: (value?: T | PromiseLike<T>) => void
-  readonly promise = new Promise<T>((resolve, reject) => {
-    this.resolve = resolve
-    this.reject = reject
-  })
-}
-
-/** Compute short string to uniquely identify this connection in logs */
-export const getConnectionId = (destinationAddress: string): Promise<string> =>
-  hash(Buffer.from(destinationAddress)).then((image) => image.toString('hex').slice(0, 6))
-
-/** Default maximum duration that a ILP Prepare can be in-flight before it should be rejected */
-const DEFAULT_PACKET_TIMEOUT_MS = 30000
-
-/** Determine the expiration timestamp for a packet based on the default */
-export const getDefaultExpiry = (): Date => new Date(Date.now() + DEFAULT_PACKET_TIMEOUT_MS)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type Constructor<T> = new (...args: any[]) => T
 
 /**
- * Duration between when an ILP Prepare expires and when a packet times out to undo its effects,
- * to prevent dropping a Fulfill if it was received right before the expiration time
+ * Return a rejected Promise if the given Promise does not resolve within the timeout,
+ * or return the resolved value of the Promise
  */
-export const MIN_MESSAGE_WINDOW = 1000
-
-/** Mapping of ILP error codes to its error message */
-export const ILP_ERROR_CODES = {
-  // Final errors
-  F00: 'bad request',
-  F01: 'invalid packet',
-  F02: 'unreachable',
-  F03: 'invalid amount',
-  F04: 'insufficient destination amount',
-  F05: 'wrong condition',
-  F06: 'unexpected payment',
-  F07: 'cannot receive',
-  F08: 'amount too large',
-  F99: 'application error',
-  // Temporary errors
-  T00: 'internal error',
-  T01: 'peer unreachable',
-  T02: 'peer busy',
-  T03: 'connector busy',
-  T04: 'insufficient liquidity',
-  T05: 'rate limited',
-  T99: 'application error',
-  // Relative errors
-  R00: 'transfer timed out',
-  R01: 'insufficient source amount',
-  R02: 'insufficient timeout',
-  R99: 'application error',
-}
-
-/** Construct an ILP Reject packet */
-export class RejectBuilder implements IlpReject {
-  code = IlpError.F00_BAD_REQUEST
-  message = ''
-  triggeredBy = ''
-  data = Buffer.alloc(0)
-
-  setCode(code: IlpError): this {
-    this.code = code
-    return this
-  }
-
-  setTriggeredBy(sourceAddress: IlpAddress): this {
-    this.triggeredBy = sourceAddress
-    return this
-  }
-
-  setData(data: Buffer): this {
-    this.data = data
-    return this
-  }
-
-  serialize(): Buffer {
-    return serializeIlpReject(this)
-  }
-}
-
-/** Create a cancellable Promise the resolves after the given duration */
-export const createTimeout = (
-  durationMs: number
-): {
-  timeoutPromise: Promise<void>
-  cancelTimeout: () => void
-} => {
-  const { resolve, promise } = new PromiseResolver<void>()
-  const timer = setTimeout(resolve, durationMs)
-
-  return {
-    timeoutPromise: promise,
-    cancelTimeout: () => clearTimeout(timer),
-  }
+export const timeout = <T>(duration: number, promise: Promise<T>): Promise<T> => {
+  let timer: NodeJS.Timeout
+  return Promise.race([
+    new Promise<T>((_, reject) => {
+      timer = setTimeout(reject, duration)
+    }),
+    promise.finally(() => clearTimeout(timer)),
+  ])
 }
 
 /** Wait and resolve after the given number of milliseconds */
 export const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-declare class Tag<N extends string> {
-  protected __nominal: N
-}
-
-export type Brand<T, N extends string> = T & Tag<N>
-
-// Buffer used to convert between Longs and BigInts (much more performant with single allocation)
-const LONG_BIGINT_BUFFER = new ArrayBuffer(8)
-const LONG_BIGINT_DATAVIEW = new DataView(LONG_BIGINT_BUFFER)
-
 /** Integer greater than or equal to 0 */
 export class Int {
-  value: bigint
+  readonly value: bigint
 
-  // TS requires the ES2020 target for BigInt literals, but that won't
-  // transpile optional chaining, which breaks Node 12 support :/
   static ZERO = new Int(BigInt(0))
   static ONE = new Int(BigInt(1)) as PositiveInt
   static TWO = new Int(BigInt(2)) as PositiveInt
@@ -129,48 +33,52 @@ export class Int {
     this.value = n
   }
 
+  static from<T extends Int>(n: T): T
   static from(n: Long): Int
+  static from(n: NonNegativeInteger): Int
   static from(n: number): Int | undefined
+  static from(n: bigint): Int | undefined
   static from(n: string): Int | undefined
-  static from(n: BigNumber): Int | undefined
-  static from(n: Long | number | string | BigNumber): Int | undefined {
-    if (typeof n === 'string') {
+  static from(n: Int | bigint | number | string): Int | undefined // Necessary for amounts passed during setup
+  static from<T extends Long | Int | bigint | number | string>(n: T): Int | undefined {
+    if (n instanceof Int) {
+      return new Int(n.value)
+    } else if (typeof n === 'bigint') {
+      return Int.fromBigint(n)
+    } else if (typeof n === 'string') {
       return Int.fromString(n)
     } else if (typeof n === 'number') {
       return Int.fromNumber(n)
-    } else if (BigNumber.isBigNumber(n)) {
-      return Int.fromBigNumber(n)
-    } else {
+    } else if (Long.isLong(n)) {
       return Int.fromLong(n)
+    }
+  }
+
+  private static fromBigint(n: bigint): Int | undefined {
+    if (n >= 0) {
+      return new Int(n)
     }
   }
 
   private static fromString(n: string): Int | undefined {
     try {
-      const big = BigInt(n)
-      if (big >= 0) {
-        return new Int(big)
-      }
+      return Int.fromBigint(BigInt(n))
       // eslint-disable-next-line no-empty
     } catch (_) {}
   }
 
-  private static fromNumber(n: number): Int | undefined {
-    if (Number.isInteger(n) && n >= 0) {
+  private static fromNumber(n: NonNegativeInteger): Int
+  private static fromNumber(n: number): Int | undefined
+  private static fromNumber<T extends number>(n: T): Int | undefined {
+    if (isNonNegativeInteger(n)) {
       return new Int(BigInt(n))
     }
   }
 
-  private static fromBigNumber(n: BigNumber): Int | undefined {
-    if (n.isInteger() && n.isGreaterThanOrEqualTo(0)) {
-      return Int.fromString(n.toString())
-    }
-  }
-
   private static fromLong(n: Long): Int {
-    LONG_BIGINT_DATAVIEW.setUint32(0, n.high)
-    LONG_BIGINT_DATAVIEW.setUint32(4, n.low)
-    return new Int(LONG_BIGINT_DATAVIEW.getBigUint64(0))
+    const lsb = BigInt(n.getLowBitsUnsigned())
+    const gsb = BigInt(n.getHighBitsUnsigned())
+    return new Int(lsb + BigInt(4294967296) * gsb)
   }
 
   add(n: PositiveInt): PositiveInt
@@ -179,7 +87,7 @@ export class Int {
     return new Int(this.value + n.value)
   }
 
-  subtract(n: Int): Int {
+  saturatingSubtract(n: Int): Int {
     return this.value >= n.value ? new Int(this.value - n.value) : Int.ZERO
   }
 
@@ -192,21 +100,20 @@ export class Int {
   }
 
   multiplyCeil(r: Ratio): Int {
-    return this.modulo(r).isPositive()
-      ? new Int((this.value * r.a.value) / r.b.value).add(Int.ONE)
-      : new Int((this.value * r.a.value) / r.b.value)
+    return this.multiply(r.a).divideCeil(r.b)
   }
 
-  divideCeil(n: PositiveInt): Int {
-    return this.modulo(n).isPositive()
-      ? new Int(this.value / n.value).add(Int.ONE)
-      : new Int(this.value / n.value)
+  divide(d: PositiveInt): Int {
+    return new Int(this.value / d.value)
   }
 
-  modulo(n: Int | Ratio): Int {
-    return n instanceof Int
-      ? new Int(this.value % n.value)
-      : new Int((this.value * n.a.value) % n.b.value)
+  divideCeil(d: PositiveInt): Int {
+    // Simple algorithm with no modulo/conditional: https://medium.com/@arunistime/how-div-round-up-works-179f1a2113b5
+    return new Int((this.value + d.value - BigInt(1)) / d.value)
+  }
+
+  modulo(n: PositiveInt): Int {
+    return new Int(this.value % n.value)
   }
 
   isEqualTo(n: Int): boolean {
@@ -232,37 +139,45 @@ export class Int {
   }
 
   isPositive(): this is PositiveInt {
-    return this.isGreaterThan(Int.ZERO)
+    return this.value > 0
   }
 
-  orLesser(n: Int): Int {
-    return this.isLessThanOrEqualTo(n) ? this : n
+  orLesser(n?: Int): Int {
+    return !n ? this : this.value <= n.value ? this : n
   }
 
   orGreater(n: PositiveInt): PositiveInt
-  orGreater(n: Int): Int
+  orGreater(n?: Int): Int
   orGreater<T extends Int>(n: T): Int {
-    return this.isGreaterThanOrEqualTo(n) ? this : n
+    return !n ? this : this.value >= n.value ? this : n
   }
 
   toString(): string {
     return this.value.toString()
   }
 
-  toBigNumber(): BigNumber {
-    return new BigNumber(this.value.toString())
+  toLong(): Long | undefined {
+    if (this.isGreaterThan(Int.MAX_U64)) {
+      return
+    }
+
+    const lsb = BigInt.asUintN(32, this.value)
+    const gsb = (this.value - lsb) / BigInt(4294967296)
+    return new Long(Number(lsb), Number(gsb), true)
   }
 
-  toLong(): Long {
-    LONG_BIGINT_DATAVIEW.setBigUint64(0, this.value)
-    const high = LONG_BIGINT_DATAVIEW.getUint32(0)
-    const low = LONG_BIGINT_DATAVIEW.getUint32(4)
-    return new Long(low, high, true)
+  valueOf(): number {
+    return Number(this.value)
+  }
+
+  toRatio(): Ratio {
+    return Ratio.of(this, Int.ONE)
   }
 }
 
 /** Integer greater than 0 */
 export interface PositiveInt extends Int {
+  add(n: Int): PositiveInt
   multiply(n: PositiveInt): PositiveInt
   multiply(n: Int): Int
   multiplyCeil(r: PositiveRatio): PositiveInt
@@ -272,52 +187,90 @@ export interface PositiveInt extends Int {
   isLessThan(n: Int): n is PositiveInt
   isLessThanOrEqualTo(n: Int): n is PositiveInt
   isPositive(): true
-  orLesser(n: PositiveInt): PositiveInt
+  orLesser(n?: PositiveInt): PositiveInt
   orLesser(n: Int): Int
-  orGreater(n: Int): PositiveInt
+  orGreater(n?: Int): PositiveInt
+  toRatio(): PositiveRatio
 }
 
+declare class Tag<N extends string> {
+  protected __nominal: N
+}
+
+export type Brand<T, N extends string> = T & Tag<N>
+
 /** Finite number greater than or equal to 0 */
-export type NonNegativeNumber = Brand<number, 'NonNegativeNumber'>
+export type NonNegativeRational = Brand<number, 'NonNegativeRational'>
 
 /** Is the given number greater than or equal to 0, not `NaN`, and not `Infinity`? */
-export const isNonNegativeNumber = (o: number): o is NonNegativeNumber =>
-  Number.isFinite(o) && o >= 0
+export const isNonNegativeRational = (o: unknown): o is NonNegativeRational =>
+  typeof o === 'number' && Number.isFinite(o) && o >= 0
+
+/** Integer greater than or equal to 0 */
+export type NonNegativeInteger = Brand<number, 'NonNegativeInteger'>
+
+/** Is the given number an integer (not `NaN` nor `Infinity`) and greater than or equal to 0? */
+export const isNonNegativeInteger = (o: number): o is NonNegativeInteger =>
+  Number.isInteger(o) && o >= 0
 
 /**
  * Ratio of two integers: a numerator greater than or equal to 0,
  * and a denominator greater than 0
  */
 export class Ratio {
-  a: Int
-  b: PositiveInt
+  /** Numerator */
+  readonly a: Int
+  /** Denominator */
+  readonly b: PositiveInt
 
-  constructor(a: Int, b: PositiveInt) {
+  private constructor(a: Int, b: PositiveInt) {
     this.a = a
     this.b = b
   }
 
-  static fromNumber(n: NonNegativeNumber): Ratio {
+  static of(a: PositiveInt, b: PositiveInt): PositiveRatio
+  static of(a: Int, b: PositiveInt): Ratio
+  static of<T extends Int>(a: T, b: PositiveInt): Ratio {
+    return new Ratio(a, b)
+  }
+
+  /**
+   * Convert a number (not `NaN`, `Infinity` or negative) into a Ratio.
+   * Zero becomes 0/1.
+   */
+  static from(n: NonNegativeRational): Ratio
+  static from(n: number): Ratio | undefined
+  static from<T extends number>(n: T): Ratio | undefined {
+    if (!isNonNegativeRational(n)) {
+      return
+    }
+
     let e = 1
     while (!Number.isInteger(n * e)) {
       e *= 10
     }
 
-    const a = Int.from(n * e)!
-    const b = Int.from(e)!
-    return new Ratio(a, b as PositiveInt)
+    const a = Int.from(n * e) as Int
+    const b = Int.from(e) as PositiveInt
+    return new Ratio(a, b)
   }
 
-  reciprocal(): Ratio | undefined {
+  reciprocal(): PositiveRatio | undefined {
     if (this.a.isPositive()) {
-      return new Ratio(this.b, this.a)
+      return Ratio.of(this.b, this.a)
     }
   }
 
-  subtract(r: Ratio): Ratio {
-    const a = this.a.multiply(r.b).subtract(r.a.multiply(this.b))
-    const b = this.b.multiply(r.b)
-    return new Ratio(a, b)
+  floor(): Int {
+    return this.a.divide(this.b)
+  }
+
+  ceil(): Int {
+    return this.a.divideCeil(this.b)
+  }
+
+  isEqualTo(r: Ratio): boolean {
+    return this.a.value * r.b.value === this.b.value * r.a.value
   }
 
   isGreaterThan(r: Ratio): this is PositiveRatio {
@@ -342,22 +295,23 @@ export class Ratio {
     return this.a.isPositive()
   }
 
-  toBigNumber(): BigNumber {
-    return new BigNumber(this.a.toString()).dividedBy(this.b.toString())
+  valueOf(): number {
+    return +this.a / +this.b
   }
 
   toString(): string {
-    const bn = this.toBigNumber()
-    return bn.toFixed(Math.min(bn.decimalPlaces(), 10)) // Limit logs to 10 decimals of precision
+    return this.valueOf().toString()
   }
 }
 
 /** Ratio of two integers greater than 0 */
-interface PositiveRatio extends Ratio {
+export interface PositiveRatio extends Ratio {
   a: PositiveInt
   b: PositiveInt
 
   reciprocal(): PositiveRatio
+  ceil(): PositiveInt
+  isEqualTo(r: Ratio): r is PositiveRatio
   isLessThan(r: Ratio): r is PositiveRatio
   isLessThanOrEqualTo(r: Ratio): r is PositiveRatio
   isPositive(): true
