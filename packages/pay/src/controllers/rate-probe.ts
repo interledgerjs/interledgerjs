@@ -1,5 +1,5 @@
 import { PaymentError } from '..'
-import { StreamSender, SenderContext, SendState } from '.'
+import { StreamSender, SendState, GetController } from '.'
 import { Int, PositiveInt } from '../utils'
 import { MaxPacketAmountController } from './max-packet'
 import { ExchangeRateController, ExchangeRateCalculator } from './exchange-rate'
@@ -9,6 +9,7 @@ import { ExpiryController } from './expiry'
 import { FailureController } from './failure'
 import { AssetDetailsController } from './asset-details'
 import { PacingController } from './pacer'
+import { RequestBuilder } from '../request'
 
 export interface ProbeResult {
   maxPacketAmount: PositiveInt
@@ -19,7 +20,7 @@ export interface ProbeResult {
 /** Establish exchange rate bounds and path max packet amount capacity with test packets */
 export class RateProbe implements StreamSender<ProbeResult> {
   /** Duration in milliseconds before the rate probe fails */
-  static TIMEOUT = 10_000
+  private static TIMEOUT = 10_000
 
   /** Largest test packet amount */
   static MAX_PROBE_AMOUNT = Int.from(1_000_000_000_000) as PositiveInt
@@ -63,7 +64,7 @@ export class RateProbe implements StreamSender<ProbeResult> {
     ExchangeRateController,
   ]
 
-  nextState({ request, send, lookup }: SenderContext<ProbeResult>): SendState<ProbeResult> {
+  nextState(request: RequestBuilder, lookup: GetController): SendState<ProbeResult> {
     if (!this.deadline) {
       this.deadline = Date.now() + RateProbe.TIMEOUT
     } else if (Date.now() > this.deadline) {
@@ -76,13 +77,17 @@ export class RateProbe implements StreamSender<ProbeResult> {
       // Send and commit the test packet
       request.setSourceAmount(probeAmount)
       this.inFlightAmounts.add(probeAmount.toString())
-      send(() => {
+
+      return SendState.Send(() => {
         this.inFlightAmounts.delete(probeAmount.toString())
 
         // If we further narrowed the max packet amount, use that amount next.
         // Otherwise, no max packet limit is known, so retry this amount.
-        const nextProbeAmount = lookup(MaxPacketAmountController).getNextMaxPacketAmount()
-        this.remainingTestAmounts.push(nextProbeAmount ?? probeAmount)
+        const nextProbeAmount =
+          lookup(MaxPacketAmountController).getNextMaxPacketAmount() ?? probeAmount
+        if (!this.remainingTestAmounts.some((n) => n.isEqualTo(nextProbeAmount))) {
+          this.remainingTestAmounts.push(nextProbeAmount)
+        }
 
         // Resolve rate probe if known rate and verified path capacity
         const rateCalculator = lookup(ExchangeRateController).getRateCalculator()
@@ -94,8 +99,6 @@ export class RateProbe implements StreamSender<ProbeResult> {
             })
           : SendState.Schedule() // Try sending another probing packet to narrow max packet amount
       })
-
-      return SendState.Schedule() // Try sending another test packet immediately
     }
 
     return SendState.Yield()

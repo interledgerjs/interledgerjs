@@ -9,16 +9,13 @@ import { Constructor } from '../utils'
  */
 export interface StreamController {
   /**
-   * Controllers iteratively construct the next request before it is sent using the given builder.
-   *
-   * Each controller in order signals the status of the request attempt:
+   * Controllers iteratively construct the next request and signal the status of the request attempt:
    * - `RequestState.Ready`    -- ready to apply and send this request,
    * - `RequestState.Error`    -- to immediately end the send loop with an error,
    * - `RequestState.Schedule` -- to cancel this request attempt and try again at a later time,
    * - `RequestState.Yield`    -- to cancel this request attempt and not directly schedule another.
    *
-   * The request is only sent if all controllers signal `Ready` and the sender explicitly
-   * commits and sends the request.
+   * If any controller does not signal `Ready`, that request attempt will be cancelled.
    *
    * Note: since subsequent controllers may change the request or cancel it,
    * no side effects should be performed here.
@@ -26,7 +23,6 @@ export interface StreamController {
    * @param request Proposed ILP Prepare and STREAM request
    */
   buildRequest?(request: RequestBuilder): RequestState
-  // TODO Change this to `RequestBuilder` | `RequestState`, so it's kinda reduced through each?
 
   /**
    * Apply side effects before sending an ILP Prepare over STREAM. Return a callback function to apply
@@ -35,7 +31,7 @@ export interface StreamController {
    * `applyRequest` is called for all controllers synchronously when the sending controller queues the
    * request to be sent.
    *
-   * Any of the reply handlers may also return an error to immediately end the send loop.
+   * The returned reply handler may also return an error to immediately end the send loop.
    *
    * @param request Finalized amounts and data of the ILP Prepare and STREAM request
    */
@@ -43,35 +39,38 @@ export interface StreamController {
 }
 
 /**
- * Resolves send loops, tracking when the successful completion criteria is met.
+ * Orchestrates a send loop, or series of requests.
+ *
+ * Sends and commits each request, and tracks completion criteria to
+ * resolve the send loop to its own value.
  *
  * While other controllers hold "veto" power over individual request attempts,
- * only the sender can explicitly send each request.
+ * only the sender explicitly commits to sending each request.
  */
 export interface StreamSender<T> {
-  readonly order: Constructor<StreamController>[] // TODO
-  nextState(context: SenderContext<T>): SendState<T>
-}
-
-/** TODO Explain */
-export interface SenderContext<T> {
-  /** Proposed ILP Prepare and STREAM request */
-  request: RequestBuilder
+  /** Order of STREAM controllers to iteratively build a request or cancel the attempt */
+  readonly order: Constructor<StreamController>[]
 
   /**
-   * Send and apply the given request, which synchronously calls `applyRequest` on all controllers.
+   * Track completion criteria to finalize and send this request the attempt,
+   * end the send loop, or re-schedule.
    *
-   * Also, provide a callback to apply side effects from the reply, which is called synchronously after
-   * the reply handlers for all other controllers. This handler may also return an error, schedule a
-   * request attempt, or successfully resolve the send loop.
+   * Return state of the send loop:
+   * - `SendState.Send`     -- to send the request, applying side effects through all controllers in order,
+   * - `SendState.Done`     -- to resolve the send loop as successful,
+   * - `SendState.Error`    -- to end send loop with an error,
+   * - `SendState.Schedule` -- to cancel this request attempt and try again at a later time,
+   * - `SendState.Yield`    -- to cancel this request attempt and not directly schedule another.
+   *
+   * @param request Proposed ILP Prepare and STREAM request
+   * @param lookup Lookup or create an instance of another controller. Each connection instantiates a single controller per constructor
    */
-  send: (applyReply: (reply: StreamReply) => SendState<T>) => void
-
-  /** Lookup or create an instance of another controller. Each send loop only instantiates a single controller per constructor */
-  lookup: <T extends StreamController>(key: Constructor<T>) => T
+  nextState(request: RequestBuilder, lookup: GetController): SendState<T>
 }
 
-/** TODO */
+/** Lookup a controller instance by its constructor */
+export type GetController = <T extends StreamController>(key: Constructor<T>) => T
+
 export enum SendStateType {
   /** Ready to send and apply a request */
   Ready,
@@ -83,54 +82,84 @@ export enum SendStateType {
   Schedule,
   /** Do not schedule another attempt. If applicable, cancels current attempt */
   Yield,
+  /** Commit to send and apply the request */
+  Send,
 }
 
-// TODO Remove `Ready`, then simplify SendState to `Done | RequestState`?
-
 /** States each controller may signal when building the next request */
-export type RequestState =
-  | { type: SendStateType.Ready }
-  | { type: SendStateType.Error; error: PaymentError }
-  | { type: SendStateType.Schedule; delay: Promise<any> }
-  | { type: SendStateType.Yield }
+export type RequestState = Error | Schedule | Yield | Ready
 
 /** States the sender may signal to determine the next state of the send loop */
-export type SendState<T> =
-  | { type: SendStateType.Done; value: T }
-  | { type: SendStateType.Error; error: PaymentError }
-  | { type: SendStateType.Schedule; delay: Promise<any> }
-  | { type: SendStateType.Yield }
+export type SendState<T> = Error | Schedule | Yield | Commit<T> | Done<T>
+
+type Error = {
+  type: SendStateType.Error
+  error: PaymentError
+}
 
 /** Immediately end the loop and payment with an error. */
-const Error = (error: PaymentError): { type: SendStateType.Error; error: PaymentError } => ({
+const Error = (error: PaymentError): Error => ({
   type: SendStateType.Error,
   error,
 })
+
+type Schedule = {
+  type: SendStateType.Schedule
+  delay: Promise<any>
+}
 
 /**
  * Schedule another request attempt after the delay, or as soon as possible if
  * no delay was provided.
  */
-const Schedule = (delay?: Promise<any>): { type: SendStateType.Schedule; delay: Promise<any> } => ({
+const Schedule = (delay?: Promise<any>): Schedule => ({
   type: SendStateType.Schedule,
   delay: delay ?? Promise.resolve(),
 })
 
-/**
- * Cancel this request, and don't schedule another attempt. Sending will pause until
- * an in-flight request completes and its reply handler schedules another attempt.
- */
-const Yield = (): { type: SendStateType.Yield } => ({ type: SendStateType.Yield })
+type Yield = {
+  type: SendStateType.Yield
+}
+
+/** Don't immediately schedule another request attempt. If applicable, cancel the current attempt. */
+const Yield = (): Yield => ({ type: SendStateType.Yield })
+
+type Done<T> = {
+  type: SendStateType.Done
+  value: T
+}
 
 /** Immediately resolve the send loop as successful. */
-const Done = <T>(value: T): { type: SendStateType.Done; value: T } => ({
+const Done = <T>(value: T): Done<T> => ({
   type: SendStateType.Done,
   value,
 })
 
+type Ready = {
+  type: SendStateType.Ready
+}
+
 /** Ready for this request to be immediately applied and sent. */
-const Ready = (): { type: SendStateType.Ready } => ({
+const Ready = (): Ready => ({
   type: SendStateType.Ready,
+})
+
+type Commit<T> = {
+  type: SendStateType.Send
+  applyReply: (reply: StreamReply) => Done<T> | Schedule | Yield | Error
+}
+
+/**
+ * Apply and send the request.
+ *
+ * @param applyReply Callback to apply side effects from the reply, called synchronously after all other
+ * controllers' reply handlers. The handler may resolve the the send loop, return an error, or re-schedule an attempt.
+ */
+const Send = <T>(
+  applyReply: (reply: StreamReply) => Done<T> | Schedule | Yield | Error
+): Commit<T> => ({
+  type: SendStateType.Send,
+  applyReply,
 })
 
 export const RequestState = {
@@ -145,4 +174,5 @@ export const SendState = {
   Error,
   Schedule,
   Yield,
+  Send,
 }

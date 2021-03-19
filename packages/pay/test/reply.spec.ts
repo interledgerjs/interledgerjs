@@ -21,8 +21,7 @@ import {
   IlpPacketType,
   Packet,
 } from 'ilp-protocol-stream/dist/src/packet'
-import { createConnection, StreamConnection } from '../src/connection'
-import { StreamReject } from '../src/request'
+import { generateKeys, StreamReject } from '../src/request'
 import { Int } from '../src/utils'
 
 const destinationAddress = 'private.bob' as IlpAddress
@@ -41,10 +40,7 @@ describe('validates replies', () => {
         data: Buffer.alloc(0),
       })
 
-    const { sendRequest } = (await createConnection(sendData, {
-      sharedSecret,
-      destinationAddress,
-    })) as StreamConnection
+    const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
     const reply = await sendRequest({
       destinationAddress,
@@ -68,10 +64,7 @@ describe('validates replies', () => {
     // Data handler never resolves
     const sendData = () => new Promise<Buffer>(() => {})
 
-    const { sendRequest } = (await createConnection(sendData, {
-      sharedSecret,
-      destinationAddress,
-    })) as StreamConnection
+    const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
     const reply = await sendRequest({
       destinationAddress,
@@ -96,10 +89,7 @@ describe('validates replies', () => {
       throw new Error('Unable to process request')
     }
 
-    const { sendRequest } = (await createConnection(sendData, {
-      sharedSecret,
-      destinationAddress,
-    })) as StreamConnection
+    const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
     const reply = await sendRequest({
       destinationAddress,
@@ -126,10 +116,7 @@ describe('validates replies', () => {
         data: Buffer.alloc(0),
       })
 
-    const { sendRequest } = (await createConnection(sendData, {
-      sharedSecret,
-      destinationAddress,
-    })) as StreamConnection
+    const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
     const reply = await sendRequest({
       destinationAddress,
@@ -166,10 +153,7 @@ describe('validates replies', () => {
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
-    const { sendRequest } = (await createConnection(sendData, {
-      sharedSecret,
-      destinationAddress,
-    })) as StreamConnection
+    const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
     const reply = await sendRequest({
       destinationAddress,
@@ -207,10 +191,7 @@ describe('validates replies', () => {
     const encryptionKey = await generatePskEncryptionKey(sharedSecret)
     const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
 
-    const { sendRequest } = (await createConnection(sendData, {
-      sharedSecret,
-      destinationAddress,
-    })) as StreamConnection
+    const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
     const reply = await sendRequest({
       destinationAddress,
@@ -240,10 +221,7 @@ describe('validates replies', () => {
         data: replyData,
       })
 
-    const { sendRequest } = (await createConnection(sendData, {
-      sharedSecret,
-      destinationAddress,
-    })) as StreamConnection
+    const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
     const reply = await sendRequest({
       destinationAddress,

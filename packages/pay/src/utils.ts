@@ -42,7 +42,7 @@ export class Int {
   static from(n: Int | bigint | number | string): Int | undefined // Necessary for amounts passed during setup
   static from<T extends Long | Int | bigint | number | string>(n: T): Int | undefined {
     if (n instanceof Int) {
-      return n
+      return new Int(n.value)
     } else if (typeof n === 'bigint') {
       return Int.fromBigint(n)
     } else if (typeof n === 'string') {
@@ -87,8 +87,7 @@ export class Int {
     return new Int(this.value + n.value)
   }
 
-  // TODO This is saturating. Should it be? How should this be handled? Use two separate methods?
-  subtract(n: Int): Int {
+  saturatingSubtract(n: Int): Int {
     return this.value >= n.value ? new Int(this.value - n.value) : Int.ZERO
   }
 
@@ -162,7 +161,7 @@ export class Int {
       return
     }
 
-    const lsb = BigInt.asIntN(32, this.value)
+    const lsb = BigInt.asUintN(32, this.value)
     const gsb = (this.value - lsb) / BigInt(4294967296)
     return new Long(Number(lsb), Number(gsb), true)
   }
@@ -172,7 +171,7 @@ export class Int {
   }
 
   toRatio(): Ratio {
-    return new Ratio(this, Int.ONE)
+    return Ratio.of(this, Int.ONE)
   }
 }
 
@@ -224,13 +223,24 @@ export class Ratio {
   /** Denominator */
   readonly b: PositiveInt
 
-  constructor(a: Int, b: PositiveInt) {
+  private constructor(a: Int, b: PositiveInt) {
     this.a = a
     this.b = b
   }
 
+  static of(a: PositiveInt, b: PositiveInt): PositiveRatio
+  static of(a: Int, b: PositiveInt): Ratio
+  static of<T extends Int>(a: T, b: PositiveInt): Ratio {
+    return new Ratio(a, b)
+  }
+
+  /**
+   * Convert a number (not `NaN`, `Infinity` or negative) into a Ratio.
+   * Zero becomes 0/1.
+   */
   static from(n: NonNegativeRational): Ratio
-  static from(n: number): Ratio | undefined {
+  static from(n: number): Ratio | undefined
+  static from<T extends number>(n: T): Ratio | undefined {
     if (!isNonNegativeRational(n)) {
       return
     }
@@ -247,7 +257,7 @@ export class Ratio {
 
   reciprocal(): PositiveRatio | undefined {
     if (this.a.isPositive()) {
-      return new Ratio(this.b, this.a) as PositiveRatio
+      return Ratio.of(this.b, this.a)
     }
   }
 
@@ -259,16 +269,8 @@ export class Ratio {
     return this.a.divideCeil(this.b)
   }
 
-  multiply(r: Ratio): Ratio {
-    const a = this.a.multiply(r.a)
-    const b = this.b.multiply(r.b)
-    return new Ratio(a, b)
-  }
-
-  subtract(r: Ratio): Ratio {
-    const a = this.a.multiply(r.b).subtract(r.a.multiply(this.b))
-    const b = this.b.multiply(r.b)
-    return new Ratio(a, b)
+  isEqualTo(r: Ratio): boolean {
+    return this.a.value * r.b.value === this.b.value * r.a.value
   }
 
   isGreaterThan(r: Ratio): this is PositiveRatio {
@@ -309,6 +311,7 @@ export interface PositiveRatio extends Ratio {
 
   reciprocal(): PositiveRatio
   ceil(): PositiveInt
+  isEqualTo(r: Ratio): r is PositiveRatio
   isLessThan(r: Ratio): r is PositiveRatio
   isLessThanOrEqualTo(r: Ratio): r is PositiveRatio
   isPositive(): true

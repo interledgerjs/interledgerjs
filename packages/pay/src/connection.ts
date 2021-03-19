@@ -1,227 +1,201 @@
-import createLogger, { Logger } from 'ilp-logger'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
-  deserializeIlpReply,
-  IlpError,
-  IlpPacketType,
-  IlpReject,
-  IlpReply,
-  isFulfill,
-  isReject,
-  serializeIlpPrepare,
-} from 'ilp-packet'
-import {
-  generateFulfillment,
-  generateFulfillmentKey,
-  generatePskEncryptionKey,
-  generateRandomCondition,
-  hash,
-} from 'ilp-protocol-stream/dist/src/crypto'
-import { Frame, FrameType, Packet } from 'ilp-protocol-stream/dist/src/packet'
-import { StreamFulfill, StreamReject, StreamReply, StreamRequest } from './request'
-import { Int, timeout } from './utils'
+  StreamSender,
+  StreamController,
+  SendState,
+  SendStateType,
+  RequestState,
+} from './controllers'
+import { RequestBuilder, generateKeys, StreamRequest, StreamReply } from './request'
+import { isPaymentError, PaymentError } from '.'
+import { Constructor } from './utils'
 import { PaymentDestination } from './open-payments'
+import { hash } from 'ilp-protocol-stream/dist/src/crypto'
+import createLogger, { Logger } from 'ilp-logger'
+import { Plugin } from './request'
 
-/** Serialize, send, receive and validate ILP/STREAM packets over the network */
-export interface StreamConnection {
-  /** Send an ILP Prepare over STREAM, then parse and authenticate the reply */
-  sendRequest: (request: StreamRequest) => Promise<StreamReply>
+/** Coordinate all business rules to schedule and send ILP/STREAM requests for one unique destination */
+export class StreamConnection {
+  /** Controllers each manage a different aspect of the connection */
+  private readonly controllers = new Map<Constructor<StreamController>, StreamController>()
 
-  /** Logger namespaced to this connection */
-  log: Logger
+  constructor(
+    /** Unique details to establish the connection to the recipient */
+    private readonly destinationDetails: PaymentDestination,
 
-  /** Unique details to establish the connection to the recipient */
-  destinationDetails: PaymentDestination
-}
+    /** Send an ILP Prepare over STREAM, then parse and authenticate the reply */
+    private readonly sendRequest: (request: StreamRequest) => Promise<StreamReply>,
 
-/** Connect the given plugin, generate keys, register handlers, and setup ILP connection so STREAM requests may be sent */
-export const createConnection = async (
-  sendData: (data: Buffer) => Promise<Buffer>,
-  destinationDetails: PaymentDestination
-): Promise<StreamConnection> => {
-  const { sharedSecret, destinationAddress } = destinationDetails
+    /** Logger namespaced to this connection */
+    public readonly log: Logger
+  ) {}
 
-  const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-  const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
+  static async create(
+    plugin: Plugin,
+    destinationDetails: PaymentDestination
+  ): Promise<StreamConnection> {
+    const { destinationAddress, sharedSecret } = destinationDetails
 
-  const connectionId = await hash(Buffer.from(destinationAddress))
-  const log = createLogger(`ilp-pay:${connectionId.toString('hex').slice(0, 6)}`)
+    const connectionId = await hash(Buffer.from(destinationAddress))
+    const log = createLogger(`ilp-pay:${connectionId.toString('hex').slice(0, 6)}`)
 
-  return {
-    log,
-    destinationDetails,
-    sendRequest: async (request: StreamRequest): Promise<StreamReply> => {
-      // Create the STREAM request packet
-      const {
-        sequence,
-        sourceAmount,
-        destinationAddress,
-        minDestinationAmount,
-        frames,
-        isFulfillable,
-        expiresAt,
-        log,
-      } = request
+    const sendRequest = await generateKeys(plugin, sharedSecret)
+    return new StreamConnection(destinationDetails, sendRequest, log)
+  }
 
-      const streamRequest = new Packet(
-        sequence,
-        IlpPacketType.Prepare.valueOf(),
-        minDestinationAmount.toLong(),
-        frames
-      )
+  /**
+   * Send a series of requests, initiated by the given STREAM sender,
+   * until it completes its send loop or a payment error is encountered.
+   *
+   * Only one send loop can run at a time. A STREAM connection
+   * may run successive send loops for different functions or phases.
+   */
+  async runSendLoop<T>(sender: StreamSender<T>): Promise<T | PaymentError> {
+    // Queue for all side effects, which return the next state of the payment
+    const requestScheduler = new Scheduler<() => SendState<T>>() // Side effects from requests
+    const replyScheduler = new Scheduler<() => SendState<T>>() // Side effects from replies
 
-      const data = await streamRequest.serializeAndEncrypt(encryptionKey)
-
-      let executionCondition: Buffer
-      let fulfillment: Buffer | undefined
-
-      if (isFulfillable) {
-        fulfillment = await generateFulfillment(fulfillmentKey, data)
-        executionCondition = await hash(fulfillment)
-        log.debug(
-          'sending Prepare. amount=%s minDestinationAmount=%s frames=[%s]',
-          sourceAmount,
-          minDestinationAmount,
-          frames.map((f) => FrameType[f.type]).join()
+    const trySending = (): SendState<T> => {
+      const request = new RequestBuilder({ log: this.log })
+      const requestState = sender.order
+        .map((c) => this.getController(c))
+        .reduce<RequestState>(
+          (state, controller) =>
+            state.type === SendStateType.Ready
+              ? controller.buildRequest?.(request) ?? state
+              : state,
+          RequestState.Ready()
         )
-      } else {
-        executionCondition = generateRandomCondition()
-        log.debug(
-          'sending unfulfillable Prepare. amount=%s frames=[%s]',
-          sourceAmount,
-          frames.map((f) => FrameType[f.type]).join()
-        )
+      if (requestState.type !== SendStateType.Ready) {
+        return requestState // Cancel this attempt
       }
 
-      log.trace('loading Prepare with frames: %o', frames)
+      // If committing and sending this request, continue
+      const state = sender.nextState(request, this.getController.bind(this))
+      if (state.type !== SendStateType.Send) {
+        return state // Cancel this attempt
+      }
 
-      // Create and serialize the ILP Prepare
-      const preparePacket = serializeIlpPrepare({
-        destination: destinationAddress,
-        amount: sourceAmount.toString(), // Max packet amount controller always limits this to U64
-        executionCondition,
-        expiresAt,
-        data,
+      // Synchronously apply the request
+      const replyHandlers = sender.order.map((c) => this.getController(c).applyRequest?.(request))
+
+      // Asynchronously send the request and queue the reply side effects as another task
+      const task = this.sendRequest(request).then((reply) => () => {
+        // Execute *all handlers*, then return the first error or next state
+        // (For example, even if a payment error occurs in a controller, it shouldn't return
+        //  immediately since that packet still needs to be correctly accounted for)
+        const error = replyHandlers.map((apply) => apply?.(reply)).find(isPaymentError)
+        const newState = state.applyReply(reply)
+        return error ? SendState.Error(error) : newState
       })
 
-      // Send the packet!
-      const pendingReply = sendData(preparePacket)
-        .then((data) => {
-          try {
-            return deserializeIlpReply(data)
-          } catch (_) {
-            return createReject(IlpError.F01_INVALID_PACKET)
-          }
-        })
-        .catch((err) => {
-          log.error('failed to send Prepare:', err)
-          return createReject(IlpError.T00_INTERNAL_ERROR)
-        })
-        .then((ilpReply) => {
-          if (!isFulfill(ilpReply) || !fulfillment || ilpReply.fulfillment.equals(fulfillment)) {
-            return ilpReply
-          }
+      replyScheduler.queue(task)
 
-          log.error(
-            'got invalid fulfillment: %h. expected: %h, condition: %h',
-            ilpReply.fulfillment,
-            fulfillment,
-            executionCondition
-          )
-          return createReject(IlpError.F05_WRONG_CONDITION)
-        })
+      return SendState.Schedule() // Schedule another attempt immediately
+    }
 
-      // Await reply and timeout if the packet expires
-      const timeoutDuration = expiresAt.getTime() - Date.now()
-      const ilpReply: IlpReply = await timeout(timeoutDuration, pendingReply).catch(() => {
-        log.error('request timed out.')
-        return createReject(IlpError.R00_TRANSFER_TIMED_OUT)
-      })
+    // Queue initial attempt to send a request
+    requestScheduler.queue(Promise.resolve(trySending))
 
-      const streamReply = await Packet.decryptAndDeserialize(encryptionKey, ilpReply.data).catch(
-        () => undefined
-      )
+    for (;;) {
+      const applyEffects = await Promise.race([replyScheduler.next(), requestScheduler.next()])
+      const state = applyEffects()
 
-      if (isFulfill(ilpReply)) {
-        log.debug('got Fulfill. amount=%s', sourceAmount)
-      } else {
-        log.debug('got %s Reject: %s', ilpReply.code, ILP_ERROR_CODES[ilpReply.code])
+      switch (state.type) {
+        case SendStateType.Done:
+          await replyScheduler.complete() // Wait to process oustanding requests
+          return state.value
 
-        if (ilpReply.message.length > 0 || ilpReply.triggeredBy.length > 0) {
-          log.trace('Reject message="%s" triggeredBy=%s', ilpReply.message, ilpReply.triggeredBy)
-        }
+        case SendStateType.Error:
+          await replyScheduler.complete() // Wait to process oustanding requests
+          return state.error
+
+        case SendStateType.Schedule:
+          requestScheduler.queue(state.delay.then(() => trySending))
+          break
       }
+    }
+  }
 
-      let responseFrames: Frame[] | undefined
-      let destinationAmount: Int | undefined
+  private getController<T extends StreamController>(Constructor: Constructor<T>): T {
+    const existingController = this.controllers.get(Constructor)
+    if (existingController) {
+      return existingController as T
+    }
 
-      // Validate the STREAM reply from recipient
-      if (streamReply) {
-        if (streamReply.sequence.notEquals(sequence)) {
-          log.error('discarding STREAM reply: received invalid sequence %s', streamReply.sequence)
-        } else if (+streamReply.ilpPacketType === IlpPacketType.Reject && isFulfill(ilpReply)) {
-          // If receiver claimed they sent a Reject but we got a Fulfill, they lied!
-          // If receiver said they sent a Fulfill but we got a Reject, that's possible
-          log.error(
-            'discarding STREAM reply: received Fulfill, but recipient claims they sent a Reject'
-          )
-        } else {
-          responseFrames = streamReply.frames
-          destinationAmount = Int.from(streamReply.prepareAmount)
-
-          log.debug(
-            'got authentic STREAM reply. receivedAmount=%s frames=[%s]',
-            destinationAmount,
-            responseFrames.map((f) => FrameType[f.type]).join()
-          )
-          log.trace('STREAM reply frames: %o', responseFrames)
-        }
-      } else if (
-        (isFulfill(ilpReply) || ilpReply.code !== IlpError.F08_AMOUNT_TOO_LARGE) &&
-        ilpReply.data.byteLength > 0
-      ) {
-        // If there's data in a Fulfill or non-F08 reject, it is expected to be a valid STREAM packet
-        log.warn('data in reply unexpectedly failed decryption.')
-      }
-
-      return isReject(ilpReply)
-        ? new StreamReject(log, ilpReply, responseFrames, destinationAmount)
-        : new StreamFulfill(log, responseFrames, destinationAmount)
-    },
+    const controller = new Constructor(this.destinationDetails)
+    this.controllers.set(Constructor, controller)
+    return controller
   }
 }
 
-/** Mapping of ILP error codes to its error message */
-const ILP_ERROR_CODES = {
-  // Final errors
-  F00: 'bad request',
-  F01: 'invalid packet',
-  F02: 'unreachable',
-  F03: 'invalid amount',
-  F04: 'insufficient destination amount',
-  F05: 'wrong condition',
-  F06: 'unexpected payment',
-  F07: 'cannot receive',
-  F08: 'amount too large',
-  F99: 'application error',
-  // Temporary errors
-  T00: 'internal error',
-  T01: 'peer unreachable',
-  T02: 'peer busy',
-  T03: 'connector busy',
-  T04: 'insufficient liquidity',
-  T05: 'rate limited',
-  T99: 'application error',
-  // Relative errors
-  R00: 'transfer timed out',
-  R01: 'insufficient source amount',
-  R02: 'insufficient timeout',
-  R99: 'application error',
+/**
+ * Task scheduler: a supercharged `Promise.race`.
+ *
+ * Queue "tasks", which are Promises resolving with a function. The scheduler aggregates
+ * all pending tasks, where `next()` resolves to the task which resolves first. Critically,
+ * this also *includes any tasks also queued while awaiting the aggregate Promise*.
+ * Then, executing the resolved function removes the task, so the remaining
+ * pending tasks can also be aggregated and awaited.
+ */
+class Scheduler<T extends (...args: any[]) => any> {
+  /** Set of tasks yet to be executed */
+  private pendingTasks = new Set<Promise<T>>()
+
+  /**
+   * Resolves to the task of the first event to resolve.
+   * Replaced with a new tick each time a task is executed
+   */
+  private nextTick = new PromiseResolver<T>()
+
+  /**
+   * Resolve to the pending task which resolves first, including existing tasks
+   * and any added after this is called.
+   */
+  next(): Promise<T> {
+    this.nextTick = new PromiseResolver<T>()
+    this.pendingTasks.forEach((task) => {
+      this.resolveTick(task)
+    })
+
+    return this.nextTick.promise
+  }
+
+  /**
+   * Execute all pending tasks immediately when they resolve,
+   * then resolve after all have resolved.
+   */
+  async complete(): Promise<any> {
+    return Promise.all([...this.pendingTasks].map((promise) => promise.then((run) => run())))
+  }
+
+  /** Schedule a task, which is Promise resolving to a function to execute */
+  queue(task: Promise<T>): void {
+    this.pendingTasks.add(task)
+    this.resolveTick(task)
+  }
+
+  /**
+   * Resolve the current tick when the given task resolves. Wrap
+   * the task's function to remove it as pending if it's executed.
+   */
+  private async resolveTick(task: Promise<T>): Promise<void> {
+    const run = await task
+    this.nextTick.resolve(
+      <T>((...args: Parameters<T>): ReturnType<T> => {
+        this.pendingTasks.delete(task)
+        return run(...args)
+      })
+    )
+  }
 }
 
-/** Construct a simple ILP Reject packet */
-const createReject = (code: IlpError): IlpReject => ({
-  code,
-  message: '',
-  triggeredBy: '',
-  data: Buffer.alloc(0),
-})
+/** Promise that can be resolved or rejected outside its executor callback. */
+class PromiseResolver<T> {
+  resolve!: (value: T) => void
+  reject!: () => void
+  readonly promise = new Promise<T>((resolve, reject) => {
+    this.resolve = resolve
+    this.reject = reject
+  })
+}

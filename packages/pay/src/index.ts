@@ -1,5 +1,3 @@
-import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { createConnection } from './connection'
 import { AssetDetails, isValidAssetDetails } from './controllers/asset-details'
 import { AssetProbe } from './controllers/asset-probe'
 import { ConnectionCloser } from './controllers/connection-closer'
@@ -7,16 +5,15 @@ import { PaymentController, PaymentType } from './controllers/payment'
 import { RateProbe } from './controllers/rate-probe'
 import { fetchPaymentDetails, PaymentDestination } from './open-payments'
 import { Int, isNonNegativeRational, NonNegativeRational, PositiveInt, Ratio } from './utils'
-import { SendLoop } from './send-loop'
+import { StreamConnection } from './connection'
+import { Plugin } from './request'
 
 export { Int, Ratio, PositiveInt, PositiveRatio } from './utils'
-
 export { AssetDetails } from './controllers/asset-details'
+export { Invoice } from './open-payments'
+export { AccountUrl } from './payment-pointer'
 
-// TODO Add README note that this is exported
-export { Invoice, parsePaymentPointer } from './open-payments'
-
-/** TODO explain */
+/** Recipient-provided details to resolve payment parameters, and connected ILP uplink */
 export interface SetupOptions {
   /** Plugin to send ILP packets over the network */
   plugin: Plugin
@@ -25,11 +22,21 @@ export interface SetupOptions {
   /** Open Payments invoice URL to resolve details and credentials to pay a fixed-delivery payment */
   invoiceUrl?: string
   /** For testing purposes: symmetric key to encrypt STREAM messages. Requires `destinationAddress` */
-  sharedSecret?: Buffer
+  sharedSecret?: Uint8Array
   /** For testing purposes: ILP address of the STREAM receiver to send outgoing packets. Requires `sharedSecret` */
   destinationAddress?: string
   /** For testing purposes: asset details of the STREAM recipient, overriding STREAM and invoice. Requires `destinationAddress` */
   destinationAsset?: AssetDetails
+}
+
+/** Resolved destination details of a proposed payment, such as the destination asset, invoice, and STREAM credentials, ready to perform a quote */
+export interface ResolvedPayment extends PaymentDestination {
+  /** Perform a rate probe: discover path max packet amount, probe the real exchange rate, and compute the minimum exchange rate and bounds of the payment. */
+  startQuote: (options: QuoteOptions) => Promise<Quote>
+  /** Cancel the payment: if connection was established, notify receiver to close the connection */
+  close: () => Promise<void>
+  /** Asset and denomination of the receiver's Interledger account */
+  destinationAsset: AssetDetails
 }
 
 /** Limits and target to quote a payment and probe the rate */
@@ -48,28 +55,11 @@ export interface QuoteOptions {
   }
 }
 
-/** TODO explain */
-export interface ResolvedPayment extends PaymentDestination {
-  /** TODO explain */
-  quote: (options: QuoteOptions) => Promise<Quote>
-  /** TODO explain */
-  close: () => Promise<void>
-}
-
-/** TODO explain */
-export interface PayOptions {
-  /**
-   * Callback to process streaming updates as packets are sent and received,
-   * such as to perform accounting while the payment is in progress.
-   */
-  progressHandler?: (receipt: Receipt) => void
-}
-
 /** Parameters of payment execution and the projected outcome of a payment */
 export interface Quote {
   /** Execute the payment within these parameters */
   pay: (options?: PayOptions) => Promise<Receipt>
-  /** Cancel the payment (closes connection with recipient) */
+  /** Cancel the payment: notify receiver to close the connection */
   close: () => Promise<void>
   /** Maximum amount that will be sent in source units */
   maxSourceAmount: PositiveInt
@@ -77,27 +67,39 @@ export interface Quote {
   minDeliveryAmount: Int
   /** Discovered maximum packet amount allowed over this payment path */
   maxPacketAmount: Int
-  /** Probed exchange rate over the path: range of [minimum, maximum] */
-  estimatedExchangeRate: [number, number]
-  /** Minimum exchange rate used to enforce rates */
-  minExchangeRate: number
+  /** Probed exchange rate over the path: range of [minimum, maximum]. Ratios of destination base units to source base units */
+  estimatedExchangeRate: [Ratio, Ratio]
+  /** Minimum exchange rate used to enforce rates. Ratio of destination base units to source base units */
+  minExchangeRate: Ratio
   /** Estimated payment duration in milliseconds, based on max packet amount, RTT, and rate of packet throttling */
   estimatedDuration: number
 }
 
-/** Final outcome of a payment */
+/** Options before immediately executing payment */
+export interface PayOptions {
+  /**
+   * Callback to process streaming updates as packets are sent and received,
+   * such as to perform accounting while the payment is in progress.
+   *
+   * Handler will be called for all fulfillable packets and replies before the payment resolves.
+   */
+  progressHandler?: (receipt: Receipt) => void
+}
+
+/** Intermediate state or outcome of the payment, to account for sent/delivered amounts */
 export interface Receipt {
-  error?: PaymentError // TODO Remove this so it's through catching Promise rejections instead ?
+  /** Error state, if the payment failed */
+  error?: PaymentError
   /** Amount sent and fulfilled, in base units of the source asset */
   amountSent: Int
   /** Amount delivered to recipient, in base units of the destination asset */
   amountDelivered: Int
-  /** Amount sent that is yet to be fulfilled or rejected, in base units of the sending account */
+  /** Amount sent that is yet to be fulfilled or rejected, in base units of the source asset */
   sourceAmountInFlight: Int
-  /** Estimate of the amount that may be delivered from in-flight packets, in base units of the receiving account */
+  /** Estimate of the amount that may be delivered from in-flight packets, in base units of the destination asset */
   destinationAmountInFlight: Int
   /** Latest [STREAM receipt](https://interledger.org/rfcs/0039-stream-receipts/) to provide proof-of-delivery to a 3rd party verifier */
-  streamReceipt?: Buffer
+  streamReceipt?: Uint8Array
 }
 
 /** Payment error states */
@@ -106,7 +108,7 @@ export enum PaymentError {
    * Errors likely caused by the library user
    */
 
-  /** Payment pointer or SPSP URL is formatted incorrectly */
+  /** Payment pointer or SPSP URL is syntactically invalid */
   InvalidPaymentPointer = 'InvalidPaymentPointer',
   /** STREAM credentials (shared secret and destination address) were not provided or invalid */
   InvalidCredentials = 'InvalidCredentials',
@@ -139,14 +141,12 @@ export enum PaymentError {
   UnknownDestinationAsset = 'UnknownDestinationAsset',
   /** Receiver sent conflicting destination asset details */
   DestinationAssetConflict = 'DestinationAssetConflict',
-  /** Failed to compute a minimum exchange rate */
+  /** Failed to compute minimum rate: prices for source or destination assets were invalid or not provided */
   ExternalRateUnavailable = 'ExternalRateUnavailable',
   /** Rate probe failed to establish the exchange rate or discover path max packet amount */
   RateProbeFailed = 'RateProbeFailed',
   /** Real exchange rate is less than minimum exchange rate with slippage */
   InsufficientExchangeRate = 'InsufficientExchangeRate',
-  /** Exchange rate is too close to minimum rate to deliver max packet amount without rounding errors */
-  ExchangeRateRoundingError = 'ExchangeRateRoundingError',
   /** No packets were fulfilled within timeout */
   IdleTimeout = 'IdleTimeout',
   /** Receiver closed the connection or stream, terminating the payment */
@@ -162,7 +162,7 @@ export enum PaymentError {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
 export const isPaymentError = (o: any): o is PaymentError => Object.values(PaymentError).includes(o)
 
-/** TODO add explanation */
+/** Resolve destination details and asset of the payment in order to establish a STREAM connection */
 export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayment> => {
   // Determine STREAM credentials, amount to pay, and destination details
   // by performing Open Payments/SPSP queries, or using the provided info
@@ -173,27 +173,24 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
   const destinationDetails = destinationDetailsOrError
   const { invoice } = destinationDetails
 
-  // Prepare to serialize and send requests: generate encryption keys and logger
-  const sendData = (data: Buffer) => options.plugin.sendData(data)
-  const connection = await createConnection(sendData, destinationDetails)
+  // Generate encryption keys and prepare to orchestrate send loops
+  const connection = await StreamConnection.create(options.plugin, destinationDetails)
   const { log } = connection
-
-  const sendLoop = new SendLoop(connection)
 
   // Callback to send connection close frame
   const close = async (): Promise<void> => {
-    await sendLoop.run(new ConnectionCloser())
+    await connection.runSendLoop(new ConnectionCloser())
   }
 
   // Use STREAM to fetch the destination asset (returns immediately if asset is already known)
-  const assetOrError = await sendLoop.run(new AssetProbe())
+  const assetOrError = await connection.runSendLoop(new AssetProbe())
   if (isPaymentError(assetOrError)) {
     await close()
     throw assetOrError
   }
   const destinationAsset = assetOrError
 
-  const quote = async (options: QuoteOptions): Promise<Quote> => {
+  const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     // Validate the amounts to set the target for the payment
     let target: {
       type: PaymentType
@@ -201,7 +198,7 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
     }
 
     if (invoice) {
-      const remainingToDeliver = invoice.amountToDeliver.subtract(invoice.amountDelivered)
+      const remainingToDeliver = invoice.amountToDeliver.saturatingSubtract(invoice.amountDelivered)
       if (!remainingToDeliver.isPositive()) {
         // Return thie error here instead of in `setupPayment` so consumer can access the resolved invoice
         log.debug(
@@ -209,7 +206,7 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
           invoice.amountToDeliver,
           invoice.amountDelivered
         )
-        await close()
+        // In invoice case, STREAM connection is yet to be established since no asset probe
         throw PaymentError.InvoiceAlreadyPaid
       }
 
@@ -267,9 +264,9 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
 
     // Determine minimum exchange rate
     let externalRate = 1 // Default to 1:1 rate for the same asset
-    if (sourceAsset.assetCode !== destinationAsset.assetCode) {
-      const sourcePrice = options.prices?.[sourceAsset.assetCode]
-      const destinationPrice = options.prices?.[destinationAsset.assetCode]
+    if (sourceAsset.code !== destinationAsset.code) {
+      const sourcePrice = options.prices?.[sourceAsset.code]
+      const destinationPrice = options.prices?.[destinationAsset.code]
 
       // Ensure the prices are defined, finite, and denominator > 0
       if (
@@ -279,8 +276,8 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
       ) {
         log.debug(
           'quote failed: no external rate available from %s to %s',
-          sourceAsset.assetCode,
-          destinationAsset.assetCode
+          sourceAsset.code,
+          destinationAsset.code
         )
         await close()
         throw PaymentError.ExternalRateUnavailable
@@ -288,7 +285,7 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
 
       // This seems counterintuitive because rates are destination amount / source amount,
       // but each price *is a rate*, not an amount.
-      // For example: sourcePrice => USD / ABC, destPrice => USD / XYZ, externalRate => XYZ / ABC
+      // For example: sourcePrice => USD/ABC, destPrice => USD/XYZ, externalRate => XYZ/ABC
       externalRate = sourcePrice / destinationPrice
     }
 
@@ -296,19 +293,19 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
     externalRate =
       externalRate *
       (1 - slippage) *
-      10 ** (destinationAsset.assetScale - sourceAsset.assetScale)
+      10 ** (destinationAsset.scale - sourceAsset.scale)
 
-    const minimumRate = Ratio.from(externalRate as NonNegativeRational)
-    log.debug('calculated min exchange rate of %s', minimumRate)
+    const minExchangeRate = Ratio.from(externalRate as NonNegativeRational)
+    log.debug('calculated min exchange rate of %s', minExchangeRate)
 
     log.debug('starting quote.')
-
     // Perform rate probe: probe realized rate and discover path max packet amount
-    const rateProbeResult = await sendLoop.run(new RateProbe())
+    const rateProbeResult = await connection.runSendLoop(new RateProbe())
     if (isPaymentError(rateProbeResult)) {
       await close()
       throw rateProbeResult
     }
+    log.debug('quote complete.')
 
     // Set the amounts to pay/deliver and perform checks to determine
     // if this is possible given the probed & minimum rates
@@ -316,24 +313,14 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
     const paymentTarget = PaymentController.createPaymentTarget(
       target.amount,
       target.type,
-      minimumRate,
+      minExchangeRate,
       rateCalculator,
-      maxPacketAmount,
       log
     )
     if (isPaymentError(paymentTarget)) {
       await close()
       throw paymentTarget
     }
-
-    log.debug('quote complete.')
-
-    // Convert exchange rates into normalized units
-    const shiftRate = (rate: Ratio): number =>
-      +rate * 10 ** (sourceAsset.assetScale - destinationAsset.assetScale)
-    const lowerBoundRate = shiftRate(rateCalculator.lowerBoundRate)
-    const upperBoundRate = shiftRate(rateCalculator.upperBoundRate)
-    const minExchangeRate = shiftRate(minimumRate)
 
     // Get strict amounts for accounting
     const { maxSourceAmount, minDeliveryAmount } = paymentTarget
@@ -343,7 +330,7 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
     const estimatedDuration = +estimatedNumberOfPackets * packetFrequency
 
     return {
-      estimatedExchangeRate: [lowerBoundRate, upperBoundRate],
+      estimatedExchangeRate: rateCalculator.getRate(),
       minExchangeRate,
       maxPacketAmount,
       maxSourceAmount,
@@ -352,25 +339,21 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
       close,
       pay: async ({ progressHandler } = {}) => {
         log.debug('starting payment.')
-
-        const paymentController = new PaymentController(paymentTarget, progressHandler)
-        const receiptOrError = await sendLoop.run(paymentController)
+        const paymentSender = new PaymentController(paymentTarget, progressHandler)
+        const error = await connection.runSendLoop(paymentSender)
 
         await close()
-        log.debug('payment ended.')
 
-        return isPaymentError(receiptOrError)
-          ? {
-              error: receiptOrError,
-              ...paymentController.getReceipt(),
-            }
-          : receiptOrError
+        return {
+          ...(isPaymentError(error) && { error }),
+          ...paymentSender.getReceipt(),
+        }
       },
     }
   }
 
   return {
-    quote,
+    startQuote,
     close,
     ...destinationDetails,
     destinationAsset,

@@ -60,17 +60,17 @@ export class MaxPacketAmountController implements StreamController {
 
       // Use a binary search to discover the precise max
       case MaxPacketState.ImpreciseMax:
-        // Always positive: if verifiedCapacity=0, maxPacketAmount / 2
-        // must round up to 1, or if verifiedCapacity=maxPacketAmount,
-        // verifiedCapacity is positive, so adding it will always be positive
+        // Always positive:
+        // - If verifiedCapacity=0, maxPacketAmount / 2 must round up to 1
+        // - If verifiedCapacity=maxPacketAmount,
+        //   verifiedCapacity is positive, so adding it will always be positive
         return this.state.maxPacketAmount
-          .subtract(this.verifiedPathCapacity)
+          .saturatingSubtract(this.verifiedPathCapacity)
           .divideCeil(Int.TWO)
           .add(this.verifiedPathCapacity) as PositiveInt
     }
   }
 
-  // TODO Move this to rate-probe & publicly export state?
   /** Did we verify the precise max packet amount or a large path capacity? */
   isProbeComplete(): boolean {
     const verifiedPreciseMax =
@@ -117,13 +117,13 @@ export class MaxPacketAmountController implements StreamController {
       }
 
       // Convert remote max packet amount into source units
-      const exchangeRate = new Ratio(sourceAmount, remoteReceived)
+      const exchangeRate = Ratio.of(sourceAmount, remoteReceived)
       newMax = remoteMaximum.multiplyFloor(exchangeRate) // newMax <= source amount since remoteMaximum / remoteReceived is < 1
       isPreciseMax = true
     } catch (_) {
       // If no metadata was included, the only thing we can infer is that the amount we sent was too high
       log.debug('handling F08 without metadata. source amount: %s', sourceAmount)
-      newMax = sourceAmount.subtract(Int.ONE)
+      newMax = sourceAmount.saturatingSubtract(Int.ONE)
       isPreciseMax = false
     }
 

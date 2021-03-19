@@ -1,4 +1,4 @@
-import { StreamSender, SenderContext, SendState } from '.'
+import { StreamSender, SendState, GetController } from '.'
 import { AssetDetails, AssetDetailsController } from './asset-details'
 import { PaymentError } from '..'
 import { ConnectionNewAddressFrame } from 'ilp-protocol-stream/dist/src/packet'
@@ -6,6 +6,7 @@ import { IlpAddress } from 'ilp-packet'
 import { EstablishmentController } from './establishment'
 import { ExpiryController } from './expiry'
 import { SequenceController } from './sequence'
+import { RequestBuilder } from '../request'
 
 /** Send requests that trigger receiver to respond with asset details */
 export class AssetProbe implements StreamSender<AssetDetails> {
@@ -16,17 +17,17 @@ export class AssetProbe implements StreamSender<AssetDetails> {
     AssetDetailsController,
   ]
 
-  private sentFirstRequest = false
+  private requestsSent = 0
   private gotFirstReply = false
 
   // Immediately send two packets to "request" the destination asset details
-  nextState({ request, send, lookup }: SenderContext<AssetDetails>): SendState<AssetDetails> {
+  nextState(request: RequestBuilder, lookup: GetController): SendState<AssetDetails> {
     const assetDetails = lookup(AssetDetailsController).getDestinationAsset()
     if (assetDetails) {
       return SendState.Done(assetDetails)
     }
 
-    if (!this.sentFirstRequest) {
+    if (this.requestsSent === 0) {
       /**
        * `ConnectionNewAddress` with an empty string will trigger `ilp-protocol-stream`
        * to respond with asset details but *not* trigger a send loop.
@@ -35,7 +36,7 @@ export class AssetProbe implements StreamSender<AssetDetails> {
        */
       request.addFrames(new ConnectionNewAddressFrame('')).build()
       request.log.debug('requesting asset details (1 of 2).')
-    } else {
+    } else if (this.requestsSent === 1) {
       /**
        * `ConnectionNewAddress` with a non-empty string is the only way to trigger Interledger.rs
        * to respond with asset details.
@@ -54,9 +55,12 @@ export class AssetProbe implements StreamSender<AssetDetails> {
         .setDestinationAddress(destinationAddress)
         .build()
       request.log.debug('requesting asset details (2 of 2).')
+    } else {
+      return SendState.Yield()
     }
 
-    send(() => {
+    this.requestsSent++
+    return SendState.Send(() => {
       if (!this.gotFirstReply) {
         this.gotFirstReply = true
         return SendState.Yield()
@@ -70,12 +74,5 @@ export class AssetProbe implements StreamSender<AssetDetails> {
         ? SendState.Error(PaymentError.UnknownDestinationAsset)
         : SendState.Done(assetDetails)
     })
-
-    if (!this.sentFirstRequest) {
-      this.sentFirstRequest = true
-      return SendState.Schedule()
-    } else {
-      return SendState.Yield()
-    }
   }
 }

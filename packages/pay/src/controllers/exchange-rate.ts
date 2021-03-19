@@ -1,15 +1,15 @@
 import { Logger } from 'ilp-logger'
 import { StreamController } from '.'
 import { StreamReply, StreamRequest } from '../request'
-import { Int, PositiveInt, Ratio } from '../utils'
+import { Int, PositiveInt, PositiveRatio, Ratio } from '../utils'
 
 /** Track exchange rates and estimate source/destination amount */
 export class ExchangeRateCalculator {
   /** Realized exchange rate is less than this ratio (exclusive): destination / source */
-  upperBoundRate: Ratio
+  private upperBoundRate: PositiveRatio
 
   /** Realized exchange rate is greater than or equal to this ratio (inclusive): destination / source */
-  lowerBoundRate: Ratio
+  private lowerBoundRate: Ratio
 
   /** Mapping of packet received amounts to its most recent sent amount */
   private sentAmounts = new Map<bigint, PositiveInt>()
@@ -18,21 +18,24 @@ export class ExchangeRateCalculator {
   private receivedAmounts = new Map<bigint, Int>()
 
   constructor(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger) {
-    this.upperBoundRate = new Ratio(receivedAmount.add(Int.ONE), sourceAmount)
-    this.lowerBoundRate = new Ratio(receivedAmount, sourceAmount)
+    this.upperBoundRate = Ratio.of(receivedAmount.add(Int.ONE), sourceAmount)
+    this.lowerBoundRate = Ratio.of(receivedAmount, sourceAmount)
     log.debug('setting initial rate to [%s, %s]', this.lowerBoundRate, this.upperBoundRate)
 
     this.sentAmounts.set(receivedAmount.value, sourceAmount)
     this.receivedAmounts.set(sourceAmount.value, receivedAmount)
   }
 
+  getRate(): [Ratio, PositiveRatio] {
+    return [this.lowerBoundRate, this.upperBoundRate]
+  }
+
   updateRate(sourceAmount: PositiveInt, receivedAmount: Int, log: Logger): void {
     // Since intermediaries floor packet amounts, the exchange rate cannot be precisely computed:
     // it's only known with some margin however. However, as we send packets of varying sizes,
     // the upper and lower bounds should converge closer and closer to the real exchange rate.
-
-    const packetUpperBoundRate = new Ratio(receivedAmount.add(Int.ONE), sourceAmount)
-    const packetLowerBoundRate = new Ratio(receivedAmount, sourceAmount)
+    const packetUpperBoundRate = Ratio.of(receivedAmount.add(Int.ONE), sourceAmount)
+    const packetLowerBoundRate = Ratio.of(receivedAmount, sourceAmount)
 
     const previousReceivedAmount = this.receivedAmounts.get(sourceAmount.value)
 
@@ -96,7 +99,7 @@ export class ExchangeRateCalculator {
     // If source amount doesn't convert precisely, we can't narrow it any better than that amount, floored ¯\_(ツ)_/¯
     const highEndDestination = sourceAmount
       .multiplyCeil(this.upperBoundRate)
-      .subtract(Int.ONE)
+      .saturatingSubtract(Int.ONE)
       .orLesser(Int.MAX_U64)
 
     return [lowEndDestination, highEndDestination]

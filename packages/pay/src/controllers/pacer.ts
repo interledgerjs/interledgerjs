@@ -1,5 +1,4 @@
 import { RequestState, StreamController } from '.'
-import { IlpError } from 'ilp-packet'
 import { sleep } from '../utils'
 import { StreamReply } from '../request'
 
@@ -87,9 +86,10 @@ export class PacingController implements StreamController {
           roundTripTime * (1 - PacingController.ROUND_TRIP_AVERAGE_WEIGHT)
       }
 
+      // TODO Add separate liquidity congestion controller/logic, don't backoff in time on T04s
+
       // If we encounter a temporary error that's not related to liquidity,
       // exponentially backoff the rate of packet sending
-      // TODO For now, backoff in time on T04s, but add separate liquidity congestion controller/logic
       if (reply.isReject() && reply.ilpReject.code[0] === 'T') {
         const reducedRate = Math.max(
           PacingController.MIN_PACKETS_PER_SECOND,

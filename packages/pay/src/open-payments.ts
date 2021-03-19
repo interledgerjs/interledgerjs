@@ -6,19 +6,20 @@ import createLogger from 'ilp-logger'
 import { AssetDetails, isValidAssetScale, isValidAssetDetails } from './controllers/asset-details'
 import { IlpAddress, isValidIlpAddress } from 'ilp-packet'
 import AbortController from 'abort-controller'
+import { AccountUrl, createHttpsUrl } from './payment-pointer'
 
 const SHARED_SECRET_BYTE_LENGTH = 32
 const INVOICE_QUERY_ACCEPT_HEADER = 'application/ilp-stream+json'
 const ACCOUNT_QUERY_ACCEPT_HEADER = 'application/ilp-stream+json, application/spsp4+json'
 
-const log = createLogger('ilp-pay')
+const log = createLogger('ilp-pay:query')
 
 /**
  * Destination details of the payment, such the asset, invoice, and STREAM credentials to
  * establish an authenticated connection with the receiver
  */
 export interface PaymentDestination {
-  /** 32-byte seed to encrypt and decrypt STREAM messages, and generate ILP packet fulfillments */
+  /** 32-byte seed to derive keys to encrypt STREAM messages and generate ILP packet fulfillments */
   sharedSecret: Buffer
   /** ILP address of the recipient, identifying this connection, which is used to send packets to their STREAM server */
   destinationAddress: IlpAddress
@@ -27,11 +28,17 @@ export interface PaymentDestination {
   /** Open Payments invoice metadata, if the payment pays into an invoice */
   invoice?: Invoice
   /**
-   * URL of the recipient Open Payments/SPSP account, identifying a unique payment recipient.
-   * Each account URL can also be represented as a payment pointer, and vice-versa.
-   * Not application is STREAM credentials were provided directly.
+   * URL of the recipient Open Payments/SPSP account (with well-known path, and stripped trailing slash).
+   * Each payment pointer and its corresponding account URL identifies a unique payment recipient.
+   * Not applicable if STREAM credentials were provided directly.
    */
   accountUrl?: string
+  /**
+   * Payment pointer, prefixed with "$", corresponding to the recipient Open Payments/SPSP account.
+   * Each payment pointer and its corresponding account URL identifies a unique payment recipient.
+   * Not applicable if STREAM credentials were provided directly.
+   */
+  paymentPointer?: string
 }
 
 /** [Open Payments invoice](https://docs.openpayments.dev/invoices) metadata */
@@ -48,10 +55,8 @@ export interface Invoice {
   amountToDeliver: PositiveInt
   /** Amount that has already been paid toward the invoice, in base units */
   amountDelivered: Int
-  /** Precision of the recipient's asset denomination: number of decimal places of the ordinary unit */
-  assetCode: string
-  /** Asset code or symbol identifying the currency of the destination account */
-  assetScale: number
+  /** Asset and denomination of recipient account */
+  asset: AssetDetails
 }
 
 /** Validate and resolve the details provided by recipient to execute the payment */
@@ -91,14 +96,14 @@ export const fetchPaymentDetails = async (
 
 /** Fetch an invoice and STREAM credentials from an Open Payments */
 const queryInvoice = async (invoiceUrl: string): Promise<PaymentDestination | PaymentError> => {
-  if (!isHttpsUrl(invoiceUrl)) {
+  if (!createHttpsUrl(invoiceUrl)) {
     log.debug('invoice query failed: invoice URL not HTTPS.')
     return PaymentError.QueryFailed
   }
 
   return fetchJson(invoiceUrl, INVOICE_QUERY_ACCEPT_HEADER)
     .then(async (data) => {
-      const invoice = validateOpenPaymentsInvoice(data)
+      const invoice = validateOpenPaymentsInvoice(data, invoiceUrl)
       const credentials = validateOpenPaymentsCredentials(data)
       if (invoice && credentials) {
         return {
@@ -118,13 +123,14 @@ const queryInvoice = async (invoiceUrl: string): Promise<PaymentDestination | Pa
 export const queryAccount = async (
   paymentPointer: string
 ): Promise<PaymentDestination | PaymentError> => {
-  const accountUrl = parsePaymentPointer(paymentPointer)
+  const accountUrl =
+    AccountUrl.fromPaymentPointer(paymentPointer) ?? AccountUrl.fromUrl(paymentPointer)
   if (!accountUrl) {
     log.debug('payment pointer or account url is invalid: %s', paymentPointer)
     return PaymentError.InvalidPaymentPointer
   }
 
-  return fetchJson(accountUrl, ACCOUNT_QUERY_ACCEPT_HEADER)
+  return fetchJson(accountUrl.toEndpointUrl(), ACCOUNT_QUERY_ACCEPT_HEADER)
     .then(
       (data) =>
         validateOpenPaymentsCredentials(data) ??
@@ -132,35 +138,15 @@ export const queryAccount = async (
         log.debug('payment pointer query returned no valid STREAM credentials.')
     )
     .catch((err) => log.debug('payment pointer query failed: %s', err))
-    .then((res) => (res ? { ...res, accountUrl } : PaymentError.QueryFailed))
-}
-
-/** Validate and convert a payment pointer into account URLs for an Open Payments or SPSP server */
-export const parsePaymentPointer = (pointer: string): string | undefined => {
-  try {
-    const endpoint = pointer.startsWith('$')
-      ? new URL('https://' + pointer.substring(1))
-      : new URL(pointer)
-
-    if (endpoint.pathname === '/') {
-      endpoint.pathname = '/.well-known/pay'
-    }
-
-    // Per spec on paymentpointers.org:
-    // - Only HTTPS
-    // - No query part
-    // - No fragment part
-    //
-    // "Payment Pointers that do not meet the limited syntax of this profile MUST be
-    //  considered invalid and should not be used to resolve a URL."
-    if (endpoint.protocol !== 'https:' || endpoint.search !== '' || endpoint.hash !== '') {
-      return
-    }
-
-    return endpoint.toString()
-  } catch (_) {
-    // No-op if the URL is invalid
-  }
+    .then((res) =>
+      res
+        ? {
+            ...res,
+            accountUrl: accountUrl.toString(),
+            paymentPointer: accountUrl.toPaymentPointer(),
+          }
+        : PaymentError.QueryFailed
+    )
 }
 
 /** Perform an HTTP request using `fetch` with timeout and retries. Resolve with parsed JSON, reject otherwise. */
@@ -207,14 +193,6 @@ const fetchJson = async (
     .finally(() => clearTimeout(timer))
 }
 
-const isHttpsUrl = (url: string): boolean => {
-  try {
-    return new URL(url).protocol === 'https:'
-  } catch (_) {
-    return false
-  }
-}
-
 const validateSharedSecretBase64 = (o: any): Buffer | undefined => {
   if (typeof o === 'string') {
     const sharedSecret = Buffer.from(o, 'base64')
@@ -239,60 +217,65 @@ const validateUInt64 = (o: any): Int | undefined => {
   }
 }
 
+const isNonNullObject = (o: any): o is Record<string, any> => typeof o === 'object' && o !== null
+
 /** Transform the Open Payments server reponse into a validated invoice */
-const validateOpenPaymentsInvoice = (o: any): Invoice | undefined => {
-  if (typeof o !== 'object' || o === null) {
+const validateOpenPaymentsInvoice = (o: any, queryUrl: string): Invoice | undefined => {
+  if (!isNonNullObject(o)) {
     return
   }
 
-  const {
-    id: invoiceUrl,
-    account: accountUrl,
-    expiresAt: expiresAtIso,
-    description,
-    amount,
-    received,
-  } = o
+  const { expiresAt: expiresAtIso, account, description, amount, received } = o
   const expiresAt = Date.parse(expiresAtIso) // `NaN` if date is invalid
   const amountToDeliver = validateUInt64(amount)
   const amountDelivered = validateUInt64(received)
-  const assetDetails = validateAssetDetails(o)
+  const asset = validateOpenPaymentsAsset(o)
 
   if (
-    typeof invoiceUrl !== 'string' ||
-    typeof accountUrl !== 'string' ||
+    typeof account !== 'string' ||
     typeof description !== 'string' ||
-    !isHttpsUrl(invoiceUrl) ||
-    !parsePaymentPointer(accountUrl) ||
     !isNonNegativeRational(expiresAt) ||
     !amountToDeliver ||
     !amountToDeliver.isPositive() ||
     !amountDelivered ||
-    !assetDetails
+    !asset
   ) {
     return
   }
 
+  const accountUrl = AccountUrl.fromUrl(account)?.toString() // No query string, fragment, or trailing slash
+  const invoiceBaseUrl = accountUrl && accountUrl + '/invoices' // Safe to append directly
+
+  if (
+    !accountUrl || // Must be valid HTTPS account endpoint
+    !invoiceBaseUrl ||
+    !queryUrl.startsWith(invoiceBaseUrl) // Validates invoice is a subresource of this OP account
+  ) {
+    return
+  }
+
+  // TODO Should the given invoice URL be validated against the `id` URL in the invoice itself?
+
   return {
-    invoiceUrl,
-    accountUrl,
+    invoiceUrl: queryUrl,
+    accountUrl: accountUrl.toString(),
     expiresAt,
     description,
     amountDelivered,
     amountToDeliver,
-    ...assetDetails,
+    asset,
   }
 }
 
 /** Validate Open Payments STREAM credentials and asset details */
 const validateOpenPaymentsCredentials = (o: any): PaymentDestination | undefined => {
-  if (typeof o !== 'object' || o === null) {
+  if (!isNonNullObject(o)) {
     return
   }
 
   const { sharedSecret: sharedSecretBase64, ilpAddress: destinationAddress } = o
   const sharedSecret = validateSharedSecretBase64(sharedSecretBase64)
-  const destinationAsset = validateAssetDetails(o)
+  const destinationAsset = validateOpenPaymentsAsset(o)
   if (!sharedSecret || !isValidIlpAddress(destinationAddress) || !destinationAsset) {
     return
   }
@@ -306,7 +289,7 @@ const validateOpenPaymentsCredentials = (o: any): PaymentDestination | undefined
 
 /** Validate and transform the SPSP server response into STREAM credentials */
 const validateSpspCredentials = (o: any): PaymentDestination | undefined => {
-  if (typeof o !== 'object' || o === null) {
+  if (!isNonNullObject(o)) {
     return
   }
 
@@ -317,13 +300,9 @@ const validateSpspCredentials = (o: any): PaymentDestination | undefined => {
   }
 }
 
-const validateAssetDetails = (o: any): AssetDetails | undefined => {
-  if (typeof o !== 'object' || o === null) {
-    return
-  }
-
+const validateOpenPaymentsAsset = (o: Record<string, any>): AssetDetails | undefined => {
   const { assetScale, assetCode } = o
   if (isValidAssetScale(assetScale) && typeof assetCode === 'string') {
-    return { assetCode, assetScale }
+    return { code: assetCode, scale: assetScale }
   }
 }

@@ -1,8 +1,7 @@
 module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!**/node_modules/**',
-    '!src/utils.ts' // TODO remove this!
+    '!**/node_modules/**'
   ],
   coverageReporters: ['text', 'lcov'],
   coverageDirectory: 'coverage',
