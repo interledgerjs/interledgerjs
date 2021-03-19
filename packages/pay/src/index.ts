@@ -262,9 +262,11 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
       throw PaymentError.UnknownSourceAsset
     }
 
-    // Determine minimum exchange rate
-    let externalRate = 1 // Default to 1:1 rate for the same asset
-    if (sourceAsset.code !== destinationAsset.code) {
+    // If assets are not the same, compute minimum exchange rate.
+    // Also skip if slippage is 100%, since no minimum rates are enforced.
+    // Otherwise, default to 1:1 rate.
+    let externalRate = 1
+    if (sourceAsset.code !== destinationAsset.code && slippage !== 1) {
       const sourcePrice = options.prices?.[sourceAsset.code]
       const destinationPrice = options.prices?.[destinationAsset.code]
 
