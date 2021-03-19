@@ -3,6 +3,7 @@ module.exports = {
     'src/**/*.ts',
     '!**/node_modules/**',
   ],
+  coverageReporters: ['text', 'lcov'],
   coverageDirectory: 'coverage',
   preset: 'ts-jest',
   testEnvironment: 'node',
