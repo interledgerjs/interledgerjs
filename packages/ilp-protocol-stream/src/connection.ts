@@ -282,6 +282,7 @@ export class Connection extends EventEmitter {
     this._totalSent = Long.UZERO
     this._totalDelivered = Long.UZERO
     this._lastPacketExchangeRate = Rational.UZERO
+    this.once('connect', () => this.startIdleTimer())
   }
 
   /**
@@ -338,7 +339,6 @@ export class Connection extends EventEmitter {
       }
     })
     this.closed = false
-    this.startIdleTimer()
   }
 
   /**
