@@ -3,7 +3,6 @@ import * as IlpPacket from 'ilp-packet'
 import { Reader } from 'oer-utils'
 import { Connection, BuildConnectionOpts } from './connection'
 import * as cryptoHelper from './crypto'
-import { AgingSet } from './util/aging-set'
 
 const log = createLogger('ilp-protocol-stream:Pool')
 const CLOSED_CONNECTION_CYCLE = 10 * 60 * 1000 // 10 minutes
@@ -20,8 +19,6 @@ export class ServerConnectionPool {
   private onConnection: ConnectionEvent
   private activeConnections: { [id: string]: Connection }
   private pendingConnections: { [id: string]: Promise<Connection> }
-  // Use an `AgingSet` so that the connection IDs stored don't accumulate indefinitely.
-  private closedConnections: AgingSet = new AgingSet(CLOSED_CONNECTION_CYCLE)
 
   constructor (
     serverSecret: Buffer,
@@ -36,7 +33,6 @@ export class ServerConnectionPool {
   }
 
   async close (): Promise<void> {
-    this.closedConnections.close()
     await Promise.all(Object.keys(this.activeConnections)
       .map((id: string) => this.activeConnections[id].end()))
   }
@@ -45,11 +41,6 @@ export class ServerConnectionPool {
     id: string,
     prepare: IlpPacket.IlpPrepare
   ): Promise<Connection> {
-    if (this.closedConnections.has(id)) {
-      log.debug('got packet for connection that was already closed: %s', id)
-      throw new Error('connection already closed')
-    }
-
     const activeConnection = this.activeConnections[id]
     if (activeConnection) return Promise.resolve(activeConnection)
     const pendingConnection = this.pendingConnections[id]
@@ -107,7 +98,6 @@ export class ServerConnectionPool {
       conn.once('close', () => {
         delete this.pendingConnections[id]
         delete this.activeConnections[id]
-        this.closedConnections.add(id)
       })
       return conn
     })()

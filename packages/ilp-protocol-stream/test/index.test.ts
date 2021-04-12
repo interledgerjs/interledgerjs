@@ -307,7 +307,7 @@ describe('Server', function () {
     it('should reject packets for connections that have already been closed', async function () {
       await this.serverConn.destroy()
 
-      await assert.isRejected(createConnection({
+      await assert.isFulfilled(createConnection({
         plugin: this.clientPlugin,
         sharedSecret: this.sharedSecret,
         destinationAccount: this.destinationAccount
