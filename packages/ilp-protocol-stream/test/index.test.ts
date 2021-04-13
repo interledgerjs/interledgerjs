@@ -304,7 +304,7 @@ describe('Server', function () {
       this.serverConn = await serverConnPromise
     })
 
-    it('should reject packets for connections that have already been closed', async function () {
+    it('should create a new connection if client sends more packets after connection is closed', async function () {
       await this.serverConn.destroy()
 
       await assert.isFulfilled(createConnection({

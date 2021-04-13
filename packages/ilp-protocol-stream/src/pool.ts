@@ -5,7 +5,6 @@ import { Connection, BuildConnectionOpts } from './connection'
 import * as cryptoHelper from './crypto'
 
 const log = createLogger('ilp-protocol-stream:Pool')
-const CLOSED_CONNECTION_CYCLE = 10 * 60 * 1000 // 10 minutes
 
 interface ConnectionEvent {
   (connection: Connection): void
