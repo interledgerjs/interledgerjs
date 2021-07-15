@@ -11,7 +11,7 @@ import Axios from 'axios'
 import PluginHttp from 'ilp-plugin-http'
 import getPort from 'get-port'
 import { describe, it, expect, afterAll } from '@jest/globals'
-import { setupPayment } from '../src'
+import { pay, ResolvedPayment, setupPayment, startQuote } from '../src'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 
 describe('interledger.rs integration', () => {
@@ -104,11 +104,13 @@ describe('interledger.rs integration', () => {
     )
 
     const amountToSend = BigInt(100_000) // 0.1 EUR, ~50 packets @ max packet amount of 2000
-    const { startQuote: quote } = await setupPayment({
+    const destination = (await setupPayment({
       plugin,
       paymentPointer: '$mywallet.com',
-    })
-    const { pay } = await quote({
+    })) as ResolvedPayment
+    const quote = await startQuote({
+      plugin,
+      destination,
       amountToSend,
       sourceAsset: {
         code: 'EUR',
@@ -116,8 +118,7 @@ describe('interledger.rs integration', () => {
       },
     })
 
-    const receipt = await pay()
-    expect(receipt.error).toBeUndefined()
+    const receipt = await pay({ plugin, destination, quote })
     expect(receipt.amountSent.value).toBe(amountToSend)
     expect(receipt.amountDelivered.value).toBe(amountToSend) // Exchange rate is 1:1
 
@@ -251,20 +252,22 @@ describe('interledger4j integration', () => {
     )
 
     const amountToSend = BigInt(9_800_000) // $9.80
-    const { startQuote: quote } = await setupPayment({
+    const destination = (await setupPayment({
       plugin,
       paymentPointer: `$mywallet.com`,
-    })
-    const { pay, maxSourceAmount, minDeliveryAmount } = await quote({
+    })) as ResolvedPayment
+    const quote = await startQuote({
+      plugin,
+      destination,
       amountToSend,
       sourceAsset: {
         code: 'USD',
         scale: 6,
       },
     })
+    const { maxSourceAmount, minDeliveryAmount } = quote
 
-    const receipt = await pay()
-    expect(receipt.error).toBeUndefined()
+    const receipt = await pay({ plugin, destination, quote })
     expect(receipt.amountSent.value).toBe(amountToSend)
     expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
 

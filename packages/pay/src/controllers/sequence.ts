@@ -1,26 +1,40 @@
 import { RequestState, StreamController } from '.'
-import { PaymentError } from '..'
-import { StreamRequest, RequestBuilder } from '../request'
+import { PaymentError, ResolvedPayment } from '..'
+import { RequestBuilder } from '../request'
+import { NonNegativeInteger } from '../utils'
+
+export class Counter {
+  constructor(private count = 0 as NonNegativeInteger) {}
+
+  increment(): void {
+    this.count++
+  }
+
+  getCount(): NonNegativeInteger {
+    return this.count
+  }
+}
 
 /** Track the sequence number of outgoing packets */
 export class SequenceController implements StreamController {
-  private static PACKET_LIMIT = 2 ** 31
-  private nextSequence = 0
+  static PACKET_LIMIT = (2 ** 31) as NonNegativeInteger
+
+  constructor(private readonly counter: Counter) {}
 
   buildRequest(request: RequestBuilder): RequestState {
     // Destroy the connection after 2^31 packets are sent for encryption safety:
     // https://github.com/interledger/rfcs/blob/master/0029-stream/0029-stream.md#513-maximum-number-of-packets-per-connection
-    if (this.nextSequence >= SequenceController.PACKET_LIMIT) {
+    if (this.counter.getCount() >= SequenceController.PACKET_LIMIT) {
       request.log.error('ending payment: cannot exceed max safe sequence number.')
-      return RequestState.Error(PaymentError.ExceededMaxSequence)
+      return RequestState.Error(PaymentError.MaxSafeEncryptionLimit)
     } else {
-      request.setSequence(this.nextSequence)
+      request.setSequence(this.counter.getCount())
       return RequestState.Ready()
     }
   }
 
-  applyRequest(request: StreamRequest): undefined {
-    this.nextSequence = request.sequence + 1
+  applyRequest(): undefined {
+    this.counter.increment()
     return // Required by TS for `undefined` return type
   }
 }

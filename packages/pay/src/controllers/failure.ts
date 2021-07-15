@@ -5,7 +5,7 @@ import {
   ErrorCode,
   StreamCloseFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
-import { PaymentController } from './payment'
+import { PaymentSender } from '../senders/payment'
 import { PaymentError } from '..'
 import { IlpError } from 'ilp-packet'
 import { StreamReply, StreamRequest } from '../request'
@@ -18,7 +18,7 @@ export class FailureController implements StreamController {
         (frame): frame is ConnectionCloseFrame | StreamCloseFrame =>
           frame.type === FrameType.ConnectionClose ||
           (frame.type === FrameType.StreamClose &&
-            frame.streamId.equals(PaymentController.DEFAULT_STREAM_ID))
+            frame.streamId.equals(PaymentSender.DEFAULT_STREAM_ID))
       )
       if (closeFrame) {
         log.error(

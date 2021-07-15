@@ -5,8 +5,8 @@ import {
   ConnectionMaxDataFrame,
   ConnectionMaxStreamIdFrame,
 } from 'ilp-protocol-stream/dist/src/packet'
-import { PaymentController } from './payment'
 import { PaymentDestination } from '../open-payments'
+import { PaymentSender } from '../senders/payment'
 
 /** Direct packets to the receiver to establish the connection and share limits */
 export class EstablishmentController implements StreamController {
@@ -27,7 +27,7 @@ export class EstablishmentController implements StreamController {
     if (!this.isConnected) {
       request.addFrames(
         // Disallow any new streams (and only the client can open stream 1)
-        new ConnectionMaxStreamIdFrame(PaymentController.DEFAULT_STREAM_ID),
+        new ConnectionMaxStreamIdFrame(PaymentSender.DEFAULT_STREAM_ID),
         // Disallow incoming data
         new ConnectionMaxDataFrame(0)
       )

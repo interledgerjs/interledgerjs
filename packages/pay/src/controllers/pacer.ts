@@ -19,7 +19,7 @@ export class PacingController implements StreamController {
   /** Additive increase of packets per second rate on authentic reply */
   private static PACKETS_PER_SECOND_INCREASE_TERM = 0.5
 
-  /** Multiplicative decrease of packets per second rate on trasient error */
+  /** Multiplicative decrease of packets per second rate on transient error */
   private static PACKETS_PER_SECOND_DECREASE_FACTOR = 0.5
 
   /** RTT to use for pacing before an average can be ascertained */

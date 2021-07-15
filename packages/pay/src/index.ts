@@ -1,17 +1,26 @@
 import { AssetDetails, isValidAssetDetails } from './controllers/asset-details'
-import { AssetProbe } from './controllers/asset-probe'
-import { ConnectionCloser } from './controllers/connection-closer'
-import { PaymentController, PaymentType } from './controllers/payment'
-import { RateProbe } from './controllers/rate-probe'
+import { AssetProbe } from './senders/asset-probe'
+import { ConnectionCloser } from './senders/connection-closer'
+import { PaymentSender, PaymentType } from './senders/payment'
+import { RateProbe } from './senders/rate-probe'
 import { fetchPaymentDetails, PaymentDestination } from './open-payments'
-import { Int, isNonNegativeRational, NonNegativeRational, PositiveInt, Ratio } from './utils'
-import { StreamConnection } from './connection'
 import { Plugin } from './request'
+import {
+  Int,
+  isNonNegativeRational,
+  NonNegativeRational,
+  PositiveInt,
+  PositiveRatio,
+  Ratio,
+} from './utils'
+import { Counter } from './controllers/sequence'
 
-export { Int, Ratio, PositiveInt, PositiveRatio } from './utils'
+export { Counter } from './controllers/sequence'
 export { AssetDetails } from './controllers/asset-details'
+export { PaymentType } from './senders/payment'
 export { Invoice } from './open-payments'
 export { AccountUrl } from './payment-pointer'
+export { Int, PositiveInt, PositiveRatio, Ratio } from './utils'
 
 /** Recipient-provided details to resolve payment parameters, and connected ILP uplink */
 export interface SetupOptions {
@@ -31,16 +40,18 @@ export interface SetupOptions {
 
 /** Resolved destination details of a proposed payment, such as the destination asset, invoice, and STREAM credentials, ready to perform a quote */
 export interface ResolvedPayment extends PaymentDestination {
-  /** Perform a rate probe: discover path max packet amount, probe the real exchange rate, and compute the minimum exchange rate and bounds of the payment. */
-  startQuote: (options: QuoteOptions) => Promise<Quote>
-  /** Cancel the payment: if connection was established, notify receiver to close the connection */
-  close: () => Promise<void>
-  /** Asset and denomination of the receiver's Interledger account */
+  /** Asset and denomination of the receiver's Interedger account */
   destinationAsset: AssetDetails
+  /** Strict counter of how many packets have been sent, to safely resume a connection */
+  requestCounter: Counter
 }
 
 /** Limits and target to quote a payment and probe the rate */
 export interface QuoteOptions {
+  /** Plugin to send ILP packets over the network */
+  plugin: Plugin
+  /** Resolved destination details of the payment to establish connection with recipient */
+  destination: ResolvedPayment
   /** Asset and denomination of the sending account */
   sourceAsset?: AssetDetails
   /** Fixed amount to send to the recipient, in base units of source asset */
@@ -57,38 +68,42 @@ export interface QuoteOptions {
 
 /** Parameters of payment execution and the projected outcome of a payment */
 export interface Quote {
-  /** Execute the payment within these parameters */
-  pay: (options?: PayOptions) => Promise<Receipt>
-  /** Cancel the payment: notify receiver to close the connection */
-  close: () => Promise<void>
+  /** How payment completion is ascertained: fixed send amount or fixed delivery amount */
+  paymentType: PaymentType
   /** Maximum amount that will be sent in source units */
   maxSourceAmount: PositiveInt
-  /** Minimum amount that will be delivered if the payment completes */
+  /** Minimum amount that will be delivered if the payment fully completes */
   minDeliveryAmount: Int
   /** Discovered maximum packet amount allowed over this payment path */
-  maxPacketAmount: Int
-  /** Probed exchange rate over the path: range of [minimum, maximum]. Ratios of destination base units to source base units */
-  estimatedExchangeRate: [Ratio, Ratio]
+  maxPacketAmount: PositiveInt
+  /** Lower bound of probed exchange rate over the path (inclusive). Ratio of destination base units to source base units */
+  lowEstimatedExchangeRate: Ratio
+  /** Upper bound of probed exchange rate over the path (exclusive). Ratio of destination base units to source base units */
+  highEstimatedExchangeRate: PositiveRatio
   /** Minimum exchange rate used to enforce rates. Ratio of destination base units to source base units */
   minExchangeRate: Ratio
-  /** Estimated payment duration in milliseconds, based on max packet amount, RTT, and rate of packet throttling */
-  estimatedDuration: number
 }
 
 /** Options before immediately executing payment */
 export interface PayOptions {
+  /** Plugin to send ILP packets over the network */
+  plugin: Plugin
+  /** Destination details of the payment to establish connection with recipient */
+  destination: ResolvedPayment
+  /** Parameters of payment execution */
+  quote: Quote
   /**
    * Callback to process streaming updates as packets are sent and received,
    * such as to perform accounting while the payment is in progress.
    *
    * Handler will be called for all fulfillable packets and replies before the payment resolves.
    */
-  progressHandler?: (receipt: Receipt) => void
+  progressHandler?: (progress: PaymentProgress) => void
 }
 
 /** Intermediate state or outcome of the payment, to account for sent/delivered amounts */
-export interface Receipt {
-  /** Error state, if the payment failed */
+export interface PaymentProgress {
+  /** Error state, if payment failed */
   error?: PaymentError
   /** Amount sent and fulfilled, in base units of the source asset */
   amountSent: Int
@@ -156,7 +171,7 @@ export enum PaymentError {
   /** Receiver violated the STREAM protocol, misrepresenting delivered amounts */
   ReceiverProtocolViolation = 'ReceiverProtocolViolation',
   /** Encrypted maximum number of packets using the key for this connection */
-  ExceededMaxSequence = 'ExceededMaxSequence',
+  MaxSafeEncryptionLimit = 'MaxSafeEncryptionLimit',
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
@@ -171,102 +186,107 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
     throw destinationDetailsOrError
   }
   const destinationDetails = destinationDetailsOrError
-  const { invoice } = destinationDetails
-
-  // Generate encryption keys and prepare to orchestrate send loops
-  const connection = await StreamConnection.create(options.plugin, destinationDetails)
-  const { log } = connection
-
-  // Callback to send connection close frame
-  const close = async (): Promise<void> => {
-    await connection.runSendLoop(new ConnectionCloser())
-  }
 
   // Use STREAM to fetch the destination asset (returns immediately if asset is already known)
-  const assetOrError = await connection.runSendLoop(new AssetProbe())
+  const requestCounter = new Counter()
+  const assetOrError = await new AssetProbe(
+    options.plugin,
+    destinationDetails,
+    requestCounter
+  ).start()
   if (isPaymentError(assetOrError)) {
-    await close()
     throw assetOrError
   }
   const destinationAsset = assetOrError
 
-  const startQuote = async (options: QuoteOptions): Promise<Quote> => {
-    // Validate the amounts to set the target for the payment
-    let target: {
-      type: PaymentType
-      amount: PositiveInt
+  return {
+    ...destinationDetails,
+    destinationAsset,
+    requestCounter,
+  }
+}
+
+/** Perform a rate probe: discover path max packet amount, probe the real exchange rate, and compute the minimum exchange rate and bounds of the payment. */
+export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
+  const rateProbe = new RateProbe(options)
+  const { log } = rateProbe
+  const { invoice, destinationAsset } = options.destination
+
+  // Validate the amounts to set the target for the payment
+  let target: {
+    type: PaymentType
+    amount: PositiveInt
+  }
+
+  if (invoice) {
+    const remainingToDeliver = invoice.amountToDeliver.saturatingSubtract(invoice.amountDelivered)
+    if (!remainingToDeliver.isPositive()) {
+      // Return this error here instead of in `setupPayment` so consumer can access the resolved invoice
+      log.debug(
+        'quote failed: invoice was already paid. amountToDeliver=%s amountDelivered=%s',
+        invoice.amountToDeliver,
+        invoice.amountDelivered
+      )
+      // In invoice case, STREAM connection is yet to be established since no asset probe
+      throw PaymentError.InvoiceAlreadyPaid
     }
 
-    if (invoice) {
-      const remainingToDeliver = invoice.amountToDeliver.saturatingSubtract(invoice.amountDelivered)
-      if (!remainingToDeliver.isPositive()) {
-        // Return thie error here instead of in `setupPayment` so consumer can access the resolved invoice
-        log.debug(
-          'quote failed: invoice was already paid. amountToDeliver=%s amountDelivered=%s',
-          invoice.amountToDeliver,
-          invoice.amountDelivered
-        )
-        // In invoice case, STREAM connection is yet to be established since no asset probe
-        throw PaymentError.InvoiceAlreadyPaid
-      }
-
-      target = {
-        type: PaymentType.FixedDelivery,
-        amount: remainingToDeliver,
-      }
+    target = {
+      type: PaymentType.FixedDelivery,
+      amount: remainingToDeliver,
     }
-    // Validate the target amount is non-zero and compatible with the precision of the accounts
-    else if (options.amountToSend !== undefined) {
-      const amountToSend = Int.from(options.amountToSend)
-      if (!amountToSend || !amountToSend.isPositive()) {
-        log.debug('invalid config: amount to send is not a positive integer')
-        await close()
-        throw PaymentError.InvalidSourceAmount
-      }
-
-      target = {
-        type: PaymentType.FixedSend,
-        amount: amountToSend,
-      }
-    } else if (options.amountToDeliver !== undefined) {
-      const amountToDeliver = Int.from(options.amountToDeliver)
-      if (!amountToDeliver || !amountToDeliver.isPositive()) {
-        log.debug('invalid config: amount to deliver is not a positive integer')
-        await close()
-        throw PaymentError.InvalidDestinationAmount
-      }
-
-      target = {
-        type: PaymentType.FixedDelivery,
-        amount: amountToDeliver,
-      }
-    } else {
-      log.debug('invalid config: no invoice, amount to send, or amount to deliver was provided')
-      await close()
-      throw PaymentError.UnknownPaymentTarget
+  } else if (typeof options.amountToDeliver !== 'undefined') {
+    const amountToDeliver = Int.from(options.amountToDeliver)
+    if (!amountToDeliver || !amountToDeliver.isPositive()) {
+      log.debug('invalid config: amount to deliver is not a positive integer')
+      throw PaymentError.InvalidDestinationAmount
     }
 
-    // Validate the slippage
-    const slippage = options.slippage ?? 0.01
-    if (!isNonNegativeRational(slippage) || slippage > 1) {
-      log.debug('invalid config: slippage is not a number between 0 and 1')
-      await close()
-      throw PaymentError.InvalidSlippage
+    target = {
+      type: PaymentType.FixedDelivery,
+      amount: amountToDeliver,
+    }
+  }
+  // Validate the target amount is non-zero and compatible with the precision of the accounts
+  else if (typeof options.amountToSend !== 'undefined') {
+    const amountToSend = Int.from(options.amountToSend)
+    if (!amountToSend || !amountToSend.isPositive()) {
+      log.debug('invalid config: amount to send is not a positive integer')
+      throw PaymentError.InvalidSourceAmount
     }
 
+    target = {
+      type: PaymentType.FixedSend,
+      amount: amountToSend,
+    }
+  } else {
+    log.debug('invalid config: no invoice, amount to send, or amount to deliver was provided')
+    throw PaymentError.UnknownPaymentTarget
+  }
+
+  // Validate the slippage
+  const slippage = options.slippage ?? 0.01
+  if (!isNonNegativeRational(slippage) || slippage > 1) {
+    log.debug('invalid config: slippage is not a number between 0 and 1')
+    throw PaymentError.InvalidSlippage
+  }
+
+  // No source asset or minimum rate computation if 100% slippage
+  let externalRate: number
+  if (slippage === 1) {
+    externalRate = 0
+  } else {
     // Validate source asset details
     const { sourceAsset } = options
     if (!isValidAssetDetails(sourceAsset)) {
       log.debug('invalid config: no source asset details were provided')
-      await close()
       throw PaymentError.UnknownSourceAsset
     }
 
-    // If assets are not the same, compute minimum exchange rate.
-    // Also skip if slippage is 100%, since no minimum rates are enforced.
-    // Otherwise, default to 1:1 rate.
-    let externalRate = 1
-    if (sourceAsset.code !== destinationAsset.code && slippage !== 1) {
+    // Compute minimum exchange rate, or 1:1 if assets are the same.
+    if (sourceAsset.code === destinationAsset.code) {
+      externalRate = 1
+    } else {
       const sourcePrice = options.prices?.[sourceAsset.code]
       const destinationPrice = options.prices?.[destinationAsset.code]
 
@@ -281,7 +301,6 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
           sourceAsset.code,
           destinationAsset.code
         )
-        await close()
         throw PaymentError.ExternalRateUnavailable
       }
 
@@ -291,73 +310,97 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
       externalRate = sourcePrice / destinationPrice
     }
 
+    // Scale rate and apply slippage
     // prettier-ignore
     externalRate =
       externalRate *
       (1 - slippage) *
       10 ** (destinationAsset.scale - sourceAsset.scale)
+  }
 
-    const minExchangeRate = Ratio.from(externalRate as NonNegativeRational)
-    log.debug('calculated min exchange rate of %s', minExchangeRate)
+  const minExchangeRate = Ratio.from(externalRate as NonNegativeRational)
+  log.debug('calculated min exchange rate of %s', minExchangeRate)
 
-    log.debug('starting quote.')
-    // Perform rate probe: probe realized rate and discover path max packet amount
-    const rateProbeResult = await connection.runSendLoop(new RateProbe())
-    if (isPaymentError(rateProbeResult)) {
-      await close()
-      throw rateProbeResult
-    }
-    log.debug('quote complete.')
+  // Perform rate probe: probe realized rate and discover path max packet amount
+  log.debug('starting quote.')
+  const rateProbeResult = await rateProbe.start()
+  if (isPaymentError(rateProbeResult)) {
+    throw rateProbeResult
+  }
+  log.debug('quote complete.')
 
-    // Set the amounts to pay/deliver and perform checks to determine
-    // if this is possible given the probed & minimum rates
-    const { rateCalculator, maxPacketAmount, packetFrequency } = rateProbeResult
-    const paymentTarget = PaymentController.createPaymentTarget(
-      target.amount,
-      target.type,
-      minExchangeRate,
-      rateCalculator,
-      log
+  // Set the amounts to pay/deliver and perform checks to determine
+  // if this is possible given the probed & minimum rates
+  const { lowEstimatedExchangeRate, highEstimatedExchangeRate, maxPacketAmount } = rateProbeResult
+
+  // From rate probe, source amount of lowerBoundRate should be the maxPacketAmount.
+  // So, no rounding error is possible as long as minRate is at least the probed rate.
+  // ceil(maxPacketAmount * minExchangeRate) >= floor(maxPacketAmount * lowerBoundRate)
+  // ceil(maxPacketAmount * minExchangeRate) >= lowerBoundRate.delivered
+  if (!lowEstimatedExchangeRate.isGreaterThanOrEqualTo(minExchangeRate)) {
+    log.debug(
+      'quote failed: probed exchange rate of %s does not exceed minimum of %s',
+      lowEstimatedExchangeRate,
+      minExchangeRate
     )
-    if (isPaymentError(paymentTarget)) {
-      await close()
-      throw paymentTarget
-    }
+    throw PaymentError.InsufficientExchangeRate
+  }
 
-    // Get strict amounts for accounting
-    const { maxSourceAmount, minDeliveryAmount } = paymentTarget
+  // At each hop, up to 1 unit of the local asset before the conversion
+  // is "lost" to rounding when the outgoing amount is floored.
+  // If a small packet is sent, such as the final one in the payment,
+  // it may not meet its minimum destination amount since the rounding
+  // error caused a shortfall.
 
-    // Estimate how long the payment may take based on max packet amount, RTT, and rate of packet sending
-    const estimatedNumberOfPackets = maxSourceAmount.divideCeil(maxPacketAmount)
-    const estimatedDuration = +estimatedNumberOfPackets * packetFrequency
+  // To address this, allow up to 1 source unit to *not* be delivered.
+  // This is accounted for and allowed within the quoted maximum source amount.
 
-    return {
-      estimatedExchangeRate: rateCalculator.getRate(),
-      minExchangeRate,
-      maxPacketAmount,
-      maxSourceAmount,
-      minDeliveryAmount,
-      estimatedDuration,
-      close,
-      pay: async ({ progressHandler } = {}) => {
-        log.debug('starting payment.')
-        const paymentSender = new PaymentController(paymentTarget, progressHandler)
-        const error = await connection.runSendLoop(paymentSender)
+  let maxSourceAmount: PositiveInt
+  let minDeliveryAmount: Int
 
-        await close()
-
-        return {
-          ...(isPaymentError(error) && { error }),
-          ...paymentSender.getReceipt(),
-        }
-      },
-    }
+  if (target.type === PaymentType.FixedSend) {
+    maxSourceAmount = target.amount
+    minDeliveryAmount = target.amount.saturatingSubtract(Int.ONE).multiplyCeil(minExchangeRate)
+  } else if (!minExchangeRate.isPositive()) {
+    log.debug('quote failed: unenforceable payment delivery. min exchange rate is 0')
+    throw PaymentError.UnenforceableDelivery
+  } else {
+    // Consider that we're trying to discover the maximum original integer value that
+    // delivered the target delivery amount. If it converts back into a decimal
+    // source amount, it's safe to floor, since we assume each portion of the target
+    // delivery amount was already ceil-ed and delivered at greater than the minimum rate.
+    //
+    // Then, add one to account for the source unit allowed lost to a rounding error.
+    maxSourceAmount = target.amount.multiplyFloor(minExchangeRate.reciprocal()).add(Int.ONE)
+    minDeliveryAmount = target.amount
   }
 
   return {
-    startQuote,
-    close,
-    ...destinationDetails,
-    destinationAsset,
+    paymentType: target.type,
+    lowEstimatedExchangeRate,
+    highEstimatedExchangeRate,
+    minExchangeRate,
+    maxPacketAmount,
+    maxSourceAmount,
+    minDeliveryAmount,
   }
+}
+
+/** Send the payment: send a series of packets to attempt the payment within the completion criteria and limits of the provided quote. */
+export const pay = async (options: PayOptions): Promise<PaymentProgress> => {
+  const sender = new PaymentSender(options)
+  const error = await sender.start()
+
+  return {
+    ...(isPaymentError(error) && { error }),
+    ...sender.getProgress(),
+  }
+}
+
+/** Notify receiver to close the connection */
+export const closeConnection = async (
+  plugin: Plugin,
+  destination: ResolvedPayment
+): Promise<void> => {
+  await new ConnectionCloser(plugin, destination).start()
 }

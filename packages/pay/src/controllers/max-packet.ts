@@ -5,7 +5,7 @@ import { Logger } from 'ilp-logger'
 import { PaymentError } from '..'
 import { IlpError } from 'ilp-packet'
 import { StreamReject, StreamReply, StreamRequest } from '../request'
-import { RateProbe } from './rate-probe'
+import { RateProbe } from '../senders/rate-probe'
 
 /** How the maximum packet amount is known or discovered */
 enum MaxPacketState {
@@ -39,15 +39,24 @@ type MaxPacketAmount =
 /** Controller to limit packet amount based on F08 errors */
 export class MaxPacketAmountController implements StreamController {
   /** Max packet amount and how it was discovered */
-  private state: MaxPacketAmount = {
-    type: MaxPacketState.UnknownMax,
-  }
+  private state: MaxPacketAmount
 
   /**
    * Greatest amount the recipient acknowledged to have received.
    * Note: this is always reduced so it's never greater than the max packet amount
    */
   private verifiedPathCapacity = Int.ZERO
+
+  constructor(preciseMaxPacketAmount?: PositiveInt) {
+    this.state = preciseMaxPacketAmount
+      ? {
+          type: MaxPacketState.PreciseMax,
+          maxPacketAmount: preciseMaxPacketAmount,
+        }
+      : {
+          type: MaxPacketState.UnknownMax,
+        }
+  }
 
   /**
    * Return a limit on the amount of the next packet: the precise max packet amount,

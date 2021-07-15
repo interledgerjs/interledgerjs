@@ -1,28 +1,41 @@
-import { StreamSender, SendState, GetController } from '.'
-import { AssetDetails, AssetDetailsController } from './asset-details'
+import { SendState, StreamController } from '../controllers'
+import { AssetDetails, AssetDetailsController } from '../controllers/asset-details'
 import { PaymentError } from '..'
 import { ConnectionNewAddressFrame } from 'ilp-protocol-stream/dist/src/packet'
 import { IlpAddress } from 'ilp-packet'
-import { EstablishmentController } from './establishment'
-import { ExpiryController } from './expiry'
-import { SequenceController } from './sequence'
-import { RequestBuilder } from '../request'
+import { EstablishmentController } from '../controllers/establishment'
+import { ExpiryController } from '../controllers/expiry'
+import { Counter, SequenceController } from '../controllers/sequence'
+import { Plugin, RequestBuilder } from '../request'
+import { StreamSender } from '.'
+import { PaymentDestination } from '../open-payments'
 
 /** Send requests that trigger receiver to respond with asset details */
-export class AssetProbe implements StreamSender<AssetDetails> {
-  readonly order = [
-    SequenceController,
-    EstablishmentController,
-    ExpiryController,
-    AssetDetailsController,
-  ]
-
+export class AssetProbe extends StreamSender<AssetDetails> {
   private requestCount = 0
   private replyCount = 0
 
+  private readonly establishmentController: EstablishmentController
+  private readonly assetController: AssetDetailsController
+  protected readonly controllers: StreamController[]
+
+  constructor(plugin: Plugin, destination: PaymentDestination, counter: Counter) {
+    super(plugin, destination)
+
+    this.establishmentController = new EstablishmentController(destination)
+    this.assetController = new AssetDetailsController(destination)
+
+    this.controllers = [
+      new SequenceController(counter),
+      this.establishmentController,
+      new ExpiryController(),
+      this.assetController,
+    ]
+  }
+
   // Immediately send two packets to "request" the destination asset details
-  nextState(request: RequestBuilder, lookup: GetController): SendState<AssetDetails> {
-    const assetDetails = lookup(AssetDetailsController).getDestinationAsset()
+  nextState(request: RequestBuilder): SendState<AssetDetails> {
+    const assetDetails = this.assetController.getDestinationAsset()
     if (assetDetails) {
       return SendState.Done(assetDetails)
     }
@@ -66,8 +79,8 @@ export class AssetProbe implements StreamSender<AssetDetails> {
         return SendState.Yield()
       }
 
-      const didConnect = lookup(EstablishmentController).didConnect()
-      const assetDetails = lookup(AssetDetailsController).getDestinationAsset()
+      const didConnect = this.establishmentController.didConnect()
+      const assetDetails = this.assetController.getDestinationAsset()
       return !didConnect
         ? SendState.Error(PaymentError.EstablishmentFailed)
         : !assetDetails

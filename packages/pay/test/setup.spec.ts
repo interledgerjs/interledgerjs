@@ -12,7 +12,7 @@ import {
 } from 'ilp-protocol-stream/dist/src/packet'
 import Long from 'long'
 import nock from 'nock'
-import { PaymentError, setupPayment } from '../src'
+import { PaymentError, setupPayment, startQuote } from '../src'
 import { fetchPaymentDetails } from '../src/open-payments'
 import { Int } from '../src/utils'
 import {
@@ -22,10 +22,12 @@ import {
   createSlippageMiddleware,
   createStreamReceiver,
   MirrorPlugin,
+  RateBackend,
 } from './helpers/plugin'
 import { CustomBackend } from './helpers/rate-backend'
 import reduct from 'reduct'
 
+const plugin = createPlugin()
 const streamServer = new StreamServer({
   serverSecret: randomBytes(32),
   serverAddress: 'private.larry',
@@ -45,7 +47,9 @@ describe('open payments', () => {
     }
 
     const plugin = createPlugin(
-      createRateMiddleware({ code: 'EUR', scale: 3 }, { code: 'USD', scale: 4 }, prices),
+      createRateMiddleware(
+        new RateBackend({ code: 'EUR', scale: 3 }, { code: 'USD', scale: 4 }, prices)
+      ),
       streamReceiver
     )
 
@@ -73,11 +77,13 @@ describe('open payments', () => {
         sharedSecret: sharedSecret.toString('base64'),
       })
 
-    const { startQuote: quote, ...destination } = await setupPayment({
+    const destination = await setupPayment({
       invoiceUrl,
       plugin,
     })
-    const { minDeliveryAmount, minExchangeRate } = await quote({
+    const { minDeliveryAmount, minExchangeRate } = await startQuote({
+      plugin,
+      destination,
       prices,
       sourceAsset: {
         code: 'EUR',
@@ -141,11 +147,11 @@ describe('open payments', () => {
         sharedSecret: sharedSecret.toString('base64'),
       })
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       invoiceUrl,
-      plugin: createPlugin(),
+      plugin,
     })
-    await expect(quote({})).rejects.toBe(PaymentError.InvoiceAlreadyPaid)
+    await expect(startQuote({ plugin, destination })).rejects.toBe(PaymentError.InvoiceAlreadyPaid)
   })
 
   it('resolves and validates an invoice', async () => {
@@ -576,8 +582,6 @@ describe('setup flow', () => {
     expect(connectionHandler.mock.calls.length).toBe(1)
     scope.done()
 
-    await details.close()
-
     await app.shutdown()
     await streamServer.close()
   })
@@ -637,8 +641,8 @@ describe('quoting flow', () => {
       code: 'ABC',
       scale: 4,
     }
-    const { startQuote: quote } = await setupPayment({
-      plugin: createPlugin(),
+    const destination = await setupPayment({
+      plugin,
       destinationAsset: asset,
       destinationAddress: 'private.foo',
       sharedSecret: Buffer.alloc(32),
@@ -646,7 +650,9 @@ describe('quoting flow', () => {
 
     // Fails with negative source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: BigInt(-2),
         sourceAsset: asset,
       })
@@ -654,7 +660,9 @@ describe('quoting flow', () => {
 
     // Fails with fractional source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: '3.14',
         sourceAsset: asset,
       })
@@ -662,7 +670,9 @@ describe('quoting flow', () => {
 
     // Fails with 0 source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 0,
         sourceAsset: asset,
       })
@@ -670,7 +680,9 @@ describe('quoting flow', () => {
 
     // Fails with `NaN` source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: NaN,
         sourceAsset: asset,
       })
@@ -678,7 +690,9 @@ describe('quoting flow', () => {
 
     // Fails with `Infinity` source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: Infinity,
         sourceAsset: asset,
       })
@@ -686,7 +700,9 @@ describe('quoting flow', () => {
 
     // Fails with Int if source amount is 0
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: Int.ZERO,
         sourceAsset: asset,
       })
@@ -698,8 +714,8 @@ describe('quoting flow', () => {
       code: 'ABC',
       scale: 4,
     }
-    const { startQuote: quote } = await setupPayment({
-      plugin: createPlugin(),
+    const destination = await setupPayment({
+      plugin,
       destinationAsset: asset,
       destinationAddress: 'private.foo',
       sharedSecret: Buffer.alloc(32),
@@ -707,7 +723,9 @@ describe('quoting flow', () => {
 
     // Fails with negative source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToDeliver: BigInt(-3),
         sourceAsset: asset,
       })
@@ -715,7 +733,9 @@ describe('quoting flow', () => {
 
     // Fails with fractional source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToDeliver: '3.14',
         sourceAsset: asset,
       })
@@ -723,7 +743,9 @@ describe('quoting flow', () => {
 
     // Fails with 0 source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToDeliver: 0,
         sourceAsset: asset,
       })
@@ -731,7 +753,9 @@ describe('quoting flow', () => {
 
     // Fails with `NaN` source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToDeliver: NaN,
         sourceAsset: asset,
       })
@@ -739,7 +763,9 @@ describe('quoting flow', () => {
 
     // Fails with `Infinity` source amount
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToDeliver: Infinity,
         sourceAsset: asset,
       })
@@ -747,7 +773,9 @@ describe('quoting flow', () => {
 
     // Fails with Int if source amount is 0
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToDeliver: Int.ZERO,
         sourceAsset: asset,
       })
@@ -761,14 +789,16 @@ describe('quoting flow', () => {
       scale: 3,
     }
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress: 'private.receiver',
       destinationAsset: asset,
       sharedSecret: randomBytes(32),
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         sourceAsset: asset,
       })
     ).rejects.toBe(PaymentError.UnknownPaymentTarget)
@@ -787,14 +817,16 @@ describe('quoting flow', () => {
       scale: 6,
     }
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress: 'private.larry.receiver',
       destinationAsset: asset,
       sharedSecret: Buffer.alloc(32),
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: '1000',
         sourceAsset: asset,
       })
@@ -807,7 +839,7 @@ describe('quoting flow', () => {
 
     const plugin = createPlugin(createMaxPacketMiddleware(Int.ZERO))
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress,
       destinationAsset: {
@@ -817,7 +849,9 @@ describe('quoting flow', () => {
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 1000,
         sourceAsset: {
           code: 'ABC',
@@ -845,8 +879,8 @@ describe('quoting flow', () => {
   it('fails if prices were not provided', async () => {
     const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
 
-    const { startQuote: quote } = await setupPayment({
-      plugin: createPlugin(),
+    const destination = await setupPayment({
+      plugin,
       destinationAddress,
       destinationAsset: {
         code: 'GBP',
@@ -855,7 +889,9 @@ describe('quoting flow', () => {
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 100,
         sourceAsset: {
           code: 'JPY',
@@ -871,15 +907,17 @@ describe('quoting flow', () => {
       scale: 2,
     }
 
-    const { startQuote: quote } = await setupPayment({
-      plugin: createPlugin(),
+    const destination = await setupPayment({
+      plugin,
       sharedSecret: Buffer.alloc(32),
       destinationAddress: 'g.recipient',
       destinationAsset: asset,
     })
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         slippage: NaN,
         amountToSend: 10,
         sourceAsset: asset,
@@ -887,7 +925,9 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.InvalidSlippage)
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         slippage: Infinity,
         amountToSend: 10,
         sourceAsset: asset,
@@ -895,7 +935,9 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.InvalidSlippage)
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         slippage: 1.2,
         amountToSend: 10,
         sourceAsset: asset,
@@ -903,7 +945,9 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.InvalidSlippage)
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         slippage: -0.0001,
         amountToSend: 10,
         sourceAsset: asset,
@@ -917,15 +961,17 @@ describe('quoting flow', () => {
       scale: 2,
     }
 
-    const { startQuote: quote } = await setupPayment({
-      plugin: createPlugin(),
+    const destination = await setupPayment({
+      plugin,
       sharedSecret: Buffer.alloc(32),
       destinationAddress: 'g.recipient',
       destinationAsset: asset,
     })
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 10,
         sourceAsset: {
           code: 'ABC',
@@ -935,7 +981,9 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.UnknownSourceAsset)
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 10,
         sourceAsset: {
           code: 'KRW',
@@ -945,7 +993,9 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.UnknownSourceAsset)
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 10,
         sourceAsset: {
           code: 'CNY',
@@ -955,7 +1005,9 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.UnknownSourceAsset)
 
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 10,
         sourceAsset: {
           code: 'USD',
@@ -975,13 +1027,15 @@ describe('quoting flow', () => {
 
     const plugin = createPlugin(streamReceiver)
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress,
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 100,
         sourceAsset: {
           code: 'some really weird currency',
@@ -1001,13 +1055,15 @@ describe('quoting flow', () => {
 
     const plugin = createPlugin(streamReceiver)
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress,
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: 100,
         sourceAsset: {
           code: 'USD',
@@ -1027,13 +1083,15 @@ describe('quoting flow', () => {
       },
     })
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress,
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: '1000',
         sourceAsset: {
           code: 'ABC',
@@ -1059,14 +1117,16 @@ describe('quoting flow', () => {
 
     const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress,
       destinationAsset: asset,
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: '1000',
         sourceAsset: asset,
         slippage: 0.01,
@@ -1090,20 +1150,22 @@ describe('quoting flow', () => {
 
     const plugin = createPlugin(
       createMaxPacketMiddleware(Int.from(1000)!),
-      createRateMiddleware(sourceAsset, destinationAsset, prices),
+      createRateMiddleware(new RateBackend(sourceAsset, destinationAsset, prices)),
       streamReceiver
     )
 
     const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       destinationAddress,
       destinationAsset,
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin,
+        destination,
         amountToSend: '1000',
         sourceAsset,
         prices,
@@ -1169,13 +1231,15 @@ describe('quoting flow', () => {
       })
     })
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin: senderPlugin1,
       destinationAddress,
       sharedSecret,
     })
     await expect(
-      quote({
+      startQuote({
+        plugin: senderPlugin1,
+        destination,
         amountToSend: 100_000,
         sourceAsset: {
           code: 'BTC',
@@ -1229,13 +1293,15 @@ describe('quoting flow', () => {
 
     const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       sharedSecret,
       destinationAddress,
       destinationAsset: asset,
     })
-    const { maxPacketAmount: discoveredMaxPacket } = await quote({
+    const { maxPacketAmount: discoveredMaxPacket } = await startQuote({
+      plugin,
+      destination,
       amountToSend: 40_000_000,
       sourceAsset: asset,
     })
@@ -1259,13 +1325,15 @@ describe('quoting flow', () => {
       scale: 0,
     }
 
-    const { startQuote: quote } = await setupPayment({
+    const destination = await setupPayment({
       plugin,
       sharedSecret,
       destinationAddress,
       destinationAsset: asset,
     })
-    const { maxPacketAmount } = await quote({
+    const { maxPacketAmount } = await startQuote({
+      plugin,
+      destination,
       amountToSend: 10,
       sourceAsset: asset,
     })

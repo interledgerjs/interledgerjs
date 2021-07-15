@@ -94,6 +94,13 @@ describe('integer operations', () => {
     expect(Int.from(45)!.modulo(Int.from(45) as PositiveInt)).toEqual(Int.ZERO)
   })
 
+  it('Int#orLesser', () => {
+    const a = Int.ONE
+    const b = Int.ZERO
+    expect(a.orLesser()).toBe(a)
+    expect(a.orLesser(b)).toBe(b)
+  })
+
   it('Int#toLong', () => {
     expect(Int.from(1234)!.toLong()).toEqual(Long.fromNumber(1234, true))
     expect(Int.MAX_U64.toLong()).toEqual(Long.MAX_UNSIGNED_VALUE)
@@ -134,5 +141,13 @@ describe('integer operations', () => {
     expect(Ratio.of(Int.from(4)!, Int.ONE).toString()).toBe('4')
     expect(Ratio.of(Int.ONE, Int.TWO).toString()).toBe('0.5')
     expect(Ratio.of(Int.ONE, Int.from(3) as PositiveInt).toString()).toBe((1 / 3).toString())
+  })
+
+  it('Ratio#toJSON', () => {
+    expect(JSON.stringify(Ratio.of(Int.ZERO, Int.ONE))).toBe('["0","1"]')
+    expect(Ratio.of(Int.from(821)!, Int.from(1200) as PositiveInt).toJSON()).toMatchObject([
+      '821',
+      '1200',
+    ])
   })
 })

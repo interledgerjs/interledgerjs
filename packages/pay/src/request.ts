@@ -10,27 +10,21 @@ import {
   serializeIlpPrepare,
   IlpAddress,
 } from 'ilp-packet'
-import {
-  generateFulfillment,
-  generateFulfillmentKey,
-  generatePskEncryptionKey,
-  generateRandomCondition,
-  hash,
-} from 'ilp-protocol-stream/dist/src/crypto'
-import { Frame, FrameType, Packet } from 'ilp-protocol-stream/dist/src/packet'
-import { Int, timeout } from './utils'
+import { randomBytes } from 'crypto'
+import { Frame, FrameType, Packet as StreamPacket } from 'ilp-protocol-stream/dist/src/packet'
+import { generateEncryptionKey, generateFulfillmentKey, hmac, Int, sha256, timeout } from './utils'
 
 export interface Plugin {
   sendData(data: Buffer): Promise<Buffer>
 }
 
-/** Generate keys and function to send ILP Prepares over STREAM */
-export const generateKeys = async (
+/** Generate keys and serialization function to send ILP Prepares over STREAM */
+export const generateKeys = (
   plugin: Plugin,
   sharedSecret: Buffer
-): Promise<(request: StreamRequest) => Promise<StreamReply>> => {
-  const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-  const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
+): ((request: StreamRequest) => Promise<StreamReply>) => {
+  const encryptionKey = generateEncryptionKey(sharedSecret)
+  const fulfillmentKey = generateFulfillmentKey(sharedSecret)
 
   return async (request: StreamRequest): Promise<StreamReply> => {
     // Create the STREAM request packet
@@ -45,7 +39,7 @@ export const generateKeys = async (
       log,
     } = request
 
-    const streamRequest = new Packet(
+    const streamRequest = new StreamPacket(
       sequence,
       IlpPacketType.Prepare.valueOf(),
       minDestinationAmount.toLong(),
@@ -58,8 +52,8 @@ export const generateKeys = async (
     let fulfillment: Buffer | undefined
 
     if (isFulfillable) {
-      fulfillment = await generateFulfillment(fulfillmentKey, data)
-      executionCondition = await hash(fulfillment)
+      fulfillment = hmac(fulfillmentKey, data)
+      executionCondition = sha256(fulfillment)
       log.debug(
         'sending Prepare. amount=%s minDestinationAmount=%s frames=[%s]',
         sourceAmount,
@@ -67,7 +61,7 @@ export const generateKeys = async (
         frames.map((f) => FrameType[f.type]).join()
       )
     } else {
-      executionCondition = generateRandomCondition()
+      executionCondition = randomBytes(32)
       log.debug(
         'sending unfulfillable Prepare. amount=%s frames=[%s]',
         sourceAmount,
@@ -121,9 +115,10 @@ export const generateKeys = async (
       return createReject(IlpError.R00_TRANSFER_TIMED_OUT)
     })
 
-    const streamReply = await Packet.decryptAndDeserialize(encryptionKey, ilpReply.data).catch(
-      () => undefined
-    )
+    const streamReply = await StreamPacket.decryptAndDeserialize(
+      encryptionKey,
+      ilpReply.data
+    ).catch(() => undefined)
 
     if (isFulfill(ilpReply)) {
       log.debug('got Fulfill. sentAmount=%s', sourceAmount)

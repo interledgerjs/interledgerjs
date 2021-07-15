@@ -1,7 +1,21 @@
 import Long from 'long'
+import { createHash, createHmac } from 'crypto'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Constructor<T> = new (...args: any[]) => T
+const HASH_ALGORITHM = 'sha256'
+const ENCRYPTION_KEY_STRING = Buffer.from('ilp_stream_encryption', 'utf8')
+const FULFILLMENT_GENERATION_STRING = Buffer.from('ilp_stream_fulfillment', 'utf8')
+
+export const sha256 = (preimage: Buffer): Buffer =>
+  createHash(HASH_ALGORITHM).update(preimage).digest()
+
+export const hmac = (key: Buffer, message: Buffer): Buffer =>
+  createHmac(HASH_ALGORITHM, key).update(message).digest()
+
+export const generateEncryptionKey = (sharedSecret: Buffer): Buffer =>
+  hmac(sharedSecret, ENCRYPTION_KEY_STRING)
+
+export const generateFulfillmentKey = (sharedSecret: Buffer): Buffer =>
+  hmac(sharedSecret, FULFILLMENT_GENERATION_STRING)
 
 /**
  * Return a rejected Promise if the given Promise does not resolve within the timeout,
@@ -301,6 +315,10 @@ export class Ratio {
 
   toString(): string {
     return this.valueOf().toString()
+  }
+
+  toJSON(): [string, string] {
+    return [this.a.toString(), this.b.toString()]
   }
 }
 

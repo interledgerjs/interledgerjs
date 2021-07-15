@@ -59,22 +59,35 @@ export const createMaxPacketMiddleware = (amount: Int): Middleware => async (pre
   }
 }
 
-export const createRateMiddleware = (
-  incomingAsset: AssetDetails,
-  outgoingAsset: AssetDetails,
-  prices: { [assetCode: string]: number },
-  spread = 0
-): Middleware => async (prepare, next) => {
-  const sourcePrice = prices[incomingAsset.code] ?? 1
-  const destPrice = prices[outgoingAsset.code] ?? 1
+export class RateBackend {
+  constructor(
+    private incomingAsset: AssetDetails,
+    private outgoingAsset: AssetDetails,
+    private prices: { [assetCode: string]: number },
+    private spread = 0
+  ) {}
 
-  // prettier-ignore
-  const rate =
-    (sourcePrice / destPrice) *
-    10 ** (outgoingAsset.scale - incomingAsset.scale) *
-    (1 - spread)
+  setSpread(spread: number): void {
+    this.spread = spread
+  }
 
-  const amount = Int.from(prepare.amount)!.multiplyFloor(Ratio.from(rate)!).toString()
+  getRate(): number {
+    const sourcePrice = this.prices[this.incomingAsset.code] ?? 1
+    const destPrice = this.prices[this.outgoingAsset.code] ?? 1
+
+    // prettier-ignore
+    return (sourcePrice / destPrice) *
+      10 ** (this.outgoingAsset.scale - this.incomingAsset.scale) *
+      (1 - this.spread)
+  }
+}
+
+export const createRateMiddleware = (converter: RateBackend): Middleware => async (
+  prepare,
+  next
+) => {
+  const rate = Ratio.from(converter.getRate())!
+  const amount = Int.from(prepare.amount)!.multiplyFloor(rate).toString()
   return next({
     ...prepare,
     amount,
