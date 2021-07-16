@@ -1,10 +1,11 @@
 import { AssetDetails, isValidAssetDetails } from './controllers/asset-details'
+import { Counter } from './controllers/sequence'
+import { fetchPaymentDetails, PaymentDestination } from './open-payments'
+import { Plugin } from './request'
 import { AssetProbe } from './senders/asset-probe'
 import { ConnectionCloser } from './senders/connection-closer'
 import { PaymentSender, PaymentType } from './senders/payment'
 import { RateProbe } from './senders/rate-probe'
-import { fetchPaymentDetails, PaymentDestination } from './open-payments'
-import { Plugin } from './request'
 import {
   Int,
   isNonNegativeRational,
@@ -13,14 +14,10 @@ import {
   PositiveRatio,
   Ratio,
 } from './utils'
-import { Counter } from './controllers/sequence'
 
-export { Counter } from './controllers/sequence'
-export { AssetDetails } from './controllers/asset-details'
-export { PaymentType } from './senders/payment'
 export { Invoice } from './open-payments'
 export { AccountUrl } from './payment-pointer'
-export { Int, PositiveInt, PositiveRatio, Ratio } from './utils'
+export { Int, PositiveInt, PositiveRatio, Ratio, Counter, PaymentType, AssetDetails }
 
 /** Recipient-provided details to resolve payment parameters, and connected ILP uplink */
 export interface SetupOptions {
@@ -188,7 +185,8 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
   const destinationDetails = destinationDetailsOrError
 
   // Use STREAM to fetch the destination asset (returns immediately if asset is already known)
-  const requestCounter = new Counter()
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  const requestCounter = Counter.from(0)!
   const assetOrError = await new AssetProbe(
     options.plugin,
     destinationDetails,

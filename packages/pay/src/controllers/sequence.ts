@@ -1,10 +1,16 @@
 import { RequestState, StreamController } from '.'
-import { PaymentError, ResolvedPayment } from '..'
+import { PaymentError } from '..'
 import { RequestBuilder } from '../request'
-import { NonNegativeInteger } from '../utils'
+import { isNonNegativeInteger, NonNegativeInteger } from '../utils'
 
 export class Counter {
-  constructor(private count = 0 as NonNegativeInteger) {}
+  private constructor(private count: NonNegativeInteger) {}
+
+  static from(count: number): Counter | undefined {
+    if (isNonNegativeInteger(count)) {
+      return new Counter(count)
+    }
+  }
 
   increment(): void {
     this.count++
@@ -17,7 +23,7 @@ export class Counter {
 
 /** Track the sequence number of outgoing packets */
 export class SequenceController implements StreamController {
-  static PACKET_LIMIT = (2 ** 31) as NonNegativeInteger
+  private static PACKET_LIMIT = (2 ** 31) as NonNegativeInteger
 
   constructor(private readonly counter: Counter) {}
 

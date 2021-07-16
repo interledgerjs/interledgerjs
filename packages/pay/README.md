@@ -55,7 +55,8 @@ async function run() {
   })
   // {
   //   maxSourceAmount: Int(1_950),
-  //   estimatedExchangeRate: [115, 135],
+  //   lowEstimatedExchangeRate: 115,
+  //   highEstimatedExchangeRate: 135,
   //   minExchangeRate: 110,
   // }
 
@@ -176,7 +177,7 @@ Pay exports the **[`AccountUrl`](https://github.com/interledgerjs/interledgerjs/
 
 Some applications may find it useful for multiple Pay library instances to send over a single STREAM connection, such as quoting in one process, and sending money in another.
 
-In this case, the client application must track key security paramters, such as the request count, which STREAM relies on for monotonically increasing sequence numbers and secure acknowledgements of each request.
+In this case, the client application must track key security parameters, such as the request count, which STREAM relies on for monotonically increasing sequence numbers and secure acknowledgements of each request.
 
 Pay uses a **[`Counter`](https://github.com/interledgerjs/interledgerjs/blob/master/packages/pay/src/controllers/sequence.ts#L6)** instance, passed in-process via the **[`ResolvedPayment`](#resolvedpayment)** object, to track how many packets have been sent. Applications that resume connections **MUST** use the counter instance to fetch how many packets have been sent, then create a new counter with the existing request count to pass to new Pay instances that use the same connection.
 

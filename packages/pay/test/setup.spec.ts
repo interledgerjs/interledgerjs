@@ -12,7 +12,7 @@ import {
 } from 'ilp-protocol-stream/dist/src/packet'
 import Long from 'long'
 import nock from 'nock'
-import { PaymentError, setupPayment, startQuote } from '../src'
+import { PaymentError, PaymentType, setupPayment, startQuote } from '../src'
 import { fetchPaymentDetails } from '../src/open-payments'
 import { Int } from '../src/utils'
 import {
@@ -81,7 +81,7 @@ describe('open payments', () => {
       invoiceUrl,
       plugin,
     })
-    const { minDeliveryAmount, minExchangeRate } = await startQuote({
+    const { minDeliveryAmount, minExchangeRate, paymentType } = await startQuote({
       plugin,
       destination,
       prices,
@@ -92,6 +92,7 @@ describe('open payments', () => {
     })
 
     // Tests that it quotes the remaining amount to deliver in the invoice
+    expect(paymentType).toBe(PaymentType.FixedDelivery)
     expect(minExchangeRate).toBeDefined()
     expect(minDeliveryAmount.value).toBe(BigInt(45601 - 2302))
     expect(destination.invoice).toMatchObject({

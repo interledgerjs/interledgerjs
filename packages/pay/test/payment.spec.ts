@@ -1,6 +1,48 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion */
-/* eslint-disable prefer-const */
+/* eslint-disable @typescript-eslint/no-non-null-assertion, prefer-const */
+import { StreamServer } from '@interledger/stream-receiver'
+import { describe, expect, it } from '@jest/globals'
 import { createApp } from 'ilp-connector'
+import {
+  deserializeIlpPrepare,
+  IlpError,
+  isFulfill,
+  isIlpReply,
+  serializeIlpFulfill,
+  serializeIlpReject,
+  serializeIlpReply,
+} from 'ilp-packet'
+import { Connection, createReceipt, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
+import {
+  generateFulfillment,
+  generateFulfillmentKey,
+  generatePskEncryptionKey,
+  hash,
+  randomBytes,
+} from 'ilp-protocol-stream/dist/src/crypto'
+import {
+  ConnectionAssetDetailsFrame,
+  IlpPacketType,
+  Packet,
+  StreamReceiptFrame,
+} from 'ilp-protocol-stream/dist/src/packet'
+import Long from 'long'
+import { Writer } from 'oer-utils'
+import reduct from 'reduct'
+import {
+  closeConnection,
+  Int,
+  pay,
+  PaymentError,
+  PaymentType,
+  Ratio,
+  setupPayment,
+  startQuote,
+} from '../src'
+import { SendStateType } from '../src/controllers'
+import { Counter, SequenceController } from '../src/controllers/sequence'
+import { RequestBuilder } from '../src/request'
+import { PaymentSender } from '../src/senders/payment'
+import { sleep } from '../src/utils'
 import {
   createBalanceTracker,
   createMaxPacketMiddleware,
@@ -12,40 +54,6 @@ import {
   RateBackend,
 } from './helpers/plugin'
 import { CustomBackend } from './helpers/rate-backend'
-import reduct from 'reduct'
-import { Connection, createReceipt, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
-import Long from 'long'
-import { Ratio, Int, PaymentError, setupPayment, startQuote, pay, closeConnection } from '../src'
-import { expect, describe, it } from '@jest/globals'
-import {
-  generateFulfillment,
-  generateFulfillmentKey,
-  generatePskEncryptionKey,
-  hash,
-  randomBytes,
-} from 'ilp-protocol-stream/dist/src/crypto'
-import {
-  deserializeIlpPrepare,
-  IlpError,
-  isFulfill,
-  isIlpReply,
-  serializeIlpFulfill,
-  serializeIlpReject,
-  serializeIlpReply,
-} from 'ilp-packet'
-import { StreamServer } from '@interledger/stream-receiver'
-import { NonNegativeInteger, sleep } from '../src/utils'
-import {
-  ConnectionAssetDetailsFrame,
-  IlpPacketType,
-  Packet,
-  StreamReceiptFrame,
-} from 'ilp-protocol-stream/dist/src/packet'
-import { Writer } from 'oer-utils'
-import { RequestBuilder } from '../src/request'
-import { SendStateType } from '../src/controllers'
-import { PaymentSender } from '../src/senders/payment'
-import { Counter, SequenceController } from '../src/controllers/sequence'
 
 const streamServer = new StreamServer({
   serverSecret: randomBytes(32),
@@ -131,6 +139,7 @@ describe('fixed source payments', () => {
       code: 'XRP',
       scale: 9,
     })
+    expect(quote.paymentType).toBe(PaymentType.FixedSend)
     expect(destination.destinationAddress).toBe(destinationAddress)
     expect(quote.maxSourceAmount.value).toBe(amountToSend)
 
@@ -455,6 +464,7 @@ describe('fixed delivery payments', () => {
       },
       slippage: 0.03125,
     })
+    expect(quote.paymentType).toBe(PaymentType.FixedDelivery)
 
     const receipt = await pay({
       plugin,
@@ -1337,7 +1347,7 @@ describe('payment execution', () => {
   }, 15_000)
 
   it('ends payment if the sequence number exceeds encryption safety', async () => {
-    const controller = new SequenceController(new Counter((2 ** 31) as NonNegativeInteger))
+    const controller = new SequenceController(Counter.from(2 ** 31)!)
     const { value } = controller.buildRequest(new RequestBuilder()) as {
       type: SendStateType.Error
       value: PaymentError

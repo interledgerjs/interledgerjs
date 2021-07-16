@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion */
 import { describe, it, expect } from '@jest/globals'
-import { AccountUrl, Int, Ratio, PositiveInt } from '../src'
+import { AccountUrl, Int, Ratio, PositiveInt, Counter } from '../src'
 import Long from 'long'
 
 describe('account urls', () => {
@@ -149,5 +149,27 @@ describe('integer operations', () => {
       '821',
       '1200',
     ])
+  })
+})
+
+describe('counter', () => {
+  it('Counter#from', () => {
+    expect(Counter.from(NaN)).toBeUndefined()
+    expect(Counter.from(Infinity)).toBeUndefined()
+    expect(Counter.from(-1)).toBeUndefined()
+    expect(Counter.from(0)).toBeDefined()
+    expect(Counter.from(1)).toBeDefined()
+  })
+
+  it('Counter#getCount', () => {
+    expect(Counter.from(0)!.getCount()).toBe(0)
+  })
+
+  it('Counter#increment', () => {
+    const c = Counter.from(2)!
+    c.increment()
+    expect(c.getCount()).toBe(3)
+    c.increment()
+    expect(c.getCount()).toBe(4)
   })
 })
