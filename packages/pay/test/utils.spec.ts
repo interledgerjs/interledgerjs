@@ -51,12 +51,8 @@ describe('account urls', () => {
     expect(AccountUrl.fromUrl('https://somewebsite.co/')!.toPaymentPointer()).toBe(
       '$somewebsite.co'
     )
-    expect(AccountUrl.fromUrl('https://user.example?someId=123')!.toPaymentPointer()).toBe(
-      '$user.example'
-    )
-    expect(AccountUrl.fromUrl('https://example.com/bob/#hash')!.toPaymentPointer()).toBe(
-      '$example.com/bob'
-    )
+    expect(AccountUrl.fromUrl('https://user.example?someId=123')!.toPaymentPointer()).toBeUndefined()
+    expect(AccountUrl.fromUrl('https://example.com/bob/#hash')!.toPaymentPointer()).toBeUndefined()
 
     expect(AccountUrl.fromPaymentPointer('$example.com/')!.toPaymentPointer()).toBe('$example.com')
     expect(AccountUrl.fromPaymentPointer('$example.com/charlie/')!.toPaymentPointer()).toBe(

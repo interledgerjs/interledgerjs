@@ -77,6 +77,9 @@ export class MaxPacketAmountController implements StreamController {
           .saturatingSubtract(this.verifiedPathCapacity)
           .divideCeil(Int.TWO)
           .add(this.verifiedPathCapacity) as PositiveInt
+
+      case MaxPacketState.UnknownMax:
+        return undefined
     }
   }
 

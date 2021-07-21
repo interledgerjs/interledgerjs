@@ -42,7 +42,7 @@ async function run() {
 
   const destination = await setupPayment({
     plugin,
-    invoiceUrl: 'https://mywallet.com/accounts/alice/invoices/04ef492f-94af-488e-8808-3ea95685c992',
+    invoiceUrl: 'https://mywallet.example/accounts/alice/invoices/04ef492f-94af-488e-8808-3ea95685c992',
   })
 
   const quote = await startQuote({

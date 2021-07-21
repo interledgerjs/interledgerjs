@@ -91,8 +91,12 @@ export class AccountUrl {
     return 'https://' + this.hostname + (this.path ?? AccountUrl.DEFAULT_PATH)
   }
 
-  /** Unique payment pointer for this SPSP or Open Payments account. Stripped trailing slash, no query string, no fragment. */
-  toPaymentPointer(): string {
+  /**
+   * Unique payment pointer for this SPSP or Open Payments account. Stripped trailing slash.
+   * Returns undefined when there is a query string or fragment.
+   */
+  toPaymentPointer(): string | undefined {
+    if (this.suffix !== '') return undefined
     return '$' + this.hostname + (this.path ?? '')
   }
 }

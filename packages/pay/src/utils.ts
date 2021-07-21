@@ -17,6 +17,8 @@ export const generateEncryptionKey = (sharedSecret: Buffer): Buffer =>
 export const generateFulfillmentKey = (sharedSecret: Buffer): Buffer =>
   hmac(sharedSecret, FULFILLMENT_GENERATION_STRING)
 
+const SHIFT_32 = BigInt(4294967296)
+
 /**
  * Return a rejected Promise if the given Promise does not resolve within the timeout,
  * or return the resolved value of the Promise
@@ -92,7 +94,7 @@ export class Int {
   private static fromLong(n: Long): Int {
     const lsb = BigInt(n.getLowBitsUnsigned())
     const gsb = BigInt(n.getHighBitsUnsigned())
-    return new Int(lsb + BigInt(4294967296) * gsb)
+    return new Int(lsb + SHIFT_32 * gsb)
   }
 
   add(n: PositiveInt): PositiveInt
@@ -176,7 +178,7 @@ export class Int {
     }
 
     const lsb = BigInt.asUintN(32, this.value)
-    const gsb = (this.value - lsb) / BigInt(4294967296)
+    const gsb = (this.value - lsb) / SHIFT_32
     return new Long(Number(lsb), Number(gsb), true)
   }
 

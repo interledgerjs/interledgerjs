@@ -183,11 +183,11 @@ The STREAM server will ensure the packet is addressed correctly, decrypt the STR
 If the STREAM server directly returns a reply packet, no funds can be received (for example, there were no authentic STREAM messages, or the sender may have restricted the packet as unfulfillable). Reply to the ILP Prepare with that ILP Reject or ILP Fulfill (which is only returned if the amount of the Prepare was 0):
 
 ```js
-import { isReply, serializeIlpReply } from 'ilp-packet'
+import { isIlpReply, serializeIlpReply } from 'ilp-packet'
 
 // ...
 
-if (isReply(moneyOrReply)) {
+if (isIlpReply(moneyOrReply)) {
   return serializeIlpReply(moneyOrReply)
 }
 ```
