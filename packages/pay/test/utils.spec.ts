@@ -17,12 +17,14 @@ describe('account urls', () => {
   })
 
   it('AccountUrl#fromUrl', () => {
-    expect(AccountUrl.fromUrl('http://wallet.example')).toBeUndefined()
+    expect(AccountUrl.fromUrl('http://wallet.example')!.toString()).toBe(
+      'http://wallet.example/.well-known/pay'
+    )
     expect(AccountUrl.fromUrl('https://user:pass@wallet.example')).toBeUndefined()
     expect(AccountUrl.fromUrl('https://wallet.example:8080/')).toBeUndefined()
 
     expect(AccountUrl.fromUrl('https://wallet.example/account?foo=bar')!.toString()).toBe(
-      'https://wallet.example/account'
+      'https://wallet.example/account?foo=bar'
     )
   })
 
@@ -30,10 +32,22 @@ describe('account urls', () => {
     expect(AccountUrl.fromPaymentPointer('$cool.wallet.co')!.toEndpointUrl()).toBe(
       'https://cool.wallet.co/.well-known/pay'
     )
-    expect(AccountUrl.fromUrl('https://user.example?someId=123')!.toEndpointUrl()).toBe(
-      'https://user.example/.well-known/pay?someId=123'
+    expect(AccountUrl.fromUrl('https://user.example?someId=123#bleh')!.toEndpointUrl()).toBe(
+      'https://user.example/.well-known/pay?someId=123#bleh'
     )
     expect(AccountUrl.fromUrl('https://user.example')!.toEndpointUrl()).toBe(
+      'https://user.example/.well-known/pay'
+    )
+  })
+
+  it('AccountUrl#toBaseUrl', () => {
+    expect(AccountUrl.fromPaymentPointer('$cool.wallet.co')!.toBaseUrl()).toBe(
+      'https://cool.wallet.co/.well-known/pay'
+    )
+    expect(AccountUrl.fromUrl('https://user.example?someId=123#bleh')!.toBaseUrl()).toBe(
+      'https://user.example/.well-known/pay'
+    )
+    expect(AccountUrl.fromUrl('https://user.example')!.toBaseUrl()).toBe(
       'https://user.example/.well-known/pay'
     )
   })
@@ -43,7 +57,7 @@ describe('account urls', () => {
       'https://wallet.example/.well-known/pay'
     )
     expect(AccountUrl.fromUrl('https://wallet.example/user/account/?baz#bleh')!.toString()).toBe(
-      'https://wallet.example/user/account'
+      'https://wallet.example/user/account?baz#bleh'
     )
   })
 

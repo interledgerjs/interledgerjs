@@ -1,7 +1,7 @@
-export const createHttpsUrl = (rawUrl: string, base?: string): URL | undefined => {
+export const createHttpUrl = (rawUrl: string, base?: string): URL | undefined => {
   try {
     const url = new URL(rawUrl, base)
-    if (url.protocol === 'https:') {
+    if (url.protocol === 'https:' || url.protocol === 'http:') {
       return url
     }
   } catch (_) {
@@ -12,6 +12,9 @@ export const createHttpsUrl = (rawUrl: string, base?: string): URL | undefined =
 /** URL of a unique account payable over Interledger, queryable via SPSP or Open Payments */
 export class AccountUrl {
   private static DEFAULT_PATH = '/.well-known/pay'
+
+  /** Protocol of the URL */
+  private protocol: string
 
   /** Domain name of the URL */
   private hostname: string
@@ -37,7 +40,7 @@ export class AccountUrl {
      * Payment Pointers that do not meet the limited syntax of this profile MUST be
      * considered invalid and should not be used to resolve a URL."
      */
-    const url = createHttpsUrl('https://' + paymentPointer.substring(1))
+    const url = createHttpUrl('https://' + paymentPointer.substring(1))
     if (
       !url || // URL was invalid
       url.username !== '' ||
@@ -52,9 +55,9 @@ export class AccountUrl {
     return new AccountUrl(url)
   }
 
-  /** Parse SPSP/Open Payments account URL. Must be HTTPS, contain no credentials, and no port. */
+  /** Parse SPSP/Open Payments account URL. Must be HTTPS/HTTP, contain no credentials, and no port. */
   static fromUrl(rawUrl: string): AccountUrl | undefined {
-    const url = createHttpsUrl(rawUrl)
+    const url = createHttpUrl(rawUrl)
     if (!url || url.username !== '' || url.password !== '' || url.port !== '') {
       return
     }
@@ -64,6 +67,7 @@ export class AccountUrl {
   }
 
   private constructor(url: URL) {
+    this.protocol = url.protocol
     this.hostname = url.hostname
 
     // Strip trailing slash. If empty, `URL` still adds back the initial slash
@@ -80,15 +84,22 @@ export class AccountUrl {
 
   /** Endpoint URL for SPSP queries to the account. Includes query string and/or fragment */
   toEndpointUrl(): string {
-    return 'https://' + this.hostname + (this.path ?? AccountUrl.DEFAULT_PATH) + this.suffix
+    return (
+      this.protocol + '//' + this.hostname + (this.path ?? AccountUrl.DEFAULT_PATH) + this.suffix
+    )
+  }
+
+  /** Endpoint URL for SPSP queries to the account. Excludes query string and/or fragment */
+  toBaseUrl(): string {
+    return this.protocol + '//' + this.hostname + (this.path ?? AccountUrl.DEFAULT_PATH)
   }
 
   /**
    * SPSP/Open Payments account URL, identifying a unique account. Use this for comparing sameness between
-   * accounts. Includes default path if applicable, stripped trailing slash, no query string, no fragment.
+   * accounts.
    */
   toString(): string {
-    return 'https://' + this.hostname + (this.path ?? AccountUrl.DEFAULT_PATH)
+    return this.toEndpointUrl()
   }
 
   /**

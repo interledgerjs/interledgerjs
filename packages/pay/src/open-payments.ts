@@ -6,7 +6,7 @@ import createLogger from 'ilp-logger'
 import { AssetDetails, isValidAssetScale, isValidAssetDetails } from './controllers/asset-details'
 import { IlpAddress, isValidIlpAddress } from 'ilp-packet'
 import AbortController from 'abort-controller'
-import { AccountUrl, createHttpsUrl } from './payment-pointer'
+import { AccountUrl, createHttpUrl } from './payment-pointer'
 
 const SHARED_SECRET_BYTE_LENGTH = 32
 const INVOICE_QUERY_ACCEPT_HEADER = 'application/ilp-stream+json'
@@ -96,8 +96,8 @@ export const fetchPaymentDetails = async (
 
 /** Fetch an invoice and STREAM credentials from an Open Payments */
 const queryInvoice = async (invoiceUrl: string): Promise<PaymentDestination | PaymentError> => {
-  if (!createHttpsUrl(invoiceUrl)) {
-    log.debug('invoice query failed: invoice URL not HTTPS.')
+  if (!createHttpUrl(invoiceUrl)) {
+    log.debug('invoice query failed: invoice URL not HTTP/HTTPS.')
     return PaymentError.QueryFailed
   }
 
@@ -243,11 +243,12 @@ const validateOpenPaymentsInvoice = (o: any, queryUrl: string): Invoice | undefi
     return
   }
 
-  const accountUrl = AccountUrl.fromUrl(account)?.toString() // No query string, fragment, or trailing slash
-  const invoiceBaseUrl = accountUrl && accountUrl + '/invoices' // Safe to append directly
+  const accountUrl = AccountUrl.fromUrl(account)
+  // The base url has no query string, fragment, or trailing slash
+  const invoiceBaseUrl = accountUrl && accountUrl.toBaseUrl() + '/invoices' // Safe to append directly
 
   if (
-    !accountUrl || // Must be valid HTTPS account endpoint
+    !accountUrl ||
     !invoiceBaseUrl ||
     !queryUrl.startsWith(invoiceBaseUrl) // Validates invoice is a subresource of this OP account
   ) {
@@ -258,7 +259,7 @@ const validateOpenPaymentsInvoice = (o: any, queryUrl: string): Invoice | undefi
 
   return {
     invoiceUrl: queryUrl,
-    accountUrl: accountUrl.toString(),
+    accountUrl: accountUrl.toEndpointUrl(),
     expiresAt,
     description,
     amountDelivered: amountDelivered.value,

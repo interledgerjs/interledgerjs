@@ -112,9 +112,9 @@ describe('open payments', () => {
     expect(destination.accountUrl).toBe(accountUrl)
   })
 
-  it('fails if invoice url is not HTTPS', async () => {
+  it('fails if invoice url is not HTTPS or HTTP', async () => {
     await expect(
-      fetchPaymentDetails({ invoiceUrl: 'http://this-is-a-wallet.co/invoice/123' })
+      fetchPaymentDetails({ invoiceUrl: 'oops://this-is-a-wallet.co/invoice/123' })
     ).resolves.toBe(PaymentError.QueryFailed)
   })
 
@@ -456,9 +456,9 @@ describe('open payments', () => {
     )
   })
 
-  it('fails if account URL is not HTTPS', async () => {
+  it('fails if account URL is not HTTPS or HTTP', async () => {
     await expect(
-      fetchPaymentDetails({ paymentPointer: 'http://ilp.wallet.com/alice' })
+      fetchPaymentDetails({ paymentPointer: 'oops://ilp.wallet.com/alice' })
     ).resolves.toBe(PaymentError.InvalidPaymentPointer)
   })
 
