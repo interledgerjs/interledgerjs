@@ -277,12 +277,12 @@ export class Ratio {
     }
   }
 
-  floor(): Int {
-    return this.a.divide(this.b)
+  floor(): bigint {
+    return this.a.divide(this.b).value
   }
 
-  ceil(): Int {
-    return this.a.divideCeil(this.b)
+  ceil(): bigint {
+    return this.a.divideCeil(this.b).value
   }
 
   isEqualTo(r: Ratio): boolean {
@@ -326,11 +326,10 @@ export class Ratio {
 
 /** Ratio of two integers greater than 0 */
 export interface PositiveRatio extends Ratio {
-  a: PositiveInt
-  b: PositiveInt
+  readonly a: PositiveInt
+  readonly b: PositiveInt
 
   reciprocal(): PositiveRatio
-  ceil(): PositiveInt
   isEqualTo(r: Ratio): r is PositiveRatio
   isLessThan(r: Ratio): r is PositiveRatio
   isLessThanOrEqualTo(r: Ratio): r is PositiveRatio

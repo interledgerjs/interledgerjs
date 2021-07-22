@@ -54,7 +54,7 @@ async function run() {
     },
   })
   // {
-  //   maxSourceAmount: Int(1_950),
+  //   maxSourceAmount: BigInt(1_950),
   //   lowEstimatedExchangeRate: 115,
   //   highEstimatedExchangeRate: 135,
   //   minExchangeRate: 110,
@@ -64,8 +64,8 @@ async function run() {
   const receipt = await pay({ plugin, destination, quote })
   console.log(receipt)
   // {
-  //    amountSent: Int(1_910),
-  //    amountDelivered: Int(234_000),
+  //    amountSent: BigInt(1_910),
+  //    amountDelivered: BigInt(234_000),
   //    ...
   // }
 
@@ -265,9 +265,9 @@ Parameters of payment execution and the projected outcome of a payment.
 | Property                        | Type                              | Description                                                                                                                                                                                                                                                                                                              |
 | :------------------------------ | :-------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`paymentType`**               | **[`PaymentType`](#paymenttype)** | The completion criteria of the payment. For fixed source amount payments, `"FixedSend"`; for invoices and fixed delivery payments, `"FixedDelivery"`.                                                                                                                                                                    |
-| **`maxSourceAmount`**           | **[`Int`](#amounts)**             | Maximum amount that will be sent in the base unit and asset of the sending account. This is intended to be presented to the user or agent before authorizing a fixed delivery payment. For fixed source amount payments, this will be the provided **`amountToSend`**.                                                   |
-| **`minDeliveryAmount`**         | **[`Int`](#amounts)**             | Minimum amount that will be delivered if the payment completes, in the base unit and asset of the receiving account. For fixed delivery payments, this will be the provided **`amountToDeliver`** or amount of the invoice.                                                                                              |
-| **`maxPacketAmount`**           | **[`Int`](#amounts)**             | Discovered maximum packet amount allowed over this payment path.                                                                                                                                                                                                                                                         |
+| **`maxSourceAmount`**           | `bigint`                          | Maximum amount that will be sent in the base unit and asset of the sending account. This is intended to be presented to the user or agent before authorizing a fixed delivery payment. For fixed source amount payments, this will be the provided **`amountToSend`**.                                                   |
+| **`minDeliveryAmount`**         | `bigint`                          | Minimum amount that will be delivered if the payment completes, in the base unit and asset of the receiving account. For fixed delivery payments, this will be the provided **`amountToDeliver`** or amount of the invoice.                                                                                              |
+| **`maxPacketAmount`**           | `bigint`                          | Discovered maximum packet amount allowed over this payment path.                                                                                                                                                                                                                                                         |
 | **`minExchangeRate`**           | **[`Ratio`](#amounts)**           | Aggregate exchange rate the payment is guaranteed to meet, as a ratio of destination base units to source base units. Corresponds to the minimum exchange rate enforced on each packet (\*except for the final packet) to ensure sufficient money gets delivered. For strict bookkeeping, use `maxSourceAmount` instead. |
 | **`lowEstimatedExchangeRate`**  | **[`Ratio`](#amounts)**           | Lower bound of probed exchange rate over the path (inclusive). Ratio of destination base units to source base units                                                                                                                                                                                                      |
 | **`highEstimatedExchangeRate`** | **[`Ratio`](#amounts)**           | Upper bound of probed exchange rate over the path (exclusive). Ratio of destination base units to source base units                                                                                                                                                                                                      |
@@ -294,10 +294,10 @@ Intermediate state or outcome of the payment, to account for sent/delivered amou
 | Property                         | Type                              | Description                                                                                                                       |
 | :------------------------------- | :-------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------- |
 | **`error`** (_Optional_)         | **[PaymentError](#paymenterror)** | Error state, if the payment failed.                                                                                               |
-| **`amountSent`**                 | **[`Int`](#amounts)**             | Amount sent and fulfilled, in base units of the source asset.                                                                     |
-| **`amountDelivered`**            | **[`Int`](#amounts)**             | Amount delivered to the recipient, in base units of the destination asset.                                                        |
-| **`sourceAmountInFlight`**       | **[`Int`](#amounts)**             | Amount sent that is yet to be fulfilled or rejected, in base units of the source asset.                                           |
-| **`destinationAmountInFlight`**  | **[`Int`](#amounts)**             | Estimate of the amount that may be delivered from in-flight packets, in base units of the destination asset.                      |
+| **`amountSent`**                 | `bigint`                          | Amount sent and fulfilled, in base units of the source asset.                                                                     |
+| **`amountDelivered`**            | `bigint`                          | Amount delivered to the recipient, in base units of the destination asset.                                                        |
+| **`sourceAmountInFlight`**       | `bigint`                          | Amount sent that is yet to be fulfilled or rejected, in base units of the source asset.                                           |
+| **`destinationAmountInFlight`**  | `bigint`                          | Estimate of the amount that may be delivered from in-flight packets, in base units of the destination asset.                      |
 | **`streamReceipt`** (_Optional_) | `Uint8Array`                      | Latest [STREAM receipt](https://interledger.org/rfcs/0039-stream-receipts/) to provide proof-of-delivery to a 3rd party verifier. |
 
 #### `Invoice`
@@ -310,8 +310,8 @@ Intermediate state or outcome of the payment, to account for sent/delivered amou
 | :-------------------- | :---------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`invoiceUrl`**      | `string`                            | URL used to query and identify the invoice.                                                                                                                                                                                              |
 | **`accountUrl`**      | `string`                            | URL of the recipient Open Payments account to which invoice payments will be credited (with well-known path, and stripped trailing slash). Each payment pointer and its corresponding account URL identifies a unique payment recipient. |
-| **`amountToDeliver`** | **[`Int`](#amounts)**               | Fixed destination amount that must be delivered to complete payment of the invoice, in ordinary units.                                                                                                                                   |
-| **`amountDelivered`** | **[`Int`](#amounts)**               | Amount that has already been paid toward the invoice, in ordinary units.                                                                                                                                                                 |
+| **`amountToDeliver`** | `bigint`                            | Fixed destination amount that must be delivered to complete payment of the invoice, in ordinary units.                                                                                                                                   |
+| **`amountDelivered`** | `bigint`                            | Amount that has already been paid toward the invoice, in ordinary units.                                                                                                                                                                 |
 | **`expiresAt`**       | `number`                            | UNIX timestamp in milliseconds after which payments toward the invoice will no longer be accepted.                                                                                                                                       |
 | **`description`**     | `string`                            | Human-readable description of what is provided in return for completion of the invoice.                                                                                                                                                  |
 | **`asset`**           | **[`AssetDetails`](#assetdetails)** | Asset and denomination of recipient account.                                                                                                                                                                                             |

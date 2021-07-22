@@ -94,14 +94,14 @@ describe('open payments', () => {
     // Tests that it quotes the remaining amount to deliver in the invoice
     expect(paymentType).toBe(PaymentType.FixedDelivery)
     expect(minExchangeRate).toBeDefined()
-    expect(minDeliveryAmount.value).toBe(BigInt(45601 - 2302))
+    expect(minDeliveryAmount).toBe(BigInt(45601 - 2302))
     expect(destination.invoice).toMatchObject({
       invoiceUrl,
       accountUrl,
       expiresAt,
       description,
-      amountDelivered: Int.from(2302),
-      amountToDeliver: Int.from(45601),
+      amountDelivered: BigInt(2302),
+      amountToDeliver: BigInt(45601),
     })
     expect(destination.destinationAsset).toMatchObject({
       code: 'USD',
@@ -189,8 +189,8 @@ describe('open payments', () => {
         scale: 4,
       },
       invoice: {
-        amountDelivered: Int.ZERO,
-        amountToDeliver: Int.from(45601),
+        amountDelivered: BigInt(0),
+        amountToDeliver: BigInt(45601),
         invoiceUrl,
         accountUrl,
         expiresAt,
@@ -704,7 +704,7 @@ describe('quoting flow', () => {
       startQuote({
         plugin,
         destination,
-        amountToSend: Int.ZERO,
+        amountToSend: BigInt(0),
         sourceAsset: asset,
       })
     ).rejects.toBe(PaymentError.InvalidSourceAmount)
@@ -777,7 +777,7 @@ describe('quoting flow', () => {
       startQuote({
         plugin,
         destination,
-        amountToDeliver: Int.ZERO,
+        amountToDeliver: BigInt(0),
         sourceAsset: asset,
       })
     ).rejects.toBe(PaymentError.InvalidDestinationAmount)
@@ -1338,6 +1338,6 @@ describe('quoting flow', () => {
       amountToSend: 10,
       sourceAsset: asset,
     })
-    expect(maxPacketAmount.value).toBe(Int.MAX_U64.value)
+    expect(maxPacketAmount).toBe(Int.MAX_U64.value)
   })
 })

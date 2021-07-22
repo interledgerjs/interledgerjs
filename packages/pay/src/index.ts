@@ -66,19 +66,22 @@ export interface QuoteOptions {
 /** Parameters of payment execution and the projected outcome of a payment */
 export interface Quote {
   /** How payment completion is ascertained: fixed send amount or fixed delivery amount */
-  paymentType: PaymentType
+  readonly paymentType: PaymentType
   /** Maximum amount that will be sent in source units */
-  maxSourceAmount: PositiveInt
+  readonly maxSourceAmount: bigint
+  readonly _maxSourceAmount: PositiveInt
   /** Minimum amount that will be delivered if the payment fully completes */
-  minDeliveryAmount: Int
+  readonly minDeliveryAmount: bigint
+  readonly _minDeliveryAmount: Int
   /** Discovered maximum packet amount allowed over this payment path */
-  maxPacketAmount: PositiveInt
+  readonly maxPacketAmount: bigint
+  readonly _maxPacketAmount: PositiveInt
   /** Lower bound of probed exchange rate over the path (inclusive). Ratio of destination base units to source base units */
-  lowEstimatedExchangeRate: Ratio
+  readonly lowEstimatedExchangeRate: Ratio
   /** Upper bound of probed exchange rate over the path (exclusive). Ratio of destination base units to source base units */
-  highEstimatedExchangeRate: PositiveRatio
+  readonly highEstimatedExchangeRate: PositiveRatio
   /** Minimum exchange rate used to enforce rates. Ratio of destination base units to source base units */
-  minExchangeRate: Ratio
+  readonly minExchangeRate: Ratio
 }
 
 /** Options before immediately executing payment */
@@ -102,14 +105,14 @@ export interface PayOptions {
 export interface PaymentProgress {
   /** Error state, if payment failed */
   error?: PaymentError
-  /** Amount sent and fulfilled, in base units of the source asset */
-  amountSent: Int
-  /** Amount delivered to recipient, in base units of the destination asset */
-  amountDelivered: Int
-  /** Amount sent that is yet to be fulfilled or rejected, in base units of the source asset */
-  sourceAmountInFlight: Int
-  /** Estimate of the amount that may be delivered from in-flight packets, in base units of the destination asset */
-  destinationAmountInFlight: Int
+  /** Amount sent and fulfilled, in base units of the source asset. ≥0 */
+  amountSent: bigint
+  /** Amount delivered to recipient, in base units of the destination asset. ≥0 */
+  amountDelivered: bigint
+  /** Amount sent that is yet to be fulfilled or rejected, in base units of the source asset. ≥0 */
+  sourceAmountInFlight: bigint
+  /** Estimate of the amount that may be delivered from in-flight packets, in base units of the destination asset. ≥0 */
+  destinationAmountInFlight: bigint
   /** Latest [STREAM receipt](https://interledger.org/rfcs/0039-stream-receipts/) to provide proof-of-delivery to a 3rd party verifier */
   streamReceipt?: Uint8Array
 }
@@ -217,8 +220,8 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
   }
 
   if (invoice) {
-    const remainingToDeliver = invoice.amountToDeliver.saturatingSubtract(invoice.amountDelivered)
-    if (!remainingToDeliver.isPositive()) {
+    const remainingToDeliver = Int.from(invoice.amountToDeliver - invoice.amountDelivered)
+    if (!remainingToDeliver || !remainingToDeliver.isPositive()) {
       // Return this error here instead of in `setupPayment` so consumer can access the resolved invoice
       log.debug(
         'quote failed: invoice was already paid. amountToDeliver=%s amountDelivered=%s',
@@ -378,9 +381,12 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     lowEstimatedExchangeRate,
     highEstimatedExchangeRate,
     minExchangeRate,
-    maxPacketAmount,
-    maxSourceAmount,
-    minDeliveryAmount,
+    maxPacketAmount: maxPacketAmount.value,
+    _maxPacketAmount: maxPacketAmount,
+    maxSourceAmount: maxSourceAmount.value,
+    _maxSourceAmount: maxSourceAmount,
+    minDeliveryAmount: minDeliveryAmount.value,
+    _minDeliveryAmount: minDeliveryAmount,
   }
 }
 

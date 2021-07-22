@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/no-empty-function */
-import { Int, isNonNegativeRational, PositiveInt, sleep } from './utils'
+import { Int, isNonNegativeRational, sleep } from './utils'
 import fetch, { Response } from 'node-fetch'
 import { PaymentError, SetupOptions } from '.'
 import createLogger from 'ilp-logger'
@@ -51,10 +51,10 @@ export interface Invoice {
   expiresAt: number
   /** Human-readable description of the invoice */
   description: string
-  /** Fixed destination amount that must be delivered to complete payment of the invoice, in base units */
-  amountToDeliver: PositiveInt
-  /** Amount that has already been paid toward the invoice, in base units */
-  amountDelivered: Int
+  /** Fixed destination amount that must be delivered to complete payment of the invoice, in base units. ≥0 */
+  amountToDeliver: bigint
+  /** Amount that has already been paid toward the invoice, in base units. >0 */
+  amountDelivered: bigint
   /** Asset and denomination of recipient account */
   asset: AssetDetails
 }
@@ -261,8 +261,8 @@ const validateOpenPaymentsInvoice = (o: any, queryUrl: string): Invoice | undefi
     accountUrl: accountUrl.toString(),
     expiresAt,
     description,
-    amountDelivered,
-    amountToDeliver,
+    amountDelivered: amountDelivered.value,
+    amountToDeliver: amountToDeliver.value,
     asset,
   }
 }

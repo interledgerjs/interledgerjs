@@ -74,7 +74,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
     this.quote = quote
     this.progressHandler = progressHandler
 
-    this.maxPacketController = new MaxPacketAmountController(quote.maxPacketAmount)
+    this.maxPacketController = new MaxPacketAmountController(quote._maxPacketAmount)
     this.rateCalculator = new ExchangeRateController(
       quote.lowEstimatedExchangeRate,
       quote.highEstimatedExchangeRate
@@ -99,7 +99,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
     const { log } = request
 
     // Ensure we never overpay the maximum source amount
-    const availableToSend = this.quote.maxSourceAmount
+    const availableToSend = this.quote._maxSourceAmount
       .saturatingSubtract(this.amountSent)
       .saturatingSubtract(this.sourceAmountInFlight)
     if (!availableToSend.isPositive()) {
@@ -116,7 +116,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
     // Apply fixed delivery limits
     if (this.quote.paymentType === PaymentType.FixedDelivery) {
-      const remainingToDeliver = this.quote.minDeliveryAmount
+      const remainingToDeliver = this.quote._minDeliveryAmount
         .saturatingSubtract(this.amountDelivered)
         .saturatingSubtract(this.destinationAmountInFlight)
       if (!remainingToDeliver.isPositive()) {
@@ -242,7 +242,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
       const paidFixedSend =
         this.quote.paymentType === PaymentType.FixedSend &&
-        this.amountSent.isEqualTo(this.quote.maxSourceAmount) // Amount in flight is always 0 if this is true
+        this.amountSent.isEqualTo(this.quote._maxSourceAmount) // Amount in flight is always 0 if this is true
       if (paidFixedSend) {
         log.debug('payment complete: paid fixed source amount.')
         return SendState.Done(this.getProgress())
@@ -250,7 +250,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
       const paidFixedDelivery =
         this.quote.paymentType === PaymentType.FixedDelivery &&
-        this.amountDelivered.isGreaterThanOrEqualTo(this.quote.minDeliveryAmount) &&
+        this.amountDelivered.isGreaterThanOrEqualTo(this.quote._minDeliveryAmount) &&
         !this.sourceAmountInFlight.isPositive()
       if (paidFixedDelivery) {
         log.debug('payment complete: paid fixed destination amount.')
@@ -259,7 +259,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
       this.remoteReceiveMax =
         this.updateReceiveMax(reply)?.orGreater(this.remoteReceiveMax) ?? this.remoteReceiveMax
-      if (this.remoteReceiveMax?.isLessThan(this.quote.minDeliveryAmount)) {
+      if (this.remoteReceiveMax?.isLessThan(this.quote._minDeliveryAmount)) {
         log.error(
           'ending payment: minimum delivery amount is too much for recipient. minDelivery=%s receiveMax=%s',
           this.quote.minDeliveryAmount,
@@ -277,10 +277,10 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
   getProgress(): PaymentProgress {
     return {
       streamReceipt: this.latestReceipt?.buffer,
-      amountSent: this.amountSent,
-      amountDelivered: this.amountDelivered,
-      sourceAmountInFlight: this.sourceAmountInFlight,
-      destinationAmountInFlight: this.destinationAmountInFlight,
+      amountSent: this.amountSent.value,
+      amountDelivered: this.amountDelivered.value,
+      sourceAmountInFlight: this.sourceAmountInFlight.value,
+      destinationAmountInFlight: this.destinationAmountInFlight.value,
     }
   }
 

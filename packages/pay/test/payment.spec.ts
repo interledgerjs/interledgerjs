@@ -141,14 +141,14 @@ describe('fixed source payments', () => {
     })
     expect(quote.paymentType).toBe(PaymentType.FixedSend)
     expect(destination.destinationAddress).toBe(destinationAddress)
-    expect(quote.maxSourceAmount.value).toBe(amountToSend)
+    expect(quote.maxSourceAmount).toBe(amountToSend)
 
     const receipt = await pay({ plugin: alice1, quote, destination })
     expect(receipt.error).toBeUndefined()
-    expect(receipt.amountSent.value).toBe(amountToSend)
+    expect(receipt.amountSent).toBe(amountToSend)
 
     const serverConnection = await connectionPromise
-    expect(BigInt(serverConnection.totalReceived)).toBe(receipt.amountDelivered.value)
+    expect(BigInt(serverConnection.totalReceived)).toBe(receipt.amountDelivered)
 
     await app.shutdown()
     await streamServer.close()
@@ -250,12 +250,12 @@ describe('fixed source payments', () => {
       prices,
       destination,
     })
-    expect(quote.maxSourceAmount.value).toBe(BigInt(100002))
+    expect(quote.maxSourceAmount).toBe(BigInt(100002))
 
     const receipt = await pay({ plugin: senderPlugin1, quote, destination })
     expect(receipt.error).toBeUndefined()
-    expect(receipt.amountSent.value).toBe(BigInt(100002))
-    expect(receipt.amountDelivered.value).toBeGreaterThanOrEqual(quote.minDeliveryAmount.value)
+    expect(receipt.amountSent).toBe(BigInt(100002))
+    expect(receipt.amountDelivered).toBeGreaterThanOrEqual(quote.minDeliveryAmount)
 
     await app.shutdown()
     await streamServer.close()
@@ -334,7 +334,7 @@ describe('fixed source payments', () => {
 
     expect(receipt.error).toBeUndefined()
     expect(highestNumberPacketsInFlight).toBe(20)
-    expect(receipt.amountSent.value).toBe(BigInt(100))
+    expect(receipt.amountSent).toBe(BigInt(100))
 
     await app.shutdown()
     await streamServer.close()
@@ -416,8 +416,8 @@ describe('fixed source payments', () => {
 
     const receipt = await pay({ plugin: alice1, destination, quote })
     expect(receipt.error).toBeUndefined()
-    expect(receipt.amountSent.value).toBe(amountToSend)
-    expect(receipt.amountDelivered.value).toBeGreaterThan(BigInt(0))
+    expect(receipt.amountSent).toBe(amountToSend)
+    expect(receipt.amountDelivered).toBeGreaterThan(BigInt(0))
 
     await app.shutdown()
     await streamServer.close()
@@ -472,25 +472,21 @@ describe('fixed delivery payments', () => {
       quote,
       // Tests progress handler logic
       progressHandler: (receipt) => {
-        expect(
-          receipt.sourceAmountInFlight
-            .add(receipt.amountSent)
-            .isLessThanOrEqualTo(quote.maxSourceAmount)
+        expect(receipt.sourceAmountInFlight + receipt.amountSent).toBeLessThanOrEqual(
+          quote.maxSourceAmount
         )
-        expect(balanceTracker.totalReceived().value).toBeGreaterThanOrEqual(
-          receipt.amountDelivered.value
-        )
+        expect(balanceTracker.totalReceived().value).toBeGreaterThanOrEqual(receipt.amountDelivered)
       },
     })
 
     expect(receipt.error).toBeUndefined()
 
-    expect(balanceTracker.totalReceived().value).toBe(amountToDeliver.value)
-    expect(receipt.amountDelivered.value).toBe(amountToDeliver.value)
+    expect(balanceTracker.totalReceived()).toEqual(amountToDeliver)
+    expect(receipt.amountDelivered).toBe(amountToDeliver.value)
 
     // Ensures this tests the edge case of the overdelivery logic
     // so the amount sent is exactly the maximum value quoted
-    expect(receipt.amountSent.value).toEqual(quote.maxSourceAmount.value)
+    expect(receipt.amountSent).toEqual(quote.maxSourceAmount)
   }, 10_000)
 
   it('delivers single-shot fixed destination amount with single-shot', async () => {
@@ -503,7 +499,7 @@ describe('fixed delivery payments', () => {
 
     const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
 
-    const amountToDeliver = Int.from(630)!
+    const amountToDeliver = BigInt(630)
     const destination = await setupPayment({
       destinationAddress,
       sharedSecret,
@@ -527,11 +523,11 @@ describe('fixed delivery payments', () => {
     const receipt = await pay({ plugin, quote, destination })
     expect(receipt.error).toBeUndefined()
     expect(receipt.amountSent).toEqual(quote.maxSourceAmount)
-    expect(receipt.amountDelivered.isGreaterThanOrEqualTo(amountToDeliver))
+    expect(receipt.amountDelivered).toBeGreaterThanOrEqual(amountToDeliver)
 
     // Allowed delivery amount doesn't allow *too much* to be delivered
-    const maxDeliveryAmount = quote.minDeliveryAmount.add(quote.minExchangeRate.ceil())
-    expect(receipt.amountDelivered.isLessThanOrEqualTo(maxDeliveryAmount))
+    const maxDeliveryAmount = quote.minDeliveryAmount + quote.minExchangeRate.ceil()
+    expect(receipt.amountDelivered).toBeLessThanOrEqual(maxDeliveryAmount)
   })
 
   it('delivers fixed destination amount with exchange rate greater than 1', async () => {
@@ -572,7 +568,7 @@ describe('fixed delivery payments', () => {
     // Connector spread: 0.80845%
     // Sender accepts up to: 0.85%
 
-    const amountToDeliver = Int.from(10_000_000_000)! // 10 XRP, ~$2 at given prices
+    const amountToDeliver = BigInt(10_000_000_000)! // 10 XRP, ~$2 at given prices
     const destination = await setupPayment({
       destinationAddress,
       destinationAsset: {
@@ -597,14 +593,14 @@ describe('fixed delivery payments', () => {
 
     const receipt = await pay({ plugin, destination, quote })
 
-    expect(receipt.amountDelivered.value).toBe(balanceTracker.totalReceived().value)
-    expect(receipt.amountDelivered.value).toBeGreaterThanOrEqual(amountToDeliver.value)
+    expect(receipt.amountDelivered).toBe(balanceTracker.totalReceived().value)
+    expect(receipt.amountDelivered).toBeGreaterThanOrEqual(amountToDeliver)
 
     // Ensure over-delivery is minimized to the equivalent of a single source unit, 1 satoshi,
     // converted into destination units, drops of XRP:
-    const maxDeliveryAmount = amountToDeliver.add(minExchangeRate.ceil())
-    expect(receipt.amountDelivered.value).toBeLessThanOrEqual(maxDeliveryAmount.value)
-    expect(receipt.amountSent.value).toBeLessThanOrEqual(maxSourceAmount.value)
+    const maxDeliveryAmount = amountToDeliver + minExchangeRate.ceil()
+    expect(receipt.amountDelivered).toBeLessThanOrEqual(maxDeliveryAmount)
+    expect(receipt.amountSent).toBeLessThanOrEqual(maxSourceAmount)
   }, 10_000)
 
   it('fails if receive max is incompatible on fixed delivery payment', async () => {
@@ -779,8 +775,8 @@ describe('fixed delivery payments', () => {
     const receipt = await pay({ plugin, destination, quote })
 
     expect(receipt.error).toBe(PaymentError.ReceiverProtocolViolation)
-    expect(receipt.amountDelivered.value).toBe(BigInt(18)) // 20 unit packet, 1% slippage, minus 1 source unit
-    expect(receipt.amountSent.value).toBeLessThanOrEqual(quote.maxSourceAmount.value)
+    expect(receipt.amountDelivered).toBe(BigInt(18)) // 20 unit packet, 1% slippage, minus 1 source unit
+    expect(receipt.amountSent).toBeLessThanOrEqual(quote.maxSourceAmount)
   }, 10_000)
 
   it('accounts for delivered amounts if the recipient claims to receive less than minimum', async () => {
@@ -866,8 +862,8 @@ describe('fixed delivery payments', () => {
 
     const receipt = await pay({ plugin: senderPlugin1, destination, quote })
     expect(receipt.error).toBe(PaymentError.ReceiverProtocolViolation)
-    expect(receipt.amountDelivered.value).toEqual(totalReceived)
-    expect(receipt.amountSent.value).toBeLessThanOrEqual(quote.maxSourceAmount.value)
+    expect(receipt.amountDelivered).toEqual(totalReceived)
+    expect(receipt.amountSent).toBeLessThanOrEqual(quote.maxSourceAmount)
 
     await app.shutdown()
   })
@@ -951,8 +947,8 @@ describe('fixed delivery payments', () => {
 
     const receipt = await pay({ plugin: senderPlugin1, destination, quote })
     expect(receipt.error).toBe(PaymentError.InsufficientExchangeRate)
-    expect(receipt.amountSent.value).toBe(BigInt(0))
-    expect(receipt.amountDelivered.value).toBe(BigInt(0))
+    expect(receipt.amountSent).toBe(BigInt(0))
+    expect(receipt.amountDelivered).toBe(BigInt(0))
     expect(serverConnection.totalReceived).toBe('0')
 
     await app.shutdown()
@@ -1041,9 +1037,9 @@ describe('fixed delivery payments', () => {
 
     const receipt = await pay({ plugin: senderPlugin1, destination, quote })
     expect(receipt.error).toBe(PaymentError.InsufficientExchangeRate)
-    expect(receipt.amountDelivered.value).toBeLessThan(BigInt(100_000))
-    expect(receipt.amountDelivered.value).toBe(BigInt(serverConnection.totalReceived))
-    expect(receipt.amountSent.value).toBeLessThanOrEqual(quote.maxSourceAmount.value)
+    expect(receipt.amountDelivered).toBeLessThan(BigInt(100_000))
+    expect(receipt.amountDelivered).toBe(BigInt(serverConnection.totalReceived))
+    expect(receipt.amountSent).toBeLessThanOrEqual(quote.maxSourceAmount)
 
     await app.shutdown()
     await streamServer.close()
@@ -1199,8 +1195,8 @@ describe('payment execution', () => {
     })
     const receipt = await pay({ plugin: senderPlugin1, destination, quote })
     expect(receipt.error).toBeUndefined()
-    expect(receipt.amountSent.value).toBe(BigInt(100))
-    expect(receipt.amountDelivered.value).toBe(BigInt(100))
+    expect(receipt.amountSent).toBe(BigInt(100))
+    expect(receipt.amountDelivered).toBe(BigInt(100))
 
     await app.shutdown()
     await streamServer.close()
@@ -1275,7 +1271,7 @@ describe('payment execution', () => {
 
     const receipt = await pay({ plugin: senderPlugin1, destination, quote })
     expect(receipt.error).toBeUndefined()
-    expect(+receipt.amountSent).toBe(amountToSend)
+    expect(receipt.amountSent).toBe(BigInt(amountToSend))
 
     await app.shutdown()
     await streamServer.close()
@@ -1340,7 +1336,7 @@ describe('payment execution', () => {
 
     const receipt = await pay({ plugin: senderPlugin1, destination, quote })
     expect(receipt.error).toBe(PaymentError.IdleTimeout)
-    expect(receipt.amountSent.value).toBe(BigInt(0))
+    expect(receipt.amountSent).toBe(BigInt(0))
 
     await app.shutdown()
     await streamServer.close()
@@ -1425,8 +1421,8 @@ describe('payment execution', () => {
     const receipt = await pay({ plugin: alice1, destination, quote })
 
     expect(receipt.error).toBe(PaymentError.ClosedByReceiver)
-    expect(receipt.amountSent.value).toBe(BigInt(20)) // Only $0.20 was sent & received
-    expect(receipt.amountDelivered.value).toBe(BigInt(20))
+    expect(receipt.amountSent).toBe(BigInt(20)) // Only $0.20 was sent & received
+    expect(receipt.amountDelivered).toBe(BigInt(20))
 
     await app.shutdown()
     await streamServer.close()
@@ -1485,13 +1481,13 @@ describe('payment execution', () => {
       amountToSend,
       slippage: 1, // 100%
     })
-    expect(quote.minDeliveryAmount).toEqual(Int.ZERO)
+    expect(quote.minDeliveryAmount).toEqual(BigInt(0))
     expect(quote.minExchangeRate).toEqual(Ratio.of(Int.ZERO, Int.ONE))
     expect(quote.lowEstimatedExchangeRate.a).toEqual(Int.ZERO)
 
     const { amountSent, amountDelivered } = await pay({ plugin, destination, quote })
-    expect(amountSent.value).toBe(BigInt(amountToSend))
-    expect(amountDelivered.value).toBe(BigInt(0))
+    expect(amountSent).toBe(BigInt(amountToSend))
+    expect(amountDelivered).toBe(BigInt(0))
   })
 })
 
@@ -1566,14 +1562,14 @@ describe('stream receipts', () => {
     const totalReceived = BigInt(serverConnection.totalReceived)
 
     expect(receipt.error).toBeUndefined()
-    expect(receipt.amountSent.value).toBe(amountToSend)
-    expect(receipt.amountDelivered.value).toBe(totalReceived)
+    expect(receipt.amountSent).toBe(amountToSend)
+    expect(receipt.amountDelivered).toBe(totalReceived)
     expect(receipt.streamReceipt).toEqual(
       createReceipt({
         nonce: receiptNonce,
         secret: receiptSecret,
         streamId: PaymentSender.DEFAULT_STREAM_ID,
-        totalReceived: receipt.amountDelivered.toLong()!,
+        totalReceived: receipt.amountDelivered.toString(),
       })
     )
 
@@ -1653,7 +1649,7 @@ describe('stream receipts', () => {
       destination,
       quote,
     })
-    expect(amountDelivered.value).toBe(BigInt(20))
+    expect(amountDelivered).toBe(BigInt(20))
     expect(streamReceipt).toEqual(
       createReceipt({
         nonce: receiptNonce,
@@ -1730,7 +1726,7 @@ describe('stream receipts', () => {
       destination,
       quote,
     })
-    expect(amountDelivered.isPositive())
+    expect(amountDelivered).toBeGreaterThan(0)
     expect(streamReceipt).toBeUndefined()
   })
 })

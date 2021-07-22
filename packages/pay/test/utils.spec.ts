@@ -51,7 +51,9 @@ describe('account urls', () => {
     expect(AccountUrl.fromUrl('https://somewebsite.co/')!.toPaymentPointer()).toBe(
       '$somewebsite.co'
     )
-    expect(AccountUrl.fromUrl('https://user.example?someId=123')!.toPaymentPointer()).toBeUndefined()
+    expect(
+      AccountUrl.fromUrl('https://user.example?someId=123')!.toPaymentPointer()
+    ).toBeUndefined()
     expect(AccountUrl.fromUrl('https://example.com/bob/#hash')!.toPaymentPointer()).toBeUndefined()
 
     expect(AccountUrl.fromPaymentPointer('$example.com/')!.toPaymentPointer()).toBe('$example.com')
@@ -117,9 +119,15 @@ describe('integer operations', () => {
   })
 
   it('Ratio#floor', () => {
-    expect(Ratio.from(2.999)!.floor()).toEqual(Int.TWO)
-    expect(Ratio.from(0)!.floor()).toEqual(Int.ZERO)
-    expect(Ratio.from(100.1)!.floor()).toEqual(Int.from(100)!)
+    expect(Ratio.from(2.999)!.floor()).toEqual(Int.TWO.value)
+    expect(Ratio.from(0)!.floor()).toEqual(Int.ZERO.value)
+    expect(Ratio.from(100.1)!.floor()).toEqual(Int.from(100)!.value)
+  })
+
+  it('Ratio#ceil', () => {
+    expect(Ratio.from(2.999)!.ceil()).toEqual(BigInt(3))
+    expect(Ratio.from(0)!.ceil()).toEqual(BigInt(0))
+    expect(Ratio.from(100.1)!.ceil()).toEqual(BigInt(101))
   })
 
   it('Ratio#reciprocal', () => {
