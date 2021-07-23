@@ -4,7 +4,7 @@ import { describe, expect, it, jest } from '@jest/globals'
 import { createApp } from 'ilp-connector'
 import { IlpError } from 'ilp-packet'
 import { Connection, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
-import { generatePskEncryptionKey, randomBytes } from 'ilp-protocol-stream/dist/src/crypto'
+import { randomBytes } from 'crypto'
 import {
   ConnectionAssetDetailsFrame,
   IlpPacketType,
@@ -14,7 +14,7 @@ import Long from 'long'
 import nock from 'nock'
 import { PaymentError, PaymentType, setupPayment, startQuote } from '../src'
 import { fetchPaymentDetails } from '../src/open-payments'
-import { Int } from '../src/utils'
+import { generateEncryptionKey, Int } from '../src/utils'
 import {
   createMaxPacketMiddleware,
   createPlugin,
@@ -589,7 +589,7 @@ describe('setup flow', () => {
 
   it('fails on asset detail conflicts', async () => {
     const sharedSecret = randomBytes(32)
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
+    const encryptionKey = generateEncryptionKey(sharedSecret)
 
     // Create simple STREAM receiver that acks test packets,
     // but replies with conflicting asset details

@@ -1,4 +1,4 @@
-import { randomBytes } from 'ilp-protocol-stream/dist/src/crypto'
+import { randomBytes } from 'crypto'
 import nock from 'nock'
 import {
   GenericContainer,

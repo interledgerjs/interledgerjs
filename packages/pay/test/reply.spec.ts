@@ -11,18 +11,13 @@ import {
   serializeIlpReject,
 } from 'ilp-packet'
 import {
-  generateFulfillment,
-  generateFulfillmentKey,
-  generatePskEncryptionKey,
-} from 'ilp-protocol-stream/dist/src/crypto'
-import {
   ConnectionDataBlockedFrame,
   ConnectionMaxStreamIdFrame,
   IlpPacketType,
   Packet,
 } from 'ilp-protocol-stream/dist/src/packet'
 import { generateKeys, StreamReject } from '../src/request'
-import { Int } from '../src/utils'
+import { generateEncryptionKey, generateFulfillmentKey, hmac, Int } from '../src/utils'
 
 const destinationAddress = 'private.bob' as IlpAddress
 const sharedSecret = randomBytes(32)
@@ -145,13 +140,13 @@ describe('validates replies', () => {
       ])
 
       return serializeIlpFulfill({
-        fulfillment: await generateFulfillment(fulfillmentKey, prepare.data),
+        fulfillment: hmac(fulfillmentKey, prepare.data),
         data: await streamReply.serializeAndEncrypt(encryptionKey),
       })
     }
 
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-    const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
+    const encryptionKey = generateEncryptionKey(sharedSecret)
+    const fulfillmentKey = generateFulfillmentKey(sharedSecret)
 
     const sendRequest = await generateKeys({ sendData }, sharedSecret)
 
@@ -183,13 +178,13 @@ describe('validates replies', () => {
       ])
 
       return serializeIlpFulfill({
-        fulfillment: await generateFulfillment(fulfillmentKey, prepare.data),
+        fulfillment: hmac(fulfillmentKey, prepare.data),
         data: await streamReply.serializeAndEncrypt(encryptionKey),
       })
     }
 
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-    const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
+    const encryptionKey = generateEncryptionKey(sharedSecret)
+    const fulfillmentKey = generateFulfillmentKey(sharedSecret)
 
     const sendRequest = await generateKeys({ sendData }, sharedSecret)
 

@@ -35,7 +35,7 @@ yarn add @interledger/pay
 > Fixed delivery amount payment
 
 ```js
-import { setupPayment, startQuote, pay } from '@interledger/pay'
+import { setupPayment, startQuote, pay, closeConnection } from '@interledger/pay'
 
 async function run() {
   let plugin /* Plugin instance */
@@ -78,7 +78,7 @@ async function run() {
 > Fixed source amount payment
 
 ```js
-import { setupPayment, startQuote, pay } from '@interledger/pay'
+import { setupPayment, startQuote, pay, closeConnection } from '@interledger/pay'
 
 async function run() {
   let plugin /* Plugin instance */

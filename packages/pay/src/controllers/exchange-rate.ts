@@ -42,6 +42,7 @@ export class ExchangeRateController implements StreamController {
         )
         this.upperBoundRate = packetUpperBoundRate
         this.lowerBoundRate = packetLowerBoundRate
+        return
       }
 
       if (packetLowerBoundRate.isGreaterThan(this.lowerBoundRate)) {

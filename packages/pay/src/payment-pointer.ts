@@ -104,10 +104,11 @@ export class AccountUrl {
 
   /**
    * Unique payment pointer for this SPSP or Open Payments account. Stripped trailing slash.
+   * Returns undefined when the protocol is not "https".
    * Returns undefined when there is a query string or fragment.
    */
   toPaymentPointer(): string | undefined {
-    if (this.suffix !== '') return undefined
+    if (this.protocol !== 'https:' || this.suffix !== '') return
     return '$' + this.hostname + (this.path ?? '')
   }
 }

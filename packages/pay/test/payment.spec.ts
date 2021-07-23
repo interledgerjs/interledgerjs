@@ -12,13 +12,7 @@ import {
   serializeIlpReply,
 } from 'ilp-packet'
 import { Connection, createReceipt, createServer, DataAndMoneyStream } from 'ilp-protocol-stream'
-import {
-  generateFulfillment,
-  generateFulfillmentKey,
-  generatePskEncryptionKey,
-  hash,
-  randomBytes,
-} from 'ilp-protocol-stream/dist/src/crypto'
+import { randomBytes } from 'crypto'
 import {
   ConnectionAssetDetailsFrame,
   IlpPacketType,
@@ -42,7 +36,7 @@ import { SendStateType } from '../src/controllers'
 import { Counter, SequenceController } from '../src/controllers/sequence'
 import { RequestBuilder } from '../src/request'
 import { PaymentSender } from '../src/senders/payment'
-import { sleep } from '../src/utils'
+import { generateEncryptionKey, generateFulfillmentKey, hmac, sha256, sleep } from '../src/utils'
 import {
   createBalanceTracker,
   createMaxPacketMiddleware,
@@ -808,16 +802,16 @@ describe('fixed delivery payments', () => {
     const destinationAddress = 'private.larry.receiver'
     const sharedSecret = randomBytes(32)
 
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-    const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
+    const encryptionKey = generateEncryptionKey(sharedSecret)
+    const fulfillmentKey = generateFulfillmentKey(sharedSecret)
 
     // STREAM "receiver" that fulfills packets
     let totalReceived = BigInt(0)
     receiverPlugin2.registerDataHandler(async (data) => {
       const prepare = deserializeIlpPrepare(data)
 
-      const fulfillment = await generateFulfillment(fulfillmentKey, prepare.data)
-      const isFulfillable = prepare.executionCondition.equals(await hash(fulfillment))
+      const fulfillment = hmac(fulfillmentKey, prepare.data)
+      const isFulfillable = prepare.executionCondition.equals(sha256(fulfillment))
 
       const streamPacket = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
 
@@ -1664,16 +1658,16 @@ describe('stream receipts', () => {
     const [senderPlugin, receiverPlugin] = MirrorPlugin.createPair()
 
     const sharedSecret = randomBytes(32)
-    const encryptionKey = await generatePskEncryptionKey(sharedSecret)
-    const fulfillmentKey = await generateFulfillmentKey(sharedSecret)
+    const encryptionKey = generateEncryptionKey(sharedSecret)
+    const fulfillmentKey = generateFulfillmentKey(sharedSecret)
 
     // Create simple STREAM receiver that acks test packets,
     // but replies with conflicting asset details
     receiverPlugin.registerDataHandler(async (requestData) => {
       const prepare = deserializeIlpPrepare(requestData)
 
-      const fulfillment = await generateFulfillment(fulfillmentKey, prepare.data)
-      const isFulfillable = prepare.executionCondition.equals(await hash(fulfillment))
+      const fulfillment = hmac(fulfillmentKey, prepare.data)
+      const isFulfillable = prepare.executionCondition.equals(sha256(fulfillment))
 
       const streamRequest = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
 
