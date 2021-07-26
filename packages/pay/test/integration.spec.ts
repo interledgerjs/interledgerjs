@@ -14,7 +14,7 @@ import { describe, it, expect, afterAll } from '@jest/globals'
 import { pay, ResolvedPayment, setupPayment, startQuote } from '../src'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
 
-describe.skip('interledger.rs integration', () => {
+describe('interledger.rs integration', () => {
   let network: StartedNetwork | undefined
   let redisContainer: StartedTestContainer | undefined
   let rustNodeContainer: StartedTestContainer | undefined
@@ -146,7 +146,7 @@ describe.skip('interledger.rs integration', () => {
   })
 })
 
-describe.skip('interledger4j integration', () => {
+describe('interledger4j integration', () => {
   let network: StartedNetwork | undefined
   let redisContainer: StartedTestContainer | undefined
   let connectorContainer: StartedTestContainer | undefined

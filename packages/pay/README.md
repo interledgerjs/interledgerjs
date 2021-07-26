@@ -54,7 +54,7 @@ async function run() {
     },
   })
   // {
-  //   maxSourceAmount: BigInt(1_950),
+  //   maxSourceAmount: 1_950n,
   //   lowEstimatedExchangeRate: 115,
   //   highEstimatedExchangeRate: 135,
   //   minExchangeRate: 110,
@@ -64,7 +64,7 @@ async function run() {
   const receipt = await pay({ plugin, destination, quote })
   console.log(receipt)
   // {
-  //    amountSent: BigInt(1_910),
+  //    amountSent: 1_910n,
   //    amountDelivered: BigInt(234_000),
   //    ...
   // }

@@ -69,19 +69,23 @@ export interface Quote {
   readonly paymentType: PaymentType
   /** Maximum amount that will be sent in source units */
   readonly maxSourceAmount: bigint
-  readonly _maxSourceAmount: PositiveInt
   /** Minimum amount that will be delivered if the payment fully completes */
   readonly minDeliveryAmount: bigint
-  readonly _minDeliveryAmount: Int
   /** Discovered maximum packet amount allowed over this payment path */
   readonly maxPacketAmount: bigint
-  readonly _maxPacketAmount: PositiveInt
   /** Lower bound of probed exchange rate over the path (inclusive). Ratio of destination base units to source base units */
   readonly lowEstimatedExchangeRate: Ratio
   /** Upper bound of probed exchange rate over the path (exclusive). Ratio of destination base units to source base units */
   readonly highEstimatedExchangeRate: PositiveRatio
   /** Minimum exchange rate used to enforce rates. Ratio of destination base units to source base units */
   readonly minExchangeRate: Ratio
+}
+
+/** Quote with stricter types, for internal library use */
+export type IntQuote = Omit<Quote, 'maxSourceAmount' | 'minDeliveryAmount' | 'maxPacketAmount'> & {
+  readonly maxSourceAmount: PositiveInt
+  readonly minDeliveryAmount: Int
+  readonly maxPacketAmount: PositiveInt
 }
 
 /** Options before immediately executing payment */
@@ -139,6 +143,8 @@ export enum PaymentError {
   InvalidDestinationAmount = 'InvalidDestinationAmount',
   /** Minimum exchange rate is 0 after subtracting slippage and cannot enforce a fixed-delivery payment */
   UnenforceableDelivery = 'UnenforceableDelivery',
+  /** Invalid quote parameters provided */
+  InvalidQuote = 'InvalidQuote',
 
   /**
    * Errors likely caused by the receiver, connectors, or other externalities
@@ -382,17 +388,29 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     highEstimatedExchangeRate,
     minExchangeRate,
     maxPacketAmount: maxPacketAmount.value,
-    _maxPacketAmount: maxPacketAmount,
     maxSourceAmount: maxSourceAmount.value,
-    _maxSourceAmount: maxSourceAmount,
     minDeliveryAmount: minDeliveryAmount.value,
-    _minDeliveryAmount: minDeliveryAmount,
   }
 }
 
 /** Send the payment: send a series of packets to attempt the payment within the completion criteria and limits of the provided quote. */
 export const pay = async (options: PayOptions): Promise<PaymentProgress> => {
-  const sender = new PaymentSender(options)
+  const maxSourceAmount = Int.from(options.quote.maxSourceAmount)
+  const minDeliveryAmount = Int.from(options.quote.minDeliveryAmount)
+  const maxPacketAmount = Int.from(options.quote.maxPacketAmount)
+  if (!maxSourceAmount || !maxSourceAmount.isPositive()) throw PaymentError.InvalidQuote
+  if (!minDeliveryAmount) throw PaymentError.InvalidQuote
+  if (!maxPacketAmount || !maxPacketAmount.isPositive()) throw PaymentError.InvalidQuote
+
+  const sender = new PaymentSender({
+    ...options,
+    quote: {
+      ...options.quote,
+      maxSourceAmount,
+      minDeliveryAmount,
+      maxPacketAmount,
+    },
+  })
   const error = await sender.start()
 
   return {

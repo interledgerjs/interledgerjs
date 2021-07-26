@@ -8,7 +8,7 @@ import {
 } from 'ilp-protocol-stream/dist/src/packet'
 import { MaxPacketAmountController } from '../controllers/max-packet'
 import { ExchangeRateController } from '../controllers/exchange-rate'
-import { PaymentError, PaymentProgress, PayOptions, Quote } from '..'
+import { IntQuote, PaymentError, PaymentProgress, PayOptions } from '..'
 import { RequestBuilder, StreamReply } from '../request'
 import { PacingController } from '../controllers/pacer'
 import { AssetDetailsController } from '../controllers/asset-details'
@@ -27,6 +27,8 @@ export enum PaymentType {
   /** Send to meet a minimum delivery amount, bounding the source amount and rates */
   FixedDelivery = 'FixedDelivery',
 }
+
+type PaymentSenderOptions = Omit<PayOptions, 'quote'> & { quote: IntQuote }
 
 /** Controller to track the payment status and compute amounts to send and deliver */
 export class PaymentSender extends StreamSender<PaymentProgress> {
@@ -57,7 +59,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
   }
 
   /** Payment execution and minimum rates */
-  private readonly quote: Quote
+  private readonly quote: IntQuote
 
   /** Callback to pass updates as packets are sent and received */
   private readonly progressHandler?: (status: PaymentProgress) => void
@@ -67,14 +69,14 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
   private readonly rateCalculator: ExchangeRateController
   private readonly maxPacketController: MaxPacketAmountController
 
-  constructor({ plugin, destination, quote, progressHandler }: PayOptions) {
+  constructor({ plugin, destination, quote, progressHandler }: PaymentSenderOptions) {
     super(plugin, destination)
     const { requestCounter } = destination
 
     this.quote = quote
     this.progressHandler = progressHandler
 
-    this.maxPacketController = new MaxPacketAmountController(quote._maxPacketAmount)
+    this.maxPacketController = new MaxPacketAmountController(this.quote.maxPacketAmount)
     this.rateCalculator = new ExchangeRateController(
       quote.lowEstimatedExchangeRate,
       quote.highEstimatedExchangeRate
@@ -99,7 +101,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
     const { log } = request
 
     // Ensure we never overpay the maximum source amount
-    const availableToSend = this.quote._maxSourceAmount
+    const availableToSend = this.quote.maxSourceAmount
       .saturatingSubtract(this.amountSent)
       .saturatingSubtract(this.sourceAmountInFlight)
     if (!availableToSend.isPositive()) {
@@ -116,7 +118,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
     // Apply fixed delivery limits
     if (this.quote.paymentType === PaymentType.FixedDelivery) {
-      const remainingToDeliver = this.quote._minDeliveryAmount
+      const remainingToDeliver = this.quote.minDeliveryAmount
         .saturatingSubtract(this.amountDelivered)
         .saturatingSubtract(this.destinationAmountInFlight)
       if (!remainingToDeliver.isPositive()) {
@@ -242,7 +244,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
       const paidFixedSend =
         this.quote.paymentType === PaymentType.FixedSend &&
-        this.amountSent.isEqualTo(this.quote._maxSourceAmount) // Amount in flight is always 0 if this is true
+        this.amountSent.isEqualTo(this.quote.maxSourceAmount) // Amount in flight is always 0 if this is true
       if (paidFixedSend) {
         log.debug('payment complete: paid fixed source amount.')
         return SendState.Done(this.getProgress())
@@ -250,7 +252,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
       const paidFixedDelivery =
         this.quote.paymentType === PaymentType.FixedDelivery &&
-        this.amountDelivered.isGreaterThanOrEqualTo(this.quote._minDeliveryAmount) &&
+        this.amountDelivered.isGreaterThanOrEqualTo(this.quote.minDeliveryAmount) &&
         !this.sourceAmountInFlight.isPositive()
       if (paidFixedDelivery) {
         log.debug('payment complete: paid fixed destination amount.')
@@ -259,7 +261,7 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
       this.remoteReceiveMax =
         this.updateReceiveMax(reply)?.orGreater(this.remoteReceiveMax) ?? this.remoteReceiveMax
-      if (this.remoteReceiveMax?.isLessThan(this.quote._minDeliveryAmount)) {
+      if (this.remoteReceiveMax?.isLessThan(this.quote.minDeliveryAmount)) {
         log.error(
           'ending payment: minimum delivery amount is too much for recipient. minDelivery=%s receiveMax=%s',
           this.quote.minDeliveryAmount,

@@ -1483,6 +1483,62 @@ describe('payment execution', () => {
     expect(amountSent).toBe(BigInt(amountToSend))
     expect(amountDelivered).toBe(BigInt(0))
   })
+
+  it('rejects invalid quotes', async () => {
+    const plugin = createPlugin(streamReceiver)
+    const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
+    const destination = await setupPayment({
+      destinationAddress,
+      sharedSecret,
+      plugin,
+      destinationAsset: {
+        code: 'USD',
+        scale: 5,
+      },
+    })
+    const quote = {
+      paymentType: PaymentType.FixedSend,
+      maxSourceAmount: BigInt(123),
+      minDeliveryAmount: BigInt(123),
+      maxPacketAmount: BigInt(123),
+      lowEstimatedExchangeRate: Ratio.of(Int.ZERO, Int.ONE),
+      highEstimatedExchangeRate: Ratio.of(Int.ONE, Int.ONE),
+      minExchangeRate: Ratio.of(Int.ZERO, Int.ONE),
+    }
+
+    await expect(
+      pay({
+        plugin,
+        destination,
+        quote: {
+          ...quote,
+          maxSourceAmount: BigInt(0),
+        },
+      })
+    ).rejects.toBe(PaymentError.InvalidQuote)
+
+    await expect(
+      pay({
+        plugin,
+        destination,
+        quote: {
+          ...quote,
+          minDeliveryAmount: BigInt(-1),
+        },
+      })
+    ).rejects.toBe(PaymentError.InvalidQuote)
+
+    await expect(
+      pay({
+        plugin,
+        destination,
+        quote: {
+          ...quote,
+          maxPacketAmount: BigInt(0),
+        },
+      })
+    ).rejects.toBe(PaymentError.InvalidQuote)
+  })
 })
 
 describe('stream receipts', () => {
