@@ -1,7 +1,7 @@
 {
   "name": "@interledger/pay",
   "description": "Send payments over Interledger",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "publishConfig": {
@@ -30,7 +30,7 @@
     "node-fetch": "2.6.1"
   },
   "devDependencies": {
-    "@interledger/stream-receiver": "^0.2.2",
+    "@interledger/stream-receiver": "^0.3.0",
     "@types/long": "^4.0.1",
     "@types/node-fetch": "^2.5.7",
     "get-port": "^5.1.1",

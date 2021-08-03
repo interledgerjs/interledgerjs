@@ -1,7 +1,7 @@
 {
   "name": "@interledger/stream-receiver",
   "description": "Simple & composable stateless Interledger STREAM receiver",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "publishConfig": {
