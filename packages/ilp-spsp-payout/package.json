@@ -22,7 +22,7 @@
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_spsp_payout"
   },
   "dependencies": {
-    "axios": "^0.19.0",
+    "axios": "^0.21.1",
     "ilp-plugin": "^3.5.3",
     "ilp-protocol-stream": "^2.6.4"
   }
