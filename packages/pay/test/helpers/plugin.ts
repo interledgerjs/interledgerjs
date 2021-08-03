@@ -1,56 +1,154 @@
-import { DataHandler, MoneyHandler, PluginInstance } from 'ilp-connector/dist/types/plugin'
+/* eslint-disable @typescript-eslint/no-non-null-assertion, @typescript-eslint/no-empty-function */
+import { DataHandler, PluginInstance } from 'ilp-connector/dist/types/plugin'
 import { EventEmitter } from 'events'
+import { Int, Ratio, sleep } from '../../src/utils'
+import {
+  deserializeIlpPrepare,
+  IlpError,
+  IlpPrepare,
+  IlpReply,
+  isFulfill,
+  isIlpReply,
+  serializeIlpReply,
+} from 'ilp-packet'
+import { Writer } from 'oer-utils'
+import { StreamServer } from '@interledger/stream-receiver'
+import { AssetDetails } from '../../src'
 import { Plugin } from 'ilp-protocol-stream/dist/src/util/plugin-interface'
-import { sleep } from '../../src/utils'
 
-// TODO Normal distribution
-//      Cite this: https://stackoverflow.com/questions/25582882/javascript-math-random-normal-distribution-gaussian-bell-curve
-const getRandomFloat = (min: number, max: number): number => {
-  let u = 0
-  let v = 0
-  while (u === 0) u = Math.random() // Converting [0,1) to (0,1)
-  while (v === 0) v = Math.random()
-  let num = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v)
-  num = num / 10 + 0.5 // Translate to 0 -> 1
-  if (num > 1 || num < 0) return getRandomFloat(min, max) // resample between 0 and 1
-  num *= max - min
-  num += min
-  return num
+export type Middleware = (prepare: IlpPrepare, next: SendPrepare) => Promise<IlpReply>
+
+type SendPrepare = (prepare: IlpPrepare) => Promise<IlpReply>
+
+export const createPlugin = (...middlewares: Middleware[]): Plugin => {
+  const send = middlewares.reduceRight<SendPrepare>(
+    (next, middleware) => (prepare: IlpPrepare) => middleware(prepare, next),
+    () => Promise.reject()
+  )
+
+  return {
+    async connect() {},
+    async disconnect() {},
+    isConnected() {
+      return true
+    },
+    registerDataHandler() {},
+    deregisterDataHandler() {},
+    async sendData(data: Buffer): Promise<Buffer> {
+      const prepare = deserializeIlpPrepare(data)
+      const reply = await send(prepare)
+      return serializeIlpReply(reply)
+    },
+  }
 }
+
+export const createMaxPacketMiddleware = (amount: Int): Middleware => async (prepare, next) => {
+  if (Int.from(prepare.amount)!.isLessThanOrEqualTo(amount)) {
+    return next(prepare)
+  }
+
+  const writer = new Writer(16)
+  writer.writeUInt64(prepare.amount) // Amount received
+  writer.writeUInt64(amount.toLong()!) // Maximum
+
+  return {
+    code: IlpError.F08_AMOUNT_TOO_LARGE,
+    message: '',
+    triggeredBy: '',
+    data: writer.getBuffer(),
+  }
+}
+
+export class RateBackend {
+  constructor(
+    private incomingAsset: AssetDetails,
+    private outgoingAsset: AssetDetails,
+    private prices: { [assetCode: string]: number },
+    private spread = 0
+  ) {}
+
+  setSpread(spread: number): void {
+    this.spread = spread
+  }
+
+  getRate(): number {
+    const sourcePrice = this.prices[this.incomingAsset.code] ?? 1
+    const destPrice = this.prices[this.outgoingAsset.code] ?? 1
+
+    // prettier-ignore
+    return (sourcePrice / destPrice) *
+      10 ** (this.outgoingAsset.scale - this.incomingAsset.scale) *
+      (1 - this.spread)
+  }
+}
+
+export const createRateMiddleware = (converter: RateBackend): Middleware => async (
+  prepare,
+  next
+) => {
+  const rate = Ratio.from(converter.getRate())!
+  const amount = Int.from(prepare.amount)!.multiplyFloor(rate).toString()
+  return next({
+    ...prepare,
+    amount,
+  })
+}
+
+export const createSlippageMiddleware = (spread: number): Middleware => async (prepare, next) =>
+  next({
+    ...prepare,
+    amount: Int.from(prepare.amount)!
+      .multiplyFloor(Ratio.from(1 - spread)!)
+      .toString(),
+  })
+
+export const createStreamReceiver = (server: StreamServer): Middleware => async (prepare) => {
+  const moneyOrReply = server.createReply(prepare)
+  return isIlpReply(moneyOrReply) ? moneyOrReply : moneyOrReply.accept()
+}
+
+export const createLatencyMiddleware = (min: number, max: number): Middleware => async (
+  prepare,
+  next
+) => {
+  await sleep(getRandomFloat(min, max))
+  const reply = await next(prepare)
+  await sleep(getRandomFloat(min, max))
+  return reply
+}
+
+export const createBalanceTracker = (): { totalReceived: () => Int; middleware: Middleware } => {
+  let totalReceived = Int.ZERO
+  return {
+    totalReceived: () => totalReceived,
+    middleware: async (prepare, next) => {
+      const reply = await next(prepare)
+      if (isFulfill(reply)) {
+        totalReceived = totalReceived.add(Int.from(prepare.amount)!)
+      }
+      return reply
+    },
+  }
+}
+
+const getRandomFloat = (min: number, max: number) => Math.random() * (max - min) + min
 
 const defaultDataHandler = async (): Promise<never> => {
   throw new Error('No data handler registered')
 }
 
-const defaultMoneyHandler = (): Promise<never> => {
-  throw new Error('No money handler registered')
-}
-
 export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance {
-  private connected = false
-
   public mirror?: MirrorPlugin
 
   public dataHandler: DataHandler = defaultDataHandler
-  public moneyHandler: MoneyHandler = defaultMoneyHandler
 
   private readonly minNetworkLatency: number
   private readonly maxNetworkLatency: number
 
-  private readonly minSettlementLatency: number
-  private readonly maxSettlementLatency: number
-
-  constructor(
-    minNetworkLatency = 10,
-    maxNetworkLatency = 50,
-    minSettlementLatency = 3000,
-    maxSettlementLatency = 6000
-  ) {
+  constructor(minNetworkLatency = 10, maxNetworkLatency = 50) {
     super()
     this.minNetworkLatency = minNetworkLatency
     this.maxNetworkLatency = maxNetworkLatency
-    this.minSettlementLatency = minSettlementLatency
-    this.maxSettlementLatency = maxSettlementLatency
   }
 
   static createPair(
@@ -66,20 +164,16 @@ export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance
     return [pluginA, pluginB]
   }
 
-  async connect(): Promise<void> {
-    this.connected = true
-  }
+  async connect(): Promise<void> {}
 
-  async disconnect(): Promise<void> {
-    this.connected = false
-  }
+  async disconnect(): Promise<void> {}
 
   isConnected(): boolean {
-    return this.connected
+    return true
   }
 
   async sendData(data: Buffer): Promise<Buffer> {
-    if (this.mirror && this.connected) {
+    if (this.mirror) {
       await this.addNetworkDelay()
       const response = await this.mirror.dataHandler(data)
       await this.addNetworkDelay()
@@ -97,28 +191,13 @@ export class MirrorPlugin extends EventEmitter implements Plugin, PluginInstance
     this.dataHandler = defaultDataHandler
   }
 
-  async sendMoney(amount: string): Promise<void> {
-    if (this.mirror && this.connected) {
-      await this.addSettlementDelay()
-      await this.mirror.moneyHandler(amount)
-    } else {
-      throw new Error('Not connected')
-    }
-  }
+  async sendMoney(): Promise<void> {}
 
-  registerMoneyHandler(handler: MoneyHandler): void {
-    this.moneyHandler = handler
-  }
+  registerMoneyHandler(): void {}
 
-  deregisterMoneyHandler(): void {
-    this.moneyHandler = defaultMoneyHandler
-  }
+  deregisterMoneyHandler(): void {}
 
   private async addNetworkDelay() {
     await sleep(getRandomFloat(this.minNetworkLatency, this.maxNetworkLatency))
-  }
-
-  private async addSettlementDelay() {
-    await sleep(getRandomFloat(this.minSettlementLatency, this.maxSettlementLatency))
   }
 }

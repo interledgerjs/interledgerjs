@@ -1,11 +1,9 @@
 module.exports = {
   collectCoverageFrom: [
     'src/**/*.ts',
-    '!**/node_modules/**',
-    // Exclude unused functionality
-    '!src/rates/ecb.ts',
-    '!src/controllers/liquidity-congestion.ts'
+    '!**/node_modules/**'
   ],
+  coverageReporters: ['text', 'lcov'],
   coverageDirectory: 'coverage',
   preset: 'ts-jest',
   testEnvironment: 'node',
