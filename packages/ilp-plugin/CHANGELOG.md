@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.5.4](https://github.com/interledgerjs/interledgerjs/compare/ilp-plugin@3.5.3...ilp-plugin@3.5.4) (2021-10-07)
+
+**Note:** Version bump only for package ilp-plugin
+
+
+
+
+
 ## [3.5.3](https://github.com/interledgerjs/interledgerjs/compare/ilp-plugin@3.5.2...ilp-plugin@3.5.3) (2021-02-04)
 
 

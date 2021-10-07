@@ -1,6 +1,6 @@
 {
   "name": "ilp-logger",
-  "version": "1.4.2",
+  "version": "1.4.4",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "description": "Logging utility for Interledger modules",

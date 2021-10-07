@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.4.4](https://github.com/interledgerjs/interledgerjs/compare/ilp-logger@1.4.2...ilp-logger@1.4.4) (2021-10-07)
+
+**Note:** Version bump only for package ilp-logger
+
+
+
+
+
 ## [1.4.2](https://github.com/interledgerjs/interledgerjs/compare/ilp-logger@1.4.1...ilp-logger@1.4.2) (2020-07-27)
 
 **Note:** Version bump only for package ilp-logger
