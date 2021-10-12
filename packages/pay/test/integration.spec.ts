@@ -25,7 +25,7 @@ describe('interledger.rs integration', () => {
 
     // Setup Redis
     redisContainer = await new GenericContainer('redis')
-      .withName('redis')
+      .withName('redis_rs')
       .withNetworkMode(network.getName())
       .start()
 
@@ -34,7 +34,7 @@ describe('interledger.rs integration', () => {
     rustNodeContainer = await new GenericContainer('interledgerrs/ilp-node:latest')
       .withEnv('ILP_SECRET_SEED', randomBytes(32).toString('hex'))
       .withEnv('ILP_ADMIN_AUTH_TOKEN', adminAuthToken)
-      .withEnv('ILP_DATABASE_URL', `redis://redis:6379`)
+      .withEnv('ILP_DATABASE_URL', `redis://redis_rs:6379`)
       .withEnv('ILP_ILP_ADDRESS', 'g.corp')
       .withEnv('ILP_HTTP_BIND_ADDRESS', '0.0.0.0:7770')
       .withName('connector')
@@ -157,14 +157,14 @@ describe('interledger4j integration', () => {
 
     // Setup Redis
     redisContainer = await new GenericContainer('redis')
-      .withName('redis')
+      .withName('redis_4j')
       .withNetworkMode(network.getName())
       .start()
 
     // Setup the Java connector
     const adminPassword = 'admin'
     connectorContainer = await new GenericContainer('interledger4j/java-ilpv4-connector:0.5.1')
-      .withEnv('redis.host', 'redis') // Hostname of Redis container
+      .withEnv('redis.host', 'redis_4j') // Hostname of Redis container
       .withEnv('interledger.connector.adminPassword', adminPassword)
       .withEnv('interledger.connector.spsp.serverSecret', randomBytes(32).toString('base64'))
       .withEnv('interledger.connector.enabledFeatures.localSpspFulfillmentEnabled', 'true')
