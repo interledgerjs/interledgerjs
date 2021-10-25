@@ -45,6 +45,36 @@ describe('Parser', function () {
         })
       }
     })
+
+    describe('handles invalid packets', function () {
+      it('throws an error on the wrong packet type', function () {
+        assert.throws(() => {
+          Parser.deserializeIlpPrepare(
+            Parser.serializeIlpFulfill({
+              fulfillment: Buffer.from('w4ZrSHSczxE7LhXCXSQH+/wUR2/nKWuxvxvNnm5BZlA=', 'base64'),
+              data: Buffer.from('Zz/r14ozso4cDbFMmgYlGgX6gx7U7ZHrzRUOcknC5gA=', 'base64'),
+            })
+          )
+        }, 'Packet has incorrect type')
+      })
+
+      it('throws an error on an invalid destination address', function () {
+        assert.throws(() => {
+          Parser.deserializeIlpPrepare(
+            Parser.serializeIlpPrepare({
+              amount: '107',
+              executionCondition: Buffer.from(
+                'dOETbcccnl8oO+yDRhy/EmHEAU9y1I+N1lRToLhOfeE=',
+                'base64'
+              ),
+              expiresAt: new Date('2017-12-23T01:21:40.549Z'),
+              destination: 'example.alice!',
+              data: Buffer.alloc(0),
+            })
+          )
+        }, 'Packet has invalid destination address')
+      })
+    })
   })
 
   describe('serializeIlpFulfill', function () {
@@ -168,6 +198,66 @@ describe('Parser', function () {
       testPackets('ilp_fulfill', Parser.Type.TYPE_ILP_FULFILL)
       testPackets('ilp_prepare', Parser.Type.TYPE_ILP_PREPARE)
       testPackets('ilp_reject', Parser.Type.TYPE_ILP_REJECT)
+    })
+  })
+
+  describe('isValidIlpAddress', function () {
+    const validIlpAddresses = [
+      'test.alice.XYZ.1234.-_~',
+      'g.us-fed.ach.0.acmebank.swx0a0.acmecorp.sales.199.~ipr.cdfa5e16-e759-4ba3-88f6-8b9dc83c1868.2',
+      // Valid schemes
+      'g.A',
+      'private.A',
+      'example.A',
+      'peer.A',
+      'self.A',
+      'test.A',
+      'test1.A',
+      'test2.A',
+      'test3.A',
+      'local.A',
+    ]
+
+    const invalidIlpAddresses = [
+      '', // empty
+      // Invalid characters.
+      'test.alice 123',
+      'test.alice!123',
+      'test.alice/123',
+      'test.alic\xF0',
+      // Bad schemes.
+      'test', // only a scheme
+      'what.alice', // invalid scheme
+      'test4.alice', // invalid scheme
+      // Invalid separators.
+      'test.', // only a prefix
+      'test.alice.', // ends in a separator
+      '.test.alice', // begins with a separator
+      'test..alice', // double separator
+    ]
+
+    validIlpAddresses.forEach(function (address) {
+      it('validates "' + address + '"', function () {
+        assert.strictEqual(Parser.isValidIlpAddress(address), true)
+      })
+    })
+
+    invalidIlpAddresses.forEach(function (address) {
+      it('invalidates "' + address + '"', function () {
+        assert.strictEqual(Parser.isValidIlpAddress(address), false)
+      })
+    })
+
+    it('validates a very-long address', function () {
+      let address = 'g.'
+      while (address.length < 1023) address += 'x'
+      assert.strictEqual(Parser.isValidIlpAddress(address), true)
+    })
+
+    it('invalidates a too-long address', function () {
+      let address = 'g.'
+      while (address.length < 1024) address += 'x'
+      assert.strictEqual(Parser.isValidIlpAddress(address), false)
     })
   })
 })
