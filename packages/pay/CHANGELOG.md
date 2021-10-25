@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.3.2](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.3.1...@interledger/pay@0.3.2) (2021-10-25)
+
+
+### Bug Fixes
+
+* **pay:** fix flaky test ([8e218c0](https://github.com/interledgerjs/interledgerjs/commit/8e218c034aa763700391995fcfbc50f47c01ff97))
+
+
+
+
+
 ## [0.3.1](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.3.0...@interledger/pay@0.3.1) (2021-10-07)
 
 **Note:** Version bump only for package @interledger/pay

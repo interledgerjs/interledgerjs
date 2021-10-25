@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.1.3](https://github.com/interledgerjs/interledgerjs/compare/ilp-packet@3.1.2...ilp-packet@3.1.3) (2021-10-25)
+
+
+### Bug Fixes
+
+* **ilp-packet:** test address on decoding prepare ([5d3ace2](https://github.com/interledgerjs/interledgerjs/commit/5d3ace240e4c24eda4bd16855af15ec09b4d437c))
+
+
+
+
+
 ## [3.1.2](https://github.com/interledgerjs/interledgerjs/compare/ilp-packet@3.1.1...ilp-packet@3.1.2) (2020-07-27)
 
 **Note:** Version bump only for package ilp-packet
