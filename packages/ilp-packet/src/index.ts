@@ -172,6 +172,9 @@ export const deserializeIlpPrepare = (binary: Buffer): IlpPrepare => {
   const expiresAt = interledgerTimeToDate(reader.read(INTERLEDGER_TIME_LENGTH).toString('ascii'))
   const executionCondition = reader.read(32)
   const destination = reader.readVarOctetString().toString('ascii')
+  if (!isValidIlpAddress(destination)) {
+    throw new Error('Packet has invalid destination address')
+  }
   const data = reader.readVarOctetString()
 
   return {
