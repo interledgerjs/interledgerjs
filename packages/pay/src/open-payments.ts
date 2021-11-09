@@ -244,14 +244,8 @@ const validateOpenPaymentsInvoice = (o: any, queryUrl: string): Invoice | undefi
   }
 
   const accountUrl = AccountUrl.fromUrl(account)
-  // The base url has no query string, fragment, or trailing slash
-  const invoiceBaseUrl = accountUrl && accountUrl.toBaseUrl() + '/invoices' // Safe to append directly
 
-  if (
-    !accountUrl ||
-    !invoiceBaseUrl ||
-    !queryUrl.startsWith(invoiceBaseUrl) // Validates invoice is a subresource of this OP account
-  ) {
+  if (!accountUrl) {
     return
   }
 
