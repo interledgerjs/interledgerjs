@@ -161,12 +161,12 @@ describe('open payments', () => {
     const invoiceId = uuid()
 
     const accountUrl = 'https://wallet.example/alice'
-    const invoiceUrl = `${accountUrl}/invoices/${invoiceId}`
+    const invoiceUrl = `https://wallet.example/invoices/${invoiceId}`
     const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
     const description = 'Coffee'
 
     const scope = nock('https://wallet.example')
-      .get(`/alice/invoices/${invoiceId}`)
+      .get(`/invoices/${invoiceId}`)
       .matchHeader('Accept', 'application/ilp-stream+json')
       .reply(200, {
         id: invoiceUrl,
@@ -198,45 +198,6 @@ describe('open payments', () => {
       },
     })
     scope.done()
-  })
-
-  it('fails on invoice account mismatch', async () => {
-    const accountUrl = 'https://wallet.example/alice'
-    const invoiceUrl = `${accountUrl}/invoices/foo`
-
-    const invoice = {
-      id: invoiceUrl,
-      amount: '100',
-      received: '0',
-      assetCode: 'USD',
-      assetScale: 4,
-      expiresAt: new Date(Date.now() + 600000000).toISOString(),
-      description: 'Coffee',
-      ilpAddress: 'g.wallet.users.alice.~w6247823482374234',
-      sharedSecret: randomBytes(32).toString('base64'),
-    }
-
-    const scope1 = nock('https://wallet.example')
-      .get('/alice/invoices/foo')
-      .matchHeader('Accept', 'application/ilp-stream+json')
-      .reply(200, {
-        ...invoice,
-        // Base URL is for a different account!
-        account: 'https://wallet.example/bob',
-      })
-    await expect(fetchPaymentDetails({ invoiceUrl })).resolves.toBe(PaymentError.QueryFailed)
-    scope1.done()
-
-    const scope2 = nock('https://wallet.example')
-      .get('/alice/invoices/foo')
-      .matchHeader('Accept', 'application/ilp-stream+json')
-      .reply(200, {
-        ...invoice,
-        // Base URL is an invalid accountURL/not HTTPS
-        account: 'http://foo.bar',
-      })
-    await expect(fetchPaymentDetails({ invoiceUrl })).resolves.toBe(PaymentError.QueryFailed)
-    scope2.done()
   })
 
   it('fails if invoice amounts are not positive and u64', async () => {
