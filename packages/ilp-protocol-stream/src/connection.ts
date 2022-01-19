@@ -1369,14 +1369,17 @@ export class Connection extends EventEmitter {
     }
 
     /* tslint:disable-next-line:no-unnecessary-type-assertion */
-    const responseData = await (new Promise(async (resolve, reject) => {
+    const responseData = await (new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.log.error('test packet %s timed out before we got a response', requestPacket.sequence)
         resolve(null)
       }, timeout)
-      const result = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
-      clearTimeout(timer)
-      resolve(result)
+      this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
+        .then((result) => {
+          clearTimeout(timer)
+          resolve(result)
+        })
+        .catch(reject)
     }) as Promise<Buffer | null>)
 
     if (!responseData) {
