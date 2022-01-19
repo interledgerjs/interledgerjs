@@ -379,7 +379,11 @@ export class Connection extends EventEmitter {
   }
 
   /**
-   * Immediately close the connection and all streams
+   * Immediately close the connection and all streams.
+   *
+   * This function must *never* return a rejection, since `startSendLoop` is run
+   * as a floating promise and returns `destroy()` on errors, so the rejection
+   * would be unhandled.
    */
   // TODO should this be sync or async?
   async destroy (err?: Error): Promise<void> {
@@ -780,7 +784,10 @@ export class Connection extends EventEmitter {
           if (frame.errorCode === ErrorCode.NoError) {
             this.log.info('remote closed connection')
             /* tslint:disable-next-line:no-floating-promises */
-            this.end()
+            this.end().catch((err) => {
+              this.log.warn('close failed with error=%s', err)
+              return this.destroy()
+            })
           } else {
             this.log.error('remote connection error. code: %s, message: %s', ErrorCode[frame.errorCode], frame.errorMessage)
             /* tslint:disable-next-line:no-floating-promises */
