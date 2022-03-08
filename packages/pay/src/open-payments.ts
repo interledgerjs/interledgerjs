@@ -9,13 +9,13 @@ import AbortController from 'abort-controller'
 import { AccountUrl, createHttpUrl } from './payment-pointer'
 
 const SHARED_SECRET_BYTE_LENGTH = 32
-const INVOICE_QUERY_ACCEPT_HEADER = 'application/ilp-stream+json'
+const INCOMING_PAYMENT_QUERY_ACCEPT_HEADER = 'application/json'
 const ACCOUNT_QUERY_ACCEPT_HEADER = 'application/ilp-stream+json, application/spsp4+json'
 
 const log = createLogger('ilp-pay:query')
 
 /**
- * Destination details of the payment, such the asset, invoice, and STREAM credentials to
+ * Destination details of the payment, such the asset, incoming payment, and STREAM credentials to
  * establish an authenticated connection with the receiver
  */
 export interface PaymentDestination {
@@ -25,8 +25,8 @@ export interface PaymentDestination {
   destinationAddress: IlpAddress
   /** Asset and denomination of the receiver's Interledger account */
   destinationAsset?: AssetDetails
-  /** Open Payments invoice metadata, if the payment pays into an invoice */
-  invoice?: Invoice
+  /** Open Payments v2 incoming payment metadata, if the payment pays into an incoming payment */
+  incomingPayment?: IncomingPayment
   /**
    * URL of the recipient Open Payments/SPSP account (with well-known path, and stripped trailing slash).
    * Each payment pointer and its corresponding account URL identifies a unique payment recipient.
@@ -41,32 +41,58 @@ export interface PaymentDestination {
   paymentPointer?: string
 }
 
-/** [Open Payments invoice](https://docs.openpayments.dev/invoices) metadata */
-export interface Invoice {
-  /** URL identifying the invoice */
-  invoiceUrl: string
-  /** URL identifying the account into which payments toward the invoice will be credited */
+/** [Open Payments v2 incoming payment](https://docs.openpayments.guide) metadata */
+export interface IncomingPayment {
+  /** URL identifying the incoming payment */
+  incomingPaymentUrl: string
+  /** URL identifying the account into which payments toward the incoming payment will be credited */
   accountUrl: string
-  /** UNIX timestamp in milliseconds when payments toward the invoice will no longer be accepted */
+  /** State of the incoming payment */
+  state: IncomingPaymentState
+  /** UNIX timestamp in milliseconds when payments toward the incoming payment will no longer be accepted */
   expiresAt: number
-  /** Human-readable description of the invoice */
+  /** Human-readable description of the incoming payment */
   description: string
-  /** Fixed destination amount that must be delivered to complete payment of the invoice, in base units. ≥0 */
+  /** Human-readable external reference of the incoming payment */
+  externalRef: string
+  /** Fixed destination amount that must be delivered to complete payment of the incoming payment, in base units. ≥0 */
   amountToDeliver: bigint
-  /** Amount that has already been paid toward the invoice, in base units. >0 */
+  /** Amount that has already been paid toward the incoming payment, in base units. >0 */
   amountDelivered: bigint
   /** Asset and denomination of recipient account */
   asset: AssetDetails
+  /** Flag whether STREAM receipts should be enabled */
+  receiptsEnabled: boolean
+}
+
+export enum IncomingPaymentState {
+  // The payment has a state of `PENDING` when it is initially created.
+  Pending = 'PENDING',
+  // As soon as payment has started (funds have cleared into the account) the state moves to `PROCESSING`.
+  Processing = 'PROCESSING',
+  // The payment is either auto-competed once the received amount equals the expected amount `amount`,
+  // or it is completed manually via an API call.
+  Completed = 'COMPLETED',
+  // If the payment expires before it is completed then the state will move to `EXPIRED`
+  // and no further payments will be accepted.
+  Expired = 'EXPIRED',
 }
 
 /** Validate and resolve the details provided by recipient to execute the payment */
 export const fetchPaymentDetails = async (
   options: Partial<SetupOptions>
 ): Promise<PaymentDestination | PaymentError> => {
-  const { invoiceUrl, paymentPointer, sharedSecret, destinationAddress, destinationAsset } = options
-  // Resolve invoice and STREAM credentials
-  if (invoiceUrl) {
-    return queryInvoice(invoiceUrl)
+  const {
+    incomingPaymentUrl,
+    paymentPointer,
+    sharedSecret,
+    destinationAddress,
+    destinationAsset,
+  } = options
+
+  // Resolve incoming payment and STREAM credentials
+  if (incomingPaymentUrl) {
+    return queryIncomingPayment(incomingPaymentUrl)
   }
   // Resolve STREAM credentials from a payment pointer or account URL via Open Payments or SPSP
   else if (paymentPointer) {
@@ -79,7 +105,7 @@ export const fetchPaymentDetails = async (
     (!destinationAsset || isValidAssetDetails(destinationAsset))
   ) {
     log.warn(
-      'using custom STREAM credentials. invoice or payment pointer is recommended to setup a STREAM payment'
+      'using custom STREAM credentials. incoming payment or payment pointer is recommended to setup a STREAM payment'
     )
     return {
       sharedSecret,
@@ -89,33 +115,35 @@ export const fetchPaymentDetails = async (
   }
   // No STREAM credentials or method to resolve them
   else {
-    log.debug('invalid config: no invoice, payment pointer, or stream credentials provided')
+    log.debug(
+      'invalid config: no incoming payment, incoming payment, payment pointer, or stream credentials provided'
+    )
     return PaymentError.InvalidCredentials
   }
 }
 
-/** Fetch an invoice and STREAM credentials from an Open Payments */
-const queryInvoice = async (invoiceUrl: string): Promise<PaymentDestination | PaymentError> => {
-  if (!createHttpUrl(invoiceUrl)) {
-    log.debug('invoice query failed: invoice URL not HTTP/HTTPS.')
+/** Fetch an incoming payment and STREAM credentials from an Open Payments */
+const queryIncomingPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
+  if (!createHttpUrl(url)) {
+    log.debug('incoming payment query failed: URL not HTTP/HTTPS.')
     return PaymentError.QueryFailed
   }
 
-  return fetchJson(invoiceUrl, INVOICE_QUERY_ACCEPT_HEADER)
+  return fetchJson(url, INCOMING_PAYMENT_QUERY_ACCEPT_HEADER)
     .then(async (data) => {
-      const invoice = validateOpenPaymentsInvoice(data, invoiceUrl)
       const credentials = validateOpenPaymentsCredentials(data)
-      if (invoice && credentials) {
+      const incomingPayment = validateOpenPaymentsIncomingPayment(data, url)
+
+      if (incomingPayment && credentials) {
         return {
-          accountUrl: invoice.accountUrl,
-          invoice,
+          accountUrl: incomingPayment.accountUrl,
+          incomingPayment,
           ...credentials,
         }
       }
-
-      log.debug('invoice query returned an invalid response.')
+      log.debug('incoming payment query returned an invalid response.')
     })
-    .catch((err) => log.debug('invoice query failed.', err?.message))
+    .catch((err) => log.debug('incoming payment query failed.', err?.message))
     .then((res) => res || PaymentError.QueryFailed)
 }
 
@@ -219,46 +247,64 @@ const validateUInt64 = (o: any): Int | undefined => {
 
 const isNonNullObject = (o: any): o is Record<string, any> => typeof o === 'object' && o !== null
 
-/** Transform the Open Payments server reponse into a validated invoice */
-const validateOpenPaymentsInvoice = (o: any, queryUrl: string): Invoice | undefined => {
+/** Transform the Open Payments server reponse into a validated incoming payment */
+const validateOpenPaymentsIncomingPayment = (
+  o: any,
+  queryUrl: string
+): IncomingPayment | undefined => {
   if (!isNonNullObject(o)) {
     return
   }
 
-  const { expiresAt: expiresAtIso, account, description, amount, received } = o
+  const {
+    accountId,
+    state,
+    incomingAmount,
+    receivedAmount,
+    expiresAt: expiresAtIso,
+    description,
+    externalRef,
+    receiptsEnabled,
+  } = o
   const expiresAt = Date.parse(expiresAtIso) // `NaN` if date is invalid
-  const amountToDeliver = validateUInt64(amount)
-  const amountDelivered = validateUInt64(received)
-  const asset = validateOpenPaymentsAsset(o)
+  const amountToDeliver = validateUInt64(incomingAmount.amount)
+  const amountDelivered = validateUInt64(receivedAmount.amount)
+  const assetToDeliver = validateOpenPaymentsAsset(incomingAmount)
+  const assetDelivered = validateOpenPaymentsAsset(receivedAmount)
 
   if (
-    typeof account !== 'string' ||
+    typeof accountId !== 'string' ||
     typeof description !== 'string' ||
+    typeof externalRef !== 'string' ||
+    typeof receiptsEnabled !== 'boolean' ||
     !isNonNegativeRational(expiresAt) ||
     !amountToDeliver ||
     !amountToDeliver.isPositive() ||
     !amountDelivered ||
-    !asset
+    !assetToDeliver ||
+    !assetDelivered
   ) {
     return
   }
 
-  const accountUrl = AccountUrl.fromUrl(account)
+  const accountUrl = AccountUrl.fromUrl(accountId)
+  if (!accountUrl) return
 
-  if (!accountUrl) {
-    return
-  }
+  if (state! in IncomingPaymentState) return
 
-  // TODO Should the given invoice URL be validated against the `id` URL in the invoice itself?
+  // TODO Should the given incoming payment URL be validated against the `id` URL in the incoming payment itself?
 
   return {
-    invoiceUrl: queryUrl,
+    incomingPaymentUrl: queryUrl,
     accountUrl: accountUrl.toEndpointUrl(),
+    state,
     expiresAt,
     description,
+    externalRef,
     amountDelivered: amountDelivered.value,
     amountToDeliver: amountToDeliver.value,
-    asset,
+    asset: assetToDeliver,
+    receiptsEnabled,
   }
 }
 
@@ -268,9 +314,10 @@ const validateOpenPaymentsCredentials = (o: any): PaymentDestination | undefined
     return
   }
 
-  const { sharedSecret: sharedSecretBase64, ilpAddress: destinationAddress } = o
+  const { sharedSecret: sharedSecretBase64, ilpAddress: destinationAddress, incomingAmount } = o
+  if (!incomingAmount) return
   const sharedSecret = validateSharedSecretBase64(sharedSecretBase64)
-  const destinationAsset = validateOpenPaymentsAsset(o)
+  const destinationAsset = validateOpenPaymentsAsset(incomingAmount)
   if (!sharedSecret || !isValidIlpAddress(destinationAddress) || !destinationAsset) {
     return
   }

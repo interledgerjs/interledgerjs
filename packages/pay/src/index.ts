@@ -1,6 +1,6 @@
 import { AssetDetails, isValidAssetDetails } from './controllers/asset-details'
 import { Counter } from './controllers/sequence'
-import { fetchPaymentDetails, PaymentDestination } from './open-payments'
+import { fetchPaymentDetails, IncomingPaymentState, PaymentDestination } from './open-payments'
 import { Plugin } from './request'
 import { AssetProbe } from './senders/asset-probe'
 import { ConnectionCloser } from './senders/connection-closer'
@@ -15,7 +15,7 @@ import {
   Ratio,
 } from './utils'
 
-export { Invoice } from './open-payments'
+export { IncomingPayment } from './open-payments'
 export { AccountUrl } from './payment-pointer'
 export { Int, PositiveInt, PositiveRatio, Ratio, Counter, PaymentType, AssetDetails }
 
@@ -25,17 +25,17 @@ export interface SetupOptions {
   plugin: Plugin
   /** Payment pointer, Open Payments or SPSP account URL to query STREAM connection credentials */
   paymentPointer?: string
-  /** Open Payments invoice URL to resolve details and credentials to pay a fixed-delivery payment */
-  invoiceUrl?: string
+  /** Open Payments incoming payment URL to resolve details and credentials to pay a fixed-delivery payment */
+  incomingPaymentUrl?: string
   /** For testing purposes: symmetric key to encrypt STREAM messages. Requires `destinationAddress` */
   sharedSecret?: Uint8Array
   /** For testing purposes: ILP address of the STREAM receiver to send outgoing packets. Requires `sharedSecret` */
   destinationAddress?: string
-  /** For testing purposes: asset details of the STREAM recipient, overriding STREAM and invoice. Requires `destinationAddress` */
+  /** For testing purposes: asset details of the STREAM recipient, overriding STREAM and incoming payment. Requires `destinationAddress` */
   destinationAsset?: AssetDetails
 }
 
-/** Resolved destination details of a proposed payment, such as the destination asset, invoice, and STREAM credentials, ready to perform a quote */
+/** Resolved destination details of a proposed payment, such as the destination asset, incoming payment, and STREAM credentials, ready to perform a quote */
 export interface ResolvedPayment extends PaymentDestination {
   /** Asset and denomination of the receiver's Interedger account */
   destinationAsset: AssetDetails
@@ -150,10 +150,14 @@ export enum PaymentError {
    * Errors likely caused by the receiver, connectors, or other externalities
    */
 
-  /** Failed to query an account or invoice from an Open Payments or SPSP server */
+  /** Failed to query an account or incoming payment from an Open Payments or SPSP server */
   QueryFailed = 'QueryFailed',
-  /** Invoice was already fully paid or overpaid, so no payment is necessary */
-  InvoiceAlreadyPaid = 'InvoiceAlreadyPaid',
+  /** Incoming payment was already fully paid or overpaid, so no payment is necessary */
+  IncomingPaymentPaid = 'IncomingPaymentPaid',
+  /** Incoming payement was already completed */
+  IncomingPaymentCompleted = 'IncomingPaymentCompleted',
+  /** Incoming payment already expired */
+  IncomingPaymentExpired = 'IncomingPaymentExpired',
   /** Cannot send over this path due to an ILP Reject error */
   ConnectorError = 'ConnectorError',
   /** No authentic reply from receiver: packets may not have been delivered */
@@ -217,7 +221,7 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
 export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
   const rateProbe = new RateProbe(options)
   const { log } = rateProbe
-  const { invoice, destinationAsset } = options.destination
+  const { incomingPayment, destinationAsset } = options.destination
 
   // Validate the amounts to set the target for the payment
   let target: {
@@ -225,17 +229,30 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     amount: PositiveInt
   }
 
-  if (invoice) {
-    const remainingToDeliver = Int.from(invoice.amountToDeliver - invoice.amountDelivered)
+  if (incomingPayment) {
+    if (incomingPayment.state === IncomingPaymentState.Completed) {
+      log.debug('quote failed: incoming payment was completed.')
+      // In incoming payment case, STREAM connection is yet to be established since no asset probe
+      throw PaymentError.IncomingPaymentCompleted
+    }
+    if (incomingPayment.state === IncomingPaymentState.Expired) {
+      log.debug('quote failed: incoming payment is expired.')
+      // In incoming payment case, STREAM connection is yet to be established since no asset probe
+      throw PaymentError.IncomingPaymentExpired
+    }
+
+    const remainingToDeliver = Int.from(
+      incomingPayment.amountToDeliver - incomingPayment.amountDelivered
+    )
     if (!remainingToDeliver || !remainingToDeliver.isPositive()) {
-      // Return this error here instead of in `setupPayment` so consumer can access the resolved invoice
+      // Return this error here instead of in `setupPayment` so consumer can access the resolved incoming payment
       log.debug(
-        'quote failed: invoice was already paid. amountToDeliver=%s amountDelivered=%s',
-        invoice.amountToDeliver,
-        invoice.amountDelivered
+        'quote failed: incoming payment was already paid. amountToDeliver=%s amountDelivered=%s',
+        incomingPayment.amountToDeliver,
+        incomingPayment.amountDelivered
       )
-      // In invoice case, STREAM connection is yet to be established since no asset probe
-      throw PaymentError.InvoiceAlreadyPaid
+      // In incoming payment case, STREAM connection is yet to be established since no asset probe
+      throw PaymentError.IncomingPaymentPaid
     }
 
     target = {
@@ -267,7 +284,9 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
       amount: amountToSend,
     }
   } else {
-    log.debug('invalid config: no invoice, amount to send, or amount to deliver was provided')
+    log.debug(
+      'invalid config: no incoming payment, amount to send, or amount to deliver was provided'
+    )
     throw PaymentError.UnknownPaymentTarget
   }
 
