@@ -154,7 +154,7 @@ export enum PaymentError {
   QueryFailed = 'QueryFailed',
   /** Incoming payment was already fully paid or overpaid, so no payment is necessary */
   IncomingPaymentPaid = 'IncomingPaymentPaid',
-  /** Incoming payement was already completed */
+  /** Incoming payment was already completed */
   IncomingPaymentCompleted = 'IncomingPaymentCompleted',
   /** Incoming payment already expired */
   IncomingPaymentExpired = 'IncomingPaymentExpired',
