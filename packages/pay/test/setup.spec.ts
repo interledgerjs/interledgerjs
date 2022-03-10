@@ -326,6 +326,63 @@ describe('open payments', () => {
         accountId: accountUrl,
         expiresAt,
         description,
+        externalRef,
+      },
+    })
+    scope.done()
+  })
+
+  it('resolves and validates an Incoming Payment if expiresAt, description, and externalRef are missing', async () => {
+    const destinationAddress = 'g.wallet.users.alice.~w6247823482374234'
+    const sharedSecret = randomBytes(32)
+    const incomingPaymentId = uuid()
+
+    const accountUrl = 'https://wallet.example/alice'
+    const receivingPayment = `https://wallet.example/incoming-payments/${incomingPaymentId}`
+    const receiptsEnabled = false
+
+    const scope = nock('https://wallet.example')
+      .get(`/incoming-payments/${incomingPaymentId}`)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, {
+        id: receivingPayment,
+        accountId: accountUrl,
+        state: IncomingPaymentState.Pending,
+        incomingAmount: {
+          amount: '45601',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        receivedAmount: {
+          amount: '0',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        ilpAddress: destinationAddress,
+        sharedSecret: sharedSecret.toString('base64'),
+        receiptsEnabled,
+      })
+
+    await expect(fetchPaymentDetails({ receivingPayment })).resolves.toMatchObject({
+      sharedSecret,
+      destinationAddress,
+      destinationAsset: {
+        code: 'USD',
+        scale: 4,
+      },
+      receivingPaymentDetails: {
+        receivedAmount: {
+          amount: BigInt(0),
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        incomingAmount: {
+          amount: BigInt(45601),
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        id: receivingPayment,
+        accountId: accountUrl,
       },
     })
     scope.done()

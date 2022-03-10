@@ -50,11 +50,11 @@ export interface IncomingPayment {
   /** State of the Incoming Payment */
   state: IncomingPaymentState
   /** UNIX timestamp in milliseconds when payments toward the Incoming Payment will no longer be accepted */
-  expiresAt: number
+  expiresAt?: number
   /** Human-readable description of the Incoming Payment */
-  description: string
+  description?: string
   /** Human-readable external reference of the Incoming Payment */
-  externalRef: string
+  externalRef?: string
   /** Fixed destination amount that must be delivered to complete payment of the Incoming Payment. */
   incomingAmount: Amount
   /** Amount that has already been paid toward the Incoming Payment. */
@@ -273,16 +273,16 @@ const validateOpenPaymentsIncomingPayment = (
     externalRef,
     receiptsEnabled,
   } = o
-  const expiresAt = Date.parse(expiresAtIso) // `NaN` if date is invalid
+  const expiresAt = expiresAtIso ? Date.parse(expiresAtIso) : undefined // `NaN` if date is invalid
   const incomingAmount = validateOpenPaymentsAmount(unvalidatedIncomingAmount)
   const receivedAmount = validateOpenPaymentsAmount(unvalidatedReceivedAmount)
 
   if (
     typeof accountId !== 'string' ||
-    typeof description !== 'string' ||
-    typeof externalRef !== 'string' ||
+    !(typeof description === 'string' || description === undefined) ||
+    !(typeof externalRef === 'string' || externalRef === undefined) ||
     typeof receiptsEnabled !== 'boolean' ||
-    !isNonNegativeRational(expiresAt) ||
+    !(isNonNegativeRational(expiresAt) || expiresAt === undefined) ||
     !incomingAmount ||
     !receivedAmount
   ) {
