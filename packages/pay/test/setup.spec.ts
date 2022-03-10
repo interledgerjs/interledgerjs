@@ -180,7 +180,9 @@ describe('open payments', () => {
       receivingPayment,
       plugin,
     })
-    await expect(startQuote({ plugin, destination })).rejects.toBe(PaymentError.IncomingPaymentPaid)
+    await expect(startQuote({ plugin, destination })).rejects.toBe(
+      PaymentError.IncomingPaymentCompleted
+    )
   })
 
   it('fails if the Incoming Payment was already completed', async () => {

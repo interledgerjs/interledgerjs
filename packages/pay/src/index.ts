@@ -152,8 +152,6 @@ export enum PaymentError {
 
   /** Failed to query an account or Incoming Payment from an Open Payments or SPSP server */
   QueryFailed = 'QueryFailed',
-  /** Incoming payment was already fully paid or overpaid, so no payment is necessary */
-  IncomingPaymentPaid = 'IncomingPaymentPaid',
   /** Incoming payment was already completed */
   IncomingPaymentCompleted = 'IncomingPaymentCompleted',
   /** Incoming payment already expired */
@@ -231,7 +229,7 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
 
   if (receivingPaymentDetails) {
     if (receivingPaymentDetails.state === IncomingPaymentState.Completed) {
-      log.debug('quote failed: Incoming Payment was completed.')
+      log.debug('quote failed: Incoming Payment is already completed.')
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
       throw PaymentError.IncomingPaymentCompleted
     }
@@ -252,7 +250,7 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
         receivingPaymentDetails.receivedAmount
       )
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
-      throw PaymentError.IncomingPaymentPaid
+      throw PaymentError.IncomingPaymentCompleted
     }
 
     target = {
