@@ -15,7 +15,7 @@ const ACCOUNT_QUERY_ACCEPT_HEADER = 'application/ilp-stream+json, application/sp
 const log = createLogger('ilp-pay:query')
 
 /**
- * Destination details of the payment, such the asset, incoming payment, and STREAM credentials to
+ * Destination details of the payment, such the asset, Incoming Payment, and STREAM credentials to
  * establish an authenticated connection with the receiver
  */
 export interface PaymentDestination {
@@ -25,8 +25,8 @@ export interface PaymentDestination {
   destinationAddress: IlpAddress
   /** Asset and denomination of the receiver's Interledger account */
   destinationAsset?: AssetDetails
-  /** Open Payments v2 incoming payment metadata, if the payment pays into an incoming payment */
-  incomingPayment?: IncomingPayment
+  /** Open Payments v2 Incoming Payment metadata, if the payment pays into an Incoming Payment */
+  receivingPaymentDetails?: IncomingPayment
   /**
    * URL of the recipient Open Payments/SPSP account (with well-known path, and stripped trailing slash).
    * Each payment pointer and its corresponding account URL identifies a unique payment recipient.
@@ -38,44 +38,51 @@ export interface PaymentDestination {
    * Each payment pointer and its corresponding account URL identifies a unique payment recipient.
    * Not applicable if STREAM credentials were provided directly.
    */
-  paymentPointer?: string
+  receivingAccount?: string
 }
 
-/** [Open Payments v2 incoming payment](https://docs.openpayments.guide) metadata */
+/** [Open Payments v2 Incoming Payment](https://docs.openpayments.guide) metadata */
 export interface IncomingPayment {
-  /** URL identifying the incoming payment */
-  incomingPaymentUrl: string
-  /** URL identifying the account into which payments toward the incoming payment will be credited */
-  accountUrl: string
-  /** State of the incoming payment */
+  /** URL identifying the Incoming Payment */
+  id: string
+  /** URL identifying the account into which payments toward the Incoming Payment will be credited */
+  accountId: string
+  /** State of the Incoming Payment */
   state: IncomingPaymentState
-  /** UNIX timestamp in milliseconds when payments toward the incoming payment will no longer be accepted */
+  /** UNIX timestamp in milliseconds when payments toward the Incoming Payment will no longer be accepted */
   expiresAt: number
-  /** Human-readable description of the incoming payment */
+  /** Human-readable description of the Incoming Payment */
   description: string
-  /** Human-readable external reference of the incoming payment */
+  /** Human-readable external reference of the Incoming Payment */
   externalRef: string
-  /** Fixed destination amount that must be delivered to complete payment of the incoming payment, in base units. ≥0 */
-  amountToDeliver: bigint
-  /** Amount that has already been paid toward the incoming payment, in base units. >0 */
-  amountDelivered: bigint
-  /** Asset and denomination of recipient account */
-  asset: AssetDetails
-  /** Flag whether STREAM receipts should be enabled */
+  /** Fixed destination amount that must be delivered to complete payment of the Incoming Payment. */
+  incomingAmount: Amount
+  /** Amount that has already been paid toward the Incoming Payment. */
+  receivedAmount: Amount
+  /** Flag whether STREAM receipts will be provided. */
   receiptsEnabled: boolean
 }
 
+interface Amount {
+  // Amount, in base units. ≥0
+  amount: bigint
+  /** Asset code or symbol identifying the currency of the account */
+  assetCode: string
+  /** Precision of the asset denomination: number of decimal places of the normal unit */
+  assetScale: number
+}
+
 export enum IncomingPaymentState {
-  // The payment has a state of `PENDING` when it is initially created.
-  Pending = 'PENDING',
-  // As soon as payment has started (funds have cleared into the account) the state moves to `PROCESSING`.
-  Processing = 'PROCESSING',
+  // The payment has a state of `pending` when it is initially created.
+  Pending = 'pending',
+  // As soon as payment has started (funds have cleared into the account) the state moves to `processing`.
+  Processing = 'processing',
   // The payment is either auto-completed once the received amount equals the expected amount `amount`,
   // or it is completed manually via an API call.
-  Completed = 'COMPLETED',
-  // If the payment expires before it is completed then the state will move to `EXPIRED`
+  Completed = 'completed',
+  // If the payment expires before it is completed then the state will move to `expired`
   // and no further payments will be accepted.
-  Expired = 'EXPIRED',
+  Expired = 'expired',
 }
 
 /** Validate and resolve the details provided by recipient to execute the payment */
@@ -83,20 +90,20 @@ export const fetchPaymentDetails = async (
   options: Partial<SetupOptions>
 ): Promise<PaymentDestination | PaymentError> => {
   const {
-    incomingPaymentUrl,
-    paymentPointer,
+    receivingPayment,
+    receivingAccount,
     sharedSecret,
     destinationAddress,
     destinationAsset,
   } = options
 
-  // Resolve incoming payment and STREAM credentials
-  if (incomingPaymentUrl) {
-    return queryIncomingPayment(incomingPaymentUrl)
+  // Resolve Incoming Payment and STREAM credentials
+  if (receivingPayment) {
+    return queryPayment(receivingPayment)
   }
   // Resolve STREAM credentials from a payment pointer or account URL via Open Payments or SPSP
-  else if (paymentPointer) {
-    return queryAccount(paymentPointer)
+  else if (receivingAccount) {
+    return queryAccount(receivingAccount)
   }
   // STREAM credentials were provided directly
   else if (
@@ -105,7 +112,7 @@ export const fetchPaymentDetails = async (
     (!destinationAsset || isValidAssetDetails(destinationAsset))
   ) {
     log.warn(
-      'using custom STREAM credentials. incoming payment or payment pointer is recommended to setup a STREAM payment'
+      'using custom STREAM credentials. receivingPayment or receivingAccount are recommended to setup a STREAM payment'
     )
     return {
       sharedSecret,
@@ -116,16 +123,16 @@ export const fetchPaymentDetails = async (
   // No STREAM credentials or method to resolve them
   else {
     log.debug(
-      'invalid config: no incoming payment, incoming payment, payment pointer, or stream credentials provided'
+      'invalid config: no receivingAccount, receivingPayment, or stream credentials provided'
     )
     return PaymentError.InvalidCredentials
   }
 }
 
-/** Fetch an incoming payment and STREAM credentials from an Open Payments */
-const queryIncomingPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
+/** Fetch an Incoming Payment and STREAM credentials from an Open Payments */
+const queryPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
   if (!createHttpUrl(url)) {
-    log.debug('incoming payment query failed: URL not HTTP/HTTPS.')
+    log.debug('receivingPayment query failed: URL not HTTP/HTTPS.')
     return PaymentError.QueryFailed
   }
 
@@ -136,25 +143,25 @@ const queryIncomingPayment = async (url: string): Promise<PaymentDestination | P
 
       if (incomingPayment && credentials) {
         return {
-          accountUrl: incomingPayment.accountUrl,
-          incomingPayment,
+          accountUrl: incomingPayment.accountId,
+          receivingPaymentDetails: incomingPayment,
           ...credentials,
         }
       }
-      log.debug('incoming payment query returned an invalid response.')
+      log.debug('receivingPayment query returned an invalid response.')
     })
-    .catch((err) => log.debug('incoming payment query failed.', err?.message))
+    .catch((err) => log.debug('receivingPayment query failed.', err?.message))
     .then((res) => res || PaymentError.QueryFailed)
 }
 
 /** Query the payment pointer, Open Payments server, or SPSP server for credentials to establish a STREAM connection */
 export const queryAccount = async (
-  paymentPointer: string
+  receivingAccount: string
 ): Promise<PaymentDestination | PaymentError> => {
   const accountUrl =
-    AccountUrl.fromPaymentPointer(paymentPointer) ?? AccountUrl.fromUrl(paymentPointer)
+    AccountUrl.fromPaymentPointer(receivingAccount) ?? AccountUrl.fromUrl(receivingAccount)
   if (!accountUrl) {
-    log.debug('payment pointer or account url is invalid: %s', paymentPointer)
+    log.debug('payment pointer or account url is invalid: %s', receivingAccount)
     return PaymentError.InvalidPaymentPointer
   }
 
@@ -171,7 +178,7 @@ export const queryAccount = async (
         ? {
             ...res,
             accountUrl: accountUrl.toString(),
-            paymentPointer: accountUrl.toPaymentPointer(),
+            receivingAccount: accountUrl.toPaymentPointer(),
           }
         : PaymentError.QueryFailed
     )
@@ -247,7 +254,7 @@ const validateUInt64 = (o: any): Int | undefined => {
 
 const isNonNullObject = (o: any): o is Record<string, any> => typeof o === 'object' && o !== null
 
-/** Transform the Open Payments server reponse into a validated incoming payment */
+/** Transform the Open Payments server reponse into a validated IncomingPayment */
 const validateOpenPaymentsIncomingPayment = (
   o: any,
   queryUrl: string
@@ -259,18 +266,16 @@ const validateOpenPaymentsIncomingPayment = (
   const {
     accountId,
     state,
-    incomingAmount,
-    receivedAmount,
+    incomingAmount: unvalidatedIncomingAmount,
+    receivedAmount: unvalidatedReceivedAmount,
     expiresAt: expiresAtIso,
     description,
     externalRef,
     receiptsEnabled,
   } = o
   const expiresAt = Date.parse(expiresAtIso) // `NaN` if date is invalid
-  const amountToDeliver = validateUInt64(incomingAmount.amount)
-  const amountDelivered = validateUInt64(receivedAmount.amount)
-  const assetToDeliver = validateOpenPaymentsAsset(incomingAmount)
-  const assetDelivered = validateOpenPaymentsAsset(receivedAmount)
+  const incomingAmount = validateOpenPaymentsAmount(unvalidatedIncomingAmount)
+  const receivedAmount = validateOpenPaymentsAmount(unvalidatedReceivedAmount)
 
   if (
     typeof accountId !== 'string' ||
@@ -278,11 +283,8 @@ const validateOpenPaymentsIncomingPayment = (
     typeof externalRef !== 'string' ||
     typeof receiptsEnabled !== 'boolean' ||
     !isNonNegativeRational(expiresAt) ||
-    !amountToDeliver ||
-    !amountToDeliver.isPositive() ||
-    !amountDelivered ||
-    !assetToDeliver ||
-    !assetDelivered
+    !incomingAmount ||
+    !receivedAmount
   ) {
     return
   }
@@ -292,18 +294,17 @@ const validateOpenPaymentsIncomingPayment = (
 
   if (state! in IncomingPaymentState) return
 
-  // TODO Should the given incoming payment URL be validated against the `id` URL in the incoming payment itself?
+  // TODO Should the given Incoming Payment URL be validated against the `id` URL in the Incoming Payment itself?
 
   return {
-    incomingPaymentUrl: queryUrl,
-    accountUrl: accountUrl.toEndpointUrl(),
+    id: queryUrl,
+    accountId: accountUrl.toEndpointUrl(),
     state,
     expiresAt,
     description,
     externalRef,
-    amountDelivered: amountDelivered.value,
-    amountToDeliver: amountToDeliver.value,
-    asset: assetToDeliver,
+    receivedAmount,
+    incomingAmount,
     receiptsEnabled,
   }
 }
@@ -317,13 +318,13 @@ const validateOpenPaymentsCredentials = (o: any): PaymentDestination | undefined
   const { sharedSecret: sharedSecretBase64, ilpAddress: destinationAddress, incomingAmount } = o
   if (!incomingAmount) return
   const sharedSecret = validateSharedSecretBase64(sharedSecretBase64)
-  const destinationAsset = validateOpenPaymentsAsset(incomingAmount)
-  if (!sharedSecret || !isValidIlpAddress(destinationAddress) || !destinationAsset) {
+  const destinationAmount = validateOpenPaymentsAmount(incomingAmount)
+  if (!sharedSecret || !isValidIlpAddress(destinationAddress) || !destinationAmount) {
     return
   }
 
   return {
-    destinationAsset,
+    destinationAsset: { code: destinationAmount.assetCode, scale: destinationAmount.assetScale },
     destinationAddress,
     sharedSecret,
   }
@@ -342,9 +343,10 @@ const validateSpspCredentials = (o: any): PaymentDestination | undefined => {
   }
 }
 
-const validateOpenPaymentsAsset = (o: Record<string, any>): AssetDetails | undefined => {
-  const { assetScale, assetCode } = o
-  if (isValidAssetScale(assetScale) && typeof assetCode === 'string') {
-    return { code: assetCode, scale: assetScale }
+const validateOpenPaymentsAmount = (o: Record<string, any>): Amount | undefined => {
+  const { amount, assetScale, assetCode } = o
+  const amountInt = validateUInt64(amount)
+  if (amountInt && isValidAssetScale(assetScale) && typeof assetCode === 'string') {
+    return { amount: amountInt.value, assetCode, assetScale }
   }
 }
