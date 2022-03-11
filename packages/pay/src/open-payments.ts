@@ -292,7 +292,7 @@ const validateOpenPaymentsIncomingPayment = (
   const accountUrl = AccountUrl.fromUrl(accountId)
   if (!accountUrl) return
 
-  if (state! in IncomingPaymentState) return
+  if (!Object.values(IncomingPaymentState).includes(state)) return
 
   // TODO Should the given Incoming Payment URL be validated against the `id` URL in the Incoming Payment itself?
 

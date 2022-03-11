@@ -412,11 +412,44 @@ describe('open payments', () => {
           assetCode: 'USD',
           assetScale: 5,
         },
-        expiresAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000 * 24).toISOString(), // 1 day in the future,
         description: 'Something special',
         externalRef: '',
-        ilpAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
+        ilpAddress: 'g.wallet.users.alice.~w6247823482374234',
+        sharedSecret: randomBytes(32).toString('base64'),
+        receiptsEnabled: false,
+      })
+
+    await expect(fetchPaymentDetails({ receivingPayment })).resolves.toBe(PaymentError.QueryFailed)
+  })
+
+  it('fails if Incoming Payment state is not defined in IncomingPaymentState', async () => {
+    const incomingPaymentId = uuid()
+    const accountUrl = 'https://wallet.example/alice'
+    const receivingPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
+
+    nock('https://wallet.example')
+      .get(`/alice/incoming-payments/${incomingPaymentId}`)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, {
+        id: receivingPayment,
+        accountId: accountUrl,
+        state: 'foo',
+        incomingAmount: {
+          amount: '45601',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        receivedAmount: {
+          amount: '0',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000 * 24).toISOString(),
+        description: 'something',
+        externalRef: 'something else',
+        ilpAddress: 'g.wallet.users.alice.~w6247823482374234',
+        sharedSecret: randomBytes(32).toString('base64'),
         receiptsEnabled: false,
       })
 
