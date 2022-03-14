@@ -25,7 +25,7 @@ export interface PaymentDestination {
   destinationAddress: IlpAddress
   /** Asset and denomination of the receiver's Interledger account */
   destinationAsset?: AssetDetails
-  /** Open Payments v2 Incoming Payment metadata, if the payment pays into an Incoming Payment */
+  /** Open Payments Incoming Payment metadata, if the payment pays into an Incoming Payment */
   receivingPaymentDetails?: IncomingPayment
   /**
    * URL of the recipient Open Payments/SPSP account (with well-known path, and stripped trailing slash).
@@ -41,7 +41,7 @@ export interface PaymentDestination {
   receivingAccount?: string
 }
 
-/** [Open Payments v2 Incoming Payment](https://docs.openpayments.guide) metadata */
+/** [Open Payments Incoming Payment](https://docs.openpayments.guide) metadata */
 export interface IncomingPayment {
   /** URL identifying the Incoming Payment */
   id: string
@@ -99,7 +99,7 @@ export const fetchPaymentDetails = async (
 
   // Resolve Incoming Payment and STREAM credentials
   if (receivingPayment) {
-    return queryPayment(receivingPayment)
+    return queryIncomingPayment(receivingPayment)
   }
   // Resolve STREAM credentials from a payment pointer or account URL via Open Payments or SPSP
   else if (receivingAccount) {
@@ -130,7 +130,7 @@ export const fetchPaymentDetails = async (
 }
 
 /** Fetch an Incoming Payment and STREAM credentials from an Open Payments */
-const queryPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
+const queryIncomingPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
   if (!createHttpUrl(url)) {
     log.debug('receivingPayment query failed: URL not HTTP/HTTPS.')
     return PaymentError.QueryFailed
