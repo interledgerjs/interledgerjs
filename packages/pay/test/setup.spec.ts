@@ -456,6 +456,39 @@ describe('open payments', () => {
     await expect(fetchPaymentDetails({ receivingPayment })).resolves.toBe(PaymentError.QueryFailed)
   })
 
+  it('fails if expiresAt cannot be parsed', async () => {
+    const incomingPaymentId = uuid()
+    const accountUrl = 'https://wallet.example/alice'
+    const receivingPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
+
+    nock('https://wallet.example')
+      .get(`/alice/incoming-payments/${incomingPaymentId}`)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, {
+        id: receivingPayment,
+        accountId: accountUrl,
+        state: 'pending',
+        incomingAmount: {
+          amount: '45601',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        receivedAmount: {
+          amount: '0',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        expiresAt: 'foo',
+        description: 'something',
+        externalRef: 'something else',
+        ilpAddress: 'g.wallet.users.alice.~w6247823482374234',
+        sharedSecret: randomBytes(32).toString('base64'),
+        receiptsEnabled: false,
+      })
+
+    await expect(fetchPaymentDetails({ receivingPayment })).resolves.toBe(PaymentError.QueryFailed)
+  })
+
   it('fails if Incoming Payment query times out', async () => {
     const scope = nock('https://money.example').get(/.*/).delay(6000).reply(500)
     await expect(fetchPaymentDetails({ receivingPayment: 'https://money.example' })).resolves.toBe(
