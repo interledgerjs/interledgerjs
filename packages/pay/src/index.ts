@@ -145,6 +145,8 @@ export enum PaymentError {
   UnenforceableDelivery = 'UnenforceableDelivery',
   /** Invalid quote parameters provided */
   InvalidQuote = 'InvalidQuote',
+  /** If Incoming Payment does not have incomingAmount property, amountToSend or amountToDeliver is required */
+  UnknownAmountToSendOrDeliver = 'UnknownAmountToSendOrDeliver',
 
   /**
    * Errors likely caused by the receiver, connectors, or other externalities
@@ -221,12 +223,6 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
   const { log } = rateProbe
   const { receivingPaymentDetails, destinationAsset } = options.destination
 
-  // Validate the amounts to set the target for the payment
-  let target: {
-    type: PaymentType
-    amount: PositiveInt
-  }
-
   if (receivingPaymentDetails) {
     if (receivingPaymentDetails.state === IncomingPaymentState.Completed) {
       log.debug('quote failed: Incoming Payment is already completed.')
@@ -238,7 +234,15 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
       throw PaymentError.IncomingPaymentExpired
     }
+  }
 
+  // Validate the amounts to set the target for the payment
+  let target: {
+    type: PaymentType
+    amount: PositiveInt
+  }
+
+  if (receivingPaymentDetails && typeof receivingPaymentDetails.incomingAmount !== 'undefined') {
     const remainingToDeliver = Int.from(
       receivingPaymentDetails.incomingAmount.amount - receivingPaymentDetails.receivedAmount.amount
     )
@@ -283,7 +287,7 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     }
   } else {
     log.debug(
-      'invalid config: no Incoming Payment, amount to send, or amount to deliver was provided'
+      'invalid config: no Incoming Payment with existing incomingAmount, amount to send, or amount to deliver was provided'
     )
     throw PaymentError.UnknownPaymentTarget
   }

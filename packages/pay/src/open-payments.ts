@@ -56,7 +56,7 @@ export interface IncomingPayment {
   /** Human-readable external reference of the Incoming Payment */
   externalRef?: string
   /** Fixed destination amount that must be delivered to complete payment of the Incoming Payment. */
-  incomingAmount: Amount
+  incomingAmount?: Amount
   /** Amount that has already been paid toward the Incoming Payment. */
   receivedAmount: Amount
   /** Flag whether STREAM receipts will be provided. */
@@ -283,7 +283,7 @@ const validateOpenPaymentsIncomingPayment = (
     !(typeof externalRef === 'string' || externalRef === undefined) ||
     typeof receiptsEnabled !== 'boolean' ||
     !(isNonNegativeRational(expiresAt) || expiresAt === undefined) ||
-    !incomingAmount ||
+    incomingAmount === null ||
     !receivedAmount
   ) {
     return
@@ -315,10 +315,10 @@ const validateOpenPaymentsCredentials = (o: any): PaymentDestination | undefined
     return
   }
 
-  const { sharedSecret: sharedSecretBase64, ilpAddress: destinationAddress, incomingAmount } = o
-  if (!incomingAmount) return
+  const { sharedSecret: sharedSecretBase64, ilpAddress: destinationAddress, receivedAmount } = o
+  if (!receivedAmount) return
   const sharedSecret = validateSharedSecretBase64(sharedSecretBase64)
-  const destinationAmount = validateOpenPaymentsAmount(incomingAmount)
+  const destinationAmount = validateOpenPaymentsAmount(receivedAmount)
   if (!sharedSecret || !isValidIlpAddress(destinationAddress) || !destinationAmount) {
     return
   }
@@ -343,10 +343,13 @@ const validateSpspCredentials = (o: any): PaymentDestination | undefined => {
   }
 }
 
-const validateOpenPaymentsAmount = (o: Record<string, any>): Amount | undefined => {
+const validateOpenPaymentsAmount = (o: Record<string, any>): Amount | undefined | null => {
+  if (typeof o === 'undefined') return
   const { amount, assetScale, assetCode } = o
   const amountInt = validateUInt64(amount)
   if (amountInt && isValidAssetScale(assetScale) && typeof assetCode === 'string') {
     return { amount: amountInt.value, assetCode, assetScale }
+  } else {
+    return null
   }
 }

@@ -131,6 +131,140 @@ describe('open payments', () => {
     expect(destination.accountUrl).toBe(accountUrl)
   })
 
+  it('quotes an Incoming Payment without incomingAmount', async () => {
+    const prices = {
+      EUR: 1,
+      USD: 1.12,
+    }
+
+    const plugin = createPlugin(
+      createRateMiddleware(
+        new RateBackend({ code: 'EUR', scale: 3 }, { code: 'USD', scale: 4 }, prices)
+      ),
+      streamReceiver
+    )
+
+    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
+
+    const incomingPaymentId = uuid()
+    const accountUrl = 'https://wallet.example/alice'
+    const receivingPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
+    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
+    const description = 'Coffee'
+    const externalRef = ''
+    const receiptsEnabled = false
+
+    nock('https://wallet.example')
+      .get(`/alice/incoming-payments/${incomingPaymentId}`)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, {
+        id: receivingPayment,
+        accountId: accountUrl,
+        state: IncomingPaymentState.Processing,
+        receivedAmount: {
+          amount: '2302',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        expiresAt: new Date(expiresAt).toISOString(),
+        description,
+        externalRef,
+        ilpAddress,
+        sharedSecret: sharedSecret.toString('base64'),
+        receiptsEnabled,
+      })
+
+    const destination = await setupPayment({
+      receivingPayment,
+      plugin,
+    })
+    const { minDeliveryAmount, minExchangeRate, paymentType } = await startQuote({
+      plugin,
+      destination,
+      prices,
+      sourceAsset: {
+        code: 'EUR',
+        scale: 4,
+      },
+      amountToSend: BigInt(400),
+    })
+
+    // Tests that it quotes the remaining amount to deliver in the Incoming Payment
+    expect(paymentType).toBe(PaymentType.FixedSend)
+    expect(minExchangeRate).toBeDefined()
+    expect(minDeliveryAmount).toBe(BigInt(353))
+    expect(destination.receivingPaymentDetails).toMatchObject({
+      id: receivingPayment,
+      accountId: accountUrl,
+      expiresAt,
+      description,
+      receivedAmount: {
+        amount: BigInt(2302),
+        assetCode: 'USD',
+        assetScale: 4,
+      },
+    })
+    expect(destination.destinationAsset).toMatchObject({
+      code: 'USD',
+      scale: 4,
+    })
+    expect(destination.destinationAddress).toBe(ilpAddress)
+    expect(destination.sharedSecret.equals(sharedSecret))
+    expect(destination.accountUrl).toBe(accountUrl)
+  })
+
+  it('fails to quotes an Incoming Payment without incomingAmount, amountToSend or amountToDeliver', async () => {
+    const prices = {
+      EUR: 1,
+      USD: 1.12,
+    }
+
+    const plugin = createPlugin(
+      createRateMiddleware(
+        new RateBackend({ code: 'EUR', scale: 3 }, { code: 'USD', scale: 4 }, prices)
+      ),
+      streamReceiver
+    )
+
+    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
+
+    const incomingPaymentId = uuid()
+    const accountUrl = 'https://wallet.example/alice'
+    const receivingPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
+    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
+    const description = 'Coffee'
+    const externalRef = ''
+    const receiptsEnabled = false
+
+    nock('https://wallet.example')
+      .get(`/alice/incoming-payments/${incomingPaymentId}`)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, {
+        id: receivingPayment,
+        accountId: accountUrl,
+        state: IncomingPaymentState.Processing,
+        receivedAmount: {
+          amount: '2302',
+          assetCode: 'USD',
+          assetScale: 4,
+        },
+        expiresAt: new Date(expiresAt).toISOString(),
+        description,
+        externalRef,
+        ilpAddress,
+        sharedSecret: sharedSecret.toString('base64'),
+        receiptsEnabled,
+      })
+
+    const destination = await setupPayment({
+      receivingPayment,
+      plugin,
+    })
+    await expect(startQuote({ plugin, destination })).rejects.toBe(
+      PaymentError.UnknownPaymentTarget
+    )
+  })
+
   it('fails if Incoming Payment url is not HTTPS or HTTP', async () => {
     await expect(
       fetchPaymentDetails({ receivingPayment: 'oops://this-is-a-wallet.co/incoming-payment/123' })
@@ -334,7 +468,7 @@ describe('open payments', () => {
     scope.done()
   })
 
-  it('resolves and validates an Incoming Payment if expiresAt, description, and externalRef are missing', async () => {
+  it('resolves and validates an Incoming Payment if incomingAmount, expiresAt, description, and externalRef are missing', async () => {
     const destinationAddress = 'g.wallet.users.alice.~w6247823482374234'
     const sharedSecret = randomBytes(32)
     const incomingPaymentId = uuid()
@@ -350,11 +484,6 @@ describe('open payments', () => {
         id: receivingPayment,
         accountId: accountUrl,
         state: IncomingPaymentState.Pending,
-        incomingAmount: {
-          amount: '45601',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
         receivedAmount: {
           amount: '0',
           assetCode: 'USD',
@@ -375,11 +504,6 @@ describe('open payments', () => {
       receivingPaymentDetails: {
         receivedAmount: {
           amount: BigInt(0),
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        incomingAmount: {
-          amount: BigInt(45601),
           assetCode: 'USD',
           assetScale: 4,
         },
