@@ -344,7 +344,7 @@ const validateSpspCredentials = (o: any): PaymentDestination | undefined => {
 }
 
 const validateOpenPaymentsAmount = (o: Record<string, any>): Amount | undefined | null => {
-  if (typeof o === 'undefined') return
+  if (o === undefined) return undefined
   const { amount, assetScale, assetCode } = o
   const amountInt = validateUInt64(amount)
   if (amountInt && isValidAssetScale(assetScale) && typeof assetCode === 'string') {
