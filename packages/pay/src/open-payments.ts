@@ -26,7 +26,7 @@ export interface PaymentDestination {
   /** Asset and denomination of the receiver's Interledger account */
   destinationAsset?: AssetDetails
   /** Open Payments Incoming Payment metadata, if the payment pays into an Incoming Payment */
-  receivingPaymentDetails?: IncomingPayment
+  destinationPaymentDetails?: IncomingPayment
   /**
    * URL of the recipient Open Payments/SPSP account (with well-known path, and stripped trailing slash).
    * Each payment pointer and its corresponding account URL identifies a unique payment recipient.
@@ -38,7 +38,7 @@ export interface PaymentDestination {
    * Each payment pointer and its corresponding account URL identifies a unique payment recipient.
    * Not applicable if STREAM credentials were provided directly.
    */
-  receivingAccount?: string
+  destinationAccount?: string
 }
 
 /** [Open Payments Incoming Payment](https://docs.openpayments.guide) metadata */
@@ -90,20 +90,20 @@ export const fetchPaymentDetails = async (
   options: Partial<SetupOptions>
 ): Promise<PaymentDestination | PaymentError> => {
   const {
-    receivingPayment,
-    receivingAccount,
+    destinationPayment,
+    destinationAccount,
     sharedSecret,
     destinationAddress,
     destinationAsset,
   } = options
 
   // Resolve Incoming Payment and STREAM credentials
-  if (receivingPayment) {
-    return queryIncomingPayment(receivingPayment)
+  if (destinationPayment) {
+    return queryIncomingPayment(destinationPayment)
   }
   // Resolve STREAM credentials from a payment pointer or account URL via Open Payments or SPSP
-  else if (receivingAccount) {
-    return queryAccount(receivingAccount)
+  else if (destinationAccount) {
+    return queryAccount(destinationAccount)
   }
   // STREAM credentials were provided directly
   else if (
@@ -112,7 +112,7 @@ export const fetchPaymentDetails = async (
     (!destinationAsset || isValidAssetDetails(destinationAsset))
   ) {
     log.warn(
-      'using custom STREAM credentials. receivingPayment or receivingAccount are recommended to setup a STREAM payment'
+      'using custom STREAM credentials. destinationPayment or destinationAccount are recommended to setup a STREAM payment'
     )
     return {
       sharedSecret,
@@ -123,7 +123,7 @@ export const fetchPaymentDetails = async (
   // No STREAM credentials or method to resolve them
   else {
     log.debug(
-      'invalid config: no receivingAccount, receivingPayment, or stream credentials provided'
+      'invalid config: no destinationAccount, destinationPayment, or stream credentials provided'
     )
     return PaymentError.InvalidCredentials
   }
@@ -132,7 +132,7 @@ export const fetchPaymentDetails = async (
 /** Fetch an Incoming Payment and STREAM credentials from an Open Payments */
 const queryIncomingPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
   if (!createHttpUrl(url)) {
-    log.debug('receivingPayment query failed: URL not HTTP/HTTPS.')
+    log.debug('destinationPayment query failed: URL not HTTP/HTTPS.')
     return PaymentError.QueryFailed
   }
 
@@ -144,24 +144,24 @@ const queryIncomingPayment = async (url: string): Promise<PaymentDestination | P
       if (incomingPayment && credentials) {
         return {
           accountUrl: incomingPayment.accountId,
-          receivingPaymentDetails: incomingPayment,
+          destinationPaymentDetails: incomingPayment,
           ...credentials,
         }
       }
-      log.debug('receivingPayment query returned an invalid response.')
+      log.debug('destinationPayment query returned an invalid response.')
     })
-    .catch((err) => log.debug('receivingPayment query failed.', err?.message))
+    .catch((err) => log.debug('destinationPayment query failed.', err?.message))
     .then((res) => res || PaymentError.QueryFailed)
 }
 
 /** Query the payment pointer, Open Payments server, or SPSP server for credentials to establish a STREAM connection */
 export const queryAccount = async (
-  receivingAccount: string
+  destinationAccount: string
 ): Promise<PaymentDestination | PaymentError> => {
   const accountUrl =
-    AccountUrl.fromPaymentPointer(receivingAccount) ?? AccountUrl.fromUrl(receivingAccount)
+    AccountUrl.fromPaymentPointer(destinationAccount) ?? AccountUrl.fromUrl(destinationAccount)
   if (!accountUrl) {
-    log.debug('payment pointer or account url is invalid: %s', receivingAccount)
+    log.debug('payment pointer or account url is invalid: %s', destinationAccount)
     return PaymentError.InvalidPaymentPointer
   }
 
@@ -178,7 +178,7 @@ export const queryAccount = async (
         ? {
             ...res,
             accountUrl: accountUrl.toString(),
-            receivingAccount: accountUrl.toPaymentPointer(),
+            destinationAccount: accountUrl.toPaymentPointer(),
           }
         : PaymentError.QueryFailed
     )

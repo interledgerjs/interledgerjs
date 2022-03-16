@@ -24,9 +24,9 @@ export interface SetupOptions {
   /** Plugin to send ILP packets over the network */
   plugin: Plugin
   /** Payment pointer, Open Payments or SPSP account URL to query STREAM connection credentials */
-  receivingAccount?: string
+  destinationAccount?: string
   /** Open Payments Incoming Payment URL to resolve details and credentials to pay a fixed-delivery payment */
-  receivingPayment?: string
+  destinationPayment?: string
   /** For testing purposes: symmetric key to encrypt STREAM messages. Requires `destinationAddress` */
   sharedSecret?: Uint8Array
   /** For testing purposes: ILP address of the STREAM receiver to send outgoing packets. Requires `sharedSecret` */
@@ -221,15 +221,15 @@ export const setupPayment = async (options: SetupOptions): Promise<ResolvedPayme
 export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
   const rateProbe = new RateProbe(options)
   const { log } = rateProbe
-  const { receivingPaymentDetails, destinationAsset } = options.destination
+  const { destinationPaymentDetails, destinationAsset } = options.destination
 
-  if (receivingPaymentDetails) {
-    if (receivingPaymentDetails.state === IncomingPaymentState.Completed) {
+  if (destinationPaymentDetails) {
+    if (destinationPaymentDetails.state === IncomingPaymentState.Completed) {
       log.debug('quote failed: Incoming Payment is already completed.')
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
       throw PaymentError.IncomingPaymentCompleted
     }
-    if (receivingPaymentDetails.state === IncomingPaymentState.Expired) {
+    if (destinationPaymentDetails.state === IncomingPaymentState.Expired) {
       log.debug('quote failed: Incoming Payment is expired.')
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
       throw PaymentError.IncomingPaymentExpired
@@ -242,16 +242,20 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     amount: PositiveInt
   }
 
-  if (receivingPaymentDetails && typeof receivingPaymentDetails.incomingAmount !== 'undefined') {
+  if (
+    destinationPaymentDetails &&
+    typeof destinationPaymentDetails.incomingAmount !== 'undefined'
+  ) {
     const remainingToDeliver = Int.from(
-      receivingPaymentDetails.incomingAmount.amount - receivingPaymentDetails.receivedAmount.amount
+      destinationPaymentDetails.incomingAmount.amount -
+        destinationPaymentDetails.receivedAmount.amount
     )
     if (!remainingToDeliver || !remainingToDeliver.isPositive()) {
       // Return this error here instead of in `setupPayment` so consumer can access the resolved Incoming Payment
       log.debug(
         'quote failed: Incoming Payment was already paid. amountToDeliver=%s amountDelivered=%s',
-        receivingPaymentDetails.incomingAmount,
-        receivingPaymentDetails.receivedAmount
+        destinationPaymentDetails.incomingAmount,
+        destinationPaymentDetails.receivedAmount
       )
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
       throw PaymentError.IncomingPaymentCompleted

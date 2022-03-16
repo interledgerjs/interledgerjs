@@ -106,7 +106,7 @@ describe('interledger.rs integration', () => {
     const amountToSend = BigInt(100_000) // 0.1 EUR, ~50 packets @ max packet amount of 2000
     const destination = (await setupPayment({
       plugin,
-      receivingAccount: '$mywallet.com',
+      destinationAccount: '$mywallet.com',
     })) as ResolvedPayment
     const quote = await startQuote({
       plugin,
@@ -254,7 +254,7 @@ describe('interledger4j integration', () => {
     const amountToSend = BigInt(9_800_000) // $9.80
     const destination = (await setupPayment({
       plugin,
-      receivingAccount: `$mywallet.com`,
+      destinationAccount: `$mywallet.com`,
     })) as ResolvedPayment
     const quote = await startQuote({
       plugin,
