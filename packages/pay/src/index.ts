@@ -145,8 +145,6 @@ export enum PaymentError {
   UnenforceableDelivery = 'UnenforceableDelivery',
   /** Invalid quote parameters provided */
   InvalidQuote = 'InvalidQuote',
-  /** If Incoming Payment does not have incomingAmount property, amountToSend or amountToDeliver is required */
-  UnknownAmountToSendOrDeliver = 'UnknownAmountToSendOrDeliver',
 
   /**
    * Errors likely caused by the receiver, connectors, or other externalities
@@ -253,7 +251,7 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     if (!remainingToDeliver || !remainingToDeliver.isPositive()) {
       // Return this error here instead of in `setupPayment` so consumer can access the resolved Incoming Payment
       log.debug(
-        'quote failed: Incoming Payment was already paid. amountToDeliver=%s amountDelivered=%s',
+        'quote failed: Incoming Payment was already paid. incomingAmount=%s receivedAmount=%s',
         destinationPaymentDetails.incomingAmount,
         destinationPaymentDetails.receivedAmount
       )
