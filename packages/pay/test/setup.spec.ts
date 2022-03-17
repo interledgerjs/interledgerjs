@@ -27,6 +27,25 @@ import {
 import { CustomBackend } from './helpers/rate-backend'
 import reduct from 'reduct'
 
+interface setupNockOptions {
+  incomingPaymentId?: string | null
+  accountUrl?: string | null
+  destinationPayment?: string | null
+  state?: string | null
+  incomingAmount?: NockAmount | null
+  receivedAmount?: NockAmount | null
+  expiresAt?: string | null
+  description?: string | null
+  externalRef?: string | null
+  receiptsEnabled?: boolean | null
+}
+
+type NockAmount = {
+  amount: string
+  assetCode: string
+  assetScale: number
+}
+
 const plugin = createPlugin()
 const streamServer = new StreamServer({
   serverSecret: randomBytes(32),
@@ -34,6 +53,77 @@ const streamServer = new StreamServer({
 })
 const streamReceiver = createStreamReceiver(streamServer)
 const uuid = () => '2646f447-542a-4f0a-a557-f7492b46265f'
+
+const setupNock = (options: setupNockOptions) => {
+  const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
+  const incomingPaymentId =
+    options.incomingPaymentId !== null ? options.incomingPaymentId || uuid() : undefined
+  const accountUrl =
+    options.accountUrl !== null ? options.accountUrl || 'https://wallet.example/alice' : undefined
+  const destinationPayment =
+    options.destinationPayment !== null
+      ? options.destinationPayment || `${accountUrl}/incoming-payments/${incomingPaymentId}`
+      : undefined
+  const state =
+    options.state !== null ? options.state || IncomingPaymentState.Processing : undefined
+  const incomingAmount =
+    options.incomingAmount !== null
+      ? options.incomingAmount || {
+          amount: '40000',
+          assetCode: 'USD',
+          assetScale: 4,
+        }
+      : undefined
+  const receivedAmount =
+    options.receivedAmount !== null
+      ? options.receivedAmount || {
+          amount: '20000',
+          assetCode: 'USD',
+          assetScale: 4,
+        }
+      : undefined
+  const expiresAt =
+    options.expiresAt !== null
+      ? options.expiresAt !== undefined
+        ? options.expiresAt
+        : new Date(Date.now() + 60 * 60 * 1000 * 24).toISOString() // 1 day in the future
+      : undefined
+  const description = options.description !== null ? options.description || 'Coffee' : undefined
+  const externalRef = options.externalRef !== null ? options.externalRef || '#123' : undefined
+  const receiptsEnabled = options.receiptsEnabled || false
+
+  nock('https://wallet.example')
+    .get(`/alice/incoming-payments/${incomingPaymentId}`)
+    .matchHeader('Accept', 'application/json')
+    .reply(200, {
+      id: destinationPayment,
+      accountId: accountUrl,
+      state,
+      incomingAmount,
+      receivedAmount,
+      expiresAt,
+      description,
+      externalRef,
+      ilpAddress,
+      sharedSecret: sharedSecret.toString('base64'),
+      receiptsEnabled,
+    })
+
+  return {
+    incomingPaymentId,
+    destinationPayment,
+    accountUrl,
+    state,
+    incomingAmount,
+    receivedAmount,
+    expiresAt,
+    description,
+    externalRef,
+    ilpAddress,
+    sharedSecret,
+    receiptsEnabled,
+  }
+}
 
 describe('open payments', () => {
   const destinationAddress = 'g.wallet.receiver.12345'
@@ -53,40 +143,17 @@ describe('open payments', () => {
       streamReceiver
     )
 
-    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
-
-    const incomingPaymentId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
-    const description = 'Coffee'
-    const externalRef = ''
-    const receiptsEnabled = false
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Processing,
-        incomingAmount: {
-          amount: '45601',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        receivedAmount: {
-          amount: '2302', // Delivered: 2302 / 45601
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        expiresAt: new Date(expiresAt).toISOString(),
-        description,
-        externalRef,
-        ilpAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled,
-      })
+    const {
+      accountUrl,
+      destinationPayment,
+      expiresAt,
+      incomingAmount,
+      receivedAmount,
+      description,
+      externalRef,
+      ilpAddress,
+      sharedSecret,
+    } = setupNock({})
 
     const destination = await setupPayment({
       destinationPayment,
@@ -105,22 +172,27 @@ describe('open payments', () => {
     // Tests that it quotes the remaining amount to deliver in the Incoming Payment
     expect(paymentType).toBe(PaymentType.FixedDelivery)
     expect(minExchangeRate).toBeDefined()
-    expect(minDeliveryAmount).toBe(BigInt(45601 - 2302))
+    expect(minDeliveryAmount).toBe(BigInt(40000 - 20000))
     expect(destination.destinationPaymentDetails).toMatchObject({
       id: destinationPayment,
       accountId: accountUrl,
-      expiresAt,
+      expiresAt: new Date(expiresAt!).getTime(),
       description,
-      receivedAmount: {
-        amount: BigInt(2302),
-        assetCode: 'USD',
-        assetScale: 4,
-      },
-      incomingAmount: {
-        amount: BigInt(45601),
-        assetCode: 'USD',
-        assetScale: 4,
-      },
+      receivedAmount: receivedAmount
+        ? {
+            amount: BigInt(receivedAmount.amount),
+            assetCode: receivedAmount.assetCode,
+            assetScale: receivedAmount.assetScale,
+          }
+        : undefined,
+      incomingAmount: incomingAmount
+        ? {
+            amount: BigInt(incomingAmount.amount),
+            assetCode: incomingAmount.assetCode,
+            assetScale: incomingAmount.assetScale,
+          }
+        : undefined,
+      externalRef,
     })
     expect(destination.destinationAsset).toMatchObject({
       code: 'USD',
@@ -144,35 +216,16 @@ describe('open payments', () => {
       streamReceiver
     )
 
-    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
-
-    const incomingPaymentId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
-    const description = 'Coffee'
-    const externalRef = ''
-    const receiptsEnabled = false
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Processing,
-        receivedAmount: {
-          amount: '2302',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        expiresAt: new Date(expiresAt).toISOString(),
-        description,
-        externalRef,
-        ilpAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled,
-      })
+    const {
+      accountUrl,
+      destinationPayment,
+      expiresAt,
+      receivedAmount,
+      description,
+      externalRef,
+      ilpAddress,
+      sharedSecret,
+    } = setupNock({ incomingAmount: null })
 
     const destination = await setupPayment({
       destinationPayment,
@@ -196,13 +249,16 @@ describe('open payments', () => {
     expect(destination.destinationPaymentDetails).toMatchObject({
       id: destinationPayment,
       accountId: accountUrl,
-      expiresAt,
+      expiresAt: new Date(expiresAt!).getTime(),
       description,
-      receivedAmount: {
-        amount: BigInt(2302),
-        assetCode: 'USD',
-        assetScale: 4,
-      },
+      receivedAmount: receivedAmount
+        ? {
+            amount: BigInt(receivedAmount.amount),
+            assetCode: receivedAmount.assetCode,
+            assetScale: receivedAmount.assetScale,
+          }
+        : undefined,
+      externalRef,
     })
     expect(destination.destinationAsset).toMatchObject({
       code: 'USD',
@@ -226,35 +282,7 @@ describe('open payments', () => {
       streamReceiver
     )
 
-    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
-
-    const incomingPaymentId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
-    const description = 'Coffee'
-    const externalRef = ''
-    const receiptsEnabled = false
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Processing,
-        receivedAmount: {
-          amount: '2302',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        expiresAt: new Date(expiresAt).toISOString(),
-        description,
-        externalRef,
-        ilpAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled,
-      })
+    const { destinationPayment } = setupNock({ incomingAmount: null })
 
     const destination = await setupPayment({
       destinationPayment,
@@ -278,37 +306,13 @@ describe('open payments', () => {
   })
 
   it('fails if the Incoming Payment was already paid', async () => {
-    const incomingPaymentId = uuid()
-    const sharedSecret = randomBytes(32)
-    const destinationAddress = 'g.larry.server3'
-
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Processing,
-        incomingAmount: {
-          amount: '200',
-          assetCode: 'USD',
-          assetScale: 2,
-        },
-        receivedAmount: {
-          amount: '203', // Paid $2.03 of $2
-          assetCode: 'USD',
-          assetScale: 2,
-        },
-        expiresAt: new Date().toISOString(),
-        description: 'Something really amazing',
-        externalRef: '',
-        ilpAddress: destinationAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled: false,
-      })
+    const { destinationPayment } = setupNock({
+      receivedAmount: {
+        amount: '40300', // Paid $4.03 of $4
+        assetCode: 'USD',
+        assetScale: 4,
+      },
+    })
 
     const destination = await setupPayment({
       destinationPayment,
@@ -320,37 +324,14 @@ describe('open payments', () => {
   })
 
   it('fails if the Incoming Payment was already completed', async () => {
-    const incomingPaymentId = uuid()
-    const sharedSecret = randomBytes(32)
-    const destinationAddress = 'g.larry.server3'
-
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Completed,
-        incomingAmount: {
-          amount: '200',
-          assetCode: 'USD',
-          assetScale: 2,
-        },
-        receivedAmount: {
-          amount: '200',
-          assetCode: 'USD',
-          assetScale: 2,
-        },
-        expiresAt: new Date().toISOString(),
-        description: 'Something really amazing',
-        externalRef: '',
-        ilpAddress: destinationAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled: false,
-      })
+    const { destinationPayment } = setupNock({
+      state: IncomingPaymentState.Completed,
+      receivedAmount: {
+        amount: '40000', // Paid $4.03 of $4
+        assetCode: 'USD',
+        assetScale: 4,
+      },
+    })
 
     const destination = await setupPayment({
       destinationPayment,
@@ -362,37 +343,10 @@ describe('open payments', () => {
   })
 
   it('fails if the Incoming Payment has expired', async () => {
-    const incomingPaymentId = uuid()
-    const sharedSecret = randomBytes(32)
-    const destinationAddress = 'g.larry.server3'
-
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Expired,
-        incomingAmount: {
-          amount: '200',
-          assetCode: 'USD',
-          assetScale: 2,
-        },
-        receivedAmount: {
-          amount: '100', // Paid $1 of $2
-          assetCode: 'USD',
-          assetScale: 2,
-        },
-        expiresAt: new Date().toISOString(),
-        description: 'Something really amazing',
-        externalRef: '',
-        ilpAddress: destinationAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled: false,
-      })
+    const { destinationPayment } = setupNock({
+      state: IncomingPaymentState.Expired,
+      expiresAt: new Date().toISOString(),
+    })
 
     const destination = await setupPayment({
       destinationPayment,
@@ -404,145 +358,91 @@ describe('open payments', () => {
   })
 
   it('resolves and validates an Incoming Payment', async () => {
-    const destinationAddress = 'g.wallet.users.alice.~w6247823482374234'
-    const sharedSecret = randomBytes(32)
-    const incomingPaymentId = uuid()
-
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `https://wallet.example/incoming-payments/${incomingPaymentId}`
-    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
-    const description = 'Coffee'
-    const externalRef = ''
-    const receiptsEnabled = false
-
-    const scope = nock('https://wallet.example')
-      .get(`/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Pending,
-        incomingAmount: {
-          amount: '45601',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        receivedAmount: {
-          amount: '0',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        expiresAt: new Date(expiresAt).toISOString(),
-        description,
-        externalRef,
-        ilpAddress: destinationAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled,
-      })
+    const {
+      accountUrl,
+      destinationPayment,
+      expiresAt,
+      incomingAmount,
+      receivedAmount,
+      description,
+      externalRef,
+      ilpAddress,
+      sharedSecret,
+    } = setupNock({})
 
     await expect(fetchPaymentDetails({ destinationPayment })).resolves.toMatchObject({
       sharedSecret,
-      destinationAddress,
+      destinationAddress: ilpAddress,
       destinationAsset: {
         code: 'USD',
         scale: 4,
       },
       destinationPaymentDetails: {
-        receivedAmount: {
-          amount: BigInt(0),
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        incomingAmount: {
-          amount: BigInt(45601),
-          assetCode: 'USD',
-          assetScale: 4,
-        },
+        receivedAmount: receivedAmount
+          ? {
+              amount: BigInt(receivedAmount.amount),
+              assetCode: receivedAmount.assetCode,
+              assetScale: receivedAmount.assetScale,
+            }
+          : undefined,
+        incomingAmount: incomingAmount
+          ? {
+              amount: BigInt(incomingAmount.amount),
+              assetCode: incomingAmount.assetCode,
+              assetScale: incomingAmount.assetScale,
+            }
+          : undefined,
         id: destinationPayment,
         accountId: accountUrl,
-        expiresAt,
+        expiresAt: new Date(expiresAt!).getTime(),
         description,
         externalRef,
       },
     })
-    scope.done()
   })
 
   it('resolves and validates an Incoming Payment if incomingAmount, expiresAt, description, and externalRef are missing', async () => {
-    const destinationAddress = 'g.wallet.users.alice.~w6247823482374234'
-    const sharedSecret = randomBytes(32)
-    const incomingPaymentId = uuid()
-
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `https://wallet.example/incoming-payments/${incomingPaymentId}`
-    const receiptsEnabled = false
-
-    const scope = nock('https://wallet.example')
-      .get(`/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Pending,
-        receivedAmount: {
-          amount: '0',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        ilpAddress: destinationAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled,
-      })
+    const { accountUrl, destinationPayment, receivedAmount, ilpAddress, sharedSecret } = setupNock({
+      incomingAmount: null,
+      expiresAt: null,
+      description: null,
+      externalRef: null,
+    })
 
     await expect(fetchPaymentDetails({ destinationPayment })).resolves.toMatchObject({
       sharedSecret,
-      destinationAddress,
+      destinationAddress: ilpAddress,
       destinationAsset: {
         code: 'USD',
         scale: 4,
       },
       destinationPaymentDetails: {
-        receivedAmount: {
-          amount: BigInt(0),
-          assetCode: 'USD',
-          assetScale: 4,
-        },
+        receivedAmount: receivedAmount
+          ? {
+              amount: BigInt(receivedAmount.amount),
+              assetCode: receivedAmount.assetCode,
+              assetScale: receivedAmount.assetScale,
+            }
+          : undefined,
         id: destinationPayment,
         accountId: accountUrl,
       },
     })
-    scope.done()
   })
 
   it('fails if Incoming Payment amounts are not positive and u64', async () => {
-    const incomingPaymentId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: IncomingPaymentState.Processing,
-        incomingAmount: {
-          amount: '100000000000000000000000000000000000000000000000000000000',
-          assetCode: 'USD',
-          assetScale: 5,
-        },
-        receivedAmount: {
-          amount: -20,
-          assetCode: 'USD',
-          assetScale: 5,
-        },
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000 * 24).toISOString(), // 1 day in the future,
-        description: 'Something special',
-        externalRef: '',
-        ilpAddress: 'g.wallet.users.alice.~w6247823482374234',
-        sharedSecret: randomBytes(32).toString('base64'),
-        receiptsEnabled: false,
-      })
+    const { destinationPayment } = setupNock({
+      incomingAmount: {
+        amount: '100000000000000000000000000000000000000000000000000000000',
+        assetCode: 'USD',
+        assetScale: 5,
+      },
+      receivedAmount: {
+        amount: '-20',
+        assetCode: 'USD',
+        assetScale: 5,
+      },
+    })
 
     await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
       PaymentError.QueryFailed
@@ -550,34 +450,9 @@ describe('open payments', () => {
   })
 
   it('fails if Incoming Payment state is not defined in IncomingPaymentState', async () => {
-    const incomingPaymentId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: 'foo',
-        incomingAmount: {
-          amount: '45601',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        receivedAmount: {
-          amount: '0',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000 * 24).toISOString(),
-        description: 'something',
-        externalRef: 'something else',
-        ilpAddress: 'g.wallet.users.alice.~w6247823482374234',
-        sharedSecret: randomBytes(32).toString('base64'),
-        receiptsEnabled: false,
-      })
+    const { destinationPayment } = setupNock({
+      state: 'foo',
+    })
 
     await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
       PaymentError.QueryFailed
@@ -585,34 +460,9 @@ describe('open payments', () => {
   })
 
   it('fails if expiresAt cannot be parsed', async () => {
-    const incomingPaymentId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const destinationPayment = `${accountUrl}/incoming-payments/${incomingPaymentId}`
-
-    nock('https://wallet.example')
-      .get(`/alice/incoming-payments/${incomingPaymentId}`)
-      .matchHeader('Accept', 'application/json')
-      .reply(200, {
-        id: destinationPayment,
-        accountId: accountUrl,
-        state: 'pending',
-        incomingAmount: {
-          amount: '45601',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        receivedAmount: {
-          amount: '0',
-          assetCode: 'USD',
-          assetScale: 4,
-        },
-        expiresAt: 'foo',
-        description: 'something',
-        externalRef: 'something else',
-        ilpAddress: 'g.wallet.users.alice.~w6247823482374234',
-        sharedSecret: randomBytes(32).toString('base64'),
-        receiptsEnabled: false,
-      })
+    const { destinationPayment } = setupNock({
+      expiresAt: 'foo',
+    })
 
     await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
       PaymentError.QueryFailed
