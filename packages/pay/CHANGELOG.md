@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0-alpha.0](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.3.3...@interledger/pay@0.4.0-alpha.0) (2022-03-21)
+
+
+### Features
+
+* **pay:** update to Open Payments v2 ([#262](https://github.com/interledgerjs/interledgerjs/issues/262)) ([82da805](https://github.com/interledgerjs/interledgerjs/commit/82da8058a1e545519b84589b6543442a755dbf0c))
+
+
+
+
+
 ## [0.3.3](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.3.2...@interledger/pay@0.3.3) (2021-11-09)
 
 
