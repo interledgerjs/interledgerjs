@@ -13,7 +13,7 @@ import {
 import Long from 'long'
 import nock from 'nock'
 import { PaymentError, PaymentType, setupPayment, startQuote } from '../src'
-import { fetchPaymentDetails } from '../src/open-payments'
+import { fetchPaymentDetails, IncomingPaymentState } from '../src/open-payments'
 import { generateEncryptionKey, Int } from '../src/utils'
 import {
   createMaxPacketMiddleware,
@@ -27,6 +27,25 @@ import {
 import { CustomBackend } from './helpers/rate-backend'
 import reduct from 'reduct'
 
+interface setupNockOptions {
+  incomingPaymentId?: string | null
+  accountUrl?: string | null
+  destinationPayment?: string | null
+  state?: string | null
+  incomingAmount?: NockAmount | null
+  receivedAmount?: NockAmount | null
+  expiresAt?: string | null
+  description?: string | null
+  externalRef?: string | null
+  receiptsEnabled?: boolean | null
+}
+
+type NockAmount = {
+  amount: string
+  assetCode: string
+  assetScale: number
+}
+
 const plugin = createPlugin()
 const streamServer = new StreamServer({
   serverSecret: randomBytes(32),
@@ -35,12 +54,83 @@ const streamServer = new StreamServer({
 const streamReceiver = createStreamReceiver(streamServer)
 const uuid = () => '2646f447-542a-4f0a-a557-f7492b46265f'
 
+const setupNock = (options: setupNockOptions) => {
+  const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
+  const incomingPaymentId =
+    options.incomingPaymentId !== null ? options.incomingPaymentId || uuid() : undefined
+  const accountUrl =
+    options.accountUrl !== null ? options.accountUrl || 'https://wallet.example/alice' : undefined
+  const destinationPayment =
+    options.destinationPayment !== null
+      ? options.destinationPayment || `${accountUrl}/incoming-payments/${incomingPaymentId}`
+      : undefined
+  const state =
+    options.state !== null ? options.state || IncomingPaymentState.Processing : undefined
+  const incomingAmount =
+    options.incomingAmount !== null
+      ? options.incomingAmount || {
+          amount: '40000',
+          assetCode: 'USD',
+          assetScale: 4,
+        }
+      : undefined
+  const receivedAmount =
+    options.receivedAmount !== null
+      ? options.receivedAmount || {
+          amount: '20000',
+          assetCode: 'USD',
+          assetScale: 4,
+        }
+      : undefined
+  const expiresAt =
+    options.expiresAt !== null
+      ? options.expiresAt !== undefined
+        ? options.expiresAt
+        : new Date(Date.now() + 60 * 60 * 1000 * 24).toISOString() // 1 day in the future
+      : undefined
+  const description = options.description !== null ? options.description || 'Coffee' : undefined
+  const externalRef = options.externalRef !== null ? options.externalRef || '#123' : undefined
+  const receiptsEnabled = options.receiptsEnabled || false
+
+  nock('https://wallet.example')
+    .get(`/alice/incoming-payments/${incomingPaymentId}`)
+    .matchHeader('Accept', 'application/json')
+    .reply(200, {
+      id: destinationPayment,
+      accountId: accountUrl,
+      state,
+      incomingAmount,
+      receivedAmount,
+      expiresAt,
+      description,
+      externalRef,
+      ilpAddress,
+      sharedSecret: sharedSecret.toString('base64'),
+      receiptsEnabled,
+    })
+
+  return {
+    incomingPaymentId,
+    destinationPayment,
+    accountUrl,
+    state,
+    incomingAmount,
+    receivedAmount,
+    expiresAt,
+    description,
+    externalRef,
+    ilpAddress,
+    sharedSecret,
+    receiptsEnabled,
+  }
+}
+
 describe('open payments', () => {
   const destinationAddress = 'g.wallet.receiver.12345'
   const sharedSecret = randomBytes(32)
   const sharedSecretBase64 = sharedSecret.toString('base64')
 
-  it('quotes an invoice', async () => {
+  it('quotes an Incoming Payment', async () => {
     const prices = {
       EUR: 1,
       USD: 1.12,
@@ -53,32 +143,20 @@ describe('open payments', () => {
       streamReceiver
     )
 
-    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
-
-    const invoiceId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const invoiceUrl = `${accountUrl}/invoices/${invoiceId}`
-    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
-    const description = 'Coffee'
-
-    nock('https://wallet.example')
-      .get(`/alice/invoices/${invoiceId}`)
-      .matchHeader('Accept', 'application/ilp-stream+json')
-      .reply(200, {
-        id: invoiceUrl,
-        account: accountUrl,
-        amount: '45601',
-        received: '2302', // Delivered: 2302 / 45601
-        assetCode: 'USD',
-        assetScale: 4,
-        expiresAt: new Date(expiresAt).toISOString(),
-        description,
-        ilpAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-      })
+    const {
+      accountUrl,
+      destinationPayment,
+      expiresAt,
+      incomingAmount,
+      receivedAmount,
+      description,
+      externalRef,
+      ilpAddress,
+      sharedSecret,
+    } = setupNock({})
 
     const destination = await setupPayment({
-      invoiceUrl,
+      destinationPayment,
       plugin,
     })
     const { minDeliveryAmount, minExchangeRate, paymentType } = await startQuote({
@@ -91,17 +169,30 @@ describe('open payments', () => {
       },
     })
 
-    // Tests that it quotes the remaining amount to deliver in the invoice
+    // Tests that it quotes the remaining amount to deliver in the Incoming Payment
     expect(paymentType).toBe(PaymentType.FixedDelivery)
     expect(minExchangeRate).toBeDefined()
-    expect(minDeliveryAmount).toBe(BigInt(45601 - 2302))
-    expect(destination.invoice).toMatchObject({
-      invoiceUrl,
-      accountUrl,
-      expiresAt,
+    expect(minDeliveryAmount).toBe(BigInt(40000 - 20000))
+    expect(destination.destinationPaymentDetails).toMatchObject({
+      id: destinationPayment,
+      accountId: accountUrl,
+      expiresAt: new Date(expiresAt!).getTime(),
       description,
-      amountDelivered: BigInt(2302),
-      amountToDeliver: BigInt(45601),
+      receivedAmount: receivedAmount
+        ? {
+            amount: BigInt(receivedAmount.amount),
+            assetCode: receivedAmount.assetCode,
+            assetScale: receivedAmount.assetScale,
+          }
+        : undefined,
+      incomingAmount: incomingAmount
+        ? {
+            amount: BigInt(incomingAmount.amount),
+            assetCode: incomingAmount.assetCode,
+            assetScale: incomingAmount.assetScale,
+          }
+        : undefined,
+      externalRef,
     })
     expect(destination.destinationAsset).toMatchObject({
       code: 'USD',
@@ -112,179 +203,312 @@ describe('open payments', () => {
     expect(destination.accountUrl).toBe(accountUrl)
   })
 
-  it('fails if invoice url is not HTTPS or HTTP', async () => {
+  it('quotes an Incoming Payment without incomingAmount', async () => {
+    const prices = {
+      EUR: 1,
+      USD: 1.12,
+    }
+
+    const plugin = createPlugin(
+      createRateMiddleware(
+        new RateBackend({ code: 'EUR', scale: 3 }, { code: 'USD', scale: 4 }, prices)
+      ),
+      streamReceiver
+    )
+
+    const {
+      accountUrl,
+      destinationPayment,
+      expiresAt,
+      receivedAmount,
+      description,
+      externalRef,
+      ilpAddress,
+      sharedSecret,
+    } = setupNock({ incomingAmount: null })
+
+    const destination = await setupPayment({
+      destinationPayment,
+      plugin,
+    })
+    const { minDeliveryAmount, minExchangeRate, paymentType } = await startQuote({
+      plugin,
+      destination,
+      prices,
+      sourceAsset: {
+        code: 'EUR',
+        scale: 4,
+      },
+      amountToSend: BigInt(400),
+    })
+
+    // Tests that it quotes the remaining amount to deliver in the Incoming Payment
+    expect(paymentType).toBe(PaymentType.FixedSend)
+    expect(minExchangeRate).toBeDefined()
+    expect(minDeliveryAmount).toBe(BigInt(353))
+    expect(destination.destinationPaymentDetails).toMatchObject({
+      id: destinationPayment,
+      accountId: accountUrl,
+      expiresAt: new Date(expiresAt!).getTime(),
+      description,
+      receivedAmount: receivedAmount
+        ? {
+            amount: BigInt(receivedAmount.amount),
+            assetCode: receivedAmount.assetCode,
+            assetScale: receivedAmount.assetScale,
+          }
+        : undefined,
+      externalRef,
+    })
+    expect(destination.destinationAsset).toMatchObject({
+      code: 'USD',
+      scale: 4,
+    })
+    expect(destination.destinationAddress).toBe(ilpAddress)
+    expect(destination.sharedSecret.equals(sharedSecret))
+    expect(destination.accountUrl).toBe(accountUrl)
+  })
+
+  it('fails to quotes an Incoming Payment without incomingAmount, amountToSend or amountToDeliver', async () => {
+    const prices = {
+      EUR: 1,
+      USD: 1.12,
+    }
+
+    const plugin = createPlugin(
+      createRateMiddleware(
+        new RateBackend({ code: 'EUR', scale: 3 }, { code: 'USD', scale: 4 }, prices)
+      ),
+      streamReceiver
+    )
+
+    const { destinationPayment } = setupNock({ incomingAmount: null })
+
+    const destination = await setupPayment({
+      destinationPayment,
+      plugin,
+    })
+    await expect(startQuote({ plugin, destination })).rejects.toBe(
+      PaymentError.UnknownPaymentTarget
+    )
+  })
+
+  it('fails if Incoming Payment url is not HTTPS or HTTP', async () => {
     await expect(
-      fetchPaymentDetails({ invoiceUrl: 'oops://this-is-a-wallet.co/invoice/123' })
+      fetchPaymentDetails({ destinationPayment: 'oops://this-is-a-wallet.co/incoming-payment/123' })
     ).resolves.toBe(PaymentError.QueryFailed)
   })
 
-  it('fails if given a payment pointer as an invoice url', async () => {
-    await expect(fetchPaymentDetails({ invoiceUrl: '$foo.money' })).resolves.toBe(
+  it('fails if given a payment pointer as an Incoming Payment url', async () => {
+    await expect(fetchPaymentDetails({ destinationPayment: '$foo.money' })).resolves.toBe(
       PaymentError.QueryFailed
     )
   })
 
-  it('fails if the invoice was already paid', async () => {
-    const invoiceId = uuid()
-    const sharedSecret = randomBytes(32)
-    const destinationAddress = 'g.larry.server3'
-
-    const accountUrl = 'https://wallet.example/alice'
-    const invoiceUrl = `${accountUrl}/invoices/${invoiceId}`
-
-    nock('https://wallet.example')
-      .get(`/alice/invoices/${invoiceId}`)
-      .matchHeader('Accept', 'application/ilp-stream+json')
-      .reply(200, {
-        id: invoiceUrl,
-        account: accountUrl,
-        amount: '200',
-        received: '203', // Paid $2.03 of $2 invoice
-        assetCode: 'USD',
-        assetScale: 2,
-        expiresAt: new Date().toISOString(),
-        description: 'Something really amazing',
-        ilpAddress: destinationAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-      })
-
-    const destination = await setupPayment({
-      invoiceUrl,
-      plugin,
-    })
-    await expect(startQuote({ plugin, destination })).rejects.toBe(PaymentError.InvoiceAlreadyPaid)
-  })
-
-  it('resolves and validates an invoice', async () => {
-    const destinationAddress = 'g.wallet.users.alice.~w6247823482374234'
-    const sharedSecret = randomBytes(32)
-    const invoiceId = uuid()
-
-    const accountUrl = 'https://wallet.example/alice'
-    const invoiceUrl = `https://wallet.example/invoices/${invoiceId}`
-    const expiresAt = Date.now() + 60 * 60 * 1000 * 24 // 1 day in the future
-    const description = 'Coffee'
-
-    const scope = nock('https://wallet.example')
-      .get(`/invoices/${invoiceId}`)
-      .matchHeader('Accept', 'application/ilp-stream+json')
-      .reply(200, {
-        id: invoiceUrl,
-        account: accountUrl,
-        amount: '45601',
-        received: '0',
+  it('fails if the Incoming Payment was already paid', async () => {
+    const { destinationPayment } = setupNock({
+      receivedAmount: {
+        amount: '40300', // Paid $4.03 of $4
         assetCode: 'USD',
         assetScale: 4,
-        expiresAt: new Date(expiresAt).toISOString(),
-        description,
-        ilpAddress: destinationAddress,
-        sharedSecret: sharedSecret.toString('base64'),
-      })
+      },
+    })
 
-    await expect(fetchPaymentDetails({ invoiceUrl })).resolves.toMatchObject({
+    const destination = await setupPayment({
+      destinationPayment,
+      plugin,
+    })
+    await expect(startQuote({ plugin, destination })).rejects.toBe(
+      PaymentError.IncomingPaymentCompleted
+    )
+  })
+
+  it('fails if the Incoming Payment was already completed', async () => {
+    const { destinationPayment } = setupNock({
+      state: IncomingPaymentState.Completed,
+      receivedAmount: {
+        amount: '40000', // Paid $4.03 of $4
+        assetCode: 'USD',
+        assetScale: 4,
+      },
+    })
+
+    const destination = await setupPayment({
+      destinationPayment,
+      plugin,
+    })
+    await expect(startQuote({ plugin, destination })).rejects.toBe(
+      PaymentError.IncomingPaymentCompleted
+    )
+  })
+
+  it('fails if the Incoming Payment has expired', async () => {
+    const { destinationPayment } = setupNock({
+      state: IncomingPaymentState.Expired,
+      expiresAt: new Date().toISOString(),
+    })
+
+    const destination = await setupPayment({
+      destinationPayment,
+      plugin,
+    })
+    await expect(startQuote({ plugin, destination })).rejects.toBe(
+      PaymentError.IncomingPaymentExpired
+    )
+  })
+
+  it('resolves and validates an Incoming Payment', async () => {
+    const {
+      accountUrl,
+      destinationPayment,
+      expiresAt,
+      incomingAmount,
+      receivedAmount,
+      description,
+      externalRef,
+      ilpAddress,
       sharedSecret,
-      destinationAddress,
+    } = setupNock({})
+
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toMatchObject({
+      sharedSecret,
+      destinationAddress: ilpAddress,
       destinationAsset: {
         code: 'USD',
         scale: 4,
       },
-      invoice: {
-        amountDelivered: BigInt(0),
-        amountToDeliver: BigInt(45601),
-        invoiceUrl,
-        accountUrl,
-        expiresAt,
+      destinationPaymentDetails: {
+        receivedAmount: receivedAmount
+          ? {
+              amount: BigInt(receivedAmount.amount),
+              assetCode: receivedAmount.assetCode,
+              assetScale: receivedAmount.assetScale,
+            }
+          : undefined,
+        incomingAmount: incomingAmount
+          ? {
+              amount: BigInt(incomingAmount.amount),
+              assetCode: incomingAmount.assetCode,
+              assetScale: incomingAmount.assetScale,
+            }
+          : undefined,
+        id: destinationPayment,
+        accountId: accountUrl,
+        expiresAt: new Date(expiresAt!).getTime(),
         description,
+        externalRef,
       },
     })
-    scope.done()
   })
 
-  it('fails if invoice amounts are not positive and u64', async () => {
-    const invoiceId = uuid()
-    const accountUrl = 'https://wallet.example/alice'
-    const invoiceUrl = `${accountUrl}/invoices/${invoiceId}`
+  it('resolves and validates an Incoming Payment if incomingAmount, expiresAt, description, and externalRef are missing', async () => {
+    const { accountUrl, destinationPayment, receivedAmount, ilpAddress, sharedSecret } = setupNock({
+      incomingAmount: null,
+      expiresAt: null,
+      description: null,
+      externalRef: null,
+    })
 
-    nock('https://wallet.example')
-      .get(`/alice/invoices/${invoiceId}`)
-      .matchHeader('Accept', 'application/ilp-stream+json')
-      .reply(200, {
-        id: invoiceUrl,
-        account: accountUrl,
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toMatchObject({
+      sharedSecret,
+      destinationAddress: ilpAddress,
+      destinationAsset: {
+        code: 'USD',
+        scale: 4,
+      },
+      destinationPaymentDetails: {
+        receivedAmount: receivedAmount
+          ? {
+              amount: BigInt(receivedAmount.amount),
+              assetCode: receivedAmount.assetCode,
+              assetScale: receivedAmount.assetScale,
+            }
+          : undefined,
+        id: destinationPayment,
+        accountId: accountUrl,
+      },
+    })
+  })
+
+  it('fails if Incoming Payment amounts are not positive and u64', async () => {
+    const { destinationPayment } = setupNock({
+      incomingAmount: {
         amount: '100000000000000000000000000000000000000000000000000000000',
-        received: -20,
         assetCode: 'USD',
         assetScale: 5,
-        expiresAt: new Date().toISOString(),
-        description: 'Something special',
-        ilpAddress: 'private.foo',
-        sharedSecret: Buffer.alloc(32),
-      })
+      },
+      receivedAmount: {
+        amount: '-20',
+        assetCode: 'USD',
+        assetScale: 5,
+      },
+    })
 
-    await expect(fetchPaymentDetails({ invoiceUrl })).resolves.toBe(PaymentError.QueryFailed)
-  })
-
-  it('fails if invoice query times out', async () => {
-    const scope = nock('https://money.example').get(/.*/).delay(6000).reply(500)
-    await expect(fetchPaymentDetails({ invoiceUrl: 'https://money.example' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
       PaymentError.QueryFailed
     )
+  })
+
+  it('fails if Incoming Payment state is not defined in IncomingPaymentState', async () => {
+    const { destinationPayment } = setupNock({
+      state: 'foo',
+    })
+
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+  })
+
+  it('fails if expiresAt cannot be parsed', async () => {
+    const { destinationPayment } = setupNock({
+      expiresAt: 'foo',
+    })
+
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+  })
+
+  it('fails if Incoming Payment query times out', async () => {
+    const scope = nock('https://money.example').get(/.*/).delay(6000).reply(500)
+    await expect(
+      fetchPaymentDetails({ destinationPayment: 'https://money.example' })
+    ).resolves.toBe(PaymentError.QueryFailed)
     scope.done()
     nock.abortPendingRequests()
   })
 
-  it('fails if invoice query returns 4xx error', async () => {
-    const invoiceUrl = 'https://example.com/foo'
+  it('fails if Incoming Payment query returns 4xx error', async () => {
+    const destinationPayment = 'https://example.com/foo'
     const scope = nock('https://example.com').get('/foo').reply(404) // Query fails
-    await expect(fetchPaymentDetails({ invoiceUrl })).resolves.toBe(PaymentError.QueryFailed)
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
     scope.done()
   })
 
-  it('fails if invoice query response is invalid', async () => {
-    // Validates invoice must be a non-null object
-    const invoiceUrl = 'https://open.mywallet.com/invoices/123'
+  it('fails if Incoming Payment query response is invalid', async () => {
+    // Validates Incoming Payment must be a non-null object
+    const destinationPayment = 'https://open.mywallet.com/incoming-payments/123'
     const scope1 = nock('https://open.mywallet.com')
-      .get('/invoices/123')
-      .reply(200, '"not an invoice"')
-    await expect(fetchPaymentDetails({ invoiceUrl })).resolves.toBe(PaymentError.QueryFailed)
+      .get('/incoming-payments/123')
+      .reply(200, '"not an Incoming Payment"')
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
     scope1.done()
 
-    // Validates invoice must contain other details, not simply credentials
+    // Validates Incoming Payment must contain other details, not simply credentials
     const scope2 = nock('https://open.mywallet.com')
-      .get('/invoices/123')
+      .get('/incoming-payments/123')
       .reply(200, {
         sharedSecret: randomBytes(32).toString('base64'),
         ilpAddress: 'private.larry.receiver',
       })
-    await expect(fetchPaymentDetails({ invoiceUrl })).resolves.toBe(PaymentError.QueryFailed)
+    await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
     scope2.done()
-  })
-
-  it('resolves credentials from an Open Payments account', async () => {
-    const scope = nock('https://open.mywallet.com')
-      .get('/accounts/alice')
-      .matchHeader('Accept', /application\/ilp-stream\+json*./)
-      .reply(200, {
-        id: 'https://open.mywallet.com/accounts/alice',
-        accountServicer: 'https://open.mywallet.com/',
-        sharedSecret: sharedSecretBase64,
-        ilpAddress: destinationAddress,
-        assetCode: 'USD',
-        assetScale: 6,
-      })
-
-    const credentials = await fetchPaymentDetails({
-      paymentPointer: '$open.mywallet.com/accounts/alice',
-    })
-    expect(credentials).toMatchObject({
-      sharedSecret,
-      destinationAddress,
-      destinationAsset: {
-        code: 'USD',
-        scale: 6,
-      },
-    })
-    scope.done()
   })
 
   it('resolves credentials from SPSP', async () => {
@@ -298,7 +522,7 @@ describe('open payments', () => {
         receiptsEnabled: false,
       })
 
-    const credentials = await fetchPaymentDetails({ paymentPointer: '$alice.mywallet.com' })
+    const credentials = await fetchPaymentDetails({ destinationAccount: '$alice.mywallet.com' })
     expect(credentials).toMatchObject({
       sharedSecret,
       destinationAddress,
@@ -309,7 +533,7 @@ describe('open payments', () => {
 
   it('fails if account query fails', async () => {
     const scope = nock('https://open.mywallet.com').get(/.*/).reply(500)
-    await expect(fetchPaymentDetails({ paymentPointer: '$open.mywallet.com' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationAccount: '$open.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope.done()
@@ -317,7 +541,7 @@ describe('open payments', () => {
 
   it('fails if account query times out', async () => {
     const scope = nock('https://open.mywallet.com').get(/.*/).delay(7000).reply(500)
-    await expect(fetchPaymentDetails({ paymentPointer: '$open.mywallet.com' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationAccount: '$open.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope.done()
@@ -327,7 +551,7 @@ describe('open payments', () => {
   it('fails if account query response is invalid', async () => {
     // Open Payments account not an object
     const scope1 = nock('https://example.com/foo').get(/.*/).reply(200, '"this is a string"')
-    await expect(fetchPaymentDetails({ paymentPointer: '$example.com/foo' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationAccount: '$example.com/foo' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope1.done()
@@ -337,14 +561,14 @@ describe('open payments', () => {
       destination_account: 'g.foo',
       shared_secret: 'Zm9v',
     })
-    await expect(fetchPaymentDetails({ paymentPointer: '$alice.mywallet.com' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationAccount: '$alice.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope2.done()
 
     // SPSP account not an object
     const scope3 = nock('https://wallet.example').get('/.well-known/pay').reply(200, '3')
-    await expect(fetchPaymentDetails({ paymentPointer: '$wallet.example' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationAccount: '$wallet.example' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope3.done()
@@ -364,7 +588,7 @@ describe('open payments', () => {
       .matchHeader('Accept', /application\/spsp4\+json*./)
       .reply(200, { destination_account: destinationAddress, shared_secret: sharedSecretBase64 })
 
-    const credentials = await fetchPaymentDetails({ paymentPointer: 'https://wallet1.example' })
+    const credentials = await fetchPaymentDetails({ destinationAccount: 'https://wallet1.example' })
     expect(credentials).toMatchObject({
       sharedSecret,
       destinationAddress,
@@ -390,9 +614,9 @@ describe('open payments', () => {
       }
     )
 
-    await expect(fetchPaymentDetails({ paymentPointer: 'https://wallet1.example' })).resolves.toBe(
-      PaymentError.QueryFailed
-    )
+    await expect(
+      fetchPaymentDetails({ destinationAccount: 'https://wallet1.example' })
+    ).resolves.toBe(PaymentError.QueryFailed)
 
     // Only the first request, should be resolved, ensure it doesn't follow insecure redirect
     expect(scope1.isDone())
@@ -400,26 +624,26 @@ describe('open payments', () => {
   })
 
   it('fails if the payment pointer is semantically invalid', async () => {
-    await expect(fetchPaymentDetails({ paymentPointer: 'ht$tps://example.com' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationAccount: 'ht$tps://example.com' })).resolves.toBe(
       PaymentError.InvalidPaymentPointer
     )
   })
 
   it('fails if query part is included', async () => {
-    await expect(fetchPaymentDetails({ paymentPointer: '$foo.co?id=12345678' })).resolves.toBe(
+    await expect(fetchPaymentDetails({ destinationAccount: '$foo.co?id=12345678' })).resolves.toBe(
       PaymentError.InvalidPaymentPointer
     )
   })
 
   it('fails if fragment part is included', async () => {
-    await expect(fetchPaymentDetails({ paymentPointer: '$interledger.org#default' })).resolves.toBe(
-      PaymentError.InvalidPaymentPointer
-    )
+    await expect(
+      fetchPaymentDetails({ destinationAccount: '$interledger.org#default' })
+    ).resolves.toBe(PaymentError.InvalidPaymentPointer)
   })
 
   it('fails if account URL is not HTTPS or HTTP', async () => {
     await expect(
-      fetchPaymentDetails({ paymentPointer: 'oops://ilp.wallet.com/alice' })
+      fetchPaymentDetails({ destinationAccount: 'oops://ilp.wallet.com/alice' })
     ).resolves.toBe(PaymentError.InvalidPaymentPointer)
   })
 
@@ -456,7 +680,7 @@ describe('setup flow', () => {
     await expect(
       setupPayment({
         plugin: new MirrorPlugin(),
-        paymentPointer: 'ht$tps://example.com',
+        destinationAccount: 'ht$tps://example.com',
       })
     ).rejects.toBe(PaymentError.InvalidPaymentPointer)
   })
@@ -465,7 +689,7 @@ describe('setup flow', () => {
     await expect(
       setupPayment({
         plugin: new MirrorPlugin(),
-        paymentPointer: 'https://wallet.co/foo/bar',
+        destinationAccount: 'https://wallet.co/foo/bar',
       })
     ).rejects.toBe(PaymentError.QueryFailed)
   })
@@ -476,7 +700,7 @@ describe('setup flow', () => {
     await expect(
       setupPayment({
         plugin: new MirrorPlugin(),
-        paymentPointer: 'https://example4.com/foo',
+        destinationAccount: 'https://example4.com/foo',
       })
     ).rejects.toBe(PaymentError.QueryFailed)
     scope.done()
@@ -531,7 +755,7 @@ describe('setup flow', () => {
       })
 
     const details = await setupPayment({
-      paymentPointer: 'https://example5.com',
+      destinationAccount: 'https://example5.com',
       plugin: senderPlugin1,
     })
 
@@ -744,7 +968,7 @@ describe('quoting flow', () => {
     ).rejects.toBe(PaymentError.InvalidDestinationAmount)
   })
 
-  it('fails if no invoice, amount to send or deliver was provided', async () => {
+  it('fails if no Incoming Payment, amount to send or deliver was provided', async () => {
     const plugin = new MirrorPlugin()
     const asset = {
       code: 'ABC',
