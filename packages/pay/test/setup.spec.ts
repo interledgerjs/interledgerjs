@@ -13,7 +13,7 @@ import {
 import Long from 'long'
 import nock from 'nock'
 import { PaymentError, PaymentType, setupPayment, startQuote } from '../src'
-import { fetchPaymentDetails, IncomingPaymentState } from '../src/open-payments'
+import { fetchPaymentDetails, IncomingPaymentState, Account } from '../src/open-payments'
 import { generateEncryptionKey, Int } from '../src/utils'
 import {
   createMaxPacketMiddleware,
@@ -26,6 +26,7 @@ import {
 } from './helpers/plugin'
 import { CustomBackend } from './helpers/rate-backend'
 import reduct from 'reduct'
+import { URL } from 'url'
 
 interface setupNockOptions {
   incomingPaymentId?: string | null
@@ -125,10 +126,57 @@ const setupNock = (options: setupNockOptions) => {
   }
 }
 
+const mockGetAccount = (account: Account) => {
+  const accountUrl = new URL(account.id)
+  return nock(accountUrl.origin)
+    .get(accountUrl.pathname)
+    .matchHeader('Accept', 'application/json')
+    .reply(200, account)
+}
+
+const mockCreateIncomingPayment = (account: Account) => {
+  const accountUrl = new URL(account.id)
+  const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
+  return nock(accountUrl.origin)
+    .post(`${accountUrl.pathname}/incoming-payments`)
+    .matchHeader('Accept', 'application/json')
+    .reply(201, (uri, requestBody: string) => {
+      const body = JSON.parse(requestBody)
+      return {
+        id: `${accountUrl.origin}/incoming-payments`,
+        accountId: account.id,
+        state: IncomingPaymentState.Pending,
+        incomingAmount: body.incomingAmount
+          ? {
+              amount: body.incomingAmount.amount,
+              assetCode: account.assetCode,
+              assetScale: account.assetScale,
+            }
+          : undefined,
+        receivedAmount: {
+          amount: '0',
+          assetCode: account.assetCode,
+          assetScale: account.assetScale,
+        },
+        ilpAddress,
+        sharedSecret: sharedSecret.toString('base64'),
+        receiptsEnabled: false,
+      }
+    })
+}
+
 describe('open payments', () => {
   const destinationAddress = 'g.wallet.receiver.12345'
   const sharedSecret = randomBytes(32)
   const sharedSecretBase64 = sharedSecret.toString('base64')
+  const account: Account = {
+    id: 'https://wallet.example/alice',
+    publicName: 'alice',
+    assetCode: 'USD',
+    assetScale: 4,
+    authServer: 'https://auth.wallet.example',
+  }
+  const accountUrl = new URL(account.id)
 
   it('quotes an Incoming Payment', async () => {
     const prices = {
@@ -511,6 +559,318 @@ describe('open payments', () => {
     scope2.done()
   })
 
+  it.each`
+    amountToDeliver
+    ${undefined}
+    ${'5'}
+  `(
+    'resolves credentials from created Incoming Payment (amountToDeliver: $amountToDeliver)',
+    async ({ amountToDeliver }): Promise<void> => {
+      const accountScope = mockGetAccount(account)
+      const paymentScope = mockCreateIncomingPayment(account)
+      const credentials = await fetchPaymentDetails({
+        destinationAccount: account.id,
+        amountToDeliver,
+      })
+      expect(credentials).toMatchObject({
+        accountUrl: account.id,
+        destinationAsset: {
+          code: account.assetCode,
+          scale: account.assetScale,
+        },
+        destinationPaymentDetails: {
+          accountId: account.id,
+          incomingAmount: amountToDeliver
+            ? {
+                amount: BigInt(amountToDeliver),
+                assetCode: account.assetCode,
+                assetScale: account.assetScale,
+              }
+            : undefined,
+        },
+      })
+      expect(accountScope.isDone()).toBe(true)
+      expect(paymentScope.isDone()).toBe(true)
+    }
+  )
+
+  it('fails if account query fails', async () => {
+    const scope = nock(accountUrl.origin)
+      .get(accountUrl.pathname)
+      .matchHeader('Accept', 'application/json')
+      .reply(500)
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+    scope.done()
+  }, 10_000)
+
+  it('fails if account query times out', async () => {
+    const scope = nock(accountUrl.origin)
+      .get(accountUrl.pathname)
+      .matchHeader('Accept', 'application/json')
+      .delay(7000)
+      .reply(500)
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+    scope.done()
+    nock.abortPendingRequests()
+  }, 10_000)
+
+  it('fails if account query response is invalid', async () => {
+    // Account not an object
+    const scope = nock(accountUrl.origin)
+      .get(accountUrl.pathname)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, '"this is a string"')
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+    scope.done()
+  }, 10_000)
+
+  it('fails if create Incoming Payment query url is invalid', async () => {
+    const accountScope = nock(accountUrl.origin)
+      .get(accountUrl.pathname)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, {
+        ...account,
+        id: account.id.replace('https', 'oops'),
+      })
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+    expect(accountScope.isDone()).toBe(true)
+  })
+
+  it('follows account redirect', async () => {
+    const redirectUrl = 'https://vanity.example'
+    const redirectScope = nock(redirectUrl)
+      .get(/.*/)
+      .matchHeader('Accept', 'application/json')
+      .reply(
+        307, // Temporary redirect
+        {},
+        {
+          Location: account.id,
+        }
+      )
+
+    const accountScope = mockGetAccount(account)
+    const paymentScope = mockCreateIncomingPayment(account)
+
+    const credentials = await fetchPaymentDetails({ destinationAccount: redirectUrl })
+    expect(credentials).toMatchObject({
+      accountUrl: account.id,
+      destinationAsset: {
+        code: account.assetCode,
+        scale: account.assetScale,
+      },
+      destinationPaymentDetails: {
+        accountId: account.id,
+      },
+    })
+    expect(redirectScope.isDone()).toBe(true)
+    expect(accountScope.isDone()).toBe(true)
+    expect(paymentScope.isDone()).toBe(true)
+  })
+
+  it('fails on account redirect to non-HTTPS endpoint', async () => {
+    const scope1 = nock(accountUrl.origin)
+      .get(accountUrl.pathname)
+      .matchHeader('Accept', 'application/json')
+      .reply(
+        302, // Temporary redirect
+        {},
+        {
+          Location: 'http://wallet2.example/.well-known/pay',
+        }
+      )
+
+    const scope2 = nock('https://wallet2.example/').get('/.well-known/pay').reply(
+      302, // Temporary redirect
+      {},
+      {
+        Location: 'http://wallet3.example/.well-known/pay',
+      }
+    )
+
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+
+    // Only the first request, should be resolved, ensure it doesn't follow insecure redirect
+    expect(scope1.isDone()).toBe(true)
+    expect(scope2.isDone()).toBe(false)
+    nock.cleanAll()
+  }, 10_000)
+
+  it('fails if create Incoming Payment query fails', async () => {
+    const accountScope = mockGetAccount(account)
+    const paymentScope = nock(accountUrl.origin)
+      .post(`${accountUrl.pathname}/incoming-payments`)
+      .matchHeader('Accept', 'application/json')
+      .reply(500)
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+    expect(accountScope.isDone()).toBe(true)
+    expect(paymentScope.isDone()).toBe(true)
+  })
+
+  it('fails if create Incoming Payment query times out', async () => {
+    const accountScope = mockGetAccount(account)
+    const paymentScope = nock(accountUrl.origin)
+      .post(`${accountUrl.pathname}/incoming-payments`)
+      .matchHeader('Accept', 'application/json')
+      .delay(7000)
+      .reply(500)
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+    expect(accountScope.isDone()).toBe(true)
+    expect(paymentScope.isDone()).toBe(true)
+    nock.abortPendingRequests()
+  }, 10_000)
+
+  it('fails if create Incoming Payment query response is invalid', async () => {
+    {
+      // Incoming Payment not an object
+      const accountScope = mockGetAccount(account)
+      const paymentScope = nock(accountUrl.origin)
+        .post(`${accountUrl.pathname}/incoming-payments`)
+        .matchHeader('Accept', 'application/json')
+        .reply(201, '"this is a string"')
+      await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+        PaymentError.QueryFailed
+      )
+      expect(accountScope.isDone()).toBe(true)
+      expect(paymentScope.isDone()).toBe(true)
+    }
+    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
+    const incomingPayment = {
+      id: `${accountUrl.origin}/incoming-payments`,
+      accountId: account.id,
+      state: IncomingPaymentState.Pending,
+      receivedAmount: {
+        amount: '0',
+        assetCode: account.assetCode,
+        assetScale: account.assetScale,
+      },
+      ilpAddress,
+      sharedSecret: sharedSecret.toString('base64'),
+      receiptsEnabled: false,
+    }
+    {
+      // Incoming Payment id not a URL
+      const accountScope = mockGetAccount(account)
+      const paymentScope = nock(accountUrl.origin)
+        .post(`${accountUrl.pathname}/incoming-payments`)
+        .matchHeader('Accept', 'application/json')
+        .reply(201, (uri, requestBody: string) => {
+          const body = JSON.parse(requestBody)
+          return {
+            ...incomingPayment,
+            id: `${accountUrl.origin.replace('https', 'oops')}/incoming-payments`,
+          }
+        })
+      await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+        PaymentError.QueryFailed
+      )
+      expect(accountScope.isDone()).toBe(true)
+      expect(paymentScope.isDone()).toBe(true)
+    }
+    {
+      // Account id not a URL
+      const accountScope = mockGetAccount(account)
+      const paymentScope = nock(accountUrl.origin)
+        .post(`${accountUrl.pathname}/incoming-payments`)
+        .matchHeader('Accept', 'application/json')
+        .reply(201, (uri, requestBody: string) => {
+          const body = JSON.parse(requestBody)
+          return {
+            ...incomingPayment,
+            accountId: account.id.replace('https', 'oops'),
+          }
+        })
+      await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+        PaymentError.QueryFailed
+      )
+      expect(accountScope.isDone()).toBe(true)
+      expect(paymentScope.isDone()).toBe(true)
+    }
+  })
+
+  it('follows create Incoming Payment redirect', async () => {
+    const redirectUrl = 'https://vanity.example'
+    const accountScope = nock(accountUrl.origin)
+      .get(accountUrl.pathname)
+      .matchHeader('Accept', 'application/json')
+      .reply(200, {
+        ...account,
+        id: redirectUrl,
+      })
+    const redirectScope = nock(redirectUrl)
+      .post('/incoming-payments')
+      .matchHeader('Accept', 'application/json')
+      .reply(
+        307, // Temporary redirect
+        {},
+        {
+          Location: `${account.id}/incoming-payments`,
+        }
+      )
+    const paymentScope = mockCreateIncomingPayment(account)
+
+    const credentials = await fetchPaymentDetails({ destinationAccount: account.id })
+    expect(credentials).toMatchObject({
+      accountUrl: account.id,
+      destinationAsset: {
+        code: account.assetCode,
+        scale: account.assetScale,
+      },
+      destinationPaymentDetails: {
+        accountId: account.id,
+      },
+    })
+    expect(accountScope.isDone()).toBe(true)
+    expect(redirectScope.isDone()).toBe(true)
+    expect(paymentScope.isDone()).toBe(true)
+  })
+
+  it('fails on create Incoming Payment redirect to non-HTTPS endpoint', async () => {
+    const accountScope = mockGetAccount(account)
+    const scope1 = nock(accountUrl.origin)
+      .post(`${accountUrl.pathname}/incoming-payments`)
+      .matchHeader('Accept', 'application/json')
+      .reply(
+        302, // Temporary redirect
+        {},
+        {
+          Location: 'http://wallet2.example/incoming-payments',
+        }
+      )
+
+    const scope2 = nock('https://wallet2.example/').post('/incoming-payments').reply(
+      302, // Temporary redirect
+      {},
+      {
+        Location: 'http://wallet3.example/incoming-payments',
+      }
+    )
+
+    await expect(fetchPaymentDetails({ destinationAccount: account.id })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
+
+    // Only the first request, should be resolved, ensure it doesn't follow insecure redirect
+    expect(accountScope.isDone()).toBe(true)
+    expect(scope1.isDone()).toBe(true)
+    expect(scope2.isDone()).toBe(false)
+    nock.cleanAll()
+  }, 10_000)
+
   it('resolves credentials from SPSP', async () => {
     const scope = nock('https://alice.mywallet.com')
       .get('/.well-known/pay')
@@ -531,97 +891,113 @@ describe('open payments', () => {
     scope.done()
   })
 
-  it('fails if account query fails', async () => {
-    const scope = nock('https://open.mywallet.com').get(/.*/).reply(500)
+  it('fails if SPSP query fails', async () => {
+    const scope = nock('https://open.mywallet.com')
+      .get(/.*/)
+      .matchHeader('Accept', /application\/spsp4\+json*./)
+      .reply(500)
     await expect(fetchPaymentDetails({ destinationAccount: '$open.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope.done()
-  })
+  }, 10_000)
 
-  it('fails if account query times out', async () => {
-    const scope = nock('https://open.mywallet.com').get(/.*/).delay(7000).reply(500)
+  it('fails if SPSP query times out', async () => {
+    const scope = nock('https://open.mywallet.com')
+      .get(/.*/)
+      .matchHeader('Accept', /application\/spsp4\+json*./)
+      .delay(7000)
+      .reply(500)
     await expect(fetchPaymentDetails({ destinationAccount: '$open.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope.done()
     nock.abortPendingRequests()
-  })
+  }, 10_000)
 
-  it('fails if account query response is invalid', async () => {
-    // Open Payments account not an object
-    const scope1 = nock('https://example.com/foo').get(/.*/).reply(200, '"this is a string"')
-    await expect(fetchPaymentDetails({ destinationAccount: '$example.com/foo' })).resolves.toBe(
-      PaymentError.QueryFailed
-    )
-    scope1.done()
-
+  it('fails if SPSP query response is invalid', async () => {
     // Invalid shared secret
-    const scope2 = nock('https://alice.mywallet.com').get('/.well-known/pay').reply(200, {
-      destination_account: 'g.foo',
-      shared_secret: 'Zm9v',
-    })
+    const scope2 = nock('https://alice.mywallet.com')
+      .get('/.well-known/pay')
+      .matchHeader('Accept', /application\/spsp4\+json*./)
+      .reply(200, {
+        destination_account: 'g.foo',
+        shared_secret: 'Zm9v',
+      })
     await expect(fetchPaymentDetails({ destinationAccount: '$alice.mywallet.com' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope2.done()
 
     // SPSP account not an object
-    const scope3 = nock('https://wallet.example').get('/.well-known/pay').reply(200, '3')
+    const scope3 = nock('https://wallet.example')
+      .get('/.well-known/pay')
+      .matchHeader('Accept', /application\/spsp4\+json*./)
+      .reply(200, '3')
     await expect(fetchPaymentDetails({ destinationAccount: '$wallet.example' })).resolves.toBe(
       PaymentError.QueryFailed
     )
     scope3.done()
-  })
+  }, 10_000)
 
   it('follows SPSP redirect', async () => {
-    const scope1 = nock('https://wallet1.example/').get('/.well-known/pay').reply(
-      307, // Temporary redirect
-      {},
-      {
-        Location: 'https://wallet2.example/.well-known/pay',
-      }
-    )
+    const scope1 = nock('https://wallet1.example/')
+      .get('/.well-known/pay')
+      .matchHeader('Accept', /application\/spsp4\+json*./)
+      .reply(
+        307, // Temporary redirect
+        {},
+        {
+          Location: 'https://wallet2.example/.well-known/pay',
+        }
+      )
 
     const scope2 = nock('https://wallet2.example/')
       .get('/.well-known/pay')
       .matchHeader('Accept', /application\/spsp4\+json*./)
       .reply(200, { destination_account: destinationAddress, shared_secret: sharedSecretBase64 })
 
-    const credentials = await fetchPaymentDetails({ destinationAccount: 'https://wallet1.example' })
+    const credentials = await fetchPaymentDetails({ destinationAccount: '$wallet1.example' })
     expect(credentials).toMatchObject({
       sharedSecret,
       destinationAddress,
     })
     scope1.done()
     scope2.done()
-  })
+  }, 10_000)
 
   it('fails on SPSP redirect to non-HTTPS endpoint', async () => {
-    const scope1 = nock('https://wallet1.example/').get('/.well-known/pay').reply(
-      302, // Temporary redirect
-      {},
-      {
-        Location: 'http://wallet2.example/.well-known/pay',
-      }
-    )
+    const scope1 = nock('https://wallet1.example/')
+      .get('/.well-known/pay')
+      .matchHeader('Accept', /application\/spsp4\+json*./)
+      .reply(
+        302, // Temporary redirect
+        {},
+        {
+          Location: 'http://wallet2.example/.well-known/pay',
+        }
+      )
 
-    const scope2 = nock('https://wallet2.example/').get('/.well-known/pay').reply(
-      302, // Temporary redirect
-      {},
-      {
-        Location: 'http://wallet3.example/.well-known/pay',
-      }
-    )
+    const scope2 = nock('https://wallet2.example/')
+      .get('/.well-known/pay')
+      .matchHeader('Accept', /application\/spsp4\+json*./)
+      .reply(
+        302, // Temporary redirect
+        {},
+        {
+          Location: 'http://wallet3.example/.well-known/pay',
+        }
+      )
 
-    await expect(
-      fetchPaymentDetails({ destinationAccount: 'https://wallet1.example' })
-    ).resolves.toBe(PaymentError.QueryFailed)
+    await expect(fetchPaymentDetails({ destinationAccount: '$wallet1.example' })).resolves.toBe(
+      PaymentError.QueryFailed
+    )
 
     // Only the first request, should be resolved, ensure it doesn't follow insecure redirect
     expect(scope1.isDone())
     expect(!scope2.isDone())
-  })
+    nock.cleanAll()
+  }, 10_000)
 
   it('fails if the payment pointer is semantically invalid', async () => {
     await expect(fetchPaymentDetails({ destinationAccount: 'ht$tps://example.com' })).resolves.toBe(
@@ -692,7 +1068,7 @@ describe('setup flow', () => {
         destinationAccount: 'https://wallet.co/foo/bar',
       })
     ).rejects.toBe(PaymentError.QueryFailed)
-  })
+  }, 10_000)
 
   it('fails if SPSP response is invalid', async () => {
     const scope = nock('https://example4.com').get('/foo').reply(200, { meh: 'why?' })
