@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/no-empty-function */
 import { Int, isNonNegativeRational, sleep } from './utils'
 import fetch, { Response } from 'node-fetch'
-import { PaymentError, isPaymentError, SetupOptions } from '.'
+import { PaymentError, SetupOptions } from '.'
 import createLogger from 'ilp-logger'
 import { AssetDetails, isValidAssetScale, isValidAssetDetails } from './controllers/asset-details'
 import { IlpAddress, isValidIlpAddress } from 'ilp-packet'
@@ -10,7 +10,7 @@ import { AccountUrl, createHttpUrl } from './payment-pointer'
 
 const SHARED_SECRET_BYTE_LENGTH = 32
 const OPEN_PAYMENT_QUERY_ACCEPT_HEADER = 'application/json'
-const SPSP_QUERY_ACCEPT_HEADER = 'application/spsp4+json'
+const ACCOUNT_QUERY_ACCEPT_HEADER = `${OPEN_PAYMENT_QUERY_ACCEPT_HEADER}, application/spsp4+json`
 
 const log = createLogger('ilp-pay:query')
 
@@ -54,6 +54,9 @@ export interface Account {
   /** The URL of the authorization server endpoint for getting grants and access tokens for this account **/
   authServer: string
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
+const isAccount = (o: any): o is Account => !!validateOpenPaymentsAccount(o)
 
 /** [Open Payments Incoming Payment](https://docs.openpayments.guide) metadata */
 export interface IncomingPayment {
@@ -121,10 +124,10 @@ export const fetchPaymentDetails = async (
   // - SPSP query at payment pointer
   else if (destinationAccount) {
     const account = await queryAccount(destinationAccount)
-    if (!isPaymentError(account)) {
+    if (isAccount(account)) {
       return createIncomingPayment(account, amountToDeliver ? Int.from(amountToDeliver) : undefined)
     } else {
-      return querySPSP(destinationAccount)
+      return account
     }
   }
   // STREAM credentials were provided directly
@@ -211,8 +214,10 @@ const queryIncomingPayment = async (url: string): Promise<PaymentDestination | P
     .then((res) => res || PaymentError.QueryFailed)
 }
 
-/** Query the Open Payments server for the account */
-export const queryAccount = async (destinationAccount: string): Promise<Account | PaymentError> => {
+/** Query the payment pointer, Open Payments server, or SPSP server for credentials to establish a STREAM connection */
+export const queryAccount = async (
+  destinationAccount: string
+): Promise<Account | PaymentDestination | PaymentError> => {
   const accountUrl =
     AccountUrl.fromPaymentPointer(destinationAccount) ?? AccountUrl.fromUrl(destinationAccount)
   if (!accountUrl) {
@@ -220,41 +225,23 @@ export const queryAccount = async (destinationAccount: string): Promise<Account 
     return PaymentError.InvalidPaymentPointer
   }
 
-  return fetchJson(accountUrl.toEndpointUrl(), OPEN_PAYMENT_QUERY_ACCEPT_HEADER)
+  return fetchJson(accountUrl.toEndpointUrl(), ACCOUNT_QUERY_ACCEPT_HEADER)
     .then(
       (data) =>
         validateOpenPaymentsAccount(data) ??
-        log.debug('account query returned no valid Open Payments account.')
-    )
-    .catch((err) => log.debug('account query failed: %s', err))
-    .then((res) => res || PaymentError.QueryFailed)
-}
-
-/** Query the SPSP server for credentials to establish a STREAM connection */
-export const querySPSP = async (
-  destinationAccount: string
-): Promise<PaymentDestination | PaymentError> => {
-  const accountUrl =
-    AccountUrl.fromPaymentPointer(destinationAccount) ?? AccountUrl.fromUrl(destinationAccount)
-  if (!accountUrl) {
-    log.debug('payment pointer is invalid: %s', destinationAccount)
-    return PaymentError.InvalidPaymentPointer
-  }
-
-  return fetchJson(accountUrl.toEndpointUrl(), SPSP_QUERY_ACCEPT_HEADER)
-    .then(
-      (data) =>
         validateSpspCredentials(data) ??
-        log.debug('SPSP query returned no valid STREAM credentials.')
+        log.debug('payment pointer query returned no valid STREAM credentials.')
     )
-    .catch((err) => log.debug('SPSP query failed: %s', err))
+    .catch((err) => log.debug('payment pointer query failed: %s', err))
     .then((res) =>
       res
-        ? {
-            ...res,
-            accountUrl: accountUrl.toString(),
-            destinationAccount: accountUrl.toPaymentPointer(),
-          }
+        ? isAccount(res)
+          ? res
+          : {
+              ...res,
+              accountUrl: accountUrl.toString(),
+              destinationAccount: accountUrl.toPaymentPointer(),
+            }
         : PaymentError.QueryFailed
     )
 }
