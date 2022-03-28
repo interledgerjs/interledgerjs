@@ -80,7 +80,7 @@ export interface IncomingPayment {
   receiptsEnabled: boolean
 }
 
-interface Amount {
+export interface Amount {
   // Amount, in base units. ≥0
   amount: bigint
   /** Asset code or symbol identifying the currency of the account */
@@ -125,7 +125,7 @@ export const fetchPaymentDetails = async (
   else if (destinationAccount) {
     const account = await queryAccount(destinationAccount)
     if (isAccount(account)) {
-      return createIncomingPayment(account, amountToDeliver ? Int.from(amountToDeliver) : undefined)
+      return createIncomingPayment(account, amountToDeliver)
     } else {
       return account
     }
@@ -157,16 +157,26 @@ export const fetchPaymentDetails = async (
 /** Create an Incoming Payment for an Open Payments account */
 const createIncomingPayment = async (
   account: Account,
-  amountToDeliver: Int | undefined
+  amountToDeliver?: Amount
 ): Promise<PaymentDestination | PaymentError> => {
   if (!createHttpUrl(account.id)) {
     log.debug('create IncomingPayment query failed: URL not HTTP/HTTPS.')
     return PaymentError.QueryFailed
   }
+  if (amountToDeliver) {
+    if (
+      account.assetCode !== amountToDeliver.assetCode ||
+      account.assetScale !== amountToDeliver.assetScale
+    ) {
+      log.debug('create IncomingPayment query failed: invalid amountToDeliver asset.')
+      return PaymentError.QueryFailed
+    }
+  }
   const body = amountToDeliver
     ? {
         incomingAmount: {
-          amount: amountToDeliver.toString(),
+          ...amountToDeliver,
+          amount: amountToDeliver.amount.toString(),
         },
       }
     : {}
@@ -174,7 +184,7 @@ const createIncomingPayment = async (
   return postJson(`${account.id}/incoming-payments`, OPEN_PAYMENT_QUERY_ACCEPT_HEADER, body)
     .then(async (data) => {
       const credentials = validateOpenPaymentsCredentials(data)
-      const incomingPayment = validateOpenPaymentsIncomingPayment(data)
+      const incomingPayment = validateOpenPaymentsIncomingPayment(data, amountToDeliver)
 
       if (incomingPayment && credentials) {
         return {
@@ -367,7 +377,10 @@ const validateOpenPaymentsAccount = (o: any): Account | undefined => {
 }
 
 /** Transform the Open Payments server response into a validated IncomingPayment */
-const validateOpenPaymentsIncomingPayment = (o: any): IncomingPayment | undefined => {
+const validateOpenPaymentsIncomingPayment = (
+  o: any,
+  expectedAmount?: Amount
+): IncomingPayment | undefined => {
   if (!isNonNullObject(o)) {
     return
   }
@@ -398,6 +411,16 @@ const validateOpenPaymentsIncomingPayment = (o: any): IncomingPayment | undefine
     !receivedAmount
   ) {
     return
+  }
+
+  if (expectedAmount) {
+    if (
+      incomingAmount?.amount !== expectedAmount.amount ||
+      incomingAmount?.assetCode !== expectedAmount.assetCode ||
+      incomingAmount?.assetScale !== expectedAmount.assetScale
+    ) {
+      return
+    }
   }
 
   if (!AccountUrl.fromUrl(id)) return

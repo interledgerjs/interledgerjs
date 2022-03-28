@@ -13,7 +13,7 @@ import {
 import Long from 'long'
 import nock from 'nock'
 import { PaymentError, PaymentType, setupPayment, startQuote } from '../src'
-import { fetchPaymentDetails, IncomingPaymentState, Account } from '../src/open-payments'
+import { fetchPaymentDetails, IncomingPaymentState, Account, Amount } from '../src/open-payments'
 import { generateEncryptionKey, Int } from '../src/utils'
 import {
   createMaxPacketMiddleware,
@@ -134,7 +134,7 @@ const mockGetAccount = (account: Account) => {
     .reply(200, account)
 }
 
-const mockCreateIncomingPayment = (account: Account) => {
+const mockCreateIncomingPayment = (account: Account, incomingAmount?: Amount) => {
   const accountUrl = new URL(account.id)
   const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
   return nock(accountUrl.origin)
@@ -146,13 +146,13 @@ const mockCreateIncomingPayment = (account: Account) => {
         id: `${accountUrl.origin}/incoming-payments`,
         accountId: account.id,
         state: IncomingPaymentState.Pending,
-        incomingAmount: body.incomingAmount
+        incomingAmount: incomingAmount
           ? {
-              amount: body.incomingAmount.amount,
-              assetCode: account.assetCode,
-              assetScale: account.assetScale,
+              amount: incomingAmount.amount.toString(),
+              assetCode: incomingAmount.assetCode,
+              assetScale: incomingAmount.assetScale,
             }
-          : undefined,
+          : body.incomingAmount,
         receivedAmount: {
           amount: '0',
           assetCode: account.assetCode,
@@ -560,14 +560,21 @@ describe('open payments', () => {
   })
 
   it.each`
-    amountToDeliver
+    amount
     ${undefined}
-    ${'5'}
+    ${BigInt(5)}
   `(
-    'resolves credentials from created Incoming Payment (amountToDeliver: $amountToDeliver)',
-    async ({ amountToDeliver }): Promise<void> => {
+    'resolves credentials from created Incoming Payment (amountToDeliver: $amount)',
+    async ({ amount }): Promise<void> => {
       const accountScope = mockGetAccount(account)
       const paymentScope = mockCreateIncomingPayment(account)
+      const amountToDeliver: Amount | undefined = amount
+        ? {
+            amount,
+            assetCode: account.assetCode,
+            assetScale: account.assetScale,
+          }
+        : undefined
       const credentials = await fetchPaymentDetails({
         destinationAccount: account.id,
         amountToDeliver,
@@ -582,13 +589,7 @@ describe('open payments', () => {
         },
         destinationPaymentDetails: {
           accountId: account.id,
-          incomingAmount: amountToDeliver
-            ? {
-                amount: BigInt(amountToDeliver),
-                assetCode: account.assetCode,
-                assetScale: account.assetScale,
-              }
-            : undefined,
+          incomingAmount: amountToDeliver,
         },
       })
     }
@@ -643,6 +644,57 @@ describe('open payments', () => {
     )
     accountScope.done()
   })
+
+  it.each`
+    assetCode            | assetScale                | description
+    ${'NOPE'}            | ${account.assetScale}     | ${'code'}
+    ${account.assetCode} | ${account.assetScale + 1} | ${'scale'}
+  `(
+    'fails if create amountToDeliver asset $description is invalid',
+    async ({ assetCode, assetScale }): Promise<void> => {
+      const accountScope = mockGetAccount(account)
+      const credentials = await expect(
+        fetchPaymentDetails({
+          destinationAccount: account.id,
+          amountToDeliver: {
+            amount: BigInt(5),
+            assetCode,
+            assetScale,
+          },
+        })
+      ).resolves.toBe(PaymentError.QueryFailed)
+      accountScope.done()
+    }
+  )
+
+  it.each`
+    amount            | assetCode            | assetScale                | description
+    ${BigInt(10_000)} | ${account.assetCode} | ${account.assetScale + 1} | ${'amount'}
+    ${BigInt(5)}      | ${'NOPE'}            | ${account.assetScale}     | ${'asset code'}
+    ${BigInt(5)}      | ${account.assetCode} | ${account.assetScale + 1} | ${'asset scale'}
+  `(
+    'fails if created Incoming Payment $description is invalid',
+    async ({ amount, assetCode, assetScale }): Promise<void> => {
+      const accountScope = mockGetAccount(account)
+      const paymentScope = mockCreateIncomingPayment(account, {
+        amount,
+        assetCode,
+        assetScale,
+      })
+      const credentials = await expect(
+        fetchPaymentDetails({
+          destinationAccount: account.id,
+          amountToDeliver: {
+            amount: BigInt(5),
+            assetCode: account.assetCode,
+            assetScale: account.assetScale,
+          },
+        })
+      ).resolves.toBe(PaymentError.QueryFailed)
+      accountScope.done()
+      paymentScope.done()
+    }
+  )
 
   it('follows account redirect', async () => {
     const redirectUrl = 'https://vanity.example'
