@@ -195,7 +195,7 @@ const createIncomingPayment = async (
       }
       log.debug('destinationPayment query returned an invalid response.')
     })
-    .catch((err) => log.debug('create IncomingPayment query failed.', err?.message))
+    .catch((err) => log.debug('create IncomingPayment query failed: %s', err?.message))
     .then((res) => res || PaymentError.QueryFailed)
 }
 
@@ -220,7 +220,7 @@ const queryIncomingPayment = async (url: string): Promise<PaymentDestination | P
       }
       log.debug('destinationPayment query returned an invalid response.')
     })
-    .catch((err) => log.debug('destinationPayment query failed.', err?.message))
+    .catch((err) => log.debug('destinationPayment query failed: %s', err?.message))
     .then((res) => res || PaymentError.QueryFailed)
 }
 
