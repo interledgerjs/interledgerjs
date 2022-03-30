@@ -9,8 +9,8 @@ import AbortController from 'abort-controller'
 import { AccountUrl, createHttpUrl } from './payment-pointer'
 
 const SHARED_SECRET_BYTE_LENGTH = 32
-const INCOMING_PAYMENT_QUERY_ACCEPT_HEADER = 'application/json'
-const ACCOUNT_QUERY_ACCEPT_HEADER = 'application/ilp-stream+json, application/spsp4+json'
+const OPEN_PAYMENT_QUERY_ACCEPT_HEADER = 'application/json'
+const ACCOUNT_QUERY_ACCEPT_HEADER = `${OPEN_PAYMENT_QUERY_ACCEPT_HEADER}, application/spsp4+json`
 
 const log = createLogger('ilp-pay:query')
 
@@ -41,6 +41,23 @@ export interface PaymentDestination {
   destinationAccount?: string
 }
 
+/** [Open Payments Account](https://docs.openpayments.guide) metadata */
+export interface Account {
+  /** URL identifying the Account */
+  id: string
+  /** A public name for the account */
+  publicName: string
+  /** Asset code or symbol identifying the currency of the account */
+  assetCode: string
+  /** Precision of the asset denomination: number of decimal places of the normal unit */
+  assetScale: number
+  /** The URL of the authorization server endpoint for getting grants and access tokens for this account **/
+  authServer: string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types
+const isAccount = (o: any): o is Account => !!validateOpenPaymentsAccount(o)
+
 /** [Open Payments Incoming Payment](https://docs.openpayments.guide) metadata */
 export interface IncomingPayment {
   /** URL identifying the Incoming Payment */
@@ -63,7 +80,7 @@ export interface IncomingPayment {
   receiptsEnabled: boolean
 }
 
-interface Amount {
+export interface Amount {
   // Amount, in base units. ≥0
   amount: bigint
   /** Asset code or symbol identifying the currency of the account */
@@ -92,6 +109,7 @@ export const fetchPaymentDetails = async (
   const {
     destinationPayment,
     destinationAccount,
+    amountToDeliver,
     sharedSecret,
     destinationAddress,
     destinationAsset,
@@ -101,9 +119,16 @@ export const fetchPaymentDetails = async (
   if (destinationPayment) {
     return queryIncomingPayment(destinationPayment)
   }
-  // Resolve STREAM credentials from a payment pointer or account URL via Open Payments or SPSP
+  // Resolve STREAM credentials from either:
+  // - Incoming Payment created at Open Payments destinationAccount
+  // - SPSP query at payment pointer
   else if (destinationAccount) {
-    return queryAccount(destinationAccount)
+    const account = await queryAccount(destinationAccount)
+    if (isAccount(account)) {
+      return createIncomingPayment(account, amountToDeliver)
+    } else {
+      return account
+    }
   }
   // STREAM credentials were provided directly
   else if (
@@ -129,17 +154,37 @@ export const fetchPaymentDetails = async (
   }
 }
 
-/** Fetch an Incoming Payment and STREAM credentials from an Open Payments */
-const queryIncomingPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
-  if (!createHttpUrl(url)) {
-    log.debug('destinationPayment query failed: URL not HTTP/HTTPS.')
+/** Create an Incoming Payment for an Open Payments account */
+const createIncomingPayment = async (
+  account: Account,
+  amountToDeliver?: Amount
+): Promise<PaymentDestination | PaymentError> => {
+  if (!createHttpUrl(account.id)) {
+    log.debug('create IncomingPayment query failed: URL not HTTP/HTTPS.')
     return PaymentError.QueryFailed
   }
+  if (amountToDeliver) {
+    if (
+      account.assetCode !== amountToDeliver.assetCode ||
+      account.assetScale !== amountToDeliver.assetScale
+    ) {
+      log.debug('create IncomingPayment query failed: invalid amountToDeliver asset.')
+      return PaymentError.QueryFailed
+    }
+  }
+  const body = amountToDeliver
+    ? {
+        incomingAmount: {
+          ...amountToDeliver,
+          amount: amountToDeliver.amount.toString(),
+        },
+      }
+    : {}
 
-  return fetchJson(url, INCOMING_PAYMENT_QUERY_ACCEPT_HEADER)
+  return postJson(`${account.id}/incoming-payments`, OPEN_PAYMENT_QUERY_ACCEPT_HEADER, body)
     .then(async (data) => {
       const credentials = validateOpenPaymentsCredentials(data)
-      const incomingPayment = validateOpenPaymentsIncomingPayment(data, url)
+      const incomingPayment = validateOpenPaymentsIncomingPayment(data, amountToDeliver)
 
       if (incomingPayment && credentials) {
         return {
@@ -150,14 +195,39 @@ const queryIncomingPayment = async (url: string): Promise<PaymentDestination | P
       }
       log.debug('destinationPayment query returned an invalid response.')
     })
-    .catch((err) => log.debug('destinationPayment query failed.', err?.message))
+    .catch((err) => log.debug('create IncomingPayment query failed: %s', err?.message))
+    .then((res) => res || PaymentError.QueryFailed)
+}
+
+/** Fetch an Incoming Payment and STREAM credentials from an Open Payments account */
+const queryIncomingPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
+  if (!createHttpUrl(url)) {
+    log.debug('destinationPayment query failed: URL not HTTP/HTTPS.')
+    return PaymentError.QueryFailed
+  }
+
+  return fetchJson(url, OPEN_PAYMENT_QUERY_ACCEPT_HEADER)
+    .then(async (data) => {
+      const credentials = validateOpenPaymentsCredentials(data)
+      const incomingPayment = validateOpenPaymentsIncomingPayment(data)
+
+      if (incomingPayment && credentials) {
+        return {
+          accountUrl: incomingPayment.accountId,
+          destinationPaymentDetails: incomingPayment,
+          ...credentials,
+        }
+      }
+      log.debug('destinationPayment query returned an invalid response.')
+    })
+    .catch((err) => log.debug('destinationPayment query failed: %s', err?.message))
     .then((res) => res || PaymentError.QueryFailed)
 }
 
 /** Query the payment pointer, Open Payments server, or SPSP server for credentials to establish a STREAM connection */
 export const queryAccount = async (
   destinationAccount: string
-): Promise<PaymentDestination | PaymentError> => {
+): Promise<Account | PaymentDestination | PaymentError> => {
   const accountUrl =
     AccountUrl.fromPaymentPointer(destinationAccount) ?? AccountUrl.fromUrl(destinationAccount)
   if (!accountUrl) {
@@ -168,18 +238,20 @@ export const queryAccount = async (
   return fetchJson(accountUrl.toEndpointUrl(), ACCOUNT_QUERY_ACCEPT_HEADER)
     .then(
       (data) =>
-        validateOpenPaymentsCredentials(data) ??
+        validateOpenPaymentsAccount(data) ??
         validateSpspCredentials(data) ??
         log.debug('payment pointer query returned no valid STREAM credentials.')
     )
     .catch((err) => log.debug('payment pointer query failed: %s', err))
     .then((res) =>
       res
-        ? {
-            ...res,
-            accountUrl: accountUrl.toString(),
-            destinationAccount: accountUrl.toPaymentPointer(),
-          }
+        ? isAccount(res)
+          ? res
+          : {
+              ...res,
+              accountUrl: accountUrl.toString(),
+              destinationAccount: accountUrl.toPaymentPointer(),
+            }
         : PaymentError.QueryFailed
     )
 }
@@ -228,6 +300,25 @@ const fetchJson = async (
     .finally(() => clearTimeout(timer))
 }
 
+/** Perform an HTTP request using `fetch`. Resolve with parsed JSON, reject otherwise. */
+const postJson = async (
+  url: string,
+  acceptHeader: string,
+  body: Record<string, any>
+): Promise<any> => {
+  return fetch(url, {
+    method: 'post',
+    redirect: 'follow',
+    headers: {
+      Accept: acceptHeader,
+    },
+    body: JSON.stringify(body),
+  }).then(async (res: Response) => {
+    // Parse JSON on HTTP 2xx, otherwise error
+    return res.ok ? res.json() : Promise.reject()
+  })
+}
+
 const validateSharedSecretBase64 = (o: any): Buffer | undefined => {
   if (typeof o === 'string') {
     const sharedSecret = Buffer.from(o, 'base64')
@@ -254,16 +345,48 @@ const validateUInt64 = (o: any): Int | undefined => {
 
 const isNonNullObject = (o: any): o is Record<string, any> => typeof o === 'object' && o !== null
 
-/** Transform the Open Payments server reponse into a validated IncomingPayment */
+/** Transform the Open Payments server response into a validated Account */
+const validateOpenPaymentsAccount = (o: any): Account | undefined => {
+  if (!isNonNullObject(o)) {
+    return
+  }
+
+  const { id, publicName, assetCode, assetScale, authServer } = o
+
+  if (
+    typeof id !== 'string' ||
+    !(typeof publicName === 'string' || publicName === undefined) ||
+    typeof assetCode !== 'string' ||
+    !isValidAssetScale(assetScale) ||
+    typeof authServer !== 'string'
+  ) {
+    return
+  }
+
+  if (!AccountUrl.fromUrl(id)) return
+
+  // TODO Should the given Account URL be validated against the `id` URL in the Account itself?
+
+  return {
+    id,
+    publicName,
+    assetCode,
+    assetScale,
+    authServer,
+  }
+}
+
+/** Transform the Open Payments server response into a validated IncomingPayment */
 const validateOpenPaymentsIncomingPayment = (
   o: any,
-  queryUrl: string
+  expectedAmount?: Amount
 ): IncomingPayment | undefined => {
   if (!isNonNullObject(o)) {
     return
   }
 
   const {
+    id,
     accountId,
     state,
     incomingAmount: unvalidatedIncomingAmount,
@@ -278,6 +401,7 @@ const validateOpenPaymentsIncomingPayment = (
   const receivedAmount = validateOpenPaymentsAmount(unvalidatedReceivedAmount)
 
   if (
+    typeof id !== 'string' ||
     typeof accountId !== 'string' ||
     !(typeof description === 'string' || description === undefined) ||
     !(typeof externalRef === 'string' || externalRef === undefined) ||
@@ -289,16 +413,26 @@ const validateOpenPaymentsIncomingPayment = (
     return
   }
 
-  const accountUrl = AccountUrl.fromUrl(accountId)
-  if (!accountUrl) return
+  if (expectedAmount) {
+    if (
+      incomingAmount?.amount !== expectedAmount.amount ||
+      incomingAmount?.assetCode !== expectedAmount.assetCode ||
+      incomingAmount?.assetScale !== expectedAmount.assetScale
+    ) {
+      return
+    }
+  }
+
+  if (!AccountUrl.fromUrl(id)) return
+  if (!AccountUrl.fromUrl(accountId)) return
 
   if (!Object.values(IncomingPaymentState).includes(state)) return
 
   // TODO Should the given Incoming Payment URL be validated against the `id` URL in the Incoming Payment itself?
 
   return {
-    id: queryUrl,
-    accountId: accountUrl.toEndpointUrl(),
+    id,
+    accountId,
     state,
     expiresAt,
     description,

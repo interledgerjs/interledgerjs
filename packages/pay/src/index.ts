@@ -1,6 +1,11 @@
 import { AssetDetails, isValidAssetDetails } from './controllers/asset-details'
 import { Counter } from './controllers/sequence'
-import { fetchPaymentDetails, IncomingPaymentState, PaymentDestination } from './open-payments'
+import {
+  fetchPaymentDetails,
+  IncomingPaymentState,
+  PaymentDestination,
+  Amount,
+} from './open-payments'
 import { Plugin } from './request'
 import { AssetProbe } from './senders/asset-probe'
 import { ConnectionCloser } from './senders/connection-closer'
@@ -27,6 +32,8 @@ export interface SetupOptions {
   destinationAccount?: string
   /** Open Payments Incoming Payment URL to resolve details and credentials to pay a fixed-delivery payment */
   destinationPayment?: string
+  /** Fixed amount to deliver to the recipient, in base units of destination asset */
+  amountToDeliver?: Amount
   /** For testing purposes: symmetric key to encrypt STREAM messages. Requires `destinationAddress` */
   sharedSecret?: Uint8Array
   /** For testing purposes: ILP address of the STREAM receiver to send outgoing packets. Requires `sharedSecret` */
