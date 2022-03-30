@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0-alpha.1](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.0...@interledger/pay@0.4.0-alpha.1) (2022-03-30)
+
+
+### Bug Fixes
+
+* **pay:** fix log.debug format string ([e4377d0](https://github.com/interledgerjs/interledgerjs/commit/e4377d06a2b5761b051bcfe8257ba90471e19dcf))
+
+
+### Features
+
+* **pay:** create Incoming Payment in setupPayment ([8af8d35](https://github.com/interledgerjs/interledgerjs/commit/8af8d35d3ebcf052cfb813048becb816d50c253a))
+
+
+
+
+
 # [0.4.0-alpha.0](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.3.3...@interledger/pay@0.4.0-alpha.0) (2022-03-21)
 
 

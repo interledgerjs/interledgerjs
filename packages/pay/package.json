@@ -1,7 +1,7 @@
 {
   "name": "@interledger/pay",
   "description": "Send payments over Interledger",
-  "version": "0.4.0-alpha.0",
+  "version": "0.4.0-alpha.1",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "publishConfig": {
