@@ -38,7 +38,6 @@ interface setupNockOptions {
   expiresAt?: string | null
   description?: string | null
   externalRef?: string | null
-  receiptsEnabled?: boolean | null
 }
 
 type NockAmount = {
@@ -91,7 +90,6 @@ const setupNock = (options: setupNockOptions) => {
       : undefined
   const description = options.description !== null ? options.description || 'Coffee' : undefined
   const externalRef = options.externalRef !== null ? options.externalRef || '#123' : undefined
-  const receiptsEnabled = options.receiptsEnabled || false
 
   nock('https://wallet.example')
     .get(`/alice/incoming-payments/${incomingPaymentId}`)
@@ -107,7 +105,6 @@ const setupNock = (options: setupNockOptions) => {
       externalRef,
       ilpAddress,
       sharedSecret: sharedSecret.toString('base64'),
-      receiptsEnabled,
     })
 
   return {
@@ -122,7 +119,6 @@ const setupNock = (options: setupNockOptions) => {
     externalRef,
     ilpAddress,
     sharedSecret,
-    receiptsEnabled,
   }
 }
 
@@ -160,7 +156,6 @@ const mockCreateIncomingPayment = (account: Account, incomingAmount?: Amount) =>
         },
         ilpAddress,
         sharedSecret: sharedSecret.toString('base64'),
-        receiptsEnabled: false,
       }
     })
 }
@@ -812,7 +807,6 @@ describe('open payments', () => {
       },
       ilpAddress,
       sharedSecret: sharedSecret.toString('base64'),
-      receiptsEnabled: false,
     }
     {
       // Incoming Payment id not a URL
@@ -931,7 +925,6 @@ describe('open payments', () => {
       .reply(200, {
         destination_account: destinationAddress,
         shared_secret: sharedSecretBase64,
-        receiptsEnabled: false,
       })
 
     const credentials = await fetchPaymentDetails({ destinationAccount: '$alice.mywallet.com' })
