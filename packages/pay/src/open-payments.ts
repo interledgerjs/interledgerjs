@@ -76,8 +76,6 @@ export interface IncomingPayment {
   incomingAmount?: Amount
   /** Amount that has already been paid toward the Incoming Payment. */
   receivedAmount: Amount
-  /** Flag whether STREAM receipts will be provided. */
-  receiptsEnabled: boolean
 }
 
 export interface Amount {
@@ -394,7 +392,6 @@ const validateOpenPaymentsIncomingPayment = (
     expiresAt: expiresAtIso,
     description,
     externalRef,
-    receiptsEnabled,
   } = o
   const expiresAt = expiresAtIso ? Date.parse(expiresAtIso) : undefined // `NaN` if date is invalid
   const incomingAmount = validateOpenPaymentsAmount(unvalidatedIncomingAmount)
@@ -405,7 +402,6 @@ const validateOpenPaymentsIncomingPayment = (
     typeof accountId !== 'string' ||
     !(typeof description === 'string' || description === undefined) ||
     !(typeof externalRef === 'string' || externalRef === undefined) ||
-    typeof receiptsEnabled !== 'boolean' ||
     !(isNonNegativeRational(expiresAt) || expiresAt === undefined) ||
     incomingAmount === null ||
     !receivedAmount
@@ -439,7 +435,6 @@ const validateOpenPaymentsIncomingPayment = (
     externalRef,
     receivedAmount,
     incomingAmount,
-    receiptsEnabled,
   }
 }
 
