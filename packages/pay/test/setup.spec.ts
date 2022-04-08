@@ -41,7 +41,7 @@ interface setupNockOptions {
 }
 
 type NockAmount = {
-  amount: string
+  value: string
   assetCode: string
   assetScale: number
 }
@@ -69,7 +69,7 @@ const setupNock = (options: setupNockOptions) => {
   const incomingAmount =
     options.incomingAmount !== null
       ? options.incomingAmount || {
-          amount: '40000',
+          value: '40000',
           assetCode: 'USD',
           assetScale: 4,
         }
@@ -77,7 +77,7 @@ const setupNock = (options: setupNockOptions) => {
   const receivedAmount =
     options.receivedAmount !== null
       ? options.receivedAmount || {
-          amount: '20000',
+          value: '20000',
           assetCode: 'USD',
           assetScale: 4,
         }
@@ -144,13 +144,13 @@ const mockCreateIncomingPayment = (account: Account, incomingAmount?: Amount) =>
         state: IncomingPaymentState.Pending,
         incomingAmount: incomingAmount
           ? {
-              amount: incomingAmount.amount.toString(),
+              value: incomingAmount.value.toString(),
               assetCode: incomingAmount.assetCode,
               assetScale: incomingAmount.assetScale,
             }
           : body.incomingAmount,
         receivedAmount: {
-          amount: '0',
+          value: '0',
           assetCode: account.assetCode,
           assetScale: account.assetScale,
         },
@@ -223,14 +223,14 @@ describe('open payments', () => {
       description,
       receivedAmount: receivedAmount
         ? {
-            amount: BigInt(receivedAmount.amount),
+            value: BigInt(receivedAmount.value),
             assetCode: receivedAmount.assetCode,
             assetScale: receivedAmount.assetScale,
           }
         : undefined,
       incomingAmount: incomingAmount
         ? {
-            amount: BigInt(incomingAmount.amount),
+            value: BigInt(incomingAmount.value),
             assetCode: incomingAmount.assetCode,
             assetScale: incomingAmount.assetScale,
           }
@@ -296,7 +296,7 @@ describe('open payments', () => {
       description,
       receivedAmount: receivedAmount
         ? {
-            amount: BigInt(receivedAmount.amount),
+            value: BigInt(receivedAmount.value),
             assetCode: receivedAmount.assetCode,
             assetScale: receivedAmount.assetScale,
           }
@@ -351,7 +351,7 @@ describe('open payments', () => {
   it('fails if the Incoming Payment was already paid', async () => {
     const { destinationPayment } = setupNock({
       receivedAmount: {
-        amount: '40300', // Paid $4.03 of $4
+        value: '40300', // Paid $4.03 of $4
         assetCode: 'USD',
         assetScale: 4,
       },
@@ -370,7 +370,7 @@ describe('open payments', () => {
     const { destinationPayment } = setupNock({
       state: IncomingPaymentState.Completed,
       receivedAmount: {
-        amount: '40000', // Paid $4.03 of $4
+        value: '40000', // Paid $4.03 of $4
         assetCode: 'USD',
         assetScale: 4,
       },
@@ -423,14 +423,14 @@ describe('open payments', () => {
       destinationPaymentDetails: {
         receivedAmount: receivedAmount
           ? {
-              amount: BigInt(receivedAmount.amount),
+              value: BigInt(receivedAmount.value),
               assetCode: receivedAmount.assetCode,
               assetScale: receivedAmount.assetScale,
             }
           : undefined,
         incomingAmount: incomingAmount
           ? {
-              amount: BigInt(incomingAmount.amount),
+              value: BigInt(incomingAmount.value),
               assetCode: incomingAmount.assetCode,
               assetScale: incomingAmount.assetScale,
             }
@@ -462,7 +462,7 @@ describe('open payments', () => {
       destinationPaymentDetails: {
         receivedAmount: receivedAmount
           ? {
-              amount: BigInt(receivedAmount.amount),
+              value: BigInt(receivedAmount.value),
               assetCode: receivedAmount.assetCode,
               assetScale: receivedAmount.assetScale,
             }
@@ -476,12 +476,12 @@ describe('open payments', () => {
   it('fails if Incoming Payment amounts are not positive and u64', async () => {
     const { destinationPayment } = setupNock({
       incomingAmount: {
-        amount: '100000000000000000000000000000000000000000000000000000000',
+        value: '100000000000000000000000000000000000000000000000000000000',
         assetCode: 'USD',
         assetScale: 5,
       },
       receivedAmount: {
-        amount: '-20',
+        value: '-20',
         assetCode: 'USD',
         assetScale: 5,
       },
@@ -565,7 +565,7 @@ describe('open payments', () => {
       const paymentScope = mockCreateIncomingPayment(account)
       const amountToDeliver: Amount | undefined = amount
         ? {
-            amount,
+            value: amount,
             assetCode: account.assetCode,
             assetScale: account.assetScale,
           }
@@ -652,7 +652,7 @@ describe('open payments', () => {
         fetchPaymentDetails({
           destinationAccount: account.id,
           amountToDeliver: {
-            amount: BigInt(5),
+            value: BigInt(5),
             assetCode,
             assetScale,
           },
@@ -672,7 +672,7 @@ describe('open payments', () => {
     async ({ amount, assetCode, assetScale }): Promise<void> => {
       const accountScope = mockGetAccount(account)
       const paymentScope = mockCreateIncomingPayment(account, {
-        amount,
+        value: amount,
         assetCode,
         assetScale,
       })
@@ -680,7 +680,7 @@ describe('open payments', () => {
         fetchPaymentDetails({
           destinationAccount: account.id,
           amountToDeliver: {
-            amount: BigInt(5),
+            value: BigInt(5),
             assetCode: account.assetCode,
             assetScale: account.assetScale,
           },
@@ -801,7 +801,7 @@ describe('open payments', () => {
       accountId: account.id,
       state: IncomingPaymentState.Pending,
       receivedAmount: {
-        amount: '0',
+        value: '0',
         assetCode: account.assetCode,
         assetScale: account.assetScale,
       },

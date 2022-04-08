@@ -252,8 +252,8 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
     typeof destinationPaymentDetails.incomingAmount !== 'undefined'
   ) {
     const remainingToDeliver = Int.from(
-      destinationPaymentDetails.incomingAmount.amount -
-        destinationPaymentDetails.receivedAmount.amount
+      destinationPaymentDetails.incomingAmount.value -
+        destinationPaymentDetails.receivedAmount.value
     )
     if (!remainingToDeliver || !remainingToDeliver.isPositive()) {
       // Return this error here instead of in `setupPayment` so consumer can access the resolved Incoming Payment
