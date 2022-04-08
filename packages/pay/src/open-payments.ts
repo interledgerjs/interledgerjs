@@ -80,7 +80,7 @@ export interface IncomingPayment {
 
 export interface Amount {
   // Amount, in base units. ≥0
-  amount: bigint
+  value: bigint
   /** Asset code or symbol identifying the currency of the account */
   assetCode: string
   /** Precision of the asset denomination: number of decimal places of the normal unit */
@@ -174,7 +174,7 @@ const createIncomingPayment = async (
     ? {
         incomingAmount: {
           ...amountToDeliver,
-          amount: amountToDeliver.amount.toString(),
+          value: amountToDeliver.value.toString(),
         },
       }
     : {}
@@ -411,7 +411,7 @@ const validateOpenPaymentsIncomingPayment = (
 
   if (expectedAmount) {
     if (
-      incomingAmount?.amount !== expectedAmount.amount ||
+      incomingAmount?.value !== expectedAmount.value ||
       incomingAmount?.assetCode !== expectedAmount.assetCode ||
       incomingAmount?.assetScale !== expectedAmount.assetScale
     ) {
@@ -474,10 +474,10 @@ const validateSpspCredentials = (o: any): PaymentDestination | undefined => {
 
 const validateOpenPaymentsAmount = (o: Record<string, any>): Amount | undefined | null => {
   if (o === undefined) return undefined
-  const { amount, assetScale, assetCode } = o
-  const amountInt = validateUInt64(amount)
+  const { value, assetScale, assetCode } = o
+  const amountInt = validateUInt64(value)
   if (amountInt && isValidAssetScale(assetScale) && typeof assetCode === 'string') {
-    return { amount: amountInt.value, assetCode, assetScale }
+    return { value: amountInt.value, assetCode, assetScale }
   } else {
     return null
   }
