@@ -309,6 +309,7 @@ const postJson = async (
     redirect: 'follow',
     headers: {
       Accept: acceptHeader,
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
   }).then(async (res: Response) => {
