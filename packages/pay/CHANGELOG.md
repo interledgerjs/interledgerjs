@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0-alpha.3](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.2...@interledger/pay@0.4.0-alpha.3) (2022-04-11)
+
+
+### Bug Fixes
+
+* specify 'Content-Type' in POST request ([67fef5d](https://github.com/interledgerjs/interledgerjs/commit/67fef5d2fecbc4da4106161ad397ca34e788d12c))
+
+
+
+
+
 # [0.4.0-alpha.2](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.1...@interledger/pay@0.4.0-alpha.2) (2022-04-01)
 
 **Note:** Version bump only for package @interledger/pay
