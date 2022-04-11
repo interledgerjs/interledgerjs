@@ -136,8 +136,8 @@ const mockCreateIncomingPayment = (account: Account, incomingAmount?: Amount) =>
   return nock(accountUrl.origin)
     .post(`${accountUrl.pathname}/incoming-payments`)
     .matchHeader('Accept', 'application/json')
-    .reply(201, (uri, requestBody: string) => {
-      const body = JSON.parse(requestBody)
+    .matchHeader('Content-Type', 'application/json')
+    .reply(201, (uri, requestBody) => {
       return {
         id: `${accountUrl.origin}/incoming-payments`,
         accountId: account.id,
@@ -148,7 +148,7 @@ const mockCreateIncomingPayment = (account: Account, incomingAmount?: Amount) =>
               assetCode: incomingAmount.assetCode,
               assetScale: incomingAmount.assetScale,
             }
-          : body.incomingAmount,
+          : requestBody['incomingAmount'],
         receivedAmount: {
           value: '0',
           assetCode: account.assetCode,
@@ -814,10 +814,9 @@ describe('open payments', () => {
       const paymentScope = nock(accountUrl.origin)
         .post(`${accountUrl.pathname}/incoming-payments`)
         .matchHeader('Accept', 'application/json')
-        .reply(201, (uri, requestBody: string) => {
-          const body = JSON.parse(requestBody)
+        .reply(201, (uri, requestBody: Record<string, any>) => {
           return {
-            ...body,
+            ...requestBody,
             id: `${accountUrl.origin.replace('https', 'oops')}/incoming-payments`,
           }
         })
@@ -833,10 +832,9 @@ describe('open payments', () => {
       const paymentScope = nock(accountUrl.origin)
         .post(`${accountUrl.pathname}/incoming-payments`)
         .matchHeader('Accept', 'application/json')
-        .reply(201, (uri, requestBody: string) => {
-          const body = JSON.parse(requestBody)
+        .reply(201, (uri, requestBody: Record<string, any>) => {
           return {
-            ...body,
+            ...requestBody,
             accountId: account.id.replace('https', 'oops'),
           }
         })
