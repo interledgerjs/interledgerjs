@@ -32,17 +32,12 @@
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
     "lint:staged": "lint-staged",
-    "version": "yarn && git add yarn.lock"
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "yarn lint:staged && lerna run precommit"
-    }
+    "version": "yarn && git add yarn.lock",
+    "prepare": "husky install"
   },
   "lint-staged": {
     "*.ts*": [
-      "yarn lint --fix",
-      "git add"
+      "yarn lint --fix"
     ]
   },
   "nyc": {
