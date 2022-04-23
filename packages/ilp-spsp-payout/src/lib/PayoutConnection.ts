@@ -3,6 +3,7 @@ import { createConnection, Connection, DataAndMoneyStream } from 'ilp-protocol-s
 import { URL } from 'url'
 import axios from 'axios'
 import { Logger, defaultLogger } from './Logger'
+import { Plugin } from 'ilp-plugin'
 
 export const resolvePaymentPointer = (pointer: string) => {
   if (!pointer.startsWith('$')) {
@@ -32,7 +33,7 @@ export class PayoutConnection {
   private connection?: Connection
   private stream?: DataAndMoneyStream
   private slippage?: number
-  private plugin: any
+  private plugin: Plugin
 
   private state = State.DISCONNECTED
   private closing = false
@@ -55,7 +56,7 @@ export class PayoutConnection {
     logger,
   }: {
     pointer: string
-    plugin: any
+    plugin: Plugin
     slippage?: number
     retryInterval: number
     maxRetries: number

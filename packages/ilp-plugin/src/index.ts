@@ -5,8 +5,9 @@ import { URL } from 'url'
 const log = require('ilp-logger')('ilp-plugin')
 
 export interface Plugin {
-  connect(params?: any): Promise<void>
-  disconnect(params?: any): Promise<void>
+  connect(params?: Record<string, unknown>): Promise<void>
+  disconnect(params?: Record<string, unknown>): Promise<void>
+  isConnected(): boolean
   sendData(data: Buffer): Promise<Buffer>
   sendMoney(amount: string): Promise<void>
   registerDataHandler: (handler: (data: Buffer) => Promise<Buffer>) => void
@@ -15,7 +16,11 @@ export interface Plugin {
   deregisterMoneyHandler: () => void
 }
 
-const generateCredentials = (opts?: any) => {
+export interface CredentialOptions {
+  name?: string
+}
+
+const generateCredentials = (opts?: CredentialOptions) => {
   if (process.env.ILP_CREDENTIALS) {
     return JSON.parse(process.env.ILP_CREDENTIALS)
   }
@@ -33,7 +38,7 @@ const generateCredentials = (opts?: any) => {
   return { server: `btp+ws://${name}:${secret}@localhost:7768` }
 }
 
-export const pluginFromEnvironment = function (opts?: any): Plugin {
+export const pluginFromEnvironment = function (opts?: CredentialOptions): Plugin {
   const module = process.env.ILP_PLUGIN || 'ilp-plugin-btp'
   const credentials = generateCredentials(opts)
 
@@ -43,10 +48,10 @@ export const pluginFromEnvironment = function (opts?: any): Plugin {
   return new Plugin(credentials)
 } as ModuleExport
 
-interface ModuleExport {
-  (opts?: any): Plugin
+export interface ModuleExport {
+  (opts?: CredentialOptions): Plugin
   default: ModuleExport
-  pluginFromEnvironment: (opts?: any) => Plugin
+  pluginFromEnvironment: (opts?: CredentialOptions) => Plugin
 }
 
 pluginFromEnvironment.pluginFromEnvironment = pluginFromEnvironment

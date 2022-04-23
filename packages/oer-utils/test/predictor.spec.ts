@@ -21,7 +21,7 @@ describe('Predictor', function () {
       const predictor = new Predictor()
       const writer = new Writer()
 
-      for (let method of Object.getOwnPropertyNames(Object.getPrototypeOf(writer))) {
+      for (const method of Object.getOwnPropertyNames(Object.getPrototypeOf(writer))) {
         if (method.startsWith('write')) {
           assert.typeOf(
             predictor[method],

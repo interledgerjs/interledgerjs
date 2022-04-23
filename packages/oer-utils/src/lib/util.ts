@@ -6,8 +6,8 @@ import * as Long from 'long'
 export const MAX_SAFE_BYTES = 6
 
 const INTEGER_REGEX = /^-?[0-9]+$/
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function isInteger(value: any): boolean {
-  // eslint-disable-line @typescript-eslint/no-explicit-any
   if (typeof value === 'number') {
     return isFinite(value) && Math.floor(value) === value
   } else if (typeof value === 'string') {
@@ -17,11 +17,7 @@ export function isInteger(value: any): boolean {
   }
 }
 
-// FIXME: long@master's types' `isLong()` function has the `is Long` return type,
-// but it hasn't been published yet.
-export function isLong(obj: any): obj is Long {
-  return Long.isLong(obj)
-} // eslint-disable-line @typescript-eslint/no-explicit-any
+export const isLong = Long.isLong
 
 export function longFromValue(value: Long | string | number, unsigned: boolean): Long {
   if (typeof value === 'number') {
