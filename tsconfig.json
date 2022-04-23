@@ -12,11 +12,11 @@
     "suppressImplicitAnyIndexErrors": true,
     "baseUrl": ".",
     "paths": {
-      "oer-utils" : ["packages/oer-utils/src"],
-      "ilp-packet" : ["packages/ilp-packet/src"],
-      "ilp-logger" : ["packages/ilp-logger/src"],
-      "ilp-protocol-ildcp" : ["packages/ilp-protocol-ildcp/src"],
-      "ilp-protocol-ccp" : ["packages/ilp-protocol-ccp/src"],
+      "oer-utils": ["packages/oer-utils/src"],
+      "ilp-packet": ["packages/ilp-packet/src"],
+      "ilp-logger": ["packages/ilp-logger/src"],
+      "ilp-protocol-ildcp": ["packages/ilp-protocol-ildcp/src"],
+      "ilp-protocol-ccp": ["packages/ilp-protocol-ccp/src"],
       "ilp-plugin": ["packages/ilp-plugin/src"],
       "ilp-spsp-payout": ["packages/ilp-spsp-payout/src"],
       "@interledger/connection-tag-utils": ["packages/connection-tag-utils/src"],
@@ -24,11 +24,6 @@
       "@interledger/pay": ["packages/pay/src"]
     }
   },
-  "exclude": [
-    "**/node_modules/**/*",
-    "packages/*/dist/**/*"
-  ],
-  "include": [
-    "packages/**/*.ts"
-  ]
+  "exclude": ["**/node_modules/**/*", "packages/*/dist/**/*"],
+  "include": ["packages/**/*.ts"]
 }

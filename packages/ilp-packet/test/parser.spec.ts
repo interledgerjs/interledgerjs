@@ -176,9 +176,9 @@ describe('Parser', function () {
               data.amount = (packet.data as Parser.IlpPrepare).amount
               data.destination = (packet.data as Parser.IlpPrepare).destination
               data.expiresAt = (packet.data as Parser.IlpPrepare).expiresAt.toISOString()
-              data.executionCondition = (packet.data as Parser.IlpPrepare).executionCondition.toString(
-                'base64'
-              )
+              data.executionCondition = (
+                packet.data as Parser.IlpPrepare
+              ).executionCondition.toString('base64')
             }
             if (typeString === 'ilp_fulfill') {
               data.fulfillment = (packet.data as Parser.IlpFulfill).fulfillment.toString('base64')

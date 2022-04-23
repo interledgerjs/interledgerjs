@@ -127,9 +127,8 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
         return SendState.Yield()
       }
 
-      const sourceAmountDeliveryLimit = this.rateCalculator.estimateSourceAmount(
-        remainingToDeliver
-      )?.[1]
+      const sourceAmountDeliveryLimit =
+        this.rateCalculator.estimateSourceAmount(remainingToDeliver)?.[1]
       if (!sourceAmountDeliveryLimit) {
         log.warn('payment cannot complete: exchange rate dropped to 0')
         return SendState.Error(PaymentError.InsufficientExchangeRate)
@@ -149,10 +148,8 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
       : sourceAmount.multiplyCeil(this.quote.minExchangeRate)
 
     // If the min destination amount isn't met, the rate dropped and payment cannot be completed.
-    const [
-      projectedDestinationAmount,
-      highEndDestinationAmount,
-    ] = this.rateCalculator.estimateDestinationAmount(sourceAmount)
+    const [projectedDestinationAmount, highEndDestinationAmount] =
+      this.rateCalculator.estimateDestinationAmount(sourceAmount)
     if (projectedDestinationAmount.isLessThan(minDestinationAmount)) {
       log.warn('payment cannot complete: exchange rate dropped below minimum')
       return RequestState.Error(PaymentError.InsufficientExchangeRate)
@@ -201,9 +198,8 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
 
       // Update in-flight amounts
       this.sourceAmountInFlight = this.sourceAmountInFlight.saturatingSubtract(sourceAmount)
-      this.destinationAmountInFlight = this.destinationAmountInFlight.saturatingSubtract(
-        highEndDestinationAmount
-      )
+      this.destinationAmountInFlight =
+        this.destinationAmountInFlight.saturatingSubtract(highEndDestinationAmount)
       // If this packet failed (e.g. for some other reason), refund the delivery deficit so it may be retried
       if (reply.isReject() && applyCorrection) {
         this.appliedRoundingCorrection = false

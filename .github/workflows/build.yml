@@ -5,14 +5,13 @@ on:
     paths-ignore:
       - '**.md'
     branches-ignore:
-    - 'master'
+      - 'master'
   pull_request:
     branches:
-    - master
+      - master
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     strategy:
@@ -20,22 +19,22 @@ jobs:
         node-version: [10.x, 12.x, 14.x]
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v1
-      with:
-        node-version: ${{ matrix.node-version }}
-    - name: Install dependencies
-      run: yarn
-    - name: Lint
-      run: yarn lint:all
-    - name: Build
-      run: yarn build
-    - name: Test
-      run: yarn cover
-      env:
-        CI: true
-    - name: Report coverage
-      run: yarn codecov
-      env:
-        CI: true
+      - uses: actions/checkout@v1
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install dependencies
+        run: yarn
+      - name: Lint
+        run: yarn lint:all
+      - name: Build
+        run: yarn build
+      - name: Test
+        run: yarn cover
+        env:
+          CI: true
+      - name: Report coverage
+        run: yarn codecov
+        env:
+          CI: true

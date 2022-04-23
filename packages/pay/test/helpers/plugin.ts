@@ -42,22 +42,24 @@ export const createPlugin = (...middlewares: Middleware[]): Plugin => {
   }
 }
 
-export const createMaxPacketMiddleware = (amount: Int): Middleware => async (prepare, next) => {
-  if (Int.from(prepare.amount)!.isLessThanOrEqualTo(amount)) {
-    return next(prepare)
-  }
+export const createMaxPacketMiddleware =
+  (amount: Int): Middleware =>
+  async (prepare, next) => {
+    if (Int.from(prepare.amount)!.isLessThanOrEqualTo(amount)) {
+      return next(prepare)
+    }
 
-  const writer = new Writer(16)
-  writer.writeUInt64(prepare.amount) // Amount received
-  writer.writeUInt64(amount.toLong()!) // Maximum
+    const writer = new Writer(16)
+    writer.writeUInt64(prepare.amount) // Amount received
+    writer.writeUInt64(amount.toLong()!) // Maximum
 
-  return {
-    code: IlpError.F08_AMOUNT_TOO_LARGE,
-    message: '',
-    triggeredBy: '',
-    data: writer.getBuffer(),
+    return {
+      code: IlpError.F08_AMOUNT_TOO_LARGE,
+      message: '',
+      triggeredBy: '',
+      data: writer.getBuffer(),
+    }
   }
-}
 
 export class RateBackend {
   constructor(
@@ -82,40 +84,42 @@ export class RateBackend {
   }
 }
 
-export const createRateMiddleware = (converter: RateBackend): Middleware => async (
-  prepare,
-  next
-) => {
-  const rate = Ratio.from(converter.getRate())!
-  const amount = Int.from(prepare.amount)!.multiplyFloor(rate).toString()
-  return next({
-    ...prepare,
-    amount,
-  })
-}
+export const createRateMiddleware =
+  (converter: RateBackend): Middleware =>
+  async (prepare, next) => {
+    const rate = Ratio.from(converter.getRate())!
+    const amount = Int.from(prepare.amount)!.multiplyFloor(rate).toString()
+    return next({
+      ...prepare,
+      amount,
+    })
+  }
 
-export const createSlippageMiddleware = (spread: number): Middleware => async (prepare, next) =>
-  next({
-    ...prepare,
-    amount: Int.from(prepare.amount)!
-      .multiplyFloor(Ratio.from(1 - spread)!)
-      .toString(),
-  })
+export const createSlippageMiddleware =
+  (spread: number): Middleware =>
+  async (prepare, next) =>
+    next({
+      ...prepare,
+      amount: Int.from(prepare.amount)!
+        .multiplyFloor(Ratio.from(1 - spread)!)
+        .toString(),
+    })
 
-export const createStreamReceiver = (server: StreamServer): Middleware => async (prepare) => {
-  const moneyOrReply = server.createReply(prepare)
-  return isIlpReply(moneyOrReply) ? moneyOrReply : moneyOrReply.accept()
-}
+export const createStreamReceiver =
+  (server: StreamServer): Middleware =>
+  async (prepare) => {
+    const moneyOrReply = server.createReply(prepare)
+    return isIlpReply(moneyOrReply) ? moneyOrReply : moneyOrReply.accept()
+  }
 
-export const createLatencyMiddleware = (min: number, max: number): Middleware => async (
-  prepare,
-  next
-) => {
-  await sleep(getRandomFloat(min, max))
-  const reply = await next(prepare)
-  await sleep(getRandomFloat(min, max))
-  return reply
-}
+export const createLatencyMiddleware =
+  (min: number, max: number): Middleware =>
+  async (prepare, next) => {
+    await sleep(getRandomFloat(min, max))
+    const reply = await next(prepare)
+    await sleep(getRandomFloat(min, max))
+    return reply
+  }
 
 export const createBalanceTracker = (): { totalReceived: () => Int; middleware: Middleware } => {
   let totalReceived = Int.ZERO

@@ -1803,10 +1803,8 @@ describe('quoting flow', () => {
       plugin: receiverPlugin2,
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     streamServer.on('connection', (conn: Connection) => {
       conn.on('stream', (stream: DataAndMoneyStream) => {

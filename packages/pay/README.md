@@ -326,11 +326,11 @@ Intermediate state or outcome of the payment, to account for sent/delivered amou
 States of an Incoming Payment
 
 | Variant          | Description                                                                                                              |
-| :--------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| :--------------- | :----------------------------------------------------------------------------------------------------------------------- | --- |
 | **`pending`**    | Incoming payment has been created.                                                                                       |
 | **`processing`** | Payment has started, funds have cleared into the account.                                                                |
 | **`completed`**  | The Incoming Payment was either auto-completed after being fully paid or it has been completed manually via an API call. |
-| **`expired`**    | The Incoming Payment expired before it was completed.                                                                    |  |
+| **`expired`**    | The Incoming Payment expired before it was completed.                                                                    |     |
 
 #### `Amount`
 

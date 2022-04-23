@@ -18,19 +18,13 @@ describe('Writer', function () {
     it('should create a writer with an explicit capacity', function () {
       const writer = new Writer(10)
 
-      assert.throws(
-        () => writer.write(Buffer.alloc(11)),
-        'writer cannot exceed capacity'
-      )
+      assert.throws(() => writer.write(Buffer.alloc(11)), 'writer cannot exceed capacity')
     })
 
     it('should create a writer with an explicit underlying buffer', function () {
       const writer = new Writer(Buffer.alloc(10))
 
-      assert.throws(
-        () => writer.write(Buffer.alloc(11)),
-        'writer cannot exceed capacity'
-      )
+      assert.throws(() => writer.write(Buffer.alloc(11)), 'writer cannot exceed capacity')
     })
   })
 
@@ -48,10 +42,7 @@ describe('Writer', function () {
     it('when writing a zero byte integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeUInt(0, 0),
-        'UInt length must be greater than zero'
-      )
+      assert.throws(() => writer.writeUInt(0, 0), 'UInt length must be greater than zero')
     })
 
     it('should write a one byte integer zero', function () {
@@ -89,10 +80,7 @@ describe('Writer', function () {
     it('when asked to write an integer that does not fit, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeUInt(256, 1),
-        'UInt 256 does not fit in 1 bytes'
-      )
+      assert.throws(() => writer.writeUInt(256, 1), 'UInt 256 does not fit in 1 bytes')
     })
 
     it('should write a Long outside of safe JavaScript range', function () {
@@ -121,19 +109,13 @@ describe('Writer', function () {
     it('when asked to write a negative integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeUInt(-1, 1),
-        'UInt must be positive'
-      )
+      assert.throws(() => writer.writeUInt(-1, 1), 'UInt must be positive')
     })
 
     it('when asked to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeUInt(false as any, 1),
-        'UInt must be an integer'
-      )
+      assert.throws(() => writer.writeUInt(false as any, 1), 'UInt must be an integer')
     })
 
     it('when asked to write an Long too large for the given length, should throw', function () {
@@ -149,10 +131,7 @@ describe('Writer', function () {
     it('when writing a zero byte integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeInt(0, 0),
-        'Int length must be greater than zero'
-      )
+      assert.throws(() => writer.writeInt(0, 0), 'Int length must be greater than zero')
     })
 
     it('should write a one byte integer zero', function () {
@@ -222,19 +201,13 @@ describe('Writer', function () {
     it('when asked to write an integer that does not fit, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeInt(256, 1),
-        'Int 256 does not fit in 1 bytes'
-      )
+      assert.throws(() => writer.writeInt(256, 1), 'Int 256 does not fit in 1 bytes')
     })
 
     it('when asked to write a negative integer that does not fit, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeInt(-257, 1),
-        'Int -257 does not fit in 1 bytes'
-      )
+      assert.throws(() => writer.writeInt(-257, 1), 'Int -257 does not fit in 1 bytes')
     })
 
     it('when asked to write an integer above safe JavaScript range, should throw', function () {
@@ -258,10 +231,7 @@ describe('Writer', function () {
     it('when asked to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeInt(false as any, 1),
-        'Int must be an integer'
-      )
+      assert.throws(() => writer.writeInt(false as any, 1), 'Int must be an integer')
     })
 
     it('when asked to write an Long too large for the given length, should throw', function () {
@@ -274,10 +244,7 @@ describe('Writer', function () {
 
     it('when asked to write an unsigned Long, should throw', function () {
       const writer = new Writer()
-      assert.throws(
-        () => writer.writeInt(Long.fromNumber(123, true), 8),
-        'Expected signed Long'
-      )
+      assert.throws(() => writer.writeInt(Long.fromNumber(123, true), 8), 'Expected signed Long')
     })
   })
 
@@ -359,19 +326,13 @@ describe('Writer', function () {
     it('when trying to write a negative integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeVarUInt(-1),
-        'UInt must be positive'
-      )
+      assert.throws(() => writer.writeVarUInt(-1), 'UInt must be positive')
     })
 
     it('when trying to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeVarUInt(false as any),
-        'UInt must be an integer'
-      )
+      assert.throws(() => writer.writeVarUInt(false as any), 'UInt must be an integer')
     })
 
     it('should accept a buffer to write', function () {
@@ -477,10 +438,7 @@ describe('Writer', function () {
     it('when trying to write a non-integer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeVarInt(false as any),
-        'Int must be an integer'
-      )
+      assert.throws(() => writer.writeVarInt(false as any), 'Int must be an integer')
     })
 
     it('should accept a buffer to write', function () {
@@ -561,10 +519,7 @@ describe('Writer', function () {
     it('when writing a non-buffer, should throw', function () {
       const writer = new Writer()
 
-      assert.throws(
-        () => writer.writeVarOctetString(false as any),
-        'Expects a buffer'
-      )
+      assert.throws(() => writer.writeVarOctetString(false as any), 'Expects a buffer')
     })
   })
 

@@ -11,11 +11,11 @@ describe('ilp-logger', function () {
   describe('createLogger', function () {
     it('should return an instance of a Logger', function () {
       const log = createLogger('TEST')
-      assert(typeof (log.info) === 'function')
-      assert(typeof (log.warn) === 'function')
-      assert(typeof (log.error) === 'function')
-      assert(typeof (log.debug) === 'function')
-      assert(typeof (log.trace) === 'function')
+      assert(typeof log.info === 'function')
+      assert(typeof log.warn === 'function')
+      assert(typeof log.error === 'function')
+      assert(typeof log.debug === 'function')
+      assert(typeof log.trace === 'function')
       assert.instanceOf(log, Logger)
     })
 

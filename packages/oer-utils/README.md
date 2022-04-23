@@ -9,7 +9,7 @@
 
 ## Usage
 
-``` sh
+```sh
 npm install oer-utils
 ```
 
@@ -27,7 +27,7 @@ Note that if the `long` API changes, there will be breaking changes to the `read
 
 ### Parse a binary buffer
 
-``` js
+```js
 const Reader = require('oer-utils/reader')
 
 const reader = Reader.from(new Buffer('1234', 'hex'))
@@ -38,7 +38,7 @@ const v2 = reader.readUInt8Long()
 
 ### Write a binary file
 
-``` js
+```js
 const Writer = require('oer-utils/writer')
 const Long = require('long')
 

@@ -27,5 +27,5 @@ module.exports = {
   globals: {
     BigInt: 'readable',
   },
-  ignorePatterns: ["**/node_modules/**/*", "**/dist/**/*", "**/*.config.js", "**/.*.js"]
+  ignorePatterns: ['**/node_modules/**/*', '**/dist/**/*', '**/*.config.js', '**/.*.js'],
 }
