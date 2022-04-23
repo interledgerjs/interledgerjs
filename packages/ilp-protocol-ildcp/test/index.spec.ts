@@ -19,6 +19,10 @@ describe('ILDCP', function () {
     this.clock = sinon.useFakeTimers(START_DATE)
   })
 
+  afterEach(function () {
+    this.clock.restore()
+  })
+
   describe('deserializeIldcpRequest', async function () {
     it('should be a function', async function () {
       assert.isFunction(ILDCP.deserializeIldcpRequest)

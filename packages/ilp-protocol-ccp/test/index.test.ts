@@ -10,15 +10,20 @@ describe('CCP', function () {
     this.clock = useFakeTimers(START_DATE)
   })
 
+  afterEach(function () {
+    this.clock.restore()
+  })
+
   describe('Route Control Request', function () {
     describe('payload', function () {
-      let routeControlRequest: CCP.CcpRouteControlRequest = {
+      const routeControlRequest: CCP.CcpRouteControlRequest = {
         mode: CCP.Mode.MODE_SYNC,
         lastKnownRoutingTableId: '70d1a134-a0df-4f47-964f-6e19e2ab3790',
         lastKnownEpoch: 32,
         features: ['foo', 'bar'],
       }
-      let hexRouteControlRequest = '0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172'
+      const hexRouteControlRequest =
+        '0170d1a134a0df4f47964f6e19e2ab379000000020010203666f6f03626172'
 
       it('can serialize Route Control Request Payload', function () {
         assert.strictEqual(
@@ -84,7 +89,7 @@ describe('CCP', function () {
 
   describe('Route Control Update', function () {
     describe('payload', function () {
-      let routeControlUpdate: CCP.CcpRouteUpdateRequest = {
+      const routeControlUpdate: CCP.CcpRouteUpdateRequest = {
         routingTableId: '21e55f8e-abcd-4e97-9ab9-bf0ff00a224c',
         currentEpochIndex: 52,
         fromEpochIndex: 52,
@@ -94,7 +99,7 @@ describe('CCP', function () {
         newRoutes: [],
         withdrawnRoutes: [],
       }
-      let hexRouteControlUpdate =
+      const hexRouteControlUpdate =
         '21e55f8eabcd4e979ab9bf0ff00a224c000000340000003400000034000075300d6578616d706c652e616c69636501000100'
 
       it('can serialize Route Control Update Payload', function () {
