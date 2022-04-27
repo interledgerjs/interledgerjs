@@ -40,7 +40,7 @@ describe('PayoutConnection', function () {
         pointer: 'http://127.0.0.1:54321',
         plugin: { disconnect: noop },
         retryInterval: 10,
-        maxRetries: 5
+        maxRetries: 5,
       })
 
       payer.send(123)

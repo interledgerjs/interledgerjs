@@ -164,7 +164,7 @@ describe('integer operations', () => {
 
   it('Ratio#toJSON', () => {
     expect(JSON.stringify(Ratio.of(Int.ZERO, Int.ONE))).toBe('["0","1"]')
-    expect(Ratio.of(Int.from(821)!, Int.from(1200) as PositiveInt).toJSON()).toMatchObject([
+    expect(Ratio.of(Int.from(821)!, Int.from(1200) as PositiveInt).toJSON()).toEqual([
       '821',
       '1200',
     ])

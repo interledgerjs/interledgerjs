@@ -81,9 +81,9 @@ describe('util', function () {
   })
 
   describe('bufferToLong', function () {
-    [
+    ;[
       { name: 'unsigned', unsigned: true },
-      { name: 'signed', unsigned: false }
+      { name: 'signed', unsigned: false },
     ].forEach(function ({ name, unsigned }) {
       describe(name, function () {
         for (let i = 0; i < 1000; i++) {
@@ -103,7 +103,7 @@ describe('util', function () {
   })
 })
 
-function randomNumber (unsigned: boolean): number {
+function randomNumber(unsigned: boolean): number {
   const max = 0x7fffffffffff
   let value = Math.floor(max * Math.random())
   if (unsigned && Math.random() < 0.5) value = -value

@@ -1,21 +1,16 @@
 import 'mocha'
 import createLogger, { Logger } from '../src'
-import * as sinon from 'sinon'
-import * as Chai from 'chai'
-import * as chaiAsPromised from 'chai-as-promised'
-Chai.use(chaiAsPromised)
-const assert = Object.assign(Chai.assert, sinon.assert)
-require('source-map-support').install()
+import { assert } from 'chai'
 
 describe('ilp-logger', function () {
   describe('createLogger', function () {
     it('should return an instance of a Logger', function () {
       const log = createLogger('TEST')
-      assert(typeof (log.info) === 'function')
-      assert(typeof (log.warn) === 'function')
-      assert(typeof (log.error) === 'function')
-      assert(typeof (log.debug) === 'function')
-      assert(typeof (log.trace) === 'function')
+      assert(typeof log.info === 'function')
+      assert(typeof log.warn === 'function')
+      assert(typeof log.error === 'function')
+      assert(typeof log.debug === 'function')
+      assert(typeof log.trace === 'function')
       assert.instanceOf(log, Logger)
     })
 

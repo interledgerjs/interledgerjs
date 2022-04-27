@@ -21,15 +21,19 @@ describe('Predictor', function () {
       const predictor = new Predictor()
       const writer = new Writer()
 
-      for (let method of Object.getOwnPropertyNames(Object.getPrototypeOf(writer))) {
+      for (const method of Object.getOwnPropertyNames(Object.getPrototypeOf(writer))) {
         if (method.startsWith('write')) {
-          assert.typeOf(predictor[method], 'function', `Expected predictor to have ${method} method`)
+          assert.typeOf(
+            predictor[method],
+            'function',
+            `Expected predictor to have ${method} method`
+          )
         }
       }
     })
 
     it('a function that takes a Writer should accept the Predictor instead', function () {
-      function writeSomeStuff (writer: WriterInterface) {
+      function writeSomeStuff(writer: WriterInterface) {
         writer.writeUInt8(0)
         writer.writeVarOctetString(Buffer.alloc(10))
       }
@@ -118,7 +122,7 @@ describe('Predictor', function () {
     it('should accept a String and add the correct size', function () {
       const predictor = new Predictor()
 
-      predictor.writeVarUInt(0x01020304.toString())
+      predictor.writeVarUInt((0x01020304).toString())
 
       assert.equal(predictor.getSize(), 5)
     })
@@ -134,28 +138,19 @@ describe('Predictor', function () {
     it('when writing a non-integer, should throw', function () {
       const predictor = new Predictor()
 
-      assert.throws(
-        () => predictor.writeVarUInt(0.5),
-        'UInt must be an integer'
-      )
+      assert.throws(() => predictor.writeVarUInt(0.5), 'UInt must be an integer')
     })
 
     it('when writing a negative integer, should throw', function () {
       const predictor = new Predictor()
 
-      assert.throws(
-        () => predictor.writeVarUInt(-1),
-        'UInt must be positive'
-      )
+      assert.throws(() => predictor.writeVarUInt(-1), 'UInt must be positive')
     })
 
     it('when writing a negative integer string, should throw', function () {
       const predictor = new Predictor()
 
-      assert.throws(
-        () => predictor.writeVarUInt('-1'),
-        'UInt must be positive'
-      )
+      assert.throws(() => predictor.writeVarUInt('-1'), 'UInt must be positive')
     })
   })
 
@@ -193,10 +188,7 @@ describe('Predictor', function () {
     it('when writing a non-integer, should throw', function () {
       const predictor = new Predictor()
 
-      assert.throws(
-        () => predictor.writeVarInt(0.5),
-        'UInt must be an integer'
-      )
+      assert.throws(() => predictor.writeVarInt(0.5), 'UInt must be an integer')
     })
   })
 

@@ -9,7 +9,7 @@
     "pretty": true,
     "esModuleInterop": true,
     "target": "ES2019",
-    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo",
+    "tsBuildInfoFile": "./dist/tsconfig.tsbuildinfo"
   },
   "include": ["src", "test"]
 }

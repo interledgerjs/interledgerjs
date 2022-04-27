@@ -16,7 +16,7 @@ npm install ilp-spsp-payout
 const { Payout } = require('ilp-spsp-payout')
 
 const payer = new Payout({
-  slippage: 0.01
+  slippage: 0.01,
 })
 payer.send('$twitter.xrptipbot.com/androswong418', 100000)
 ```

@@ -176,12 +176,10 @@ class Scheduler<T extends (...args: any[]) => any> {
    */
   private async resolveTick(task: Promise<T>): Promise<void> {
     const run = await task
-    this.nextTick.resolve(
-      <T>((...args: Parameters<T>): ReturnType<T> => {
-        this.pendingTasks.delete(task)
-        return run(...args)
-      })
-    )
+    this.nextTick.resolve(<T>((...args: Parameters<T>): ReturnType<T> => {
+      this.pendingTasks.delete(task)
+      return run(...args)
+    }))
   }
 }
 

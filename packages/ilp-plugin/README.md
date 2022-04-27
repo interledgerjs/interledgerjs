@@ -1,16 +1,17 @@
 # ILP Plugin
+
 > A generic handle to ILP
 
 [![NPM Package](https://img.shields.io/npm/v/ilp-plugin.svg?style=flat)](https://npmjs.org/package/ilp-plugin)
 
-The script below will get ILP credentials with no setup whatsoever.  You can
+The script below will get ILP credentials with no setup whatsoever. You can
 use this anywhere that you need an ILP plugin created from details in the
 environment.
 
 ```js
 const plugin = require('ilp-plugin')()
 
-async function run () {
+async function run() {
   await plugin.connect()
   await plugin.sendData(/* ... */)
   process.exit(0)

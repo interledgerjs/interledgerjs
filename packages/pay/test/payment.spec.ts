@@ -106,10 +106,8 @@ describe('fixed source payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const amountToSend = BigInt(100427)
     const destination = await setupPayment({
@@ -201,10 +199,8 @@ describe('fixed source payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     // On the final packet, reject. This tests that the delivery shortfall
     // correctly gets refunded, and after the packet is retried,
@@ -301,10 +297,8 @@ describe('fixed source payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     // Send 100 total packets
     const destination = await setupPayment({
@@ -383,10 +377,8 @@ describe('fixed source payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       destinationAddress,
@@ -633,10 +625,8 @@ describe('fixed delivery payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       plugin: senderPlugin1,
@@ -697,10 +687,8 @@ describe('fixed delivery payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       plugin: senderPlugin1,
@@ -912,10 +900,8 @@ describe('fixed delivery payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       destinationAddress,
@@ -1005,10 +991,8 @@ describe('fixed delivery payments', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       destinationAddress,
@@ -1166,10 +1150,8 @@ describe('payment execution', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       destinationAddress,
@@ -1239,10 +1221,8 @@ describe('payment execution', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     // 20 units / 1 max packet amount => at least 20 packets
     const amountToSend = 20
@@ -1308,10 +1288,8 @@ describe('payment execution', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       plugin: senderPlugin1,
@@ -1388,10 +1366,8 @@ describe('payment execution', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     // Since we're sending $100,000, test will fail due to timeout
     // if the connection isn't closed quickly
@@ -1581,13 +1557,11 @@ describe('stream receipts', () => {
 
     const receiptNonce = randomBytes(16)
     const receiptSecret = randomBytes(32)
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret({
-      receiptNonce,
-      receiptSecret,
-    })
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret({
+        receiptNonce,
+        receiptSecret,
+      })
 
     const amountToSend = BigInt(10_000) // 10,000 units, 1,000 max packet => ~10 packets
     const destination = await setupPayment({
@@ -1816,10 +1790,8 @@ describe('closes connection', () => {
       })
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     const destination = await setupPayment({
       plugin: senderPlugin,

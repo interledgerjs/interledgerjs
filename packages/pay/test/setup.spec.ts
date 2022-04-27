@@ -648,7 +648,7 @@ describe('open payments', () => {
     'fails if create amountToDeliver asset $description is invalid',
     async ({ assetCode, assetScale }): Promise<void> => {
       const accountScope = mockGetAccount(account)
-      const credentials = await expect(
+      await expect(
         fetchPaymentDetails({
           destinationAccount: account.id,
           amountToDeliver: {
@@ -676,7 +676,7 @@ describe('open payments', () => {
         assetCode,
         assetScale,
       })
-      const credentials = await expect(
+      await expect(
         fetchPaymentDetails({
           destinationAccount: account.id,
           amountToDeliver: {
@@ -794,19 +794,6 @@ describe('open payments', () => {
       )
       accountScope.done()
       paymentScope.done()
-    }
-    const { ilpAddress, sharedSecret } = streamServer.generateCredentials()
-    const incomingPayment = {
-      id: `${accountUrl.origin}/incoming-payments`,
-      accountId: account.id,
-      state: IncomingPaymentState.Pending,
-      receivedAmount: {
-        value: '0',
-        assetCode: account.assetCode,
-        assetScale: account.assetScale,
-      },
-      ilpAddress,
-      sharedSecret: sharedSecret.toString('base64'),
     }
     {
       // Incoming Payment id not a URL
@@ -1803,10 +1790,8 @@ describe('quoting flow', () => {
       plugin: receiverPlugin2,
     })
 
-    const {
-      sharedSecret,
-      destinationAccount: destinationAddress,
-    } = streamServer.generateAddressAndSecret()
+    const { sharedSecret, destinationAccount: destinationAddress } =
+      streamServer.generateAddressAndSecret()
 
     streamServer.on('connection', (conn: Connection) => {
       conn.on('stream', (stream: DataAndMoneyStream) => {

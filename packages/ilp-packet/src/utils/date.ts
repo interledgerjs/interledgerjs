@@ -48,7 +48,8 @@ export const dateToGeneralizedTime = (date: Date) => {
   return date.toISOString().replace(/[-T:]/g, '')
 }
 
-export const GENERALIZED_TIME_REGEX = /^([0-9]{4})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2}\.[0-9]{3}Z)$/
+export const GENERALIZED_TIME_REGEX =
+  /^([0-9]{4})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2})([0-9]{2}\.[0-9]{3}Z)$/
 
 export const generalizedTimeToDate = (generalizedTime: string) => {
   const isoTimestamp = generalizedTime.replace(GENERALIZED_TIME_REGEX, '$1-$2-$3T$4:$5:$6')
