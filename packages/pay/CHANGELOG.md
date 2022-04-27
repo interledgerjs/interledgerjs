@@ -3,6 +3,23 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0-alpha.4](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.3...@interledger/pay@0.4.0-alpha.4) (2022-04-27)
+
+
+### Bug Fixes
+
+* fixing eslint issues ([6093679](https://github.com/interledgerjs/interledgerjs/commit/6093679060d9f27911e2fd3f0dbbf15ebae6f538))
+* tests which broke due to updated tooling ([eea42af](https://github.com/interledgerjs/interledgerjs/commit/eea42af4530c00cbd0736a962aed92251ac136cd))
+
+
+### BREAKING CHANGES
+
+* Add `isConnected` property to the Plugin interface in ilp-plugin. This property should have already been there and most plugins are likely to implement it because it is required in other contexts. For example, ilp-protocol-stream requires it.
+
+
+
+
+
 # [0.4.0-alpha.3](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.2...@interledger/pay@0.4.0-alpha.3) (2022-04-11)
 
 ### Bug Fixes

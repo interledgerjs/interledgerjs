@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [1.2.4-alpha.0](https://github.com/interledgerjs/interledgerjs/compare/ilp-protocol-ccp@1.2.3...ilp-protocol-ccp@1.2.4-alpha.0) (2022-04-27)
+
+
+### Bug Fixes
+
+* tests which broke due to updated tooling ([eea42af](https://github.com/interledgerjs/interledgerjs/commit/eea42af4530c00cbd0736a962aed92251ac136cd))
+
+
+
+
+
 ## [1.2.3](https://github.com/interledgerjs/interledgerjs/compare/ilp-protocol-ccp@1.2.2...ilp-protocol-ccp@1.2.3) (2021-10-25)
 
 **Note:** Version bump only for package ilp-protocol-ccp

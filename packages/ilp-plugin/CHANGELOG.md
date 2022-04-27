@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [3.5.5-alpha.0](https://github.com/interledgerjs/interledgerjs/compare/ilp-plugin@3.5.4...ilp-plugin@3.5.5-alpha.0) (2022-04-27)
+
+
+### Bug Fixes
+
+* fixing eslint issues ([6093679](https://github.com/interledgerjs/interledgerjs/commit/6093679060d9f27911e2fd3f0dbbf15ebae6f538))
+
+
+### BREAKING CHANGES
+
+* Add `isConnected` property to the Plugin interface in ilp-plugin. This property should have already been there and most plugins are likely to implement it because it is required in other contexts. For example, ilp-protocol-stream requires it.
+
+
+
+
+
 ## [3.5.4](https://github.com/interledgerjs/interledgerjs/compare/ilp-plugin@3.5.3...ilp-plugin@3.5.4) (2021-10-07)
 
 **Note:** Version bump only for package ilp-plugin
