@@ -3,5 +3,5 @@ module.exports = {
   excludePrivate: true,
   excludeProtected: true,
   excludeExternals: true,
-  mode: 'modules'
+  mode: 'modules',
 }

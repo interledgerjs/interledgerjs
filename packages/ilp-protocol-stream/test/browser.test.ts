@@ -15,8 +15,8 @@ const BTP_SERVER_OPTS = {
   debugHostIldcpInfo: {
     clientAddress: 'test.example',
     assetScale: 9,
-    assetCode: '___'
-  }
+    assetCode: '___',
+  },
 }
 
 describe('Puppeteer', function () {
@@ -59,29 +59,31 @@ describe('Puppeteer', function () {
     // See: https://github.com/GoogleChrome/puppeteer/issues/2301#issuecomment-379622459
     await this.page.goto('file:///dev/null')
     await this.page.addScriptTag({
-      path: path.resolve(__dirname, '../dist/test/browser/bundle.js')
+      path: path.resolve(__dirname, '../dist/test/browser/bundle.js'),
     })
 
     const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
-    await this.page.evaluate(async (opts: {
-      port: number,
-      destinationAccount: string,
-      sharedSecret: string
-    }) => {
-      try {
-        window['streamClient'] = await window['makeStreamClient']({
-          server: 'btp+ws://127.0.0.1:' + opts.port,
-          btpToken: 'secret'
-        }, opts)
-      } catch (err) {
-        console.error('uncaught error:', err.stack)
-        throw err
+    await this.page.evaluate(
+      async (opts: { port: number; destinationAccount: string; sharedSecret: string }) => {
+        try {
+          window['streamClient'] = await window['makeStreamClient'](
+            {
+              server: 'btp+ws://127.0.0.1:' + opts.port,
+              btpToken: 'secret',
+            },
+            opts
+          )
+        } catch (err) {
+          console.error('uncaught error:', err.stack)
+          throw err
+        }
+      },
+      {
+        port: BTP_SERVER_OPTS.port,
+        destinationAccount,
+        sharedSecret: sharedSecret.toString('base64'),
       }
-    }, {
-      port: BTP_SERVER_OPTS.port,
-      destinationAccount,
-      sharedSecret: sharedSecret.toString('base64')
-    })
+    )
   })
 
   afterEach('Tear down client & server', async function () {
@@ -108,8 +110,12 @@ describe('Puppeteer', function () {
       await this.page.evaluate(async function () {
         const tests: any[] = []
         window['runCryptoTests']({
-          describe: function (label: any, run: any) { run() },
-          it: function (label: any, run: any) { tests.push(run()) }
+          describe: function (label: any, run: any) {
+            run()
+          },
+          it: function (label: any, run: any) {
+            tests.push(run())
+          },
         })
         await Promise.all(tests)
       })
@@ -117,7 +123,7 @@ describe('Puppeteer', function () {
   })
 })
 
-function buildClientBundle () {
+function buildClientBundle() {
   return new Promise((resolve, reject) => {
     webpack(require('./browser/webpack.config.js'), (err, stats) => {
       if (err) {

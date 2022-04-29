@@ -1,8 +1,8 @@
 exit: true
 require:
-- ts-node/register
-- source-map-support/register
+  - ts-node/register
+  - source-map-support/register
 recursive: true
 spec:
-- test/*.test.ts
-- test/util/*.test.ts
+  - test/*.test.ts
+  - test/util/*.test.ts

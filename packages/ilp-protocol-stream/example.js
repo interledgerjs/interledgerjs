@@ -4,10 +4,10 @@ const createPlugin = require('ilp-plugin')
 // Note this requires a local moneyd instance to work
 // See https://github.com/interledgerjs/moneyd for instructions
 
-async function run () {
+async function run() {
   const serverPlugin = createPlugin()
   const server = await IlpStream.createServer({
-    plugin: serverPlugin
+    plugin: serverPlugin,
   })
 
   server.on('connection', (connection) => {
@@ -34,13 +34,17 @@ async function run () {
   // These would need to be passed from the server to the client using
   // some encrypted communication channel (not provided by STREAM)
   const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
-  console.log(`server generated ILP address (${destinationAccount}) and shared secret (${sharedSecret.toString('hex')}) for client`)
+  console.log(
+    `server generated ILP address (${destinationAccount}) and shared secret (${sharedSecret.toString(
+      'hex'
+    )}) for client`
+  )
 
   const clientPlugin = createPlugin()
   const clientConn = await IlpStream.createConnection({
     plugin: clientPlugin,
     destinationAccount,
-    sharedSecret
+    sharedSecret,
   })
 
   // Streams are automatically given ids (client-initiated ones are odd, server-initiated are even)

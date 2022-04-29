@@ -2,7 +2,7 @@ import * as Long from 'long'
 
 export type LongValue = Long | string | number
 
-export function longFromValue (value: LongValue, unsigned: boolean): Long {
+export function longFromValue(value: LongValue, unsigned: boolean): Long {
   if (typeof value === 'number') {
     if (unsigned && value < 0) {
       throw new Error('Expected positive number')
@@ -29,15 +29,15 @@ export function longFromValue (value: LongValue, unsigned: boolean): Long {
   return value
 }
 
-export function maxLong (a: Long, b: Long): Long {
+export function maxLong(a: Long, b: Long): Long {
   return a.greaterThan(b) ? a : b
 }
 
-export function minLong (a: Long, b: Long): Long {
+export function minLong(a: Long, b: Long): Long {
   return a.lessThan(b) ? a : b
 }
 
-export function minLongs (values: Long[]): Long {
+export function minLongs(values: Long[]): Long {
   let min = values[0]
   for (let i = 1; i < values.length; i++) {
     min = minLong(min, values[i])
@@ -45,7 +45,7 @@ export function minLongs (values: Long[]): Long {
   return min
 }
 
-export function countDigits (value: Long): number {
+export function countDigits(value: Long): number {
   let digits = 0
   while (!value.isZero()) {
     digits++
@@ -54,39 +54,48 @@ export function countDigits (value: Long): number {
   return digits
 }
 
-export function checkedAdd (a: Long, b: Long): {
-  sum: Long,
+export function checkedAdd(
+  a: Long,
+  b: Long
+): {
+  sum: Long
   overflow: boolean
 } {
   const sum = a.add(b)
   const overflow = sum.lessThan(a) || sum.lessThan(b)
   return {
     sum: overflow ? Long.MAX_UNSIGNED_VALUE : sum,
-    overflow
+    overflow,
   }
 }
 
-export function checkedSubtract (a: Long, b: Long): {
-  difference: Long,
+export function checkedSubtract(
+  a: Long,
+  b: Long
+): {
+  difference: Long
   underflow: boolean
 } {
   const difference = a.subtract(b)
   const underflow = difference.greaterThan(a) && difference.greaterThan(b)
   return {
     difference: underflow ? Long.UZERO : difference,
-    underflow
+    underflow,
   }
 }
 
-export function checkedMultiply (a: Long, b: Long): {
-  product: Long,
+export function checkedMultiply(
+  a: Long,
+  b: Long
+): {
+  product: Long
   overflow: boolean
 } {
   const product = a.multiply(b)
   const overflow = product.lessThan(a) || product.lessThan(b)
   return {
     product: overflow ? Long.MAX_UNSIGNED_VALUE : product,
-    overflow
+    overflow,
   }
 }
 
@@ -95,31 +104,35 @@ export function checkedMultiply (a: Long, b: Long): {
  *
  * returns a * b / c, floored
  */
-export function multiplyDivideFloor (a: Long, b: Long, c: Long): Long {
+export function multiplyDivideFloor(a: Long, b: Long, c: Long): Long {
   return multiplyDivide(a, b, c).quo
 }
 
-export function multiplyDivideCeil (a: Long, b: Long, c: Long): Long {
+export function multiplyDivideCeil(a: Long, b: Long, c: Long): Long {
   const { quo, rem } = multiplyDivide(a, b, c)
   // Never wrap to 0.
   if (quo.equals(Long.MAX_UNSIGNED_VALUE)) return quo
   return quo.add(rem.isZero() ? 0 : 1)
 }
 
-export function multiplyDivideRound (a: Long, b: Long, c: Long): Long {
+export function multiplyDivideRound(a: Long, b: Long, c: Long): Long {
   const { quo, rem } = multiplyDivide(a, b, c)
   // Never wrap to 0.
   if (quo.equals(Long.MAX_UNSIGNED_VALUE)) return quo
-  const roundUp = !rem.isZero() && (
-    c.isOdd()
+  const roundUp =
+    !rem.isZero() &&
+    (c.isOdd()
       ? rem.greaterThan(c.divide(2)) // 5/2 ≅ 2
-      : rem.greaterThanOrEqual(c.divide(2)) // 4/2 = 2
-  )
+      : rem.greaterThanOrEqual(c.divide(2))) // 4/2 = 2
   return roundUp ? quo.add(Long.UONE) : quo
 }
 
-export function multiplyDivide (a: Long, b: Long, c: Long): {
-  quo: Long,
+export function multiplyDivide(
+  a: Long,
+  b: Long,
+  c: Long
+): {
+  quo: Long
   rem: Long
 } {
   let quo = Long.UZERO // quotient

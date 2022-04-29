@@ -5,7 +5,7 @@ class DataQueueEntry {
   next?: DataQueueEntry
   callback?: () => void
 
-  constructor (buf: Buffer, callback?: () => void, entry?: DataQueueEntry) {
+  constructor(buf: Buffer, callback?: () => void, entry?: DataQueueEntry) {
     this.data = buf
     this.callback = callback
     this.next = entry
@@ -18,11 +18,11 @@ export class DataQueue {
   private tail?: DataQueueEntry
   private length: number
 
-  constructor () {
+  constructor() {
     this.length = 0
   }
 
-  push (buf: Buffer, callback?: () => void): void {
+  push(buf: Buffer, callback?: () => void): void {
     const entry = new DataQueueEntry(buf, callback)
 
     if (this.tail) {
@@ -34,7 +34,7 @@ export class DataQueue {
     this.length += 1
   }
 
-  private shift () {
+  private shift() {
     if (!this.head) {
       return null
     }
@@ -48,7 +48,7 @@ export class DataQueue {
     return ret
   }
 
-  read (n: number): Buffer | undefined {
+  read(n: number): Buffer | undefined {
     if (!this.head) {
       return undefined
     }
@@ -75,11 +75,11 @@ export class DataQueue {
     return Buffer.concat(chunks)
   }
 
-  isEmpty (): boolean {
+  isEmpty(): boolean {
     return this.length === 0
   }
 
-  byteLength (): number {
+  byteLength(): number {
     let length = 0
     let entry = this.head
     while (entry) {

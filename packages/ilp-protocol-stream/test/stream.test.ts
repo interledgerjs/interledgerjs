@@ -6,7 +6,14 @@ import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
 import { Duplex } from 'stream'
 import * as IlpPacket from 'ilp-packet'
-import { Packet, StreamCloseFrame, ErrorCode, StreamMoneyFrame, StreamDataFrame, Frame } from '../src/packet'
+import {
+  Packet,
+  StreamCloseFrame,
+  ErrorCode,
+  StreamMoneyFrame,
+  StreamDataFrame,
+  Frame,
+} from '../src/packet'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import * as chaiAsPromised from 'chai-as-promised'
@@ -20,7 +27,7 @@ describe('DataAndMoneyStream', function () {
 
     this.server = new Server({
       plugin: this.serverPlugin,
-      serverSecret: Buffer.alloc(32)
+      serverSecret: Buffer.alloc(32),
     })
     await this.server.listen()
 
@@ -33,7 +40,7 @@ describe('DataAndMoneyStream', function () {
     this.clientConn = await createConnection({
       plugin: this.clientPlugin,
       destinationAccount,
-      sharedSecret
+      sharedSecret,
     })
 
     this.serverConn = await connectionPromise
@@ -64,7 +71,10 @@ describe('DataAndMoneyStream', function () {
         clientStream.on('outgoing_total_sent', resolve)
       })
 
-      assert.throws(() => clientStream.setSendMax(500), 'Cannot set sendMax lower than the totalSent')
+      assert.throws(
+        () => clientStream.setSendMax(500),
+        'Cannot set sendMax lower than the totalSent'
+      )
     })
 
     it('should throw if the amount is infinite', function () {
@@ -72,7 +82,7 @@ describe('DataAndMoneyStream', function () {
       assert.throws(() => clientStream.setSendMax(Infinity), 'sendMax must be finite')
     })
 
-    it('should throw if the amount doesn\'t fit in a UInt64', function () {
+    it("should throw if the amount doesn't fit in a UInt64", function () {
       const clientStream = this.clientConn.createStream()
       assert.throws(
         () => clientStream.setSendMax('18446744073709551616'),
@@ -162,7 +172,10 @@ describe('DataAndMoneyStream', function () {
         await new Promise((resolve, reject) => setImmediate(resolve))
 
         assert.equal(stream.totalReceived, '500')
-        assert.throws(() => stream.setReceiveMax(200), 'Cannot set receiveMax lower than the totalReceived')
+        assert.throws(
+          () => stream.setReceiveMax(200),
+          'Cannot set receiveMax lower than the totalReceived'
+        )
         done()
       })
 
@@ -232,7 +245,10 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before the desired amount was sent (target: 1000, totalSent: 0)')
+      await assert.isRejected(
+        clientStream.sendTotal(1000),
+        'Stream was closed before the desired amount was sent (target: 1000, totalSent: 0)'
+      )
     })
 
     it('should reject if the stream is destroyed before the amount has been sent', async function () {
@@ -244,31 +260,40 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      await assert.isRejected(clientStream.sendTotal(1000), 'Stream encountered an error before the desired amount was sent (target: 1000, totalSent: 0): ApplicationError: blah')
+      await assert.isRejected(
+        clientStream.sendTotal(1000),
+        'Stream encountered an error before the desired amount was sent (target: 1000, totalSent: 0): ApplicationError: blah'
+      )
     })
 
     it('should reject if there is an error before the amount has been sent', async function () {
       const clientStream = this.clientConn.createStream()
       const sendPromise = clientStream.sendTotal(1000)
       clientStream.emit('error', new Error('oops'))
-      await assert.isRejected(sendPromise, 'Stream encountered an error before the desired amount was sent (target: 1000, totalSent: 0): Error: oops')
+      await assert.isRejected(
+        sendPromise,
+        'Stream encountered an error before the desired amount was sent (target: 1000, totalSent: 0): Error: oops'
+      )
     })
 
-    it('should retry sending total if rejected by the receiver', async function() {
+    it('should retry sending total if rejected by the receiver', async function () {
       const moneySpy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(500)
         stream.on('money', moneySpy)
       })
 
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onFirstCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'F99',
-          message: 'uh oh',
-          triggeredBy: 'test.receiver',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F99',
+            message: 'uh oh',
+            triggeredBy: 'test.receiver',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
 
       const clientStream = this.clientConn.createStream()
@@ -277,21 +302,24 @@ describe('DataAndMoneyStream', function () {
       assert.equal(clientStream.totalSent, '1000')
     })
 
-    it('should retry sending total if rejected by a connector', async function() {
+    it('should retry sending total if rejected by a connector', async function () {
       const moneySpy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(500)
         stream.on('money', moneySpy)
       })
 
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onFirstCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'T00',
-          message: 'uh oh',
-          triggeredBy: 'test.connector',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T00',
+            message: 'uh oh',
+            triggeredBy: 'test.connector',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
 
       const clientStream = this.clientConn.createStream()
@@ -305,7 +333,10 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       const sendTotalPromise = clientStream.sendTotal(1000, { timeout: 1000 })
       clock.tick(1000)
-      await assert.isRejected(sendTotalPromise, 'Timed out before the desired amount was sent (target: 1000, totalSent: 0)')
+      await assert.isRejected(
+        sendTotalPromise,
+        'Timed out before the desired amount was sent (target: 1000, totalSent: 0)'
+      )
       clock.restore()
     })
 
@@ -314,7 +345,10 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       const sendTotalPromise = clientStream.sendTotal(1000)
       clock.tick(60000)
-      await assert.isRejected(sendTotalPromise, 'Timed out before the desired amount was sent (target: 1000, totalSent: 0)')
+      await assert.isRejected(
+        sendTotalPromise,
+        'Timed out before the desired amount was sent (target: 1000, totalSent: 0)'
+      )
       clock.restore()
     })
   })
@@ -372,7 +406,10 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      await assert.isRejected(clientStream.receiveTotal(1000), 'Stream was closed before the desired amount was received (target: 1000, totalReceived: 0)')
+      await assert.isRejected(
+        clientStream.receiveTotal(1000),
+        'Stream was closed before the desired amount was received (target: 1000, totalReceived: 0)'
+      )
     })
 
     it('should reject if the stream is destroyed before the amount has been received', async function () {
@@ -382,7 +419,10 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      await assert.isRejected(clientStream.receiveTotal(1000), 'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0): ApplicationError: blah')
+      await assert.isRejected(
+        clientStream.receiveTotal(1000),
+        'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0): ApplicationError: blah'
+      )
     })
 
     it('should reject if there is an error before the amount has been received', async function () {
@@ -390,7 +430,10 @@ describe('DataAndMoneyStream', function () {
       const receivePromise = clientStream.receiveTotal(1000)
       clientStream.emit('error', new Error('oops'))
       clientStream.on('error', () => {})
-      await assert.isRejected(receivePromise, 'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0)')
+      await assert.isRejected(
+        receivePromise,
+        'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0)'
+      )
     })
 
     it('should reject after the specified timeout has been reached', async function () {
@@ -398,7 +441,10 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       const receiveTotalPromise = clientStream.receiveTotal(1000, { timeout: 1000 })
       clock.tick(1000)
-      await assert.isRejected(receiveTotalPromise, 'Timed out before the desired amount was received (target: 1000, totalReceived: 0)')
+      await assert.isRejected(
+        receiveTotalPromise,
+        'Timed out before the desired amount was received (target: 1000, totalReceived: 0)'
+      )
       clock.restore()
     })
 
@@ -407,7 +453,10 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       const receiveTotalPromise = clientStream.receiveTotal(1000)
       clock.tick(60000)
-      await assert.isRejected(receiveTotalPromise, 'Timed out before the desired amount was received (target: 1000, totalReceived: 0)')
+      await assert.isRejected(
+        receiveTotalPromise,
+        'Timed out before the desired amount was received (target: 1000, totalReceived: 0)'
+      )
       clock.restore()
     })
   })
@@ -449,8 +498,7 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      clientStream.sendTotal(1000)
-        .then(() => clientStream.end())
+      clientStream.sendTotal(1000).then(() => clientStream.end())
     })
 
     it('should not close the stream until all the money has been sent', function (done) {
@@ -505,13 +553,21 @@ describe('DataAndMoneyStream', function () {
       clientStream.setSendMax(100)
       await new Promise((resolve) => setTimeout(resolve, 0))
 
-      const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
-        new StreamMoneyFrame(clientStream.id, 1)
-      ]), Long.fromNumber(100, true))
+      const response = await this.clientConn['sendPacket'].call(
+        this.clientConn,
+        new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
+          new StreamMoneyFrame(clientStream.id, 1),
+        ]),
+        Long.fromNumber(100, true)
+      )
       assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
 
       const closeFrame = response.frames.find((frame: Frame) => frame.name === 'StreamClose')
-      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.StreamStateError, 'Stream is already closed')
+      const expectFrame = new StreamCloseFrame(
+        clientStream.id,
+        ErrorCode.StreamStateError,
+        'Stream is already closed'
+      )
       // Longs don't compare properly with deepEqual.
       assert.equal(closeFrame.streamId.toString(), expectFrame.streamId.toString())
       assert.equal(closeFrame.errorCode, expectFrame.errorCode)
@@ -529,13 +585,21 @@ describe('DataAndMoneyStream', function () {
       clientStream.write('hello')
       await new Promise((resolve) => setTimeout(resolve, 10))
 
-      const response = await this.clientConn['sendPacket'].call(this.clientConn, new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
-        new StreamDataFrame(clientStream.id, 5, Buffer.from('blah'))
-      ]), Long.UZERO)
+      const response = await this.clientConn['sendPacket'].call(
+        this.clientConn,
+        new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
+          new StreamDataFrame(clientStream.id, 5, Buffer.from('blah')),
+        ]),
+        Long.UZERO
+      )
       assert.equal(response.ilpPacketType, IlpPacket.Type.TYPE_ILP_REJECT)
 
       const closeFrame = response.frames.find((frame: Frame) => frame.name === 'StreamClose')
-      const expectFrame = new StreamCloseFrame(clientStream.id, ErrorCode.StreamStateError, 'Stream is already closed')
+      const expectFrame = new StreamCloseFrame(
+        clientStream.id,
+        ErrorCode.StreamStateError,
+        'Stream is already closed'
+      )
       assert.equal(closeFrame.streamId.toString(), expectFrame.streamId.toString())
       assert.equal(closeFrame.errorCode, expectFrame.errorCode)
       assert.equal(closeFrame.errorMessage, expectFrame.errorMessage)
@@ -556,17 +620,20 @@ describe('DataAndMoneyStream', function () {
       clientStream.write('hello')
     })
 
-    it('should not allow more money to be sent once the stream is closed and throw an error', async function() {
+    it('should not allow more money to be sent once the stream is closed and throw an error', async function () {
       const clientStream = this.clientConn.createStream()
       await clientStream.end()
       assert.throws(() => clientStream.setSendMax(400), 'Stream already closed')
       await assert.isRejected(clientStream.sendTotal(300), 'Stream already closed')
     })
 
-    it('should not allow more money to be sent once the stream is closed mid sending and throw an error', async function() {
+    it('should not allow more money to be sent once the stream is closed mid sending and throw an error', async function () {
       const clientStream = this.clientConn.createStream()
       clientStream.end()
-      await assert.isRejected(clientStream.sendTotal(300), 'Stream was closed before the desired amount was sent (target: 300, totalSent: 0)')
+      await assert.isRejected(
+        clientStream.sendTotal(300),
+        'Stream was closed before the desired amount was sent (target: 300, totalSent: 0)'
+      )
     })
   })
 
@@ -578,8 +645,7 @@ describe('DataAndMoneyStream', function () {
       })
 
       const clientStream = this.clientConn.createStream()
-      clientStream.sendTotal(1000)
-        .then(() => clientStream.destroy())
+      clientStream.sendTotal(1000).then(() => clientStream.destroy())
     })
 
     it('should cause the remote stream to emit the error passed in', function (done) {
@@ -595,7 +661,8 @@ describe('DataAndMoneyStream', function () {
       clientStream.on('error', (err: Error) => {
         assert.equal(err.message, 'oops, something went wrong')
       })
-      clientStream.sendTotal(1000)
+      clientStream
+        .sendTotal(1000)
         .then(() => clientStream.destroy(new Error('oops, something went wrong')))
     })
 
@@ -649,7 +716,7 @@ describe('DataAndMoneyStream', function () {
         await new Promise(setImmediate)
         assert.equal(stream.readableHighWaterMark, 16384)
         assert.equal(stream.writableHighWaterMark, 16384)
-        stream.on('data', () => { })
+        stream.on('data', () => {})
         done()
       })
 
@@ -776,14 +843,17 @@ describe('DataAndMoneyStream', function () {
           done()
         })
       })
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onFirstCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'T00',
-          message: 'uh oh',
-          triggeredBy: 'test.connector',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T00',
+            message: 'uh oh',
+            triggeredBy: 'test.connector',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
       const clientStream = this.clientConn.createStream()
       clientStream.write(Buffer.alloc(1000))
@@ -796,14 +866,17 @@ describe('DataAndMoneyStream', function () {
           done()
         })
       })
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onFirstCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'F99',
-          message: 'uh oh',
-          triggeredBy: 'test.receiver',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F99',
+            message: 'uh oh',
+            triggeredBy: 'test.receiver',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
       const clientStream = this.clientConn.createStream()
       clientStream.write(Buffer.alloc(1000))
@@ -823,14 +896,17 @@ describe('DataAndMoneyStream', function () {
           done()
         })
       })
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onFirstCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'F99',
-          message: 'uh oh',
-          triggeredBy: 'test.receiver',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F99',
+            message: 'uh oh',
+            triggeredBy: 'test.receiver',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
       const clientStream = this.clientConn.createStream()
       for (let i = 0; i < 40; i++) {
@@ -853,7 +929,7 @@ describe('DataAndMoneyStream', function () {
       assert.deepEqual(clientStream._getIncomingOffsets(), {
         max: 606,
         current: 0,
-        maxAcceptable: 16384
+        maxAcceptable: 16384,
       })
 
       clientStream._pushIncomingData(Buffer.alloc(100, 1), 0)
@@ -870,13 +946,13 @@ describe('DataAndMoneyStream', function () {
       assert.deepEqual(clientStream._getIncomingOffsets(), {
         max: 606,
         current: 600,
-        maxAcceptable: 16384 + 600
+        maxAcceptable: 16384 + 600,
       })
     })
   })
 
-  describe('Control Frames', function() {
-    it('should retry StreamCloseFrame when rejected by connector', function(done) {
+  describe('Control Frames', function () {
+    it('should retry StreamCloseFrame when rejected by connector', function (done) {
       const serverEndSpy = sinon.spy()
       const clientEndSpy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -891,14 +967,17 @@ describe('DataAndMoneyStream', function () {
       clientStream.on('end', clientEndSpy)
 
       // Allow the write through on first call, reject second to block Close Frame
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onSecondCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'T00',
-          message: 'uh oh',
-          triggeredBy: 'test.connector',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T00',
+            message: 'uh oh',
+            triggeredBy: 'test.connector',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
       clientStream.end('hello')
     })
@@ -918,19 +997,22 @@ describe('DataAndMoneyStream', function () {
       clientStream.on('end', clientEndSpy)
 
       // Allow the write through on first call, reject second to block Close Frame
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onSecondCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'F99',
-          message: 'uh oh',
-          triggeredBy: 'test.receiver',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F99',
+            message: 'uh oh',
+            triggeredBy: 'test.receiver',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
       clientStream.end('hello')
     })
 
-    it('should retry StreamCloseFrame when rejected multiple times by receiver', function(done) {
+    it('should retry StreamCloseFrame when rejected multiple times by receiver', function (done) {
       const serverEndSpy = sinon.spy()
       const clientEndSpy = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -945,21 +1027,26 @@ describe('DataAndMoneyStream', function () {
       clientStream.on('end', clientEndSpy)
 
       // Allow the write through on first call, reject second to block Close Frame
-      sinon.stub(this.clientPlugin, 'sendData')
+      sinon
+        .stub(this.clientPlugin, 'sendData')
         .onSecondCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'F99',
-          message: 'uh oh',
-          triggeredBy: 'test.receiver',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F99',
+            message: 'uh oh',
+            triggeredBy: 'test.receiver',
+            data: Buffer.alloc(0),
+          })
+        )
         .onThirdCall()
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'F99',
-          message: 'second rejection',
-          triggeredBy: 'test.receiver',
-          data: Buffer.alloc(0)
-        }))
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F99',
+            message: 'second rejection',
+            triggeredBy: 'test.receiver',
+            data: Buffer.alloc(0),
+          })
+        )
         .callThrough()
       clientStream.end('hello')
     })

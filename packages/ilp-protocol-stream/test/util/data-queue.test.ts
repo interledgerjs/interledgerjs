@@ -12,29 +12,29 @@ describe('DataQueue', function () {
     })
 
     it('returns a partial chunk', function () {
-      this.queue.push(Buffer.from("abc"))
-      assert.deepEqual(this.queue.read(1), Buffer.from("a"))
+      this.queue.push(Buffer.from('abc'))
+      assert.deepEqual(this.queue.read(1), Buffer.from('a'))
     })
 
     it('returns avalable data', function () {
-      this.queue.push(Buffer.from("abc"))
-      assert.deepEqual(this.queue.read(9), Buffer.from("abc"))
+      this.queue.push(Buffer.from('abc'))
+      assert.deepEqual(this.queue.read(9), Buffer.from('abc'))
     })
 
     it('returns sequential data', function () {
-      this.queue.push(Buffer.from("abc"))
-      this.queue.push(Buffer.from("def"))
-      assert.deepEqual(this.queue.read(2), Buffer.from("ab"))
-      assert.deepEqual(this.queue.read(2), Buffer.from("cd"))
-      assert.deepEqual(this.queue.read(2), Buffer.from("ef"))
+      this.queue.push(Buffer.from('abc'))
+      this.queue.push(Buffer.from('def'))
+      assert.deepEqual(this.queue.read(2), Buffer.from('ab'))
+      assert.deepEqual(this.queue.read(2), Buffer.from('cd'))
+      assert.deepEqual(this.queue.read(2), Buffer.from('ef'))
       assert.equal(this.queue.read(1), undefined)
     })
 
     it('calls the callback when a chunk is consumed', function () {
       let c1 = 0
       let c2 = 0
-      this.queue.push(Buffer.from("abc"), () => c1++)
-      this.queue.push(Buffer.from("def"), () => c2++)
+      this.queue.push(Buffer.from('abc'), () => c1++)
+      this.queue.push(Buffer.from('def'), () => c2++)
 
       this.queue.read(2)
       assert.equal(c1, 0)
@@ -56,7 +56,7 @@ describe('DataQueue', function () {
     })
 
     it('returns whether or not the queue is empty', function () {
-      this.queue.push(Buffer.from("abc"))
+      this.queue.push(Buffer.from('abc'))
       this.queue.read(2)
       assert(!this.queue.isEmpty())
       this.queue.read(1)

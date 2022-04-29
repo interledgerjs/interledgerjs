@@ -21,8 +21,8 @@ export interface ServerOpts extends ConnectionOpts {
 }
 
 export interface GenerateAddressSecretOpts {
-  connectionTag?: string,
-  receiptNonce?: Buffer,
+  connectionTag?: string
+  receiptNonce?: Buffer
   receiptSecret?: Buffer
 }
 
@@ -49,13 +49,13 @@ export class Server extends EventEmitter {
   protected disconnectDelay: number
   private pool: ServerConnectionPool
 
-  constructor (opts: ServerOpts) {
+  constructor(opts: ServerOpts) {
     super()
     this.serverSecret = opts.serverSecret || cryptoHelper.randomBytes(32)
     this.plugin = opts.plugin
     this.log = createLogger('ilp-protocol-stream:Server')
     this.connectionOpts = Object.assign({}, opts, {
-      serverSecret: undefined
+      serverSecret: undefined,
     }) as ConnectionOpts
     this.disconnectDelay = opts.disconnectDelay || DEFAULT_DISCONNECT_DELAY
     this.connected = false
@@ -76,53 +76,61 @@ export class Server extends EventEmitter {
    *
    * @fires connection
    */
-  async listen (): Promise<void> {
+  async listen(): Promise<void> {
     if (this.connected && this.plugin.isConnected()) {
       return
     }
-    this.plugin.registerDataHandler(data => {
+    this.plugin.registerDataHandler((data) => {
       this.emit('_incoming_prepare')
       const request = this.handleData(data)
       this.pendingRequests = this.pendingRequests.then(() => request.finally())
       return request
     })
     await this.plugin.connect()
-    const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(this.plugin.sendData.bind(this.plugin))
+    const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(
+      this.plugin.sendData.bind(this.plugin)
+    )
     this.serverAccount = clientAddress
     this.serverAssetCode = assetCode
     this.serverAssetScale = assetScale
     this.connected = true
-    this.pool = new ServerConnectionPool(this.serverSecret, {
-      ...this.connectionOpts,
-      isServer: true,
-      plugin: this.plugin,
-      sourceAccount: this.serverAccount,
-      assetCode: this.serverAssetCode,
-      assetScale: this.serverAssetScale
-    }, (connection: Connection) => {
-      this.emit('connection', connection)
-    })
+    this.pool = new ServerConnectionPool(
+      this.serverSecret,
+      {
+        ...this.connectionOpts,
+        isServer: true,
+        plugin: this.plugin,
+        sourceAccount: this.serverAccount,
+        assetCode: this.serverAssetCode,
+        assetScale: this.serverAssetScale,
+      },
+      (connection: Connection) => {
+        this.emit('connection', connection)
+      }
+    )
   }
 
   /**
    * End all connections and disconnect the plugin
    */
-  async close (): Promise<void> {
+  async close(): Promise<void> {
     // Stop handling new requests, and return T99 while the connection is closing.
     // If an F02 unreachable was returned on new packets: clients would immediately destroy the connection
     // If an F99 was returned on on new packets: clients would retry with no backoff
     this.plugin.deregisterDataHandler()
-    this.plugin.registerDataHandler(async () => IlpPacket.serializeIlpReject({
-      code: IlpPacket.Errors.codes.T99_APPLICATION_ERROR,
-      triggeredBy: this.serverAccount,
-      message: 'Shutting down server',
-      data: Buffer.alloc(0)
-    }))
+    this.plugin.registerDataHandler(async () =>
+      IlpPacket.serializeIlpReject({
+        code: IlpPacket.Errors.codes.T99_APPLICATION_ERROR,
+        triggeredBy: this.serverAccount,
+        message: 'Shutting down server',
+        data: Buffer.alloc(0),
+      })
+    )
 
     // Wait for in-progress requests to finish so all Fulfills are returned
     await this.pendingRequests
     // Allow the plugin time to send the reply packets back before disconnecting it
-    await new Promise(r => setTimeout(r, this.disconnectDelay))
+    await new Promise((r) => setTimeout(r, this.disconnectDelay))
 
     // Gracefully close the connection and all streams
     await this.pool.close()
@@ -140,7 +148,7 @@ export class Server extends EventEmitter {
    * To handle subsequent connections, the user must call `acceptConnection` again.
    * Alternatively, the user can listen on the `'connection'` event.
    */
-  async acceptConnection (): Promise<Connection> {
+  async acceptConnection(): Promise<Connection> {
     await this.listen()
     /* tslint:disable-next-line:no-unnecessary-type-assertion */
     return new Promise((resolve, reject) => {
@@ -164,7 +172,11 @@ export class Server extends EventEmitter {
    * @param receiptNonce Optional nonce to include in STREAM receipts
    * @param receiptSecret Optional secret to use for signing STREAM receipts
    */
-  generateAddressAndSecret (opts?: string | GenerateAddressSecretOpts): { destinationAccount: string, sharedSecret: Buffer, receiptsEnabled: boolean } {
+  generateAddressAndSecret(opts?: string | GenerateAddressSecretOpts): {
+    destinationAccount: string
+    sharedSecret: Buffer
+    receiptsEnabled: boolean
+  } {
     if (!this.connected) {
       throw new Error('Server must be connected to generate address and secret')
     }
@@ -215,18 +227,18 @@ export class Server extends EventEmitter {
       // TODO should this be called serverAccount or serverAddress instead?
       destinationAccount: `${this.serverAccount}.${base64url(token)}`,
       sharedSecret,
-      receiptsEnabled
+      receiptsEnabled,
     }
   }
 
-  get assetCode (): string {
+  get assetCode(): string {
     if (!this.connected) {
       throw new Error('Server must be connected to get asset code.')
     }
     return this.serverAssetCode
   }
 
-  get assetScale (): number {
+  get assetScale(): number {
     if (!this.connected) {
       throw new Error('Server must be connected to get asset scale.')
     }
@@ -236,7 +248,7 @@ export class Server extends EventEmitter {
   /**
    * Parse incoming ILP Prepare packets and pass them to the correct connection
    */
-  protected async handleData (data: Buffer): Promise<Buffer> {
+  protected async handleData(data: Buffer): Promise<Buffer> {
     try {
       let prepare: IlpPacket.IlpPrepare
       try {
@@ -247,13 +259,16 @@ export class Server extends EventEmitter {
           code: 'F00',
           message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
           data: Buffer.alloc(0),
-          triggeredBy: this.serverAccount
+          triggeredBy: this.serverAccount,
         })
       }
 
       const localAddressParts = prepare.destination.replace(this.serverAccount + '.', '').split('.')
       if (localAddressParts.length === 0 || !localAddressParts[0]) {
-        this.log.error('destination in ILP Prepare packet does not have a Connection ID: %s', prepare.destination)
+        this.log.error(
+          'destination in ILP Prepare packet does not have a Connection ID: %s',
+          prepare.destination
+        )
         /* Why no error message here?
         We return an empty message here because we want to minimize the amount of information sent unencrypted
         that identifies this protocol and specific implementation for the rest of the network. For example,
@@ -265,7 +280,8 @@ export class Server extends EventEmitter {
       }
       const connectionId = localAddressParts[0]
 
-      const connection = await this.pool.getConnection(connectionId, prepare)
+      const connection = await this.pool
+        .getConnection(connectionId, prepare)
         .catch((_err: Error) => {
           // See "Why no error message here?" note above
           throw new IlpPacket.Errors.UnreachableError('')
@@ -281,7 +297,7 @@ export class Server extends EventEmitter {
         code: err.ilpErrorCode || 'F00',
         message: err.ilpErrorMessage || '',
         data: err.ilpErrorData || Buffer.alloc(0),
-        triggeredBy: this.serverAccount || ''
+        triggeredBy: this.serverAccount || '',
       })
     }
   }
@@ -290,15 +306,12 @@ export class Server extends EventEmitter {
 /**
  * Creates a [`Server`]{@link Server} and resolves when the server is connected and listening
  */
-export async function createServer (opts: ServerOpts): Promise<Server> {
+export async function createServer(opts: ServerOpts): Promise<Server> {
   const server = new Server(opts)
   await server.listen()
   return server
 }
 
-function base64url (buffer: Buffer) {
-  return buffer.toString('base64')
-    .replace(/=+$/, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
+function base64url(buffer: Buffer) {
+  return buffer.toString('base64').replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')
 }

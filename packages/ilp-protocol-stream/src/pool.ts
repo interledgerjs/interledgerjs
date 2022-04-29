@@ -19,7 +19,7 @@ export class ServerConnectionPool {
   private activeConnections: { [id: string]: Connection }
   private pendingConnections: { [id: string]: Promise<Connection> }
 
-  constructor (
+  constructor(
     serverSecret: Buffer,
     connectionOpts: ConnectionOptions,
     onConnection: ConnectionEvent
@@ -31,15 +31,13 @@ export class ServerConnectionPool {
     this.pendingConnections = {}
   }
 
-  async close (): Promise<void> {
-    await Promise.all(Object.keys(this.activeConnections)
-      .map((id: string) => this.activeConnections[id].end()))
+  async close(): Promise<void> {
+    await Promise.all(
+      Object.keys(this.activeConnections).map((id: string) => this.activeConnections[id].end())
+    )
   }
 
-  async getConnection (
-    id: string,
-    prepare: IlpPacket.IlpPrepare
-  ): Promise<Connection> {
+  async getConnection(id: string, prepare: IlpPacket.IlpPrepare): Promise<Connection> {
     const activeConnection = this.activeConnections[id]
     if (activeConnection) return Promise.resolve(activeConnection)
     const pendingConnection = this.pendingConnections[id]
@@ -52,7 +50,9 @@ export class ServerConnectionPool {
       let connectionTag: string | undefined
       let receiptNonce: Buffer | undefined
       let receiptSecret: Buffer | undefined
-      const reader = new Reader(cryptoHelper.decryptConnectionAddressToken(this.serverSecret, token))
+      const reader = new Reader(
+        cryptoHelper.decryptConnectionAddressToken(this.serverSecret, token)
+      )
       reader.skipOctetString(cryptoHelper.TOKEN_NONCE_LENGTH)
       if (reader.peekVarOctetString().length) {
         connectionTag = reader.readVarOctetString().toString('ascii')
@@ -85,9 +85,13 @@ export class ServerConnectionPool {
         connectionTag,
         connectionId: id,
         receiptNonce,
-        receiptSecret
+        receiptSecret,
       })
-      log.debug('got incoming packet for new connection: %s%s', id, (connectionTag ? ' (connectionTag: ' + connectionTag + ')' : ''))
+      log.debug(
+        'got incoming packet for new connection: %s%s',
+        id,
+        connectionTag ? ' (connectionTag: ' + connectionTag + ')' : ''
+      )
       try {
         this.onConnection(conn)
       } catch (err) {
@@ -115,19 +119,18 @@ export class ServerConnectionPool {
     return connection
   }
 
-  private async getSharedSecret (
-    token: Buffer,
-    prepare: IlpPacket.IlpPrepare
-  ): Promise<Buffer> {
+  private async getSharedSecret(token: Buffer, prepare: IlpPacket.IlpPrepare): Promise<Buffer> {
     try {
-      const sharedSecret = cryptoHelper.generateSharedSecretFromToken(
-        this.serverSecret, token)
+      const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
       // TODO just pass this into the connection?
       const pskKey = await cryptoHelper.generatePskEncryptionKey(sharedSecret)
       await cryptoHelper.decrypt(pskKey, prepare.data)
       return sharedSecret
     } catch (err) {
-      log.error('got prepare for an address and token that we did not generate: %s', prepare.destination)
+      log.error(
+        'got prepare for an address and token that we did not generate: %s',
+        prepare.destination
+      )
       throw err
     }
   }

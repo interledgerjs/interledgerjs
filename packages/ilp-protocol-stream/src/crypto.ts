@@ -9,7 +9,7 @@ export {
   generateReceiptHMAC, // only in node, not browser
   hash,
   hmac,
-  randomBytes
+  randomBytes,
 } from './util/crypto-node'
 
 export const TOKEN_NONCE_LENGTH = 18
@@ -18,26 +18,26 @@ const FULFILLMENT_GENERATION_STRING = Buffer.from('ilp_stream_fulfillment', 'utf
 const PACKET_ID_STRING = Buffer.from('ilp_stream_packet_id', 'utf8')
 export const ENCRYPTION_OVERHEAD = 28
 
-export function generateTokenNonce (): Buffer {
+export function generateTokenNonce(): Buffer {
   return randomBytes(TOKEN_NONCE_LENGTH)
 }
 
-export function generateRandomCondition (): Buffer {
+export function generateRandomCondition(): Buffer {
   return randomBytes(32)
 }
 
-export function generatePskEncryptionKey (sharedSecret: Buffer): Promise<Buffer> {
+export function generatePskEncryptionKey(sharedSecret: Buffer): Promise<Buffer> {
   return hmac(sharedSecret, ENCRYPTION_KEY_STRING)
 }
 
-export function generateFulfillmentKey (sharedSecret: Buffer): Promise<Buffer> {
+export function generateFulfillmentKey(sharedSecret: Buffer): Promise<Buffer> {
   return hmac(sharedSecret, FULFILLMENT_GENERATION_STRING)
 }
 
-export function generateFulfillment (fulfillmentKey: Buffer, data: Buffer): Promise<Buffer> {
+export function generateFulfillment(fulfillmentKey: Buffer, data: Buffer): Promise<Buffer> {
   return hmac(fulfillmentKey, data)
 }
 
-export function generateIncomingPacketId (sharedSecret: Buffer, sequence: Long): Promise<Buffer> {
+export function generateIncomingPacketId(sharedSecret: Buffer, sequence: Long): Promise<Buffer> {
   return hmac(sharedSecret, Buffer.concat([PACKET_ID_STRING, Buffer.from(sequence.toBytes())]))
 }

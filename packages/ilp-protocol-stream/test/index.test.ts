@@ -18,7 +18,7 @@ describe('Server', function () {
   describe('constructor', function () {
     it('should generate a random serverSecret if one is not supplied', function () {
       const server = new Server({
-        plugin: this.serverPlugin
+        plugin: this.serverPlugin,
       })
       assert(Buffer.isBuffer(server['serverSecret']))
       assert.lengthOf(server['serverSecret'], 32)
@@ -29,12 +29,14 @@ describe('Server', function () {
     beforeEach(async function () {
       this.server = new Server({
         serverSecret: Buffer.alloc(32),
-        plugin: this.serverPlugin
+        plugin: this.serverPlugin,
       })
     })
 
     it('rejects when the server closes', async function () {
-      process.nextTick(() => { this.server.close() })
+      process.nextTick(() => {
+        this.server.close()
+      })
       await assert.isRejected(this.server.acceptConnection())
     })
   })
@@ -43,17 +45,20 @@ describe('Server', function () {
     beforeEach(async function () {
       this.server = new Server({
         serverSecret: Buffer.alloc(32),
-        plugin: this.serverPlugin
+        plugin: this.serverPlugin,
       })
     })
 
     it('should throw an error if the server is not connected', async function () {
       const server = new Server({
         serverSecret: Buffer.alloc(32),
-        plugin: this.serverPlugin
+        plugin: this.serverPlugin,
       })
 
-      assert.throws(() => server.generateAddressAndSecret(), 'Server must be connected to generate address and secret')
+      assert.throws(
+        () => server.generateAddressAndSecret(),
+        'Server must be connected to generate address and secret'
+      )
     })
 
     it('should return a destinationAccount and sharedSecret', async function () {
@@ -87,7 +92,7 @@ describe('Server', function () {
       const clientConn = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
-        sharedSecret
+        sharedSecret,
       })
 
       const connection = await connectionPromise
@@ -102,7 +107,7 @@ describe('Server', function () {
       const clientConn = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
-        sharedSecret
+        sharedSecret,
       })
 
       const connection = await connectionPromise
@@ -111,13 +116,14 @@ describe('Server', function () {
     it('should accept a connectionTag as a string and attach it to the incoming connection', async function () {
       await this.server.listen()
       const connectionTag = 'hello-there_123'
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionTag)
+      const { destinationAccount, sharedSecret } =
+        this.server.generateAddressAndSecret(connectionTag)
       const connectionPromise = this.server.acceptConnection()
 
       const clientConn = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
-        sharedSecret
+        sharedSecret,
       })
 
       const connection = await connectionPromise
@@ -127,13 +133,15 @@ describe('Server', function () {
     it('should accept a connectionTag and attach it to the incoming connection', async function () {
       await this.server.listen()
       const connectionTag = 'hello-there_123'
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret({ connectionTag })
+      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret({
+        connectionTag,
+      })
       const connectionPromise = this.server.acceptConnection()
 
       const clientConn = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
-        sharedSecret
+        sharedSecret,
       })
 
       const connection = await connectionPromise
@@ -143,7 +151,8 @@ describe('Server', function () {
     it('should reject the connection if the connectionTag is modified', async function () {
       await this.server.listen()
       const connectionName = 'hello-there_123'
-      const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(connectionName)
+      const { destinationAccount, sharedSecret } =
+        this.server.generateAddressAndSecret(connectionName)
 
       const spy = sinon.spy()
       this.server.on('connection', spy)
@@ -156,11 +165,14 @@ describe('Server', function () {
         return response
       }
 
-      await assert.isRejected(createConnection({
-        plugin: this.clientPlugin,
-        destinationAccount: destinationAccount + '456',
-        sharedSecret
-      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
+      await assert.isRejected(
+        createConnection({
+          plugin: this.clientPlugin,
+          destinationAccount: destinationAccount + '456',
+          sharedSecret,
+        }),
+        'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.'
+      )
 
       assert.notCalled(spy)
     })
@@ -179,24 +191,42 @@ describe('Server', function () {
       const connectionTag = 'hello-there_123'
       const receiptNonce = Buffer.from('nonce_123', 'ascii')
       const receiptSecret = Buffer.from('secret_123', 'ascii')
-      assert.throws(() => this.server.generateAddressAndSecret({ receiptNonce }), 'receiptNonce and receiptSecret must accompany each other')
-      assert.throws(() => this.server.generateAddressAndSecret({ receiptSecret }), 'receiptNonce and receiptSecret must accompany each other')
-      assert.throws(() => this.server.generateAddressAndSecret({ connectionTag, receiptNonce }), 'receiptNonce and receiptSecret must accompany each other')
-      assert.throws(() => this.server.generateAddressAndSecret({ connectionTag, receiptSecret }), 'receiptNonce and receiptSecret must accompany each other')
+      assert.throws(
+        () => this.server.generateAddressAndSecret({ receiptNonce }),
+        'receiptNonce and receiptSecret must accompany each other'
+      )
+      assert.throws(
+        () => this.server.generateAddressAndSecret({ receiptSecret }),
+        'receiptNonce and receiptSecret must accompany each other'
+      )
+      assert.throws(
+        () => this.server.generateAddressAndSecret({ connectionTag, receiptNonce }),
+        'receiptNonce and receiptSecret must accompany each other'
+      )
+      assert.throws(
+        () => this.server.generateAddressAndSecret({ connectionTag, receiptSecret }),
+        'receiptNonce and receiptSecret must accompany each other'
+      )
     })
 
     it('should require 16 byte receipt nonce', async function () {
       await this.server.listen()
       const receiptNonce = Buffer.alloc(15)
       const receiptSecret = Buffer.alloc(32)
-      assert.throws(() => this.server.generateAddressAndSecret({ receiptNonce, receiptSecret }), 'receiptNonce must be 16 bytes')
+      assert.throws(
+        () => this.server.generateAddressAndSecret({ receiptNonce, receiptSecret }),
+        'receiptNonce must be 16 bytes'
+      )
     })
 
     it('should require 32 byte receipt secret', async function () {
       await this.server.listen()
       const receiptNonce = Buffer.alloc(16)
       const receiptSecret = Buffer.alloc(31)
-      assert.throws(() => this.server.generateAddressAndSecret({ receiptNonce, receiptSecret }), 'receiptSecret must be 32 bytes')
+      assert.throws(
+        () => this.server.generateAddressAndSecret({ receiptNonce, receiptSecret }),
+        'receiptSecret must be 32 bytes'
+      )
     })
   })
 
@@ -206,8 +236,8 @@ describe('Server', function () {
         serverSecret: Buffer.alloc(32),
         plugin: this.serverPlugin,
         async shouldFulfill() {
-          await new Promise(r => setTimeout(r, 1000))
-        }
+          await new Promise((r) => setTimeout(r, 1000))
+        },
       })
       await this.server.listen()
     })
@@ -217,7 +247,7 @@ describe('Server', function () {
 
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret('hello'),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       const clientStream = clientConn.createStream()
 
@@ -231,8 +261,8 @@ describe('Server', function () {
       serverConn.on('end', serverEndSpy)
 
       // Wait for initial connection establishment to finish before sending any money
-      await new Promise(r => clientStream.once('_send_loop_finished', r))
-      await new Promise(r => serverStream.once('_send_loop_finished', r))
+      await new Promise((r) => clientStream.once('_send_loop_finished', r))
+      await new Promise((r) => serverStream.once('_send_loop_finished', r))
 
       // After it receives the next packet, immediately try to close the server
       let closePromise: Promise<void>
@@ -266,7 +296,7 @@ describe('Server', function () {
     beforeEach(async function () {
       this.server = new Server({
         serverSecret: Buffer.alloc(32),
-        plugin: this.serverPlugin
+        plugin: this.serverPlugin,
       })
       await this.server.listen()
     })
@@ -278,7 +308,7 @@ describe('Server', function () {
 
       await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
     })
   })
@@ -287,7 +317,7 @@ describe('Server', function () {
     beforeEach(async function () {
       this.server = new Server({
         serverSecret: Buffer.alloc(32),
-        plugin: this.serverPlugin
+        plugin: this.serverPlugin,
       })
       await this.server.listen()
 
@@ -299,7 +329,7 @@ describe('Server', function () {
       this.clientConn = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
-        sharedSecret
+        sharedSecret,
       })
       this.serverConn = await serverConnPromise
     })
@@ -307,11 +337,14 @@ describe('Server', function () {
     it('should create a new connection if client sends more packets after connection is closed', async function () {
       await this.serverConn.destroy()
 
-      await assert.isFulfilled(createConnection({
-        plugin: this.clientPlugin,
-        sharedSecret: this.sharedSecret,
-        destinationAccount: this.destinationAccount
-      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
+      await assert.isFulfilled(
+        createConnection({
+          plugin: this.clientPlugin,
+          sharedSecret: this.sharedSecret,
+          destinationAccount: this.destinationAccount,
+        }),
+        'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.'
+      )
     })
 
     it('should remove the record of closed connections', async function () {
@@ -332,7 +365,7 @@ describe('createServer', function () {
     const spy = sinon.spy(this.serverPlugin, 'connect')
     const server = await createServer({
       serverSecret: Buffer.alloc(32),
-      plugin: this.serverPlugin
+      plugin: this.serverPlugin,
     })
     assert.instanceOf(server, Server)
     assert.called(spy)
@@ -341,7 +374,7 @@ describe('createServer', function () {
   it('should return a server with an assetCode and assetScale', async function () {
     const server = await createServer({
       serverSecret: Buffer.alloc(32),
-      plugin: this.serverPlugin
+      plugin: this.serverPlugin,
     })
     assert.equal(server.assetCode, 'XYZ')
     assert.equal(server.assetScale, 9)

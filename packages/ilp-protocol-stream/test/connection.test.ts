@@ -24,12 +24,12 @@ describe('Connection', function () {
 
     this.server = await createServer({
       plugin: this.serverPlugin,
-      serverSecret: Buffer.alloc(32)
+      serverSecret: Buffer.alloc(32),
     })
 
     const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret({
       receiptNonce: this.receiptNonce,
-      receiptSecret: this.receiptSecret
+      receiptSecret: this.receiptSecret,
     })
     this.destinationAccount = destinationAccount
     this.sharedSecret = sharedSecret
@@ -40,7 +40,7 @@ describe('Connection', function () {
       plugin: this.clientPlugin,
       destinationAccount,
       sharedSecret,
-      slippage: 0
+      slippage: 0,
     })
 
     this.serverConn = await connectionPromise
@@ -143,35 +143,35 @@ describe('Connection', function () {
         stream1: {
           finish: sinon.spy(),
           end: sinon.spy(),
-          close: sinon.spy()
+          close: sinon.spy(),
         },
         stream2: {
           finish: sinon.spy(),
           end: sinon.spy(),
-          close: sinon.spy()
-        }
+          close: sinon.spy(),
+        },
       }
       const serverStreamSpy = {
         finish: sinon.spy(),
         end: sinon.spy(),
-        close: sinon.spy()
+        close: sinon.spy(),
       }
       const connSpy = {
         client: {
           end: sinon.spy(),
-          close: sinon.spy()
+          close: sinon.spy(),
         },
         server: {
           end: sinon.spy(),
-          close: sinon.spy()
-        }
+          close: sinon.spy(),
+        },
       }
 
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('finish', serverStreamSpy.finish)
         stream.on('end', serverStreamSpy.end)
         stream.on('close', serverStreamSpy.close)
-        stream.on('data', () => { })
+        stream.on('data', () => {})
       })
       this.serverConn.on('end', connSpy.server.end)
       this.serverConn.on('close', connSpy.server.close)
@@ -218,35 +218,35 @@ describe('Connection', function () {
         stream1: {
           finish: sinon.spy(),
           end: sinon.spy(),
-          close: sinon.spy()
+          close: sinon.spy(),
         },
         stream2: {
           finish: sinon.spy(),
           end: sinon.spy(),
-          close: sinon.spy()
-        }
+          close: sinon.spy(),
+        },
       }
       const serverStreamSpy = {
         finish: sinon.spy(),
         end: sinon.spy(),
-        close: sinon.spy()
+        close: sinon.spy(),
       }
       const connSpy = {
         client: {
           end: sinon.spy(),
-          close: sinon.spy()
+          close: sinon.spy(),
         },
         server: {
           end: sinon.spy(),
-          close: sinon.spy()
-        }
+          close: sinon.spy(),
+        },
       }
 
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('finish', serverStreamSpy.finish)
         stream.on('end', serverStreamSpy.end)
         stream.on('close', serverStreamSpy.close)
-        stream.on('data', () => { })
+        stream.on('data', () => {})
       })
       this.serverConn.on('end', connSpy.server.end)
       this.serverConn.on('close', connSpy.server.close)
@@ -386,7 +386,6 @@ describe('Connection', function () {
       assert.notCalled(connectionCloseSpy)
     })
 
-
     it('should emit error on attempting to send data on a closed connection if an error listener is present', async function () {
       const serverStreamData = sinon.spy()
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -425,7 +424,10 @@ describe('Connection', function () {
 
     it('should accept an error that will be emitted on the other side of the connection', function (done) {
       this.clientConn.on('error', (err: Error) => {
-        assert.equal(err.message, 'Remote connection error. Code: InternalError, message: i had enough of this')
+        assert.equal(
+          err.message,
+          'Remote connection error. Code: InternalError, message: i had enough of this'
+        )
         done()
       })
 
@@ -452,12 +454,18 @@ describe('Connection', function () {
       const serverStream = this.serverConn.createStream()
       await this.serverConn.destroy()
 
-      assert.throws(() => clientStream.write('hello'), 'Cannot call write after a stream was destroyed')
+      assert.throws(
+        () => clientStream.write('hello'),
+        'Cannot call write after a stream was destroyed'
+      )
       assert.throws(() => clientStream.setSendMax(300), 'Stream already closed')
       await assert.isRejected(clientStream.sendTotal(300), 'Stream already closed')
       // Node v10.0.0 throws 'Cannot call write after a stream was destroyed'
       // Node v8.11.1 throws 'write after end'
-      assert.throws(() => serverStream.write('hello'), /Cannot call write after a stream was destroyed|write after end/)
+      assert.throws(
+        () => serverStream.write('hello'),
+        /Cannot call write after a stream was destroyed|write after end/
+      )
       assert.throws(() => serverStream.setSendMax(300), 'Stream already closed')
       await assert.isRejected(serverStream.sendTotal(300), 'Stream already closed')
     })
@@ -503,17 +511,17 @@ describe('Connection', function () {
   describe('Connection Timeout', function () {
     it('should destroy the connection if it is idle for too long', async function () {
       const clock = sinon.useFakeTimers({
-        toFake: ['setTimeout', 'Date']
+        toFake: ['setTimeout', 'Date'],
       })
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       const errPromise = new Promise((resolve, reject) => {
         clientConn.on('error', resolve)
       })
       clock.tick(60000)
-      const err = await errPromise as Error
+      const err = (await errPromise) as Error
       assert.equal(err.message, 'Connection timed out due to inactivity')
       clock.restore()
     })
@@ -544,7 +552,10 @@ describe('Connection', function () {
       assert.calledWith(moneyEventSpy, '58')
 
       // 2nd arg passed to `money` event handler should be the same ILP Prepare received by the plugin
-      assert.deepEqual(moneyEventSpy.getCall(0).args[1], IlpPacket.deserializeIlpPrepare(handleDataSpy.getCall(0).args[0]))
+      assert.deepEqual(
+        moneyEventSpy.getCall(0).args[1],
+        IlpPacket.deserializeIlpPrepare(handleDataSpy.getCall(0).args[0])
+      )
     })
 
     it('should get a receipt for each fulfilled packet', async function () {
@@ -552,14 +563,16 @@ describe('Connection', function () {
       const spy = sinon.spy(clientStream, '_setReceipt')
       await clientStream.sendTotal(1002)
 
-      const receiptFixture = require('./fixtures/packets.json').find(({ name }: { name: string}) => name === 'frame:stream_receipt' ).packet.frames[0].receipt
+      const receiptFixture = require('./fixtures/packets.json').find(
+        ({ name }: { name: string }) => name === 'frame:stream_receipt'
+      ).packet.frames[0].receipt
       assert.calledTwice(spy)
       assert.calledWith(spy.firstCall, receiptFixture)
       const receipt = createReceipt({
         nonce: this.receiptNonce,
         streamId: clientStream.id,
         totalReceived: '501',
-        secret: this.receiptSecret
+        secret: this.receiptSecret,
       })
       assert.calledWith(spy.secondCall, receipt)
       assert(clientStream.receipt.equals(receipt))
@@ -593,7 +606,7 @@ describe('Connection', function () {
       this.serverPlugin.deregisterDataHandler()
       this.server = await createServer({
         plugin: this.serverPlugin,
-        serverSecret: Buffer.alloc(32)
+        serverSecret: Buffer.alloc(32),
       })
       this.server.on('error', (_err: Error) => {
         // noop
@@ -609,7 +622,7 @@ describe('Connection', function () {
       this.clientPlugin.maxAmount = 1000000000 // 10^9
       await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
     })
 
@@ -618,24 +631,27 @@ describe('Connection', function () {
       this.clientPlugin.maxAmount = 1000000000000 // 10^12
       await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
     })
 
     it('should throw an error if the exchange rate is smaller than 1/1000000000', async function () {
       this.clientPlugin.exchangeRate = 0.0000000001
       this.serverPlugin.exchangeRate = 1 / this.clientPlugin.exchangeRate
-      await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
-      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
+      await assert.isRejected(
+        createConnection({
+          ...this.server.generateAddressAndSecret(),
+          plugin: this.clientPlugin,
+        }),
+        'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.'
+      )
     })
 
     it('should apply a default slippage of 1% to the exchange rate', async function () {
       const slippage = 0.01
       const connection = await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       const exchangeRateWithSlippage = (0.5 * (1 - slippage)).toString()
       assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage)
@@ -646,7 +662,7 @@ describe('Connection', function () {
       const connection = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        slippage
+        slippage,
       })
       const exchangeRateWithSlippage = (0.5 * (1 - slippage)).toString()
       assert.equal(connection.minimumAcceptableExchangeRate, exchangeRateWithSlippage)
@@ -664,7 +680,7 @@ describe('Connection', function () {
       const connection = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        slippage: 0
+        slippage: 0,
       })
       assert.equal(connection.minimumAcceptableExchangeRate, '0.001')
 
@@ -681,17 +697,20 @@ describe('Connection', function () {
       this.clientPlugin.exchangeRate = 0.001
       this.clientPlugin.maxAmount = 1500
 
-      await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
-      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
+      await assert.isRejected(
+        createConnection({
+          ...this.server.generateAddressAndSecret(),
+          plugin: this.clientPlugin,
+        }),
+        'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.'
+      )
       clearInterval(interval)
       clock.restore()
     })
 
     it('should fail to determine the exchange rate if it keeps getting F08 errors', async function () {
       const clock = sinon.useFakeTimers({
-        toFake: ['setTimeout']
+        toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(1000), 1)
 
@@ -702,19 +721,26 @@ describe('Connection', function () {
       testData.writeUInt64(10)
       testData.writeUInt64(500)
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onFirstCall().callsFake(realSendData)
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'F08',
-          message: 'Amount too Large',
-          data: testData.getBuffer(),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .callsFake(realSendData)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount too Large',
+            data: testData.getBuffer(),
+            triggeredBy: 'test.connector',
+          })
+        )
 
-      await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
-      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
+      await assert.isRejected(
+        createConnection({
+          ...this.server.generateAddressAndSecret(),
+          plugin: this.clientPlugin,
+        }),
+        'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.'
+      )
 
       clearInterval(interval)
       clock.restore()
@@ -725,32 +751,45 @@ describe('Connection', function () {
         toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(1000), 1)
-      this.clientPlugin.exchangeRate = .00001
+      this.clientPlugin.exchangeRate = 0.00001
       this.clientPlugin.maxAmount = 1000000
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onCall(2).resolves(IlpPacket.serializeIlpReject({
-          code: 'F08',
-          message: 'Amount Too Large',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onCall(3).resolves(IlpPacket.serializeIlpReject({
-          code: 'F08',
-          message: 'Amount Too Large',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onCall(4).resolves(IlpPacket.serializeIlpReject({
-          code: 'F08',
-          message: 'Amount Too Large',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onCall(2)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount Too Large',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onCall(3)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount Too Large',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onCall(4)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount Too Large',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
         .callThrough()
-      await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
-      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
+      await assert.isRejected(
+        createConnection({
+          ...this.server.generateAddressAndSecret(),
+          plugin: this.clientPlugin,
+        }),
+        'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.'
+      )
       clearInterval(interval)
       clock.restore()
     })
@@ -762,30 +801,40 @@ describe('Connection', function () {
       const interval = setInterval(() => clock.tick(1000), 1)
       this.clientPlugin.exchangeRate = 1
       this.clientPlugin.maxAmount = 1000000
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onCall(2).resolves(IlpPacket.serializeIlpReject({
-          code: 'F08',
-          message: 'Amount Too Large',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onCall(3).resolves(IlpPacket.serializeIlpReject({
-          code: 'F08',
-          message: 'Amount Too Large',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onCall(4).resolves(IlpPacket.serializeIlpReject({
-          code: 'F08',
-          message: 'Amount Too Large',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onCall(2)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount Too Large',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onCall(3)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount Too Large',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onCall(4)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'F08',
+            message: 'Amount Too Large',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
         .callThrough()
       await createConnection({
         ...this.server.generateAddressAndSecret(),
         minExchangeRatePrecision: 1,
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       clearInterval(interval)
       clock.restore()
@@ -793,7 +842,7 @@ describe('Connection', function () {
 
     it('should establish the exchange rate if its less than the max packet amount and T04 errors are found', async function () {
       const clock = sinon.useFakeTimers({
-        toFake: ['setTimeout']
+        toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(1000), 1)
       this.clientPlugin.exchangeRate = 0.00099
@@ -803,7 +852,7 @@ describe('Connection', function () {
         code: 'T04',
         message: 'Insufficient Liquidity Error',
         data: Buffer.alloc(0),
-        triggeredBy: 'test.connector'
+        triggeredBy: 'test.connector',
       })
 
       const mySendData = async (data: Buffer): Promise<Buffer> => {
@@ -818,7 +867,7 @@ describe('Connection', function () {
             code: 'F08',
             message: 'Amount to Large Million',
             data: rejectedPacketData.getBuffer(),
-            triggeredBy: 'test.connector'
+            triggeredBy: 'test.connector',
           })
         } else if (packetAmount === 1000000000) {
           const rejectedPacketData = new Writer()
@@ -829,7 +878,7 @@ describe('Connection', function () {
             code: 'F08',
             message: 'Amount to Large Billion',
             data: rejectedPacketData.getBuffer(),
-            triggeredBy: 'test.connector'
+            triggeredBy: 'test.connector',
           })
         } else if (packetAmount === 1000000000000) {
           const rejectedPacketData = new Writer()
@@ -840,7 +889,7 @@ describe('Connection', function () {
             code: 'F08',
             message: 'Amount to Large Trillion',
             data: rejectedPacketData.getBuffer(),
-            triggeredBy: 'test.connector'
+            triggeredBy: 'test.connector',
           })
         }
 
@@ -852,13 +901,12 @@ describe('Connection', function () {
       }
 
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .callsFake(mySendData)
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData').callsFake(mySendData)
 
       await createConnection({
         ...this.server.generateAddressAndSecret(),
         minExchangeRatePrecision: 2,
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
 
       clearInterval(interval)
@@ -872,7 +920,7 @@ describe('Connection', function () {
         code: 'T04',
         message: 'Insufficient Liquidity Error',
         data: Buffer.alloc(0),
-        triggeredBy: 'test.connector'
+        triggeredBy: 'test.connector',
       })
 
       const mySendData = async (data: Buffer): Promise<Buffer> => {
@@ -883,13 +931,12 @@ describe('Connection', function () {
       }
 
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .callsFake(mySendData)
+      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData').callsFake(mySendData)
 
       const serverPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
 
       const serverConn = await serverPromise
@@ -897,31 +944,38 @@ describe('Connection', function () {
         stream.setReceiveMax(10000)
       })
       const stream = clientConn.createStream()
-      await stream.sendTotal(200, {timeout: 99999999})
+      await stream.sendTotal(200, { timeout: 99999999 })
     })
 
     it('should stop trying to connect if it keeps getting temporary errors', async function () {
       const clock = sinon.useFakeTimers({
-        toFake: ['setTimeout']
+        toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(1000), 1)
 
       this.clientPlugin.exchangeRate = 0.000001
       this.clientPlugin.maxAmount = 1000000
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onFirstCall().callsFake(realSendData)
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .callsFake(realSendData)
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T04',
+            message: 'Insufficient Liquidity Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
 
-      await assert.isRejected(createConnection({
-        ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
-      }), 'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.')
+      await assert.isRejected(
+        createConnection({
+          ...this.server.generateAddressAndSecret(),
+          plugin: this.clientPlugin,
+        }),
+        'Error connecting: Unable to establish connection, no packets meeting the minimum exchange precision of 3 digits made it through the path.'
+      )
 
       clearInterval(interval)
       clock.restore()
@@ -931,24 +985,31 @@ describe('Connection', function () {
       // NOTE: This test uses real timers to ensure that `determineExchangeRate`
       // doesn't take forever to abort when the connection is terminated.
       const realSendData = this.serverPlugin.sendData.bind(this.serverPlugin)
-      const sendDataStub = sinon.stub(this.serverPlugin, 'sendData')
-        .onFirstCall().callsFake(realSendData) // ILDCP
-        .resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.serverPlugin, 'sendData')
+        .onFirstCall()
+        .callsFake(realSendData) // ILDCP
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T04',
+            message: 'Insufficient Liquidity Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
 
       const connectionPromise = createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       const serverConnection = await this.server.acceptConnection()
       const clientConnection = await connectionPromise
       const serverRatePromise = serverConnection['determineExchangeRate']()
       await clientConnection.end()
-      await assert.isRejected(serverRatePromise, 'Connection terminated before rate could be determined.')
+      await assert.isRejected(
+        serverRatePromise,
+        'Connection terminated before rate could be determined.'
+      )
     })
   })
 
@@ -989,7 +1050,7 @@ describe('Connection', function () {
 
       this.server = await createServer({
         plugin: this.serverPlugin,
-        serverSecret: Buffer.alloc(32)
+        serverSecret: Buffer.alloc(32),
       })
       await this.server.listen()
 
@@ -1003,7 +1064,7 @@ describe('Connection', function () {
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret,
-        slippage: 0.05
+        slippage: 0.05,
       })
       this.serverConn = await connectionPromise
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -1045,7 +1106,7 @@ describe('Connection', function () {
       this.server = await createServer({
         plugin: this.serverPlugin,
         serverSecret: Buffer.alloc(32),
-        slippage: 0.01
+        slippage: 0.01,
       })
       await this.server.listen()
 
@@ -1060,7 +1121,7 @@ describe('Connection', function () {
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret,
-        slippage: 0.05
+        slippage: 0.05,
       })
       this.serverConn = await connectionPromise
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
@@ -1103,7 +1164,7 @@ describe('Connection', function () {
         ...this.server.generateAddressAndSecret(),
         exchangeRate: 0.001,
         slippage: 0,
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       this.serverConn = await connectionPromise
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -1130,7 +1191,7 @@ describe('Connection', function () {
       this.serverPlugin.deregisterDataHandler()
       this.server = await createServer({
         plugin: this.serverPlugin,
-        serverSecret: Buffer.alloc(32)
+        serverSecret: Buffer.alloc(32),
       })
     })
 
@@ -1138,7 +1199,7 @@ describe('Connection', function () {
       this.clientPlugin.maxAmount = 1500
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       assert.equal(clientConn['congestion'].maximumPacketAmount.toString(), '1500')
     })
@@ -1178,7 +1239,7 @@ describe('Connection', function () {
         if (result[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
           result = IlpPacket.serializeIlpReject({
             ...IlpPacket.deserializeIlpReject(result),
-            data: Buffer.alloc(0)
+            data: Buffer.alloc(0),
           })
         }
         return result
@@ -1207,7 +1268,7 @@ describe('Connection', function () {
         if (result[0] === IlpPacket.Type.TYPE_ILP_REJECT) {
           result = IlpPacket.serializeIlpReject({
             ...IlpPacket.deserializeIlpReject(result),
-            data: Buffer.from('xcoivusadlfkjlwkerjlkjlkxcjvlkoiuiowedr', 'base64')
+            data: Buffer.from('xcoivusadlfkjlwkerjlkjlkxcjvlkoiuiowedr', 'base64'),
           })
         }
         return result
@@ -1236,7 +1297,10 @@ describe('Connection', function () {
         assert.equal(err.message, 'Cannot send. Path has a Maximum Packet Amount of 0')
       })
 
-      await assert.isRejected(clientStream.sendTotal(1000), 'Stream was closed before the desired amount was sent (target: 1000, totalSent: 0)')
+      await assert.isRejected(
+        clientStream.sendTotal(1000),
+        'Stream was closed before the desired amount was sent (target: 1000, totalSent: 0)'
+      )
     })
 
     it('closes the connection if totalReceived exceeds MaxUint64', async function () {
@@ -1245,7 +1309,7 @@ describe('Connection', function () {
       const serverPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       const serverConn = await serverPromise
       clientConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -1262,12 +1326,17 @@ describe('Connection', function () {
 
       await serverStream1.sendTotal(Long.MAX_UNSIGNED_VALUE.divide(2))
       // Cause `totalReceived` to exceed MAX_UNSIGNED_VALUE.
-      await assert.isRejected(serverStream2.sendTotal(1),
-        'Stream was closed before the desired amount was sent (target: 1, totalSent: 0)')
+      await assert.isRejected(
+        serverStream2.sendTotal(1),
+        'Stream was closed before the desired amount was sent (target: 1, totalSent: 0)'
+      )
       assert.calledOnce(spy1)
       assert.equal(spy1.args[0][0].message, 'Total received exceeded MaxUint64')
       assert.calledOnce(spy2)
-      assert.equal(spy2.args[0][0].message, 'Unexpected error while sending packet. Code: F00, triggered by: test.peerA, message: Total received exceeded MaxUint64')
+      assert.equal(
+        spy2.args[0][0].message,
+        'Unexpected error while sending packet. Code: F00, triggered by: test.peerA, message: Total received exceeded MaxUint64'
+      )
       assert.equal(spy2.args[0][0].ilpReject.code, 'F00')
     })
 
@@ -1276,7 +1345,7 @@ describe('Connection', function () {
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        maximumPacketAmount: '5'
+        maximumPacketAmount: '5',
       })
       const _serverConn = await serverPromise
       assert.equal(clientConn['congestion'].maximumPacketAmount.toString(), '5')
@@ -1320,46 +1389,48 @@ describe('Connection', function () {
        * If any other packets call it, the test will fail.
        */
 
-      const shouldFulfillSpy = sinon.spy(async (amount: Long, packetId: Buffer, connectionTag: string) => {
-        assert.equal(actualConnectionTag, connectionTag)
+      const shouldFulfillSpy = sinon.spy(
+        async (amount: Long, packetId: Buffer, connectionTag: string) => {
+          assert.equal(actualConnectionTag, connectionTag)
 
-        assert.isFalse(packetIds.has(packetId.toString())) // Test that the packet Ids are unique
-        packetIds.add(packetId.toString())
+          assert.isFalse(packetIds.has(packetId.toString())) // Test that the packet Ids are unique
+          packetIds.add(packetId.toString())
 
-        const amountNum = amount.toNumber()
-        if (shouldFulfillSpy.callCount === 1) {
-          assert.equal(30, amountNum)
+          const amountNum = amount.toNumber()
+          if (shouldFulfillSpy.callCount === 1) {
+            assert.equal(30, amountNum)
 
-          assert.equal('0', serverConn.totalReceived)
-          assert(serverMoneySpy.notCalled)
+            assert.equal('0', serverConn.totalReceived)
+            assert(serverMoneySpy.notCalled)
 
-          return // Fulfill the packet
-        } else if (shouldFulfillSpy.callCount === 2) {
-          assert.equal(20, amountNum)
+            return // Fulfill the packet
+          } else if (shouldFulfillSpy.callCount === 2) {
+            assert.equal(20, amountNum)
 
-          // Amount received from the first packet
-          assert.equal('30', serverConn.totalReceived)
-          assert(serverMoneySpy.calledOnceWith('30'))
+            // Amount received from the first packet
+            assert.equal('30', serverConn.totalReceived)
+            assert(serverMoneySpy.calledOnceWith('30'))
 
-          return Promise.reject() // Reject this packet
-        } else if (shouldFulfillSpy.callCount === 3) {
-          assert.equal(20, amountNum)
+            return Promise.reject() // Reject this packet
+          } else if (shouldFulfillSpy.callCount === 3) {
+            assert.equal(20, amountNum)
 
-          // Amount received from the first packet
-          assert.equal('30', serverConn.totalReceived)
-          assert(serverMoneySpy.calledOnceWith('30'))
+            // Amount received from the first packet
+            assert.equal('30', serverConn.totalReceived)
+            assert(serverMoneySpy.calledOnceWith('30'))
 
-          return // Fulfill the packet
-        } else {
-          // No other packets trigger calls to `shouldFulfill`
-          assert.fail()
+            return // Fulfill the packet
+          } else {
+            // No other packets trigger calls to `shouldFulfill`
+            assert.fail()
+          }
         }
-      })
+      )
 
       this.server = await createServer({
         plugin: this.serverPlugin,
         serverSecret: Buffer.alloc(32),
-        shouldFulfill: shouldFulfillSpy
+        shouldFulfill: shouldFulfillSpy,
       })
 
       const addressAndSecret = this.server.generateAddressAndSecret(actualConnectionTag)
@@ -1369,7 +1440,7 @@ describe('Connection', function () {
       const clientConn = await createConnection({
         ...addressAndSecret,
         plugin: this.clientPlugin,
-        minExchangeRatePrecision: 2
+        minExchangeRatePrecision: 2,
       })
 
       serverConn = await serverPromise
@@ -1398,7 +1469,7 @@ describe('Connection', function () {
       this.clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
         getExpiry: (destination: string) => this.expiry,
-        plugin: this.clientPlugin
+        plugin: this.clientPlugin,
       })
       this.serverConn = await connectionPromise
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -1424,19 +1495,27 @@ describe('Connection', function () {
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
       const spy = sinon.spy()
       this.clientConn.on('error', spy)
-      sendDataStub.resolves(IlpPacket.serializeIlpReject({
-        code: 'F89',
-        message: 'Blah',
-        data: Buffer.alloc(0),
-        triggeredBy: 'test.connector'
-      }))
+      sendDataStub.resolves(
+        IlpPacket.serializeIlpReject({
+          code: 'F89',
+          message: 'Blah',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector',
+        })
+      )
 
       const clientStream1 = this.clientConn.createStream()
       const clientStream2 = this.clientConn.createStream()
 
       await Promise.all([
-        assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before the desired amount was sent (target: 117, totalSent: 0)'),
-        assert.isRejected(clientStream2.sendTotal(204), 'Stream was closed before the desired amount was sent (target: 204, totalSent: 0)')
+        assert.isRejected(
+          clientStream1.sendTotal(117),
+          'Stream was closed before the desired amount was sent (target: 117, totalSent: 0)'
+        ),
+        assert.isRejected(
+          clientStream2.sendTotal(204),
+          'Stream was closed before the desired amount was sent (target: 204, totalSent: 0)'
+        ),
       ])
       await new Promise(setImmediate)
       assert.callCount(spy, 1)
@@ -1447,25 +1526,35 @@ describe('Connection', function () {
         toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(100), 1)
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onFirstCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onSecondCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onThirdCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T04',
+            message: 'Insufficient Liquidity Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onSecondCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T04',
+            message: 'Insufficient Liquidity Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onThirdCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T04',
+            message: 'Insufficient Liquidity Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
         .callThrough()
 
       const clientStream = this.clientConn.createStream()
@@ -1483,19 +1572,26 @@ describe('Connection', function () {
         toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(100), 1)
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onFirstCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onSecondCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T04',
-          message: 'Insufficient Liquidity Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T04',
+            message: 'Insufficient Liquidity Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onSecondCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T04',
+            message: 'Insufficient Liquidity Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
         .callThrough()
 
       const clientStream = this.clientConn.createStream()
@@ -1511,21 +1607,31 @@ describe('Connection', function () {
         code: 'T04',
         message: 'Insufficient Liquidity Error',
         data: Buffer.alloc(0),
-        triggeredBy: 'test.connector'
+        triggeredBy: 'test.connector',
       })
 
       // Reject the packet 10 times with T04 error using send total of 1000
       // to recreate stuck in loop and hung issue
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onFirstCall().resolves(rejectPacket)
-        .onSecondCall().resolves(rejectPacket)
-        .onCall(3).resolves(rejectPacket)
-        .onCall(4).resolves(rejectPacket)
-        .onCall(5).resolves(rejectPacket)
-        .onCall(8).resolves(rejectPacket)
-        .onCall(9).resolves(rejectPacket)
-        .onCall(14).resolves(rejectPacket)
-        .onCall(15).resolves(rejectPacket)
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(rejectPacket)
+        .onSecondCall()
+        .resolves(rejectPacket)
+        .onCall(3)
+        .resolves(rejectPacket)
+        .onCall(4)
+        .resolves(rejectPacket)
+        .onCall(5)
+        .resolves(rejectPacket)
+        .onCall(8)
+        .resolves(rejectPacket)
+        .onCall(9)
+        .resolves(rejectPacket)
+        .onCall(14)
+        .resolves(rejectPacket)
+        .onCall(15)
+        .resolves(rejectPacket)
         .callThrough()
 
       const sendTotal = 1000
@@ -1548,25 +1654,35 @@ describe('Connection', function () {
         toFake: ['setTimeout'],
       })
       const interval = setInterval(() => clock.tick(100), 1)
-      const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-        .onFirstCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T00',
-          message: 'Internal Server Error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onSecondCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T03',
-          message: 'Connector Busy',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
-        .onThirdCall().resolves(IlpPacket.serializeIlpReject({
-          code: 'T89',
-          message: 'Some other error',
-          data: Buffer.alloc(0),
-          triggeredBy: 'test.connector'
-        }))
+      const sendDataStub = sinon
+        .stub(this.clientPlugin, 'sendData')
+        .onFirstCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T00',
+            message: 'Internal Server Error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onSecondCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T03',
+            message: 'Connector Busy',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
+        .onThirdCall()
+        .resolves(
+          IlpPacket.serializeIlpReject({
+            code: 'T89',
+            message: 'Some other error',
+            data: Buffer.alloc(0),
+            triggeredBy: 'test.connector',
+          })
+        )
         .callThrough()
 
       const clientStream = this.clientConn.createStream()
@@ -1578,16 +1694,21 @@ describe('Connection', function () {
 
     it('should return the balance to the money streams if sending fails', async function () {
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-      sendDataStub.resolves(IlpPacket.serializeIlpReject({
-        code: 'F89',
-        message: 'Blah',
-        data: Buffer.alloc(0),
-        triggeredBy: 'test.connector'
-      }))
+      sendDataStub.resolves(
+        IlpPacket.serializeIlpReject({
+          code: 'F89',
+          message: 'Blah',
+          data: Buffer.alloc(0),
+          triggeredBy: 'test.connector',
+        })
+      )
 
       const clientStream1 = this.clientConn.createStream()
 
-      await assert.isRejected(clientStream1.sendTotal(117), 'Stream was closed before the desired amount was sent (target: 117, totalSent: 0)')
+      await assert.isRejected(
+        clientStream1.sendTotal(117),
+        'Stream was closed before the desired amount was sent (target: 117, totalSent: 0)'
+      )
       assert.equal(clientStream1.totalSent, '0')
     })
   })
@@ -1600,7 +1721,7 @@ describe('Connection', function () {
       this.server = await createServer({
         plugin: this.serverPlugin,
         serverSecret: Buffer.alloc(32),
-        enablePadding: true
+        enablePadding: true,
       })
 
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
@@ -1613,7 +1734,7 @@ describe('Connection', function () {
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret,
-        enablePadding: true
+        enablePadding: true,
       })
       this.serverConn = await connectionPromise
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
@@ -1652,19 +1773,25 @@ describe('Connection', function () {
         assetCode: 'ABC',
         assetScale: 2,
         sharedSecret,
-        isServer: false
+        isServer: false,
       })
       clientConn['nextStreamId'] = 2
       const done = new Promise((resolve) => {
         clientConn.on('error', (err: Error) => {
-          assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
+          assert.equal(
+            err.message,
+            'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs'
+          )
           resolve()
         })
       })
       clientConn.connect()
       const stream = clientConn.createStream()
       stream.on('error', (err: Error) => {
-        assert.equal(err.message, 'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs')
+        assert.equal(
+          err.message,
+          'Remote connection error. Code: ProtocolViolation, message: Invalid Stream ID: 2. Client-initiated streams must have odd-numbered IDs'
+        )
       })
       await done
     })
@@ -1675,9 +1802,9 @@ describe('Connection', function () {
       this.server.on('connection', (serverConn: Connection) => {
         serverConn['maxStreamId'] = 6
         serverConn.on('stream', (stream: DataAndMoneyStream) => {
-          stream.on('error', (err: Error) => { })
+          stream.on('error', (err: Error) => {})
         })
-        serverConn.on('error', (err: Error) => { })
+        serverConn.on('error', (err: Error) => {})
       })
       const clientPlugin = this.clientPlugin
       const clientConn = await Connection.build({
@@ -1687,7 +1814,7 @@ describe('Connection', function () {
         assetCode: 'ABC',
         assetScale: 2,
         sharedSecret,
-        isServer: false
+        isServer: false,
       })
       clientConn.on('error', spy)
       await clientConn.connect()
@@ -1696,12 +1823,17 @@ describe('Connection', function () {
         clientConn.createStream(),
         clientConn.createStream(),
         clientConn.createStream(),
-        clientConn.createStream()
+        clientConn.createStream(),
       ]
 
-      await Promise.all(streams.map((stream: DataAndMoneyStream) => assert.isRejected(stream.sendTotal(10))))
+      await Promise.all(
+        streams.map((stream: DataAndMoneyStream) => assert.isRejected(stream.sendTotal(10)))
+      )
 
-      assert.equal(spy.firstCall.args[0].message, 'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 7, current max stream ID: 6')
+      assert.equal(
+        spy.firstCall.args[0].message,
+        'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 7, current max stream ID: 6'
+      )
     })
 
     it('should allow the user to set the maximum number of open streams', async function () {
@@ -1709,7 +1841,7 @@ describe('Connection', function () {
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        maxRemoteStreams: 1
+        maxRemoteStreams: 1,
       })
       const serverConn = await serverConnPromise
 
@@ -1719,31 +1851,44 @@ describe('Connection', function () {
       clientConn.on('error', clientSpy)
       serverConn.on('error', serverSpy)
 
-      await assert.isRejected(Promise.all([
-        serverConn.createStream().sendTotal(10),
-        serverConn.createStream().sendTotal(10)
-      ]))
+      await assert.isRejected(
+        Promise.all([
+          serverConn.createStream().sendTotal(10),
+          serverConn.createStream().sendTotal(10),
+        ])
+      )
 
-      assert.equal(clientSpy.args[0][0].message, 'Maximum number of open streams exceeded. Got stream: 4, current max stream ID: 2')
-      assert.equal(serverSpy.args[0][0].message, 'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 4, current max stream ID: 2')
+      assert.equal(
+        clientSpy.args[0][0].message,
+        'Maximum number of open streams exceeded. Got stream: 4, current max stream ID: 2'
+      )
+      assert.equal(
+        serverSpy.args[0][0].message,
+        'Remote connection error. Code: StreamIdError, message: Maximum number of open streams exceeded. Got stream: 4, current max stream ID: 2'
+      )
     })
 
-    it('should throw an error when the user calls createStream if it would exceed the other side\'s limit', async function () {
+    it("should throw an error when the user calls createStream if it would exceed the other side's limit", async function () {
       const serverConnPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        maxRemoteStreams: 2
+        maxRemoteStreams: 2,
       })
       const serverConn = await serverConnPromise
-      clientConn.on('stream', (stream: DataAndMoneyStream) => { stream.setReceiveMax(100) })
+      clientConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(100)
+      })
 
       await Promise.all([
         serverConn.createStream().sendTotal(10),
-        serverConn.createStream().sendTotal(10)
+        serverConn.createStream().sendTotal(10),
       ])
 
-      assert.throws(() => serverConn.createStream(), `Creating another stream would exceed the remote connection's maximum number of open streams`)
+      assert.throws(
+        () => serverConn.createStream(),
+        `Creating another stream would exceed the remote connection's maximum number of open streams`
+      )
     })
 
     it('should increase the max stream id as streams are closed', async function () {
@@ -1751,10 +1896,12 @@ describe('Connection', function () {
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        maxRemoteStreams: 2
+        maxRemoteStreams: 2,
       })
       const serverConn = await serverConnPromise
-      clientConn.on('stream', (stream: DataAndMoneyStream) => { stream.setReceiveMax(100) })
+      clientConn.on('stream', (stream: DataAndMoneyStream) => {
+        stream.setReceiveMax(100)
+      })
       const streams = [serverConn.createStream(), serverConn.createStream()]
       await Promise.all(streams.map((stream: DataAndMoneyStream) => stream.sendTotal(10)))
       assert.throws(() => serverConn.createStream())
@@ -1777,7 +1924,7 @@ describe('Connection', function () {
         this.clientConn.createStream(),
         this.clientConn.createStream(),
         this.clientConn.createStream(),
-        this.clientConn.createStream()
+        this.clientConn.createStream(),
       ]
       const data = Buffer.alloc(1000)
       for (let stream of streams) {
@@ -1804,7 +1951,7 @@ describe('Connection', function () {
         this.clientConn.createStream(),
         this.clientConn.createStream(),
         this.clientConn.createStream(),
-        this.clientConn.createStream()
+        this.clientConn.createStream(),
       ]
       const data = Buffer.alloc(16384)
       for (let stream of streams) {
@@ -1817,7 +1964,10 @@ describe('Connection', function () {
       await new Promise(setImmediate)
 
       assert.calledOnce(spy)
-      assert.equal(spy.args[0][0].message, 'Remote connection error. Code: FlowControlError, message: Exceeded flow control limits. Max connection byte offset: 65534, received: 81920')
+      assert.equal(
+        spy.args[0][0].message,
+        'Remote connection error. Code: FlowControlError, message: Exceeded flow control limits. Max connection byte offset: 65534, received: 81920'
+      )
     })
 
     it('should close the connection if the remote does not respect stream-level flow control', async function () {
@@ -1834,7 +1984,10 @@ describe('Connection', function () {
       await new Promise(setImmediate)
 
       assert.calledOnce(spy)
-      assert.equal(spy.args[0][0].message, 'Remote connection error. Code: FlowControlError, message: Exceeded flow control limits. Stream 1 can accept up to offset: 16384 but got bytes up to offset: 20000')
+      assert.equal(
+        spy.args[0][0].message,
+        'Remote connection error. Code: FlowControlError, message: Exceeded flow control limits. Stream 1 can accept up to offset: 16384 but got bytes up to offset: 20000'
+      )
     })
 
     it('should allow the per-connection buffer size to be configured', async function () {
@@ -1844,7 +1997,7 @@ describe('Connection', function () {
       const server = await createServer({
         plugin: this.serverPlugin,
         serverSecret: Buffer.alloc(32),
-        connectionBufferSize: 2000
+        connectionBufferSize: 2000,
       })
 
       const serverConnPromise = server.acceptConnection()
@@ -1852,7 +2005,7 @@ describe('Connection', function () {
       const clientConn = await createConnection({
         ...server.generateAddressAndSecret(),
         plugin: this.clientPlugin,
-        connectionBufferSize: 2500
+        connectionBufferSize: 2500,
       })
 
       const serverConn = await serverConnPromise
@@ -1892,7 +2045,10 @@ describe('Connection', function () {
       assert.calledOnce(clientSpy)
       assert.calledOnce(serverSpy)
       assert.equal(clientSpy.args[0][0].message, 'Connection exceeded maximum number of packets')
-      assert.equal(serverSpy.args[0][0].message, 'Remote connection error. Code: InternalError, message: Connection exceeded maximum number of packets')
+      assert.equal(
+        serverSpy.args[0][0].message,
+        'Remote connection error. Code: InternalError, message: Connection exceeded maximum number of packets'
+      )
     })
   })
 })

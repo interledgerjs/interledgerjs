@@ -6,7 +6,7 @@ module.exports = {
   entry: './test/browser/main.js',
   resolve: {
     aliasFields: ['browser'],
-    extensions: ['.tsx', '.ts', '.js', '.json']
+    extensions: ['.tsx', '.ts', '.js', '.json'],
   },
   module: {
     rules: [
@@ -14,8 +14,8 @@ module.exports = {
         test: /\.tsx?$/,
         loader: 'ts-loader',
         options: { onlyCompileBundledFiles: true },
-      }
-    ]
+      },
+    ],
   },
   output: {
     filename: 'dist/test/browser/bundle.js',
@@ -28,6 +28,6 @@ module.exports = {
     fs: 'empty',
     net: 'empty',
     tls: 'empty',
-    crypto: 'empty'
-  }
+    crypto: 'empty',
+  },
 }

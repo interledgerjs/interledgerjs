@@ -4,7 +4,7 @@ import BigNumber from 'bignumber.js'
 import * as Long from 'long'
 import Rational from '../../src/util/rational'
 
-function L (value: number, unsigned?: boolean): Long {
+function L(value: number, unsigned?: boolean): Long {
   return Long.fromNumber(value, unsigned === undefined ? true : unsigned)
 }
 
@@ -14,10 +14,9 @@ const REPS = 10000
 describe('Rational', function () {
   describe('constructor', function () {
     it('should throw if the numerator is incorrectly signed', function () {
-      assert.throws(
-        () => { new Rational(L(123, false), L(123, true), true) },
-        /numerator is incorrectly signed/
-      )
+      assert.throws(() => {
+        new Rational(L(123, false), L(123, true), true)
+      }, /numerator is incorrectly signed/)
     })
 
     it('should throw if the denominator is incorrectly signed', function () {
@@ -52,66 +51,36 @@ describe('Rational', function () {
 
   describe('fromNumber', function () {
     it('creates a Rational from known values', function () {
-      assert.deepEqual(
-        Rational.fromNumber(0, true),
-        new Rational(L(0), L(1), true)
-      )
+      assert.deepEqual(Rational.fromNumber(0, true), new Rational(L(0), L(1), true))
 
-      assert.deepEqual(
-        Rational.fromNumber(1, true),
-        new Rational(L(1), L(1), true)
-      )
+      assert.deepEqual(Rational.fromNumber(1, true), new Rational(L(1), L(1), true))
 
       // Integer:
-      assert.deepEqual(
-        Rational.fromNumber(123, true),
-        new Rational(L(123), L(1), true)
-      )
+      assert.deepEqual(Rational.fromNumber(123, true), new Rational(L(123), L(1), true))
 
-      assert.deepEqual(
-        Rational.fromNumber(0.5, true).toNumber(),
-        0.5
-      )
+      assert.deepEqual(Rational.fromNumber(0.5, true).toNumber(), 0.5)
     })
 
     it('creates a Rational from very small values', function () {
-      assert.deepEqual(
-        Rational.fromNumber(1.0e-10, true).toNumber(),
-        1.0e-10
-      )
-      assert.deepEqual(
-        Rational.fromNumber(1.23e-10, true).toNumber(),
-        1.23e-10
-      )
-      assert.deepEqual(
-        Rational.fromNumber(1.0e-17, true).toNumber(),
-        1.0e-17
-      )
+      assert.deepEqual(Rational.fromNumber(1.0e-10, true).toNumber(), 1.0e-10)
+      assert.deepEqual(Rational.fromNumber(1.23e-10, true).toNumber(), 1.23e-10)
+      assert.deepEqual(Rational.fromNumber(1.0e-17, true).toNumber(), 1.0e-17)
     })
 
     it('creates a Rational from a floating-point number', function () {
       for (let i = 0; i < REPS; i++) {
         const value = Math.random() * 10
         const result = Rational.fromNumber(value, true).toNumber()
-        assert(
-          Math.abs(result - value) < 1.0e-14,
-          `attempt=${i} got=${result} want=${value}`
-        )
+        assert(Math.abs(result - value) < 1.0e-14, `attempt=${i} got=${result} want=${value}`)
       }
     })
 
     it('throws creating an unsigned Rational from a non-finite number', function () {
-      assert.throws(
-        () => Rational.fromNumber(Infinity, true),
-        /value must be finite/
-      )
+      assert.throws(() => Rational.fromNumber(Infinity, true), /value must be finite/)
     })
 
     it('throws creating an unsigned Rational from a negative number', function () {
-      assert.throws(
-        () => Rational.fromNumber(-123, true),
-        /unsigned value must be positive/
-      )
+      assert.throws(() => Rational.fromNumber(-123, true), /unsigned value must be positive/)
     })
   })
 
@@ -142,8 +111,7 @@ describe('Rational', function () {
         const rat2 = Rational.fromNumbers(c, d, true)
 
         const result = new BigNumber(rat1.multiplyByRational(rat2).toString())
-        const expect = new BigNumber(a).times(c)
-          .div(b).div(d)
+        const expect = new BigNumber(a).times(c).div(b).div(d)
 
         assert(
           result.minus(expect).abs().lt(1.0e-19),
@@ -163,10 +131,7 @@ describe('Rational', function () {
 
     it('should throw if >1', function () {
       const value = Rational.fromNumbers(4, 3, true)
-      assert.throws(
-        () => value.complement(),
-        /cannot take complement of rational >1/
-      )
+      assert.throws(() => value.complement(), /cannot take complement of rational >1/)
     })
   })
 

@@ -23,7 +23,7 @@ export interface ReceiptWithHMAC extends Receipt {
   hmac: Buffer
 }
 
-export function createReceipt (opts: ReceiptOpts): Buffer {
+export function createReceipt(opts: ReceiptOpts): Buffer {
   if (opts.nonce.length !== 16) {
     throw new Error('receipt nonce must be 16 bytes')
   }
@@ -39,7 +39,7 @@ export function createReceipt (opts: ReceiptOpts): Buffer {
   return receipt.getBuffer()
 }
 
-function decode (receipt: Buffer): ReceiptWithHMAC {
+function decode(receipt: Buffer): ReceiptWithHMAC {
   if (receipt.length !== 58) {
     throw new Error('receipt malformed')
   }
@@ -54,15 +54,18 @@ function decode (receipt: Buffer): ReceiptWithHMAC {
     nonce,
     streamId,
     totalReceived,
-    hmac
+    hmac,
   }
 }
 
-export function decodeReceipt (receipt: Buffer): Receipt {
+export function decodeReceipt(receipt: Buffer): Receipt {
   return decode(receipt)
 }
 
-export function verifyReceipt (receipt: Buffer, secret: Buffer | ((decoded: ReceiptWithHMAC) => Buffer)): Receipt {
+export function verifyReceipt(
+  receipt: Buffer,
+  secret: Buffer | ((decoded: ReceiptWithHMAC) => Buffer)
+): Receipt {
   const decoded = decode(receipt)
   if (decoded.version !== RECEIPT_VERSION) {
     throw new Error('invalid version')

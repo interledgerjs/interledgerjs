@@ -1,10 +1,6 @@
 import * as assert from 'assert'
 import * as Long from 'long'
-import {
-  multiplyDivideFloor,
-  multiplyDivideCeil,
-  multiplyDivideRound
-} from './long'
+import { multiplyDivideFloor, multiplyDivideCeil, multiplyDivideRound } from './long'
 
 export default class Rational {
   static UZERO = new Rational(Long.UZERO, Long.UONE, true)
@@ -13,7 +9,7 @@ export default class Rational {
   private b: Long
   public unsigned: boolean
 
-  constructor (numer: Long, denom: Long, unsigned: boolean) {
+  constructor(numer: Long, denom: Long, unsigned: boolean) {
     if (!unsigned) {
       throw new Error('signed rationals are not implemented')
     }
@@ -25,11 +21,11 @@ export default class Rational {
     this.unsigned = unsigned
   }
 
-  static isRational (value: any): value is Rational {
+  static isRational(value: any): value is Rational {
     return value instanceof Rational
   }
 
-  static fromNumbers (numer: number, denom: number, unsigned: boolean): Rational {
+  static fromNumbers(numer: number, denom: number, unsigned: boolean): Rational {
     return new Rational(
       Long.fromNumber(numer, unsigned),
       Long.fromNumber(denom, unsigned),
@@ -37,7 +33,7 @@ export default class Rational {
     )
   }
 
-  static fromNumber (value: number, unsigned: boolean): Rational {
+  static fromNumber(value: number, unsigned: boolean): Rational {
     if (!isFinite(value)) {
       throw new Error('value must be finite')
     } else if (unsigned && value < 0) {
@@ -53,12 +49,9 @@ export default class Rational {
     // to do this. That said, creating a Rational from two Longs is always going
     // to be more precise.
     const mag = Math.floor(Math.log(value) / Math.LN10)
-    let shift = mag < 0 ? 18 : (18 - mag)
+    let shift = mag < 0 ? 18 : 18 - mag
     let den = 1
-    while (
-      Math.floor(value * den) !== value * den &&
-      shift > 0
-    ) {
+    while (Math.floor(value * den) !== value * den && shift > 0) {
       den *= 10
       shift--
     }
@@ -69,31 +62,27 @@ export default class Rational {
   /**
    * Multiply a rational by a Long without intermediate overflow.
    */
-  multiplyByLong (value: Long): Long {
+  multiplyByLong(value: Long): Long {
     return multiplyDivideFloor(value, this.a, this.b)
   }
 
-  multiplyByLongCeil (value: Long): Long {
+  multiplyByLongCeil(value: Long): Long {
     return multiplyDivideCeil(value, this.a, this.b)
   }
 
   // TODO prevent overflows by reducing fraction when necessary
-  multiplyByRational (other: Rational): Rational {
-    return new Rational(
-      this.a.multiply(other.a),
-      this.b.multiply(other.b),
-      this.unsigned
-    )
+  multiplyByRational(other: Rational): Rational {
+    return new Rational(this.a.multiply(other.a), this.b.multiply(other.b), this.unsigned)
   }
 
-  greaterThanOne (): boolean {
+  greaterThanOne(): boolean {
     return this.a.greaterThan(this.b)
   }
 
   /**
    * Returns `1 - this`.
    */
-  complement (): Rational {
+  complement(): Rational {
     if (this.a.greaterThan(this.b)) {
       throw new Error('cannot take complement of rational >1')
     }
@@ -103,24 +92,22 @@ export default class Rational {
   /**
    * Returns `1 / this`.
    */
-  reciprocal (): Rational {
+  reciprocal(): Rational {
     return new Rational(this.b, this.a, this.unsigned)
   }
 
-  toNumber (): number {
+  toNumber(): number {
     return this.a.toNumber() / this.b.toNumber()
   }
 
-  toString (): string {
+  toString(): string {
     // 19 is the highest precision achievable using this method, since 1e19 is
     // the largest power of 10 that fits in a uint64.
     const str = trimRight(this.toFixed(19), '0')
-    return str[str.length - 1] === '.'
-         ? str.slice(0, -1)
-         : str
+    return str[str.length - 1] === '.' ? str.slice(0, -1) : str
   }
 
-  private toFixed (digits?: number): string {
+  private toFixed(digits?: number): string {
     digits = digits || 0
     const quotient = this.a.divide(this.b)
     if (digits === 0) {
@@ -128,20 +115,13 @@ export default class Rational {
     }
 
     const remainder = this.a.modulo(this.b)
-    const remainderString = multiplyDivideRound(
-      remainder,
-      power10(digits),
-      this.b
-    ).toString()
+    const remainderString = multiplyDivideRound(remainder, power10(digits), this.b).toString()
 
-    return quotient.toString() +
-      '.' +
-      '0'.repeat(digits - remainderString.length) +
-      remainderString
+    return quotient.toString() + '.' + '0'.repeat(digits - remainderString.length) + remainderString
   }
 }
 
-function trimRight (str: string, ch: string): string {
+function trimRight(str: string, ch: string): string {
   for (let i = str.length - 1; i >= 0; i--) {
     if (str[i] !== ch) {
       return str.slice(0, i + 1)
@@ -150,7 +130,7 @@ function trimRight (str: string, ch: string): string {
   return ''
 }
 
-function power10 (n: number): Long {
+function power10(n: number): Long {
   const ten = Long.fromNumber(10, true)
   let value = Long.UONE
   while (n--) value = value.multiply(ten)

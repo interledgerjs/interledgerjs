@@ -15,11 +15,13 @@ const BUNDLE_FILE = path.resolve(__dirname, '../dist/test/browser/bundle.js')
 
 runStreamServer()
   .then((info) => {
-    const httpServer = http.createServer(makeRequestHandler({
-      streamPort: STREAM_PORT,
-      destinationAccount: info.destinationAccount,
-      sharedSecret: info.sharedSecret.toString('base64')
-    }))
+    const httpServer = http.createServer(
+      makeRequestHandler({
+        streamPort: STREAM_PORT,
+        destinationAccount: info.destinationAccount,
+        sharedSecret: info.sharedSecret.toString('base64'),
+      })
+    )
     httpServer.listen(HTTP_PORT, '127.0.0.1')
     console.log(`http://127.0.0.1:${HTTP_PORT}`)
   })
@@ -28,15 +30,15 @@ runStreamServer()
     process.exit(1)
   })
 
-async function runStreamServer () {
+async function runStreamServer() {
   const serverPlugin = new PluginMiniAccounts({
     port: STREAM_PORT,
     allowedOrigins: ['.*'],
     debugHostIldcpInfo: {
       clientAddress: 'test.example',
       assetScale: 9,
-      assetCode: '___'
-    }
+      assetCode: '___',
+    },
   })
   const server = await createServer({ plugin: serverPlugin })
   server.on('connection', (connection) => {
@@ -44,31 +46,33 @@ async function runStreamServer () {
     connection.on('stream', (stream) => {
       console.log('new stream')
       stream.setReceiveMax(10000)
-      stream.on('money', (amount) => { process.stdout.write(amount + ',') })
+      stream.on('money', (amount) => {
+        process.stdout.write(amount + ',')
+      })
     })
   })
   return server.generateAddressAndSecret()
 }
 
-function makeRequestHandler (streamInfo) {
+function makeRequestHandler(streamInfo) {
   return function (req, res) {
     switch (req.url) {
-    case '/':
-      res.setHeader('Content-Type', 'text/html')
-      res.write(makeHTML(streamInfo))
-      break
-    case '/bundle.js':
-      res.setHeader('Content-Type', 'text/javascript')
-      res.write(fs.readFileSync(BUNDLE_FILE))
-      break
-    default:
-      res.statusCode = 404
+      case '/':
+        res.setHeader('Content-Type', 'text/html')
+        res.write(makeHTML(streamInfo))
+        break
+      case '/bundle.js':
+        res.setHeader('Content-Type', 'text/javascript')
+        res.write(fs.readFileSync(BUNDLE_FILE))
+        break
+      default:
+        res.statusCode = 404
     }
     res.end()
   }
 }
 
-function makeHTML (info) {
+function makeHTML(info) {
   return `<!doctype html>
   <html>
     <head>
@@ -85,19 +89,22 @@ function makeHTML (info) {
   </html>`
 }
 
-async function clientCode (info) {
+async function clientCode(info) {
   const BATCH_SIZE = 1000
   let totalAmount = 0
 
-  const client = await window.makeStreamClient({
-    server: `btp+ws://127.0.0.1:${info.streamPort}`,
-    btpToken: 'secret'
-  }, info)
+  const client = await window.makeStreamClient(
+    {
+      server: `btp+ws://127.0.0.1:${info.streamPort}`,
+      btpToken: 'secret',
+    },
+    info
+  )
   const stream = await client.createStream()
 
   sendBatch()
 
-  function sendBatch () {
+  function sendBatch() {
     _sendBatch()
       .then((elapsed) => {
         console.log('elapsed:', elapsed, 'ms')
@@ -106,7 +113,7 @@ async function clientCode (info) {
       .catch((err) => console.error('sendTotal error:', err.stack))
   }
 
-  async function _sendBatch () {
+  async function _sendBatch() {
     const start = performance.now()
     for (let i = 0; i < BATCH_SIZE; i++) {
       await stream.sendTotal(++totalAmount)

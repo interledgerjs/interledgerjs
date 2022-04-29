@@ -11,37 +11,37 @@ This document describes the JavaScript implementation of Interledger's STREAM tr
 
 ## References
 
-* [STREAM RFC](https://interledger.org/rfcs/0029-stream/)
-* [Interledger protocol suite](https://interledger.org/overview.html)
-* API docs:
-  * [Connection](https://interledgerjs.github.io/ilp-protocol-stream/modules/_connection_.html) - Manages the communication between a client and a server
-  * [Index](https://interledgerjs.github.io/ilp-protocol-stream/modules/_index_.html) - Creates a connection to a server
-  * [Stream](https://interledgerjs.github.io/ilp-protocol-stream/modules/_stream_.html) - Sends/receives data and money
+- [STREAM RFC](https://interledger.org/rfcs/0029-stream/)
+- [Interledger protocol suite](https://interledger.org/overview.html)
+- API docs:
+  - [Connection](https://interledgerjs.github.io/ilp-protocol-stream/modules/_connection_.html) - Manages the communication between a client and a server
+  - [Index](https://interledgerjs.github.io/ilp-protocol-stream/modules/_index_.html) - Creates a connection to a server
+  - [Stream](https://interledgerjs.github.io/ilp-protocol-stream/modules/_stream_.html) - Sends/receives data and money
 
 # Table of Contents
 
 - [Overview](#overview)
-  * [References](#references)
+  - [References](#references)
 - [STREAM protocol overview](#stream-protocol-overview)
 - [STREAM connections](#stream-connections)
-  * [Open a STREAM connection](#open-a-stream-connection)
+  - [Open a STREAM connection](#open-a-stream-connection)
 - [Streams](#streams)
 - [Install the STREAM module](#install-the-stream-module)
-  * [Dependencies](#dependencies)
+  - [Dependencies](#dependencies)
 - [Usage examples](#usage-examples)
-  * [Exchange destination address and shared secret](#exchange-destination-address-and-shared-secret)
-  * [Create a STREAM connection](#create-a-stream-connection)
-  * [Send and receive on streams](#send-and-receive-on-streams)
-  * [Stream multiple payments on a single connection](#stream-multiple-payments-on-a-single-connection)
-  * [Stream data](#stream-data)
-  * [Stream expiry](#stream-expiry)
-  * [Close a stream](#close-a-stream)
-  * [Close a connection](#close-a-connection)
-  * [How a receiving wallet can use the STREAM server](#how-a-receiving-wallet-can-use-the-stream-server)
-  * [Configure the STREAM library as a sender for Web Monetization](#configure-the-stream-library-as-a-sender-for-web-monetization)
+  - [Exchange destination address and shared secret](#exchange-destination-address-and-shared-secret)
+  - [Create a STREAM connection](#create-a-stream-connection)
+  - [Send and receive on streams](#send-and-receive-on-streams)
+  - [Stream multiple payments on a single connection](#stream-multiple-payments-on-a-single-connection)
+  - [Stream data](#stream-data)
+  - [Stream expiry](#stream-expiry)
+  - [Close a stream](#close-a-stream)
+  - [Close a connection](#close-a-connection)
+  - [How a receiving wallet can use the STREAM server](#how-a-receiving-wallet-can-use-the-stream-server)
+  - [Configure the STREAM library as a sender for Web Monetization](#configure-the-stream-library-as-a-sender-for-web-monetization)
 - [How STREAM handles assets](#how-stream-handles-assets)
-  * [Connectors](#connectors)
-  * [Determine an exchange rate (optional)](#determine-an-exchange-rate--optional-)
+  - [Connectors](#connectors)
+  - [Determine an exchange rate (optional)](#determine-an-exchange-rate--optional-)
 - [STREAM receipts](#stream-receipts)
 
 # STREAM protocol overview
@@ -52,11 +52,11 @@ STREAM stands for Streaming Transport for the Real-time Exchange of Assets and M
 
 STREAM is designed for use by applications that stream micropayments and those that deliver larger, discrete payments. It's responsible for:
 
-* Defining the conditions and fulfillments used in the Interledger protocol layer
-* Grouping and retrying packets to achieve a desired outcome
-* Determining the effective exchange rate of a payment
-* Adapting to the speed at which money can be sent, and for what amounts (congestion and flow control)
-* Encrypting and decrypting data
+- Defining the conditions and fulfillments used in the Interledger protocol layer
+- Grouping and retrying packets to achieve a desired outcome
+- Determining the effective exchange rate of a payment
+- Adapting to the speed at which money can be sent, and for what amounts (congestion and flow control)
+- Encrypting and decrypting data
 
 # STREAM connections
 
@@ -98,13 +98,13 @@ Also, `ilp-protocol-stream` will run in a browser via webpack, but only as a cli
 
 The `ilp-protocol-stream` module is bundled with a set of dependencies.
 
-* Bundle dependencies
-  * ilp-logger - Debug logging utility for Interledger modules
-  * ilp-packet - Codecs for  ILP packets and messages
-  * ilp-protocol-ildcp - Transfers node and ledger information from a parent node to a child node
-* Development dependencies
-  * ilp-plugin - Gets ILP credentials
-  * ilp-plugin-btp - Acts as a building block for plugins that don't have an underlying ledger
+- Bundle dependencies
+  - ilp-logger - Debug logging utility for Interledger modules
+  - ilp-packet - Codecs for ILP packets and messages
+  - ilp-protocol-ildcp - Transfers node and ledger information from a parent node to a child node
+- Development dependencies
+  - ilp-plugin - Gets ILP credentials
+  - ilp-plugin-btp - Acts as a building block for plugins that don't have an underlying ledger
 
 # Usage examples
 
@@ -118,11 +118,10 @@ The server must generate a destination account address and shared secret for eac
 const { createServer } = require('ilp-protocol-stream')
 const Plugin = require('ilp-plugin-btp')
 
-
 // Connects to the given plugin and waits for streams.
-async function run () {
+async function run() {
   const server = await createServer({
-    plugin: new Plugin({ server: process.env.BTP_SERVER })
+    plugin: new Plugin({ server: process.env.BTP_SERVER }),
   })
 
   const { destinationAccount, sharedSecret } = server.generateAddressAndSecret()
@@ -137,14 +136,13 @@ After the server provides the destination account and shared secret, the client 
 const { createConnection } = require('ilp-protocol-stream')
 const getPlugin = require('ilp-plugin-btp')
 
-const { destinationAccount, sharedSecret } =
-  providedByTheServerSomehow()
+const { destinationAccount, sharedSecret } = providedByTheServerSomehow()
 
-async function run () {
+async function run() {
   const connection = await createConnection({
-    plugin: new Plugin({ server: process.env.BTP_SERVER}),
+    plugin: new Plugin({ server: process.env.BTP_SERVER }),
     destinationAccount,
-    sharedSecret
+    sharedSecret,
   })
 }
 ```
@@ -165,9 +163,9 @@ The client creates a STREAM connection to the server.
 
 ```js
 const connection = await createConnection({
-  plugin: new Plugin({ server: process.env.BTP_SERVER}),
+  plugin: new Plugin({ server: process.env.BTP_SERVER }),
   destinationAccount,
-  sharedSecret
+  sharedSecret,
 })
 ```
 
@@ -196,7 +194,7 @@ The stream will always attempt to send up to its defined max, but ultimately wil
 ![sendMax example](./docs/assets/sendmax.png)
 
 ```js
-stream.on('outgoing_money', amount => {
+stream.on('outgoing_money', (amount) => {
   console.log('sent', amount)
 })
 
@@ -208,7 +206,7 @@ In the following scenario, the receiver isn’t willing to receive the whole amo
 #### Sender
 
 ```js
-stream.on('outgoing_money', amount => {
+stream.on('outgoing_money', (amount) => {
   console.log('sent', amount)
 })
 stream.setSendMax(100)
@@ -217,10 +215,10 @@ stream.setSendMax(100)
 #### Receiver
 
 ```js
-server.on('connection', connection => {
-  connection.on('stream', stream => {
+server.on('connection', (connection) => {
+  connection.on('stream', (stream) => {
     stream.setReceiveMax(75)
-    stream.on('money', amount => {
+    stream.on('money', (amount) => {
       console.log(`got money: ${amount} on stream ${stream.id}`)
     })
     stream.on('end', () => {
@@ -245,10 +243,10 @@ To receive a stream, the server listens for a `connection` event.
 Since each connection can include many separate streams of money and data, the connection then listens for `stream` events.
 
 ```js
-server.on('connection', connection => {
-  connection.on('stream', stream => {
+server.on('connection', (connection) => {
+  connection.on('stream', (stream) => {
     stream.setReceiveMax(10000)
-    stream.on('money', amount => {
+    stream.on('money', (amount) => {
       console.log(`got money: ${amount} on stream ${stream.id}`)
     })
   })
@@ -274,12 +272,11 @@ stream2.setSendMax(25)
 ### Server
 
 ```js
-server.on('connection', connection => {
-  connection.on('stream', stream => {
-
+server.on('connection', (connection) => {
+  connection.on('stream', (stream) => {
     stream.setReceiveMax(10000)
 
-    stream.on('money', amount => {
+    stream.on('money', (amount) => {
       console.log(`got money: ${amount} on stream ${stream.id}`)
     })
 
@@ -306,7 +303,7 @@ stream.end()
 ### Receive data
 
 ```js
-stream.on('data', chunk => {
+stream.on('data', (chunk) => {
   console.log(`got data on stream ${stream.id}: ${chunk.toString('utf8')}`)
 })
 ```
@@ -375,7 +372,7 @@ At a high level, the STREAM server:
 
 1. Binds the `connection` event.
 2. Might perform some **non-async** setup.
-> A common pitfall is for an asynchronous operation to happen between the `connection` event and binding the stream (in the next step), causing the server to miss when the stream opens.
+   > A common pitfall is for an asynchronous operation to happen between the `connection` event and binding the stream (in the next step), causing the server to miss when the stream opens.
 3. Binds the `stream` event.
 4. Might perform more **non-async** setup.
 5. Sets the `setReceiveMax` to allow incoming funds.
@@ -383,11 +380,11 @@ At a high level, the STREAM server:
 7. Dispatches something to the database or some kind of store whenever a `money` event triggers.
 
 ```js
-streamServer.on('connection', connection => {
+streamServer.on('connection', (connection) => {
   const metadata = JSON.parse(this.connectionTag.decode(connection.connectionTag))
-  connection.on('stream', stream => {
+  connection.on('stream', (stream) => {
     stream.setReceiveMax(Infinity)
-    stream.on('money', amount => {
+    stream.on('money', (amount) => {
       console.log('received money', amount)
     })
   })
@@ -421,7 +418,7 @@ If you **do** need to consider exchange rates, you can verify that the connectio
 1. The sender opens a connection using `create.Connection`.
 2. The sender opens a stream using `connection.createStream`.
 3. The sender begins paying using `stream.setSendMax(cumulativeAmountToSend)`.
-> The sender’s `stream.on(‘outgoing_money’)` event emits every time money is successfully delivered to the recipient.
+   > The sender’s `stream.on(‘outgoing_money’)` event emits every time money is successfully delivered to the recipient.
 4. After some time passes, the sender can increase the `setSendMax` according to their application’s requirements.
 
 If any step fails, or the connection dies, terminate whatever is left of the connection and plugin and start over. Keep track of how much was sent on the old connection with `connection.totalSent` or `connection.totalDelivered`.
@@ -434,9 +431,9 @@ The following source file is part of the Coil Extension. Lines 303 - 493 can be 
 
 An asset is comprised three parts:
 
-* Amount - The quantity of the asset expressed as an integer greater than or equal to zero
-* Asset code - A code, typically three characters, that identifies the amount's unit (e.g., USD, XRP, EUR, BTC)
-* Asset scale - The number of places past the decimal for the amount
+- Amount - The quantity of the asset expressed as an integer greater than or equal to zero
+- Asset code - A code, typically three characters, that identifies the amount's unit (e.g., USD, XRP, EUR, BTC)
+- Asset scale - The number of places past the decimal for the amount
 
 For example:
 

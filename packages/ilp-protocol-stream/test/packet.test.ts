@@ -7,7 +7,7 @@ import {
   Frame,
   FrameType,
   StreamMaxMoneyFrame,
-  StreamMoneyBlockedFrame
+  StreamMoneyBlockedFrame,
 } from '../src/packet'
 import { Reader, Writer } from 'oer-utils'
 import * as Long from 'long'
@@ -15,19 +15,28 @@ import * as Long from 'long'
 describe('Packet Format', function () {
   describe('decryptAndDeserialize()', function () {
     it('should throw an error if it cannot decrypt the packet', async function () {
-      const packet = Buffer.from('9c4f511dbc865607311609d7559e01e1fd22f985292539e1f5d8f3eb0832060f', 'hex')
+      const packet = Buffer.from(
+        '9c4f511dbc865607311609d7559e01e1fd22f985292539e1f5d8f3eb0832060f',
+        'hex'
+      )
 
       try {
         await Packet.decryptAndDeserialize(Buffer.alloc(32), packet)
       } catch (err) {
-        assert.equal(err.message, 'Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key')
+        assert.equal(
+          err.message,
+          'Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key'
+        )
         return
       }
       assert(false)
     })
 
     it('should throw an error if the version is unsupported', function () {
-      const decryptedPacket = Buffer.from('9c4f511dbc865607311609d7559e01e1fd22f985292539e1f5d8f3eb0832060f', 'hex')
+      const decryptedPacket = Buffer.from(
+        '9c4f511dbc865607311609d7559e01e1fd22f985292539e1f5d8f3eb0832060f',
+        'hex'
+      )
 
       assert.throws(() => {
         return Packet._deserializeUnencrypted(decryptedPacket)
@@ -42,10 +51,7 @@ describe('Packet Format', function () {
 
       const lastFrame = new StreamMoneyFrame(3, 3).writeTo(new Writer()).getBuffer()
 
-      const packet = new Packet(0, 14, 5, [
-        new StreamMoneyFrame(1, 1),
-        new StreamMoneyFrame(2, 2)
-      ])
+      const packet = new Packet(0, 14, 5, [new StreamMoneyFrame(1, 1), new StreamMoneyFrame(2, 2)])
 
       const serialized = packet._serialize()
       serialized[7] = 5
@@ -53,7 +59,7 @@ describe('Packet Format', function () {
         serialized,
         unknownFrame,
         lastFrame,
-        unknownFrame
+        unknownFrame,
       ])
       const deserializedPacket = Packet._deserializeUnencrypted(serializedWithExtraFrames)
 
@@ -62,16 +68,10 @@ describe('Packet Format', function () {
     })
 
     it('should stop reading after the number of frames specified', function () {
-      const packet = new Packet(0, 14, 5, [
-        new StreamMoneyFrame(1, 1),
-        new StreamMoneyFrame(2, 2)
-      ])
+      const packet = new Packet(0, 14, 5, [new StreamMoneyFrame(1, 1), new StreamMoneyFrame(2, 2)])
       const serialized = packet._serialize()
       const lastFrame = new StreamMoneyFrame(3, 3).writeTo(new Writer()).getBuffer()
-      const serializedWithExtraFrames = Buffer.concat([
-        serialized,
-        lastFrame
-      ])
+      const serializedWithExtraFrames = Buffer.concat([serialized, lastFrame])
 
       const deserializedPacket = Packet._deserializeUnencrypted(serializedWithExtraFrames)
       assert.equal(deserializedPacket.frames.length, 2)
@@ -82,11 +82,12 @@ describe('Packet Format', function () {
     it('converts larger receiveMax to MaxUInt64', function () {
       const writer = new Writer()
       writer.writeVarUInt(123) // streamId
-      writer.writeVarOctetString(Buffer.from([ // receiveMax
-        0x01, 0x02, 0x03,
-        0x04, 0x05, 0x06,
-        0x07, 0x08, 0x09
-      ]))
+      writer.writeVarOctetString(
+        Buffer.from([
+          // receiveMax
+          0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+        ])
+      )
       writer.writeVarUInt(123) // totalReceived
 
       const frame = StreamMaxMoneyFrame.fromContents(new Reader(writer.getBuffer()))
@@ -98,11 +99,12 @@ describe('Packet Format', function () {
     it('converts larger sendMax to MaxUInt64', function () {
       const writer = new Writer()
       writer.writeVarUInt(123) // streamId
-      writer.writeVarOctetString(Buffer.from([ // sendMax
-        0x01, 0x02, 0x03,
-        0x04, 0x05, 0x06,
-        0x07, 0x08, 0x09
-      ]))
+      writer.writeVarOctetString(
+        Buffer.from([
+          // sendMax
+          0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
+        ])
+      )
       writer.writeVarUInt(123) // totalSent
 
       const frame = StreamMoneyBlockedFrame.fromContents(new Reader(writer.getBuffer()))
@@ -136,7 +138,7 @@ describe('Packet Fixtures', function () {
   })
 })
 
-function buildFrame (options: any) {
+function buildFrame(options: any) {
   for (const key in options) {
     const value = options[key]
     if (typeof value === 'string') {
@@ -147,8 +149,5 @@ function buildFrame (options: any) {
       }
     }
   }
-  return Object.assign(
-    Object.create(PacketModule[options.name + 'Frame'].prototype),
-    options
-  )
+  return Object.assign(Object.create(PacketModule[options.name + 'Frame'].prototype), options)
 }

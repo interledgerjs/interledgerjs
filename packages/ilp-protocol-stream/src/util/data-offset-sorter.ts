@@ -5,7 +5,7 @@ class OffsetDataEntry {
   offset: number
   next?: OffsetDataEntry
 
-  constructor (data: Buffer, offset: number, next?: OffsetDataEntry) {
+  constructor(data: Buffer, offset: number, next?: OffsetDataEntry) {
     this.data = data
     this.offset = offset
     this.next = next
@@ -18,12 +18,12 @@ export class OffsetSorter {
   readOffset: number
   maxOffset: number
 
-  constructor () {
+  constructor() {
     this.readOffset = 0
     this.maxOffset = 0
   }
 
-  push (data: Buffer, offset: number) {
+  push(data: Buffer, offset: number) {
     const entry = new OffsetDataEntry(data, offset)
 
     this.maxOffset = Math.max(offset + data.length, this.maxOffset)
@@ -50,7 +50,7 @@ export class OffsetSorter {
     }
   }
 
-  read (): Buffer | undefined {
+  read(): Buffer | undefined {
     let data
     if (this.head && this.readOffset === this.head.offset) {
       data = this.head.data
@@ -61,7 +61,7 @@ export class OffsetSorter {
   }
 
   // Only returns contiguous data
-  byteLength (): number {
+  byteLength(): number {
     let length = 0
     let entry = this.head
     let offset = this.readOffset

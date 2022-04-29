@@ -8,7 +8,7 @@ if (typeof describe === 'function') {
   })
 }
 
-export function runCryptoTests (args: {describe: Mocha.SuiteFunction, it: Mocha.TestFunction}) {
+export function runCryptoTests(args: { describe: Mocha.SuiteFunction; it: Mocha.TestFunction }) {
   const { describe, it } = args
 
   describe('generateTokenNonce', function () {
