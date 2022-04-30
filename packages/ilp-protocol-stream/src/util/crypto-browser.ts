@@ -28,7 +28,7 @@ class KeyCache {
   async importKey(
     keyData: Buffer,
     algorithm: string | HmacImportParams | AesKeyAlgorithm,
-    keyUsages: string[]
+    keyUsages: KeyUsage[]
   ): Promise<CryptoKey> {
     const oldEntry = this.cache.get(keyData)
     if (oldEntry) {

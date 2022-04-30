@@ -2,12 +2,13 @@
 // ilp-protocol-stream. The main point is to exercise `src/util/crypto-browser`,
 // since every thing else is the same as in Node.
 
-import * as assert from 'assert'
+import assert from 'assert'
 import * as path from 'path'
 import * as puppeteer from 'puppeteer'
-import * as webpack from 'webpack'
+import webpack from 'webpack'
 import PluginMiniAccounts from 'ilp-plugin-mini-accounts'
 import { createServer, Connection } from '../src'
+import webpackConfig from './browser/webpack.config'
 
 const BTP_SERVER_OPTS = {
   port: 9000,
@@ -124,8 +125,8 @@ describe('Puppeteer', function () {
 })
 
 function buildClientBundle() {
-  return new Promise((resolve, reject) => {
-    webpack(require('./browser/webpack.config.js'), (err, stats) => {
+  return new Promise<void>((resolve, reject) => {
+    webpack(webpackConfig, (err, stats) => {
       if (err) {
         reject(err)
       } else if (stats.hasErrors()) {

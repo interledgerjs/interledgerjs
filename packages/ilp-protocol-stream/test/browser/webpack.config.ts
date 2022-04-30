@@ -1,7 +1,7 @@
-'use strict'
-const path = require('path')
+import path from 'path'
+import { Configuration } from 'webpack'
 
-module.exports = {
+const config: Configuration = {
   mode: 'development',
   entry: './test/browser/main.js',
   resolve: {
@@ -31,3 +31,5 @@ module.exports = {
     crypto: 'empty',
   },
 }
+
+export default config

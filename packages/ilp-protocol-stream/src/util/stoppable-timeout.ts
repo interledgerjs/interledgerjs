@@ -2,7 +2,7 @@
 // - The current `wait` promise (if any) will reject.
 // - All future `wait` calls will reject.
 export class StoppableTimeout {
-  private stopped: boolean = false
+  private stopped = false
   private timer: NodeJS.Timer
   private reject?: (err: Error) => void
 

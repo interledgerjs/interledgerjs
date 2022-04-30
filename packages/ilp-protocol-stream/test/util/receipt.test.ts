@@ -8,17 +8,19 @@ import {
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import { Writer } from 'oer-utils'
-import * as chaiAsPromised from 'chai-as-promised'
+import chaiAsPromised from 'chai-as-promised'
 import * as Long from 'long'
 import { longFromValue } from '../../src/util/long'
 import { randomBytes } from '../../src/crypto'
+import packetsFixtures from '../fixtures/packets.json'
 Chai.use(chaiAsPromised)
-const assert = Object.assign(Chai.assert, sinon.assert)
+const assert: Chai.AssertStatic & sinon.SinonAssert = Object.assign(Chai.assert, sinon.assert)
 
 describe('Receipt', function () {
-  const receiptFixture = require('../fixtures/packets.json').find(
-    ({ name }: { name: string }) => name === 'frame:stream_receipt'
-  ).packet.frames[0].receipt
+  const receiptFixture = Buffer.from(
+    packetsFixtures['frame:stream_receipt'].packet.frames[0].receipt,
+    'base64'
+  )
 
   describe('createReceipt', function () {
     it('should create a receipt', function () {

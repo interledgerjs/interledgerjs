@@ -1,4 +1,4 @@
-import * as assert from 'assert'
+import assert from 'assert'
 import { DataQueue } from '../../src/util/data-queue'
 
 describe('DataQueue', function () {

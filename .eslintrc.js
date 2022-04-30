@@ -27,11 +27,12 @@ module.exports = {
   ignorePatterns: ['**/node_modules/**/*', '**/dist/**/*', '**/*.config.js', '**/.*.js'],
   overrides: [
     {
-      files: ['**/*.spec.ts'],
+      files: ['**/*.spec.ts', '**/*.test.ts'],
       rules: {
         // In test code, it's often useful to explicitly disable typing so we don't want to be
-        // warned about using 'any'.
+        // warned about using 'any' or @ts-ignore comments.
         '@typescript-eslint/no-explicit-any': ['off'],
+        '@typescript-eslint/ban-ts-comment': ['off'],
       },
     },
   ],

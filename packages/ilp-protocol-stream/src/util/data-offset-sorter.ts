@@ -35,7 +35,7 @@ export class OffsetSorter {
       this.head = entry
     } else {
       let prev = this.head
-      while (true) {
+      for (;;) {
         if (!prev.next) {
           prev.next = entry
           break

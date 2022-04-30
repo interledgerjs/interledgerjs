@@ -25,7 +25,7 @@ import {
   ConnectionDataBlockedFrame,
   StreamMoneyBlockedFrame,
 } from './packet'
-import { Reader, Writer } from 'oer-utils'
+import { Reader } from 'oer-utils'
 import { CongestionController } from './util/congestion'
 import { Plugin } from './util/plugin-interface'
 import {
@@ -39,7 +39,7 @@ import {
 } from './util/long'
 import * as Long from 'long'
 import Rational from './util/rational'
-import { createReceipt, RECEIPT_VERSION } from './util/receipt'
+import { createReceipt } from './util/receipt'
 import { StoppableTimeout } from './util/stoppable-timeout'
 import { v4 as uuid } from 'uuid'
 
@@ -186,7 +186,7 @@ export class Connection extends EventEmitter {
   protected maxStreamId: number
   protected log: any
   protected sending: boolean
-  protected looping: boolean = false // whether there is a running send-loop
+  protected looping = false // whether there is a running send-loop
   protected congestion: CongestionController
   protected minExchangeRatePrecision: number
   protected connected: boolean
@@ -196,7 +196,7 @@ export class Connection extends EventEmitter {
   // - When `end()` is called, but before sending the `ConnectionCloseFrame` to remote.
   protected closed: boolean
   // Set to `true` when either `end()` or `destroy()` has finished.
-  protected done: boolean = false
+  protected done = false
   protected exchangeRate?: Rational
   protected retryDelay: number
   protected queuedFrames: Frame[]
@@ -321,7 +321,7 @@ export class Connection extends EventEmitter {
     }
     /* tslint:disable-next-line:no-floating-promises */
     this.startSendLoop()
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const connectHandler = () => {
         cleanup()
         resolve()
@@ -341,12 +341,11 @@ export class Connection extends EventEmitter {
       this.once('close', closeHandler)
       this.once('end', closeHandler)
 
-      const self = this
-      function cleanup() {
-        self.removeListener('connect', connectHandler)
-        self.removeListener('error', errorHandler)
-        self.removeListener('close', closeHandler)
-        self.removeListener('end', closeHandler)
+      const cleanup = () => {
+        this.removeListener('connect', connectHandler)
+        this.removeListener('error', errorHandler)
+        this.removeListener('close', closeHandler)
+        this.removeListener('end', closeHandler)
       }
     })
     this.closed = false
@@ -360,8 +359,8 @@ export class Connection extends EventEmitter {
     this.log.info('closing connection')
     // Create Promises on each stream that resolve on the 'end' event so
     // we can wait for them all to be completed before closing the connection
-    let streamEndPromises: Promise<any>[] = []
-    for (let [_, stream] of this.streams) {
+    const streamEndPromises: Promise<any>[] = []
+    for (const [_, stream] of this.streams) {
       if (stream.isOpen()) {
         streamEndPromises.push(
           new Promise((resolve, reject) => {
@@ -410,8 +409,8 @@ export class Connection extends EventEmitter {
     }
     // Create Promises on each stream that resolve on the 'close' event so
     // we can wait for them all to be completed before closing the connection
-    let streamClosePromises: Promise<any>[] = []
-    for (let [_, stream] of this.streams) {
+    const streamClosePromises: Promise<any>[] = []
+    for (const [_, stream] of this.streams) {
       streamClosePromises.push(
         new Promise((resolve, reject) => {
           stream.on('close', resolve)
@@ -598,7 +597,7 @@ export class Connection extends EventEmitter {
     }
 
     // Handle new streams
-    for (let frame of requestPacket.frames) {
+    for (const frame of requestPacket.frames) {
       if (
         frame.type === FrameType.StreamMoney ||
         frame.type === FrameType.StreamData ||
@@ -695,7 +694,7 @@ export class Connection extends EventEmitter {
       }
       return sum
     }, Long.UZERO)
-    for (let frame of requestPacket.frames) {
+    for (const frame of requestPacket.frames) {
       if (!(frame instanceof StreamMoneyFrame)) {
         continue
       }
@@ -757,14 +756,14 @@ export class Connection extends EventEmitter {
 
     // Add incoming amounts to each stream
     const totalsReceived: Map<number, string> = new Map()
-    for (let { stream, amount } of amountsToReceive) {
+    for (const { stream, amount } of amountsToReceive) {
       stream._addToIncoming(amount, prepare)
       totalsReceived.set(stream.id, stream.totalReceived)
     }
 
     // Tell peer about closed streams and how much each stream can receive
     if (!this.closed && this.remoteState !== RemoteState.Closed) {
-      for (let [_, stream] of this.streams) {
+      for (const [_, stream] of this.streams) {
         if (!stream.isOpen() && !stream._remoteClosed) {
           this.log.trace('telling other side that stream %d is closed', stream.id)
           if (stream._errorMessage) {
@@ -796,7 +795,7 @@ export class Connection extends EventEmitter {
 
     // Add receipt frame(s)
     if (this._receiptNonce && this._receiptSecret) {
-      for (let [streamId, totalReceived] of totalsReceived) {
+      for (const [streamId, totalReceived] of totalsReceived) {
         responseFrames.push(
           new StreamReceiptFrame(
             streamId,
@@ -843,10 +842,10 @@ export class Connection extends EventEmitter {
    * except for passing money to the streams
    */
   protected handleControlFrames(frames: Frame[]): void {
-    for (let frame of frames) {
+    for (const frame of frames) {
       let stream
       switch (frame.type) {
-        case FrameType.ConnectionNewAddress:
+        case FrameType.ConnectionNewAddress: {
           this.log.trace('peer notified us of their account: %s', frame.sourceAccount)
 
           // Tell the other side our max stream id and asset details
@@ -864,6 +863,7 @@ export class Connection extends EventEmitter {
           }
           // TODO reset the exchange rate and send a test packet to make sure they haven't spoofed the address
           break
+        }
         case FrameType.ConnectionAssetDetails:
           this.log.trace(
             'peer notified us of their asset details: code=%s, scale=%d',
@@ -901,7 +901,7 @@ export class Connection extends EventEmitter {
             )
           }
           break
-        case FrameType.ConnectionMaxData:
+        case FrameType.ConnectionMaxData: {
           const outgoingOffsets = this.getOutgoingOffsets()
           this.log.trace(
             "remote connection max byte offset is: %s, we've sent: %d, we want to send up to: %d",
@@ -916,6 +916,7 @@ export class Connection extends EventEmitter {
             this.remoteMaxOffset = frame.maxOffset.toNumber()
           }
           break
+        }
         case FrameType.ConnectionDataBlocked:
           this.log.trace(
             'remote wants to send more data but we are blocking them. current max incoming offset: %d, remote max offset: %s',
@@ -967,7 +968,7 @@ export class Connection extends EventEmitter {
             frame.sendMax
           )
           break
-        case FrameType.StreamData:
+        case FrameType.StreamData: {
           this.log.trace('got data for stream %s', frame.streamId)
 
           stream = this.streams.get(frame.streamId.toNumber())
@@ -988,7 +989,8 @@ export class Connection extends EventEmitter {
             )
           }
           break
-        case FrameType.StreamMaxData:
+        }
+        case FrameType.StreamMaxData: {
           stream = this.streams.get(frame.streamId.toNumber())
           if (!stream) {
             break
@@ -1014,6 +1016,7 @@ export class Connection extends EventEmitter {
             )
           }
           break
+        }
         case FrameType.StreamDataBlocked:
           stream = this.streams.get(frame.streamId.toNumber())
           if (!stream) {
@@ -1199,7 +1202,7 @@ export class Connection extends EventEmitter {
     }
     this.log.debug('finished sending')
     this.safeEmit('_send_loop_finished')
-    for (let [_, stream] of this.streams) {
+    for (const [_, stream] of this.streams) {
       stream.emit('_send_loop_finished')
     }
   }
@@ -1231,7 +1234,7 @@ export class Connection extends EventEmitter {
 
     // Send control frames
     // TODO only send the max amount when it changes
-    for (let [_, stream] of this.streams) {
+    for (const [_, stream] of this.streams) {
       if (stream.isOpen()) {
         requestPacket.frames.push(
           new StreamMaxMoneyFrame(stream.id, stream.receiveMax, stream.totalReceived)
@@ -1261,7 +1264,7 @@ export class Connection extends EventEmitter {
       )
     }
     const streamsSentFrom = []
-    for (let [_, stream] of this.streams) {
+    for (const [_, stream] of this.streams) {
       if (stream._sentEnd) {
         // TODO just remove closed streams?
         continue
@@ -1343,7 +1346,7 @@ export class Connection extends EventEmitter {
       bytesLeftInPacket = maxBytesRemoteConnectionCanReceive
     }
 
-    for (let [_, stream] of this.streams) {
+    for (const [_, stream] of this.streams) {
       // TODO use a sensible estimate for the StreamDataFrame overhead
       if (bytesLeftInPacket - 20 <= 0) {
         // Never pass a negative offset to _getAmountAvailableToSend.
@@ -1417,7 +1420,7 @@ export class Connection extends EventEmitter {
       }
 
       if (responsePacket.ilpPacketType === IlpPacketType.Fulfill) {
-        for (let frame of responsePacket.frames) {
+        for (const frame of responsePacket.frames) {
           if (frame.type === FrameType.StreamReceipt) {
             const stream = this.streams.get(frame.streamId.toNumber())
             if (stream) {
@@ -1432,7 +1435,7 @@ export class Connection extends EventEmitter {
           }
         }
 
-        for (let stream of streamsSentFrom) {
+        for (const stream of streamsSentFrom) {
           stream._executeHold(requestPacket.sequence.toString())
         }
 
@@ -1900,16 +1903,18 @@ export class Connection extends EventEmitter {
     this.log.debug('packet %s was rejected', requestPacket.sequence)
 
     // TODO resend control frames
-    for (let frame of requestPacket.frames) {
+    for (const frame of requestPacket.frames) {
       switch (frame.type) {
-        case FrameType.StreamMoney:
-          const stream1 = this.streams.get(frame.streamId.toNumber())
-          if (stream1) stream1._cancelHold(requestPacket.sequence.toString())
+        case FrameType.StreamMoney: {
+          const stream = this.streams.get(frame.streamId.toNumber())
+          if (stream) stream._cancelHold(requestPacket.sequence.toString())
           break
-        case FrameType.StreamData:
-          const stream2 = this.streams.get(frame.streamId.toNumber())
-          if (stream2) stream2._resendOutgoingData(frame.data, frame.offset.toNumber())
+        }
+        case FrameType.StreamData: {
+          const stream = this.streams.get(frame.streamId.toNumber())
+          if (stream) stream._resendOutgoingData(frame.data, frame.offset.toNumber())
           break
+        }
         case FrameType.StreamClose:
           this.queuedFrames.push(frame)
           break
@@ -1969,10 +1974,10 @@ export class Connection extends EventEmitter {
     }
   }
 
-  protected safeEmit(event: string, ...args: any[]) {
+  protected safeEmit(...args: Parameters<typeof EventEmitter.prototype.emit>) {
+    const event = args[0]
     try {
-      args.unshift(event)
-      this.emit.apply(this, args)
+      this.emit(...args)
     } catch (err) {
       this.log.debug('error in %s handler: %s', event, err)
     }
@@ -1982,7 +1987,7 @@ export class Connection extends EventEmitter {
     let currentOffset = 0
     let maxOffset = 0
 
-    for (let [_, stream] of this.streams) {
+    for (const [_, stream] of this.streams) {
       const streamOffsets = stream._getOutgoingOffsets()
       currentOffset += streamOffsets.current
       maxOffset += streamOffsets.max
@@ -1997,7 +2002,7 @@ export class Connection extends EventEmitter {
     let totalMaxOffset = 0
     let totalReadOffset = 0
     let totalBufferedData = 0
-    for (let [_, stream] of this.streams) {
+    for (const [_, stream] of this.streams) {
       const { max, current } = stream._getIncomingOffsets()
       totalMaxOffset += max
       totalReadOffset += current
@@ -2133,5 +2138,5 @@ export class Connection extends EventEmitter {
 function isFulfill(
   packet: IlpPacket.IlpFulfill | IlpPacket.IlpReject
 ): packet is IlpPacket.IlpFulfill {
-  return packet.hasOwnProperty('fulfillment')
+  return Object.prototype.hasOwnProperty.call(packet, 'fulfillment')
 }

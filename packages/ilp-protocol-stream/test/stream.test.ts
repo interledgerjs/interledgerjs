@@ -14,11 +14,11 @@ import {
   StreamDataFrame,
   Frame,
 } from '../src/packet'
-import * as sinon from 'sinon'
-import * as Chai from 'chai'
-import * as chaiAsPromised from 'chai-as-promised'
+import sinon from 'sinon'
+import Chai from 'chai'
+import chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
-const assert = Object.assign(Chai.assert, sinon.assert)
+const assert: Chai.AssertStatic & sinon.SinonAssert = Object.assign(Chai.assert, sinon.assert)
 
 describe('DataAndMoneyStream', function () {
   beforeEach(async function () {
@@ -415,7 +415,9 @@ describe('DataAndMoneyStream', function () {
     it('should reject if the stream is destroyed before the amount has been received', async function () {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.destroy(new Error('blah'))
-        stream.on('error', () => {})
+        stream.on('error', () => {
+          // do nothing
+        })
       })
 
       const clientStream = this.clientConn.createStream()
@@ -429,7 +431,9 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       const receivePromise = clientStream.receiveTotal(1000)
       clientStream.emit('error', new Error('oops'))
-      clientStream.on('error', () => {})
+      clientStream.on('error', () => {
+        // do nothing
+      })
       await assert.isRejected(
         receivePromise,
         'Stream encountered an error before the desired amount was received (target: 1000, totalReceived: 0)'
@@ -515,7 +519,7 @@ describe('DataAndMoneyStream', function () {
     })
 
     it('should not close the stream until all the data has been sent', async function () {
-      let data: Buffer[] = []
+      const data: Buffer[] = []
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('data', (chunk: Buffer) => {
           data.push(chunk)
@@ -576,7 +580,9 @@ describe('DataAndMoneyStream', function () {
 
     it('should reject packets that include data for streams that are already closed', async function () {
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.on('data', () => {})
+        stream.on('data', () => {
+          // do nothing
+        })
         stream.end()
       })
 
@@ -702,7 +708,9 @@ describe('DataAndMoneyStream', function () {
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
         await new Promise(setImmediate)
         assert.equal(stream.readableLength, 5)
-        stream.on('data', () => {})
+        stream.on('data', () => {
+          // do nothing
+        })
         done()
       })
 
@@ -716,7 +724,9 @@ describe('DataAndMoneyStream', function () {
         await new Promise(setImmediate)
         assert.equal(stream.readableHighWaterMark, 16384)
         assert.equal(stream.writableHighWaterMark, 16384)
-        stream.on('data', () => {})
+        stream.on('data', () => {
+          // do nothing
+        })
         done()
       })
 
@@ -754,7 +764,9 @@ describe('DataAndMoneyStream', function () {
     it('should not send more than 32767 bytes in the packet', function (done) {
       const spy = sinon.spy(this.clientPlugin, 'sendData')
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.on('data', () => {})
+        stream.on('data', () => {
+          // do nothing
+        })
         stream.on('end', (chunk: Buffer) => {
           assert.isAtMost(IlpPacket.deserializeIlpPrepare(spy.args[0][0]).data.length, 32767)
           done()

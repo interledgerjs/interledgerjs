@@ -3,14 +3,7 @@ import * as Long from 'long'
 import { Duplex } from 'stream'
 import { DataQueue } from './util/data-queue'
 import { OffsetSorter } from './util/data-offset-sorter'
-import {
-  LongValue,
-  longFromValue,
-  maxLong,
-  minLong,
-  checkedAdd,
-  checkedSubtract,
-} from './util/long'
+import { LongValue, longFromValue, minLong, checkedAdd, checkedSubtract } from './util/long'
 import { IlpPrepare } from 'ilp-packet'
 
 const DEFAULT_TIMEOUT = 60000
@@ -153,58 +146,6 @@ export class DataAndMoneyStream extends Duplex {
   }
 
   /**
-   * Number of bytes buffered and waiting to be read
-   *
-   * This property exists on streams after Node 9.4 so it is added here for backwards compatibility
-   */
-  get readableLength(): number {
-    // stream.readableLength was only added in Node v9.4.0
-    const readableLength =
-      super.readableLength || (this['_readableState'] && this['_readableState'].length) || 0
-    return readableLength + this._incomingData.byteLength()
-  }
-
-  /**
-   * Number of bytes buffered and waiting to be sent
-   *
-   * This property exists on streams after Node 9.4 so it is added here for backwards compatibility
-   */
-  get writableLength(): number {
-    // stream.writableLength was only added in Node v9.4.0
-    const writableLength =
-      super.writableLength || (this['_writableState'] && this['_writableState'].length) || 0
-    return writableLength
-  }
-
-  /**
-   * Returns the value of readableHighWaterMark passed when constructing this stream
-   *
-   * This property exists on streams after Node 8.10 so it is added here for backwards compatibility
-   */
-  get readableHighWaterMark(): number {
-    /* tslint:disable-next-line:strict-type-predicates */
-    if (typeof super.readableHighWaterMark === 'number') {
-      return super.readableHighWaterMark
-    } else {
-      return this['_readableState'].highWaterMark
-    }
-  }
-
-  /**
-   * Returns the value of writableHighWaterMark passed when constructing this stream
-   *
-   * This property exists on streams after Node 8.10 so it is added here for backwards compatibility
-   */
-  get writableHighWaterMark(): number {
-    /* tslint:disable-next-line:strict-type-predicates */
-    if (typeof super.writableHighWaterMark === 'number') {
-      return super.writableHighWaterMark
-    } else {
-      return this['_writableState'].highWaterMark
-    }
-  }
-
-  /**
    * Latest receipt for total sent amount.
    */
   get receipt(): Buffer | undefined {
@@ -294,38 +235,37 @@ export class DataAndMoneyStream extends Duplex {
     }
 
     this.setSendMax(limit)
-    await new Promise((resolve, reject) => {
-      const self = this
-      function outgoingHandler() {
-        if (self._totalSent.greaterThanOrEqual(limit)) {
+    await new Promise<void>((resolve, reject) => {
+      const outgoingHandler = () => {
+        if (this._totalSent.greaterThanOrEqual(limit)) {
           cleanup()
           resolve()
         }
       }
-      function endHandler() {
+      const endHandler = () => {
         // Clean up on next tick in case an error was also emitted
         setImmediate(cleanup)
-        if (self._totalSent.greaterThanOrEqual(limit)) {
+        if (this._totalSent.greaterThanOrEqual(limit)) {
           resolve()
         } else {
-          self.log.debug(
+          this.log.debug(
             'Stream was closed before the desired amount was sent (target: %s, totalSent: %s)',
             limit,
-            self._totalSent
+            this._totalSent
           )
           reject(
             new Error(
-              `Stream was closed before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`
+              `Stream was closed before the desired amount was sent (target: ${limit}, totalSent: ${this._totalSent})`
             )
           )
         }
       }
-      function errorHandler(err: Error) {
-        self.log.debug('error waiting for stream to stabilize:', err)
+      const errorHandler = (err: Error) => {
+        this.log.debug('error waiting for stream to stabilize:', err)
         cleanup()
         reject(
           new Error(
-            `Stream encountered an error before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent}): ${err}`
+            `Stream encountered an error before the desired amount was sent (target: ${limit}, totalSent: ${this._totalSent}): ${err}`
           )
         )
       }
@@ -333,15 +273,15 @@ export class DataAndMoneyStream extends Duplex {
         cleanup()
         reject(
           new Error(
-            `Timed out before the desired amount was sent (target: ${limit}, totalSent: ${self._totalSent})`
+            `Timed out before the desired amount was sent (target: ${limit}, totalSent: ${this._totalSent})`
           )
         )
       }, timeout)
-      function cleanup() {
+      const cleanup = () => {
         clearTimeout(timer)
-        self.removeListener('outgoing_money', outgoingHandler)
-        self.removeListener('error', errorHandler)
-        self.removeListener('end', endHandler)
+        this.removeListener('outgoing_money', outgoingHandler)
+        this.removeListener('error', errorHandler)
+        this.removeListener('end', endHandler)
       }
 
       this.on('outgoing_money', outgoingHandler)
@@ -365,38 +305,37 @@ export class DataAndMoneyStream extends Duplex {
     }
 
     this.setReceiveMax(limit)
-    await new Promise((resolve, reject) => {
-      const self = this
-      function moneyHandler() {
-        if (self._totalReceived.greaterThanOrEqual(limit)) {
+    await new Promise<void>((resolve, reject) => {
+      const moneyHandler = () => {
+        if (this._totalReceived.greaterThanOrEqual(limit)) {
           cleanup()
           resolve()
         }
       }
-      function endHandler() {
+      const endHandler = () => {
         // Clean up on next tick in case an error was also emitted
         setImmediate(cleanup)
-        if (self._totalReceived.greaterThanOrEqual(limit)) {
+        if (this._totalReceived.greaterThanOrEqual(limit)) {
           resolve()
         } else {
-          self.log.debug(
+          this.log.debug(
             'Stream was closed before the desired amount was received (target: %s, totalReceived: %s)',
             limit,
-            self._totalReceived
+            this._totalReceived
           )
           reject(
             new Error(
-              `Stream was closed before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`
+              `Stream was closed before the desired amount was received (target: ${limit}, totalReceived: ${this._totalReceived})`
             )
           )
         }
       }
-      function errorHandler(err: Error) {
-        self.log.debug('error waiting for stream to stabilize:', err)
+      const errorHandler = (err: Error) => {
+        this.log.debug('error waiting for stream to stabilize:', err)
         cleanup()
         reject(
           new Error(
-            `Stream encountered an error before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived}): ${err}`
+            `Stream encountered an error before the desired amount was received (target: ${limit}, totalReceived: ${this._totalReceived}): ${err}`
           )
         )
       }
@@ -404,15 +343,15 @@ export class DataAndMoneyStream extends Duplex {
         cleanup()
         reject(
           new Error(
-            `Timed out before the desired amount was received (target: ${limit}, totalReceived: ${self._totalReceived})`
+            `Timed out before the desired amount was received (target: ${limit}, totalReceived: ${this._totalReceived})`
           )
         )
       }, timeout)
-      function cleanup() {
+      const cleanup = () => {
         clearTimeout(timer)
-        self.removeListener('money', moneyHandler)
-        self.removeListener('error', errorHandler)
-        self.removeListener('end', endHandler)
+        this.removeListener('money', moneyHandler)
+        this.removeListener('error', errorHandler)
+        this.removeListener('end', endHandler)
       }
 
       this.on('money', moneyHandler)
@@ -743,10 +682,10 @@ export class DataAndMoneyStream extends Duplex {
     this._receipt = receipt
   }
 
-  protected safeEmit(event: string, ...args: any[]) {
+  protected safeEmit(...args: Parameters<typeof Duplex.prototype.emit>) {
+    const event = args[0]
     try {
-      args.unshift(event)
-      this.emit.apply(this, args)
+      this.emit(...args)
     } catch (err) {
       this.log.debug('error in %s handler: %s', event, err)
     }

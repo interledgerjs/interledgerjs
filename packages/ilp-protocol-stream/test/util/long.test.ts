@@ -1,5 +1,5 @@
 import 'mocha'
-import * as assert from 'assert'
+import assert from 'assert'
 import BigNumber from 'bignumber.js'
 import * as Long from 'long'
 import {

@@ -1,5 +1,5 @@
 import * as crypto from 'crypto'
-import * as assert from 'assert'
+import assert from 'assert'
 
 const HASH_ALGORITHM = 'sha256'
 const ENCRYPTION_ALGORITHM = 'aes-256-gcm'
@@ -24,7 +24,7 @@ function encryptSync(pskEncryptionKey: Buffer, ...buffers: Buffer[]): Buffer {
   const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, pskEncryptionKey, iv)
 
   const ciphertext = []
-  for (let buffer of buffers) {
+  for (const buffer of buffers) {
     ciphertext.push(cipher.update(buffer))
   }
   ciphertext.push(cipher.final())

@@ -1,6 +1,5 @@
-[
-  {
-    "name": "sequence:0",
+{
+  "sequence:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -9,8 +8,7 @@
     },
     "buffer": "AQwBAAEAAQA="
   },
-  {
-    "name": "sequence:max_js",
+  "sequence:max_js": {
     "packet": {
       "sequence": "9007199254740991",
       "packetType": 12,
@@ -19,8 +17,7 @@
     },
     "buffer": "AQwHH////////wEAAQA="
   },
-  {
-    "name": "sequence:max_uint_64",
+  "sequence:max_uint_64": {
     "packet": {
       "sequence": "18446744073709551615",
       "packetType": 12,
@@ -29,8 +26,7 @@
     },
     "buffer": "AQwI//////////8BAAEA"
   },
-  {
-    "name": "type:prepare",
+  "type:prepare": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -39,8 +35,7 @@
     },
     "buffer": "AQwBAAEAAQA="
   },
-  {
-    "name": "type:fulfill",
+  "type:fulfill": {
     "packet": {
       "sequence": "0",
       "packetType": 13,
@@ -49,8 +44,7 @@
     },
     "buffer": "AQ0BAAEAAQA="
   },
-  {
-    "name": "type:reject",
+  "type:reject": {
     "packet": {
       "sequence": "0",
       "packetType": 14,
@@ -59,8 +53,7 @@
     },
     "buffer": "AQ4BAAEAAQA="
   },
-  {
-    "name": "amount:0",
+  "amount:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -69,8 +62,7 @@
     },
     "buffer": "AQwBAAEAAQA="
   },
-  {
-    "name": "amount:max_js",
+  "amount:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -79,8 +71,7 @@
     },
     "buffer": "AQwBAAcf////////AQA="
   },
-  {
-    "name": "amount:max_uint_64",
+  "amount:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -89,8 +80,7 @@
     },
     "buffer": "AQwBAAj//////////wEA"
   },
-  {
-    "name": "frame:connection_close",
+  "frame:connection_close": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -106,8 +96,7 @@
     },
     "buffer": "AQwBAAEAAQEBBgEEZmFpbA=="
   },
-  {
-    "name": "frame:connection_new_address",
+  "frame:connection_new_address": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -122,8 +111,7 @@
     },
     "buffer": "AQwBAAEAAQECDg1leGFtcGxlLmFsaWNl"
   },
-  {
-    "name": "frame:connection_asset_details",
+  "frame:connection_asset_details": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -139,8 +127,7 @@
     },
     "buffer": "AQwBAAEAAQEHBQNBQkP/"
   },
-  {
-    "name": "frame:connection_max_data:0",
+  "frame:connection_max_data:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -155,8 +142,7 @@
     },
     "buffer": "AQwBAAEAAQEDAgEA"
   },
-  {
-    "name": "frame:connection_max_data:max_js",
+  "frame:connection_max_data:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -171,8 +157,7 @@
     },
     "buffer": "AQwBAAEAAQEDCAcf////////"
   },
-  {
-    "name": "frame:connection_max_data:max_uint_64",
+  "frame:connection_max_data:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -187,8 +172,7 @@
     },
     "buffer": "AQwBAAEAAQEDCQj//////////w=="
   },
-  {
-    "name": "frame:connection_data_blocked:0",
+  "frame:connection_data_blocked:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -203,8 +187,7 @@
     },
     "buffer": "AQwBAAEAAQEEAgEA"
   },
-  {
-    "name": "frame:connection_data_blocked:max_js",
+  "frame:connection_data_blocked:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -219,8 +202,7 @@
     },
     "buffer": "AQwBAAEAAQEECAcf////////"
   },
-  {
-    "name": "frame:connection_data_blocked:max_uint_64",
+  "frame:connection_data_blocked:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -235,8 +217,7 @@
     },
     "buffer": "AQwBAAEAAQEECQj//////////w=="
   },
-  {
-    "name": "frame:connection_max_stream_id:0",
+  "frame:connection_max_stream_id:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -251,8 +232,7 @@
     },
     "buffer": "AQwBAAEAAQEFAgEA"
   },
-  {
-    "name": "frame:connection_max_stream_id:max_js",
+  "frame:connection_max_stream_id:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -267,8 +247,7 @@
     },
     "buffer": "AQwBAAEAAQEFCAcf////////"
   },
-  {
-    "name": "frame:connection_max_stream_id:max_uint_64",
+  "frame:connection_max_stream_id:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -283,8 +262,7 @@
     },
     "buffer": "AQwBAAEAAQEFCQj//////////w=="
   },
-  {
-    "name": "frame:connection_stream_id_blocked:0",
+  "frame:connection_stream_id_blocked:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -299,8 +277,7 @@
     },
     "buffer": "AQwBAAEAAQEGAgEA"
   },
-  {
-    "name": "frame:connection_stream_id_blocked:max_js",
+  "frame:connection_stream_id_blocked:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -315,8 +292,7 @@
     },
     "buffer": "AQwBAAEAAQEGCAcf////////"
   },
-  {
-    "name": "frame:connection_stream_id_blocked:max_uint_64",
+  "frame:connection_stream_id_blocked:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -331,8 +307,7 @@
     },
     "buffer": "AQwBAAEAAQEGCQj//////////w=="
   },
-  {
-    "name": "frame:stream_close",
+  "frame:stream_close": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -349,8 +324,7 @@
     },
     "buffer": "AQwBAAEAAQEQFAF7/xBhbiBlcnJvciBtZXNzYWdl"
   },
-  {
-    "name": "frame:stream_money:0",
+  "frame:stream_money:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -366,8 +340,7 @@
     },
     "buffer": "AQwBAAEAAQERBAF7AQA="
   },
-  {
-    "name": "frame:stream_money:max_js",
+  "frame:stream_money:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -383,8 +356,7 @@
     },
     "buffer": "AQwBAAEAAQERCgF7Bx////////8="
   },
-  {
-    "name": "frame:stream_money:max_uint_64",
+  "frame:stream_money:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -400,8 +372,7 @@
     },
     "buffer": "AQwBAAEAAQERCwF7CP//////////"
   },
-  {
-    "name": "frame:stream_max_money:receive_max:0",
+  "frame:stream_max_money:receive_max:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -418,8 +389,7 @@
     },
     "buffer": "AQwBAAEAAQESBwF7AQACAcg="
   },
-  {
-    "name": "frame:stream_max_money:receive_max:max_js",
+  "frame:stream_max_money:receive_max:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -436,8 +406,7 @@
     },
     "buffer": "AQwBAAEAAQESDQF7Bx////////8CAcg="
   },
-  {
-    "name": "frame:stream_max_money:receive_max:max_uint_64",
+  "frame:stream_max_money:receive_max:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -454,8 +423,7 @@
     },
     "buffer": "AQwBAAEAAQESDgF7CP//////////AgHI"
   },
-  {
-    "name": "frame:stream_max_money:total_received:0",
+  "frame:stream_max_money:total_received:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -472,8 +440,7 @@
     },
     "buffer": "AQwBAAEAAQESBwF7AgHIAQA="
   },
-  {
-    "name": "frame:stream_max_money:total_received:max_js",
+  "frame:stream_max_money:total_received:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -490,8 +457,7 @@
     },
     "buffer": "AQwBAAEAAQESDQF7AgHIBx////////8="
   },
-  {
-    "name": "frame:stream_max_money:total_received:max_uint_64",
+  "frame:stream_max_money:total_received:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -508,8 +474,7 @@
     },
     "buffer": "AQwBAAEAAQESDgF7AgHICP//////////"
   },
-  {
-    "name": "frame:stream_money_blocked:send_max:0",
+  "frame:stream_money_blocked:send_max:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -526,8 +491,7 @@
     },
     "buffer": "AQwBAAEAAQETBwF7AQACAcg="
   },
-  {
-    "name": "frame:stream_money_blocked:send_max:max_js",
+  "frame:stream_money_blocked:send_max:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -544,8 +508,7 @@
     },
     "buffer": "AQwBAAEAAQETDQF7Bx////////8CAcg="
   },
-  {
-    "name": "frame:stream_money_blocked:send_max:max_uint_64",
+  "frame:stream_money_blocked:send_max:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -562,8 +525,7 @@
     },
     "buffer": "AQwBAAEAAQETDgF7CP//////////AgHI"
   },
-  {
-    "name": "frame:stream_money_blocked:total_sent:0",
+  "frame:stream_money_blocked:total_sent:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -580,8 +542,7 @@
     },
     "buffer": "AQwBAAEAAQETBwF7AgHIAQA="
   },
-  {
-    "name": "frame:stream_money_blocked:total_sent:max_js",
+  "frame:stream_money_blocked:total_sent:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -598,8 +559,7 @@
     },
     "buffer": "AQwBAAEAAQETDQF7AgHIBx////////8="
   },
-  {
-    "name": "frame:stream_money_blocked:total_sent:max_uint_64",
+  "frame:stream_money_blocked:total_sent:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -616,8 +576,7 @@
     },
     "buffer": "AQwBAAEAAQETDgF7AgHICP//////////"
   },
-  {
-    "name": "frame:stream_data",
+  "frame:stream_data": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -634,8 +593,7 @@
     },
     "buffer": "AQwBAAEAAQEUDAF7AgHIBmZvb2Jhcg=="
   },
-  {
-    "name": "frame:stream_data:offset:0",
+  "frame:stream_data:offset:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -652,8 +610,7 @@
     },
     "buffer": "AQwBAAEAAQEUBQF7AQAA"
   },
-  {
-    "name": "frame:stream_data:offset:max_js",
+  "frame:stream_data:offset:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -670,8 +627,7 @@
     },
     "buffer": "AQwBAAEAAQEUCwF7Bx////////8A"
   },
-  {
-    "name": "frame:stream_data:offset:max_uint_64",
+  "frame:stream_data:offset:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -688,8 +644,7 @@
     },
     "buffer": "AQwBAAEAAQEUDAF7CP//////////AA=="
   },
-  {
-    "name": "frame:stream_max_data:offset:0",
+  "frame:stream_max_data:offset:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -705,8 +660,7 @@
     },
     "buffer": "AQwBAAEAAQEVBAF7AQA="
   },
-  {
-    "name": "frame:stream_max_data:offset:max_js",
+  "frame:stream_max_data:offset:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -722,8 +676,7 @@
     },
     "buffer": "AQwBAAEAAQEVCgF7Bx////////8="
   },
-  {
-    "name": "frame:stream_max_data:offset:max_uint_64",
+  "frame:stream_max_data:offset:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -739,8 +692,7 @@
     },
     "buffer": "AQwBAAEAAQEVCwF7CP//////////"
   },
-  {
-    "name": "frame:stream_data_blocked:offset:0",
+  "frame:stream_data_blocked:offset:0": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -756,8 +708,7 @@
     },
     "buffer": "AQwBAAEAAQEWBAF7AQA="
   },
-  {
-    "name": "frame:stream_data_blocked:offset:max_js",
+  "frame:stream_data_blocked:offset:max_js": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -773,8 +724,7 @@
     },
     "buffer": "AQwBAAEAAQEWCgF7Bx////////8="
   },
-  {
-    "name": "frame:stream_data_blocked:offset:max_uint_64",
+  "frame:stream_data_blocked:offset:max_uint_64": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -790,8 +740,7 @@
     },
     "buffer": "AQwBAAEAAQEWCwF7CP//////////"
   },
-  {
-    "name": "frame:stream_receipt",
+  "frame:stream_receipt": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -807,8 +756,7 @@
     },
     "buffer": "AQwBAAEAAQEXPQEBOgEAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAH0wSL6AlLeu2ctWRgj9xDplRbWc4XPOX2ofMj56Mi/UTA="
   },
-  {
-    "name": "frame:stream_max_money:receive_max:too_big",
+  "frame:stream_max_money:receive_max:too_big": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -826,8 +774,7 @@
     "buffer": "AQwBAAEAAQESDwF7CQEAAAAAAAAAAAIByA==",
     "decode_only": true
   },
-  {
-    "name": "frame:stream_money_blocked:send_max:too_big",
+  "frame:stream_money_blocked:send_max:too_big": {
     "packet": {
       "sequence": "0",
       "packetType": 12,
@@ -845,4 +792,4 @@
     "buffer": "AQwBAAEAAQETDwF7CQEAAAAAAAAAAAIByA==",
     "decode_only": true
   }
-]
+}

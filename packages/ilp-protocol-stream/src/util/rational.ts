@@ -1,4 +1,4 @@
-import * as assert from 'assert'
+import assert from 'assert'
 import * as Long from 'long'
 import { multiplyDivideFloor, multiplyDivideCeil, multiplyDivideRound } from './long'
 

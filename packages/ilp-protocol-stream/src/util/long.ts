@@ -141,7 +141,7 @@ export function multiplyDivide(
   let rn = b.modulo(c)
 
   while (!a.isZero()) {
-    let oldQuo = quo
+    const oldQuo = quo
     if (!a.and(Long.UONE).isZero()) {
       quo = quo.add(qn)
       rem = rem.add(rn)

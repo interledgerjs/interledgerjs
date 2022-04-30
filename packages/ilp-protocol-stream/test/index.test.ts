@@ -3,11 +3,11 @@ import { Connection } from '../src/connection'
 import { DataAndMoneyStream } from '../src/stream'
 import { createConnection, Server, createServer, GenerateAddressSecretOpts } from '../src/index'
 import MockPlugin from './mocks/plugin'
-import * as sinon from 'sinon'
-import * as Chai from 'chai'
-import * as chaiAsPromised from 'chai-as-promised'
+import sinon from 'sinon'
+import Chai from 'chai'
+import chaiAsPromised from 'chai-as-promised'
 Chai.use(chaiAsPromised)
-const assert = Object.assign(Chai.assert, sinon.assert)
+const assert: Chai.AssertStatic & sinon.SinonAssert = Object.assign(Chai.assert, sinon.assert)
 
 describe('Server', function () {
   beforeEach(function () {

@@ -135,12 +135,12 @@ export class Packet {
     // Pad packet to max data size, if desired
     if (padPacketToSize !== undefined) {
       const paddingSize = padPacketToSize - ENCRYPTION_OVERHEAD - serialized.length
-      const args = [pskEncryptionKey, serialized]
+      const args = [serialized]
       for (let i = 0; i < Math.floor(paddingSize / 32); i++) {
         args.push(ZERO_BYTES)
       }
       args.push(ZERO_BYTES.slice(0, paddingSize % 32))
-      return encrypt.apply(null, args)
+      return encrypt(pskEncryptionKey, ...args)
     }
 
     return encrypt(pskEncryptionKey, serialized)
@@ -166,7 +166,7 @@ export class Packet {
     writer.writeVarUInt(this.frames.length)
 
     // Write each of the frames
-    for (let frame of this.frames) {
+    for (const frame of this.frames) {
       frame.writeTo(writer)
     }
   }
@@ -206,7 +206,7 @@ export abstract class BaseFrame {
     const properties = Object.getOwnPropertyNames(this).filter(
       (propName: string) => propName !== 'type' && propName !== 'name'
     )
-    for (let prop of properties) {
+    for (const prop of properties) {
       const value = this[prop]
       if (typeof value === 'number') {
         contents.writeUInt8(value)
@@ -446,7 +446,7 @@ export class StreamDataFrame extends BaseFrame {
   }
 
   // Leave out the data because that may be very long
-  toJSON(): Object {
+  toJSON(): Record<string, unknown> {
     return {
       type: this.type,
       name: this.name,
@@ -510,7 +510,7 @@ export class StreamReceiptFrame extends BaseFrame {
     return new StreamReceiptFrame(streamId, receipt)
   }
 
-  toJSON(): Object {
+  toJSON(): Record<string, unknown> {
     return {
       type: this.type,
       name: this.name,

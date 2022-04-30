@@ -1,3 +1,5 @@
+/*eslint prefer-const: ["error", {"ignoreReadBeforeAssign": true}]*/
+
 import 'mocha'
 import { Connection } from '../src/connection'
 import { createConnection, createServer } from '../src/index'
@@ -7,13 +9,14 @@ import * as IlpPacket from 'ilp-packet'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import { Writer } from 'oer-utils'
-import * as chaiAsPromised from 'chai-as-promised'
+import chaiAsPromised from 'chai-as-promised'
 import * as Long from 'long'
 import { longFromValue } from '../src/util/long'
 import { createReceipt } from '../src/util/receipt'
 import { hmac } from '../src/crypto'
+import packetsFixtures from './fixtures/packets.json'
 Chai.use(chaiAsPromised)
-const assert = Object.assign(Chai.assert, sinon.assert)
+const assert: Chai.AssertStatic & sinon.SinonAssert = Object.assign(Chai.assert, sinon.assert)
 
 describe('Connection', function () {
   beforeEach(async function () {
@@ -171,7 +174,9 @@ describe('Connection', function () {
         stream.on('finish', serverStreamSpy.finish)
         stream.on('end', serverStreamSpy.end)
         stream.on('close', serverStreamSpy.close)
-        stream.on('data', () => {})
+        stream.on('data', () => {
+          // do nothing
+        })
       })
       this.serverConn.on('end', connSpy.server.end)
       this.serverConn.on('close', connSpy.server.close)
@@ -246,7 +251,9 @@ describe('Connection', function () {
         stream.on('finish', serverStreamSpy.finish)
         stream.on('end', serverStreamSpy.end)
         stream.on('close', serverStreamSpy.close)
-        stream.on('data', () => {})
+        stream.on('data', () => {
+          // do nothing
+        })
       })
       this.serverConn.on('end', connSpy.server.end)
       this.serverConn.on('close', connSpy.server.close)
@@ -308,7 +315,7 @@ describe('Connection', function () {
     })
 
     it('should complete sending all data from server when end is called on server side of the connection', async function () {
-      let data: Buffer[] = []
+      const data: Buffer[] = []
       this.clientConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('data', (chunk: Buffer) => {
           data.push(chunk)
@@ -322,7 +329,7 @@ describe('Connection', function () {
     })
 
     it('should complete sending all data from client when end is called on client side of the connection', async function () {
-      let data: Buffer[] = []
+      const data: Buffer[] = []
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('data', (chunk: Buffer) => {
           data.push(chunk)
@@ -338,7 +345,7 @@ describe('Connection', function () {
 
     it('should complete sending all money from server when end is called on server side of the connection', async function () {
       const moneySpy = sinon.spy()
-      let totalMoney: number = 0
+      let totalMoney = 0
       this.clientConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(12000)
         stream.on('money', (amount) => {
@@ -355,7 +362,7 @@ describe('Connection', function () {
 
     it('should complete sending all money from client when end is called on client side of the connection', async function () {
       const moneySpy = sinon.spy()
-      let totalMoney: number = 0
+      let totalMoney = 0
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('money', (amount) => {
           moneySpy()
@@ -563,9 +570,7 @@ describe('Connection', function () {
       const spy = sinon.spy(clientStream, '_setReceipt')
       await clientStream.sendTotal(1002)
 
-      const receiptFixture = require('./fixtures/packets.json').find(
-        ({ name }: { name: string }) => name === 'frame:stream_receipt'
-      ).packet.frames[0].receipt
+      const receiptFixture = packetsFixtures['frame:stream_receipt'].packet.frames[0].receipt
       assert.calledTwice(spy)
       assert.calledWith(spy.firstCall, receiptFixture)
       const receipt = createReceipt({
@@ -1020,7 +1025,7 @@ describe('Connection', function () {
       const realSendData = this.clientPlugin.sendData
       let callCount = 0
       const args: Buffer[] = []
-      let rejected: Array<IlpPacket.IlpReject> = []
+      const rejected: Array<IlpPacket.IlpReject> = []
       this.clientPlugin.sendData = async (data: Buffer) => {
         callCount++
         args[callCount - 1] = data
@@ -1076,7 +1081,7 @@ describe('Connection', function () {
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
       let callCount = 0
       const args: Buffer[] = []
-      let rejected: Array<IlpPacket.IlpReject> = []
+      const rejected: Array<IlpPacket.IlpReject> = []
       this.clientPlugin.sendData = async (data: Buffer) => {
         callCount++
         args[callCount - 1] = data
@@ -1756,7 +1761,7 @@ describe('Connection', function () {
       const clientStream = this.clientConn.createStream()
       await clientStream.sendTotal(117)
 
-      for (let length of lengths) {
+      for (const length of lengths) {
         assert.equal(length, 32767)
       }
     })
@@ -1776,7 +1781,7 @@ describe('Connection', function () {
         isServer: false,
       })
       clientConn['nextStreamId'] = 2
-      const done = new Promise((resolve) => {
+      const done = new Promise<void>((resolve) => {
         clientConn.on('error', (err: Error) => {
           assert.equal(
             err.message,
@@ -1802,9 +1807,13 @@ describe('Connection', function () {
       this.server.on('connection', (serverConn: Connection) => {
         serverConn['maxStreamId'] = 6
         serverConn.on('stream', (stream: DataAndMoneyStream) => {
-          stream.on('error', (err: Error) => {})
+          stream.on('error', (err: Error) => {
+            // do nothing
+          })
         })
-        serverConn.on('error', (err: Error) => {})
+        serverConn.on('error', (err: Error) => {
+          // do nothing
+        })
       })
       const clientPlugin = this.clientPlugin
       const clientConn = await Connection.build({
@@ -1927,7 +1936,7 @@ describe('Connection', function () {
         this.clientConn.createStream(),
       ]
       const data = Buffer.alloc(1000)
-      for (let stream of streams) {
+      for (const stream of streams) {
         for (let i = 0; i < 20; i++) {
           stream.write(data)
         }
@@ -1954,7 +1963,7 @@ describe('Connection', function () {
         this.clientConn.createStream(),
       ]
       const data = Buffer.alloc(16384)
-      for (let stream of streams) {
+      for (const stream of streams) {
         stream.write(data)
       }
       await new Promise(setImmediate)

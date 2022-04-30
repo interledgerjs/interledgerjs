@@ -1,4 +1,4 @@
-import * as assert from 'assert'
+import assert from 'assert'
 import 'mocha'
 import * as PacketModule from '../src/packet'
 import {
@@ -11,6 +11,7 @@ import {
 } from '../src/packet'
 import { Reader, Writer } from 'oer-utils'
 import * as Long from 'long'
+import packetsFixtures from './fixtures/packets.json'
 
 describe('Packet Format', function () {
   describe('decryptAndDeserialize()', function () {
@@ -114,8 +115,7 @@ describe('Packet Format', function () {
 })
 
 describe('Packet Fixtures', function () {
-  const fixtures = require('./fixtures/packets.json')
-  fixtures.forEach(function (fixture: any) {
+  Object.entries(packetsFixtures).forEach(function ([name, fixture]) {
     const wantBuffer = Buffer.from(fixture.buffer, 'base64')
     const wantPacket = new Packet(
       fixture.packet.sequence,
@@ -124,14 +124,14 @@ describe('Packet Fixtures', function () {
       fixture.packet.frames.map(buildFrame)
     )
 
-    it('deserializes ' + fixture.name, function () {
+    it('deserializes ' + name, function () {
       const gotPacket = Packet._deserializeUnencrypted(wantBuffer)
       assert.deepEqual(gotPacket, wantPacket)
     })
 
-    if (fixture.decode_only) return
+    if ('decode_only' in fixture && fixture.decode_only) return
 
-    it('serializes ' + fixture.name, function () {
+    it('serializes ' + name, function () {
       const gotBuffer = wantPacket._serialize()
       assert(gotBuffer.equals(wantBuffer))
     })
