@@ -27,7 +27,7 @@ module.exports = {
   ignorePatterns: ['**/node_modules/**/*', '**/dist/**/*', '**/*.config.js', '**/.*.js'],
   overrides: [
     {
-      files: ['**/*.spec.ts', '**/*.test.ts'],
+      files: ['**/*.spec.ts'],
       rules: {
         // In test code, it's often useful to explicitly disable typing so we don't want to be
         // warned about using 'any' or @ts-ignore comments.
