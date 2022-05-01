@@ -638,9 +638,10 @@ describe('DataAndMoneyStream', function () {
 
     it('should not allow more money to be sent once the stream is closed mid sending and throw an error', async function () {
       const clientStream = this.clientConn.createStream()
+      const sendPromise = clientStream.sendTotal(300)
       clientStream.end()
       await assert.isRejected(
-        clientStream.sendTotal(300),
+        sendPromise,
         'Stream was closed before the desired amount was sent (target: 300, totalSent: 0)'
       )
     })
