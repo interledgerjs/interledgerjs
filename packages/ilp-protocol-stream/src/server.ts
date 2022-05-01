@@ -150,7 +150,6 @@ export class Server extends EventEmitter {
    */
   async acceptConnection(): Promise<Connection> {
     await this.listen()
-    /* tslint:disable-next-line:no-unnecessary-type-assertion */
     return new Promise((resolve, reject) => {
       const done = (connection: Connection | undefined) => {
         this.removeListener('connection', done)

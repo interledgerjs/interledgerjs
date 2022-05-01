@@ -1,7 +1,3 @@
-// According to their type declarations, SubtleCrypto functions return `PromiseLike`.
-// They are close enough to a `Promise` to `await`, but tslint doesn't know that.
-/* tslint:disable:await-promise */
-
 const { crypto } = window
 const HASH_ALGORITHM = 'SHA-256'
 const ENCRYPTION_ALGORITHM = 'AES-GCM'

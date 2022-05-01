@@ -331,7 +331,6 @@ export class Connection extends EventEmitter {
     if (!this.closed) {
       return Promise.resolve()
     }
-    /* tslint:disable-next-line:no-floating-promises */
     this.startSendLoop()
     await new Promise<void>((resolve, reject) => {
       const connectHandler = () => {
@@ -387,7 +386,6 @@ export class Connection extends EventEmitter {
       this.once('_send_loop_finished', resolve)
       this.once('error', reject)
 
-      /* tslint:disable-next-line:no-floating-promises */
       this.startSendLoop()
     })
     // Wait for the send loop to finish & all the streams to end
@@ -663,7 +661,6 @@ export class Connection extends EventEmitter {
     // TODO keep a running total of the offsets so we don't need to recalculate each time
     const incomingOffsets = this.getIncomingOffsets()
     if (incomingOffsets.max > incomingOffsets.maxAcceptable) {
-      /* tslint:disable-next-line:no-floating-promises */
       this.destroy(
         new ConnectionError(
           `Exceeded flow control limits. Max connection byte offset: ${incomingOffsets.maxAcceptable}, received: ${incomingOffsets.max}`,
@@ -900,7 +897,6 @@ export class Connection extends EventEmitter {
           this.remoteState = RemoteState.Closed
           if (frame.errorCode === ErrorCode.NoError) {
             this.log.info('remote closed connection')
-            /* tslint:disable-next-line:no-floating-promises */
             this.end().catch((err) => {
               this.log.warn('close failed with error=%s', err)
               return this.destroy()
@@ -911,7 +907,6 @@ export class Connection extends EventEmitter {
               ErrorCode[frame.errorCode],
               frame.errorMessage
             )
-            /* tslint:disable-next-line:no-floating-promises */
             this.destroy(
               new Error(
                 `Remote connection error. Code: ${ErrorCode[frame.errorCode]}, message: ${
@@ -976,7 +971,6 @@ export class Connection extends EventEmitter {
             stream._remoteReceiveMax.greaterThan(stream._remoteReceived) &&
             stream._getAmountAvailableToSend().greaterThan(0)
           ) {
-            /* tslint:disable-next-line:no-floating-promises */
             this.startSendLoop()
           }
           break
@@ -1000,7 +994,6 @@ export class Connection extends EventEmitter {
           // Make sure the peer hasn't exceeded the flow control limits
           const incomingOffsets = stream._getIncomingOffsets()
           if (incomingOffsets.max > incomingOffsets.maxAcceptable) {
-            /* tslint:disable-next-line:no-floating-promises */
             this.destroy(
               new ConnectionError(
                 `Exceeded flow control limits. Stream ${stream.id} can accept up to offset: ${incomingOffsets.maxAcceptable} but got bytes up to offset: ${incomingOffsets.max}`,
@@ -1025,7 +1018,6 @@ export class Connection extends EventEmitter {
               stream._getOutgoingOffsets().current
             )
             stream._remoteMaxOffset = newOffset
-            /* tslint:disable-next-line:no-floating-promises */
             this.startSendLoop()
           } else {
             this.log.trace(
@@ -1172,7 +1164,6 @@ export class Connection extends EventEmitter {
     this.log.trace('raising maxStreamId to %d', this.maxStreamId)
     this.queuedFrames.push(new ConnectionMaxStreamIdFrame(this.maxStreamId))
     // Start send loop to make sure this frame is sent
-    /* tslint:disable-next-line:no-floating-promises */
     this.startSendLoop()
   }
 
@@ -1339,7 +1330,6 @@ export class Connection extends EventEmitter {
       const amountLeftStreamWantsToSend = Long.fromString(stream.sendMax, true)
         .subtract(stream.totalSent)
         .subtract(amountToSendFromStream)
-      /* tslint:disable-next-line:no-unnecessary-type-assertion */
       if (
         this.exchangeRate
           .multiplyByLong(amountLeftStreamWantsToSend)
@@ -1682,7 +1672,6 @@ export class Connection extends EventEmitter {
       expiresAt: this.getExpiry(this._destinationAccount),
     }
 
-    /* tslint:disable-next-line:no-unnecessary-type-assertion */
     const responseData = await new Promise<Buffer | null>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.log.error('test packet %s timed out before we got a response', requestPacket.sequence)
@@ -2074,7 +2063,6 @@ export class Connection extends EventEmitter {
     const idle = Date.now() - this.lastActive.getTime()
     this.idleTimer = setTimeout(() => this.testIdle(), this.idleTimeout - idle)
     // browser timers don't support unref
-    /* tslint:disable-next-line:strict-type-predicates */
     if (typeof this.idleTimer.unref === 'function') {
       this.idleTimer.unref()
     }
@@ -2085,7 +2073,6 @@ export class Connection extends EventEmitter {
     const idle = Date.now() - this.lastActive.getTime()
     if (idle >= this.idleTimeout) {
       this.log.error('Connection timed out due to inactivity, destroying connection')
-      /* tslint:disable-next-line:no-floating-promises */
       this.destroy(new Error('Connection timed out due to inactivity'))
     } else {
       this.startIdleTimer()
@@ -2103,7 +2090,6 @@ export class Connection extends EventEmitter {
     if (result.overflow) {
       const err = new IlpPacket.Errors.BadRequestError('Total received exceeded MaxUint64')
       err['ilpErrorMessage'] = err.message
-      /* tslint:disable-next-line:no-floating-promises */
       this.destroy(err)
       throw err
     } else {
@@ -2128,7 +2114,6 @@ export class Connection extends EventEmitter {
     if (result.overflow) {
       const err = new IlpPacket.Errors.BadRequestError('Total sent exceeded MaxUint64')
       err['ilpErrorMessage'] = err.message
-      /* tslint:disable-next-line:no-floating-promises */
       this.destroy(err)
       throw err
     } else {
@@ -2141,7 +2126,6 @@ export class Connection extends EventEmitter {
     if (result.overflow) {
       const err = new IlpPacket.Errors.BadRequestError('Total delivered exceeded MaxUint64')
       err['ilpErrorMessage'] = err.message
-      /* tslint:disable-next-line:no-floating-promises */
       this.destroy(err)
       throw err
     } else {
