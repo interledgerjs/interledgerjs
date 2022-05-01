@@ -190,7 +190,7 @@ export abstract class BaseFrame {
     this.name = name
   }
 
-  static fromContents(reader: Reader): BaseFrame {
+  static fromContents(_reader: Reader): BaseFrame {
     throw new Error(`class method "fromContents" is not implemented`)
   }
 

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events'
 import * as IlpPacket from 'ilp-packet'
 import * as ILDCP from 'ilp-protocol-ildcp'
-import createLogger from 'ilp-logger'
+import createLogger, { Logger } from 'ilp-logger'
 import * as cryptoHelper from './crypto'
 import { Connection, ConnectionOpts } from './connection'
 import { ServerConnectionPool } from './pool'
@@ -41,11 +41,11 @@ export class Server extends EventEmitter {
   protected serverAccount: string
   protected serverAssetCode: string
   protected serverAssetScale: number
-  protected log: any
+  protected log: Logger
   protected enablePadding?: boolean
   protected connected: boolean
   protected connectionOpts: ConnectionOpts
-  protected pendingRequests: Promise<any> = Promise.resolve()
+  protected pendingRequests: Promise<void | Buffer> = Promise.resolve()
   protected disconnectDelay: number
   private pool: ServerConnectionPool
 

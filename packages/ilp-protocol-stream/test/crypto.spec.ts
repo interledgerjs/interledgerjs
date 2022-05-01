@@ -1,5 +1,5 @@
 import 'mocha'
-import * as assert from 'assert'
+import assert from 'assert'
 import * as helpers from '../src/crypto'
 
 if (typeof describe === 'function') {

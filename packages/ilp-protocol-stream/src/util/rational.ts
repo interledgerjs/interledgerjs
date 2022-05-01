@@ -21,7 +21,7 @@ export default class Rational {
     this.unsigned = unsigned
   }
 
-  static isRational(value: any): value is Rational {
+  static isRational(value: unknown): value is Rational {
     return value instanceof Rational
   }
 

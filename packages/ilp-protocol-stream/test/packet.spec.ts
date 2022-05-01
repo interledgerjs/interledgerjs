@@ -4,8 +4,6 @@ import * as PacketModule from '../src/packet'
 import {
   Packet,
   StreamMoneyFrame,
-  Frame,
-  FrameType,
   StreamMaxMoneyFrame,
   StreamMoneyBlockedFrame,
 } from '../src/packet'

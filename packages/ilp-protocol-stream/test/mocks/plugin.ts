@@ -111,7 +111,7 @@ export default class MockPlugin extends EventEmitter {
     this.moneyHandler = this.defaultMoneyHandler
   }
 
-  async defaultDataHandler(data: Buffer): Promise<Buffer> {
+  async defaultDataHandler(_data: Buffer): Promise<Buffer> {
     return IlpPacket.serializeIlpReject({
       code: 'F02', // Unreachable
       triggeredBy: 'example.mock-plugin',
@@ -120,7 +120,7 @@ export default class MockPlugin extends EventEmitter {
     })
   }
 
-  async defaultMoneyHandler(amount: string): Promise<void> {
+  async defaultMoneyHandler(_amount: string): Promise<void> {
     return
   }
 }

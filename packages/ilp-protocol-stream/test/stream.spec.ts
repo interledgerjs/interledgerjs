@@ -1,5 +1,4 @@
 import 'mocha'
-import { Connection } from '../src/connection'
 import { createConnection, Server } from '../src/index'
 import * as Long from 'long'
 import MockPlugin from './mocks/plugin'
@@ -54,7 +53,7 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
 
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         clientStream.on('outgoing_total_sent', resolve)
       })
       assert.equal(clientStream.totalSent, '1000')
@@ -67,7 +66,7 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
 
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         clientStream.on('outgoing_total_sent', resolve)
       })
 
@@ -100,8 +99,8 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
 
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
       assert.notCalled(spy)
       assert.equal(clientStream.totalSent, '0')
     })
@@ -122,7 +121,7 @@ describe('DataAndMoneyStream', function () {
     it('should accept money if the receiveMax is raised after an async call', async function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
-        await new Promise((resolve, reject) => setTimeout(resolve, 10))
+        await new Promise((resolve) => setTimeout(resolve, 10))
         stream.setReceiveMax(500)
         stream.on('money', spy)
       })
@@ -144,18 +143,18 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(2000)
 
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
       assert.callCount(spy, 1)
       assert.calledWith(spy, '500')
       assert.equal(clientStream.totalSent, '1000')
 
       serverStream!.setReceiveMax(1000)
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
 
       assert.callCount(spy, 2)
       assert.calledWith(spy.firstCall, '500')
@@ -168,8 +167,8 @@ describe('DataAndMoneyStream', function () {
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(500)
 
-        await new Promise((resolve, reject) => setImmediate(resolve))
-        await new Promise((resolve, reject) => setImmediate(resolve))
+        await new Promise(setImmediate)
+        await new Promise(setImmediate)
 
         assert.equal(stream.totalReceived, '500')
         assert.throws(
@@ -363,13 +362,13 @@ describe('DataAndMoneyStream', function () {
       })
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
-      await new Promise((resolve, reject) => setImmediate(resolve))
-      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise(setImmediate)
+      await new Promise(setImmediate)
 
       await receivedPromise!
       assert.equal(receiverStream!.totalReceived, '500')
 
-      await new Promise((resolve, reject) => setImmediate(resolve))
+      await new Promise(setImmediate)
       assert.equal(clientStream.totalSent, '1000')
     })
 
@@ -771,7 +770,7 @@ describe('DataAndMoneyStream', function () {
         stream.on('data', () => {
           // do nothing
         })
-        stream.on('end', (chunk: Buffer) => {
+        stream.on('end', () => {
           assert.isAtMost(IlpPacket.deserializeIlpPrepare(spy.args[0][0]).data.length, 32767)
           done()
         })

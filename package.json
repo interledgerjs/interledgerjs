@@ -29,7 +29,7 @@
     "test": "lerna run test --concurrency=1 --stream",
     "test:quick": "lerna run test --parallel",
     "publish:release": "lerna publish from-git --yes",
-    "lint": "eslint --cache --cache-location node_modules/.cache/eslint packages/**/*.ts",
+    "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
     "lint:staged": "lint-staged",
     "version": "yarn && git add yarn.lock",

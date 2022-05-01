@@ -89,13 +89,15 @@ describe('Server', function () {
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret()
       const connectionPromise = this.server.acceptConnection()
 
-      const clientConn = await createConnection({
+      const clientConnection = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret,
       })
 
-      const connection = await connectionPromise
+      const serverConnection = await connectionPromise
+      assert.instanceOf(clientConnection, Connection)
+      assert.instanceOf(serverConnection, Connection)
     })
 
     it('should accept connections created with empty options', async function () {
@@ -104,13 +106,15 @@ describe('Server', function () {
       const { destinationAccount, sharedSecret } = this.server.generateAddressAndSecret(opts)
       const connectionPromise = this.server.acceptConnection()
 
-      const clientConn = await createConnection({
+      const clientConnection = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret,
       })
 
-      const connection = await connectionPromise
+      const serverConnection = await connectionPromise
+      assert.instanceOf(clientConnection, Connection)
+      assert.instanceOf(serverConnection, Connection)
     })
 
     it('should accept a connectionTag as a string and attach it to the incoming connection', async function () {
@@ -120,14 +124,16 @@ describe('Server', function () {
         this.server.generateAddressAndSecret(connectionTag)
       const connectionPromise = this.server.acceptConnection()
 
-      const clientConn = await createConnection({
+      const clientConnection = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret,
       })
 
-      const connection = await connectionPromise
-      assert.equal(connection.connectionTag, connectionTag)
+      const serverConnection = await connectionPromise
+      assert.instanceOf(clientConnection, Connection)
+      assert.instanceOf(serverConnection, Connection)
+      assert.equal(serverConnection.connectionTag, connectionTag)
     })
 
     it('should accept a connectionTag and attach it to the incoming connection', async function () {
@@ -138,14 +144,16 @@ describe('Server', function () {
       })
       const connectionPromise = this.server.acceptConnection()
 
-      const clientConn = await createConnection({
+      const clientConnection = await createConnection({
         plugin: this.clientPlugin,
         destinationAccount,
         sharedSecret,
       })
 
-      const connection = await connectionPromise
-      assert.equal(connection.connectionTag, connectionTag)
+      const serverConnection = await connectionPromise
+      assert.instanceOf(clientConnection, Connection)
+      assert.instanceOf(serverConnection, Connection)
+      assert.equal(serverConnection.connectionTag, connectionTag)
     })
 
     it('should reject the connection if the connectionTag is modified', async function () {
@@ -265,11 +273,12 @@ describe('Server', function () {
       await new Promise((r) => serverStream.once('_send_loop_finished', r))
 
       // After it receives the next packet, immediately try to close the server
-      let closePromise: Promise<void>
       const pluginDisconnectSpy = sinon.spy(this.serverPlugin, 'disconnect')
-      this.server.once('_incoming_prepare', () => {
-        process.nextTick(() => {
-          closePromise = this.server.close()
+      const closePromise: Promise<void> = new Promise((resolve) => {
+        this.server.once('_incoming_prepare', () => {
+          process.nextTick(() => {
+            this.server.close().then(resolve)
+          })
         })
       })
 
@@ -284,7 +293,6 @@ describe('Server', function () {
       assert.equal('50', serverConn.totalReceived)
       assert.equal('50', clientConn.totalDelivered)
 
-      // @ts-ignore
       await closePromise
 
       assert.calledOnce(serverEndSpy)

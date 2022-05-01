@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import createLogger from 'ilp-logger'
+import createLogger, { Logger } from 'ilp-logger'
 import { DataAndMoneyStream } from './stream'
 import * as IlpPacket from 'ilp-packet'
 import * as cryptoHelper from './crypto'
@@ -140,6 +140,18 @@ enum RemoteState {
   Closed,
 }
 
+export interface PacketError {
+  sourceAmount: Long.Long
+  code: string
+}
+
+export interface TestVolleyResult {
+  maxDigits: number
+  exchangeRate: Rational
+  maxPacketAmounts: Long.Long[]
+  packetErrors: PacketError[]
+}
+
 function defaultGetExpiry(): Date {
   return new Date(Date.now() + DEFAULT_PACKET_TIMEOUT)
 }
@@ -184,7 +196,7 @@ export class Connection extends EventEmitter {
   protected closedStreams: Set<number>
   protected nextStreamId: number
   protected maxStreamId: number
-  protected log: any
+  protected log: Logger
   protected sending: boolean
   protected looping = false // whether there is a running send-loop
   protected congestion: CongestionController
@@ -359,11 +371,11 @@ export class Connection extends EventEmitter {
     this.log.info('closing connection')
     // Create Promises on each stream that resolve on the 'end' event so
     // we can wait for them all to be completed before closing the connection
-    const streamEndPromises: Promise<any>[] = []
-    for (const [_, stream] of this.streams) {
+    const streamEndPromises: Promise<void>[] = []
+    for (const [, stream] of this.streams) {
       if (stream.isOpen()) {
         streamEndPromises.push(
-          new Promise((resolve, reject) => {
+          new Promise((resolve) => {
             stream.on('end', resolve)
           })
         )
@@ -409,10 +421,10 @@ export class Connection extends EventEmitter {
     }
     // Create Promises on each stream that resolve on the 'close' event so
     // we can wait for them all to be completed before closing the connection
-    const streamClosePromises: Promise<any>[] = []
-    for (const [_, stream] of this.streams) {
+    const streamClosePromises: Promise<void>[] = []
+    for (const [, stream] of this.streams) {
       streamClosePromises.push(
-        new Promise((resolve, reject) => {
+        new Promise((resolve) => {
           stream.on('close', resolve)
         })
       )
@@ -577,7 +589,7 @@ export class Connection extends EventEmitter {
     // Tell peer how much data connection can receive
     responseFrames.push(new ConnectionMaxDataFrame(this.getIncomingOffsets().maxAcceptable))
 
-    const throwFinalApplicationError = async () => {
+    const constructFinalApplicationError = async () => {
       responseFrames = responseFrames.concat(this.queuedFrames)
       this.queuedFrames = []
       const responsePacket = new Packet(
@@ -587,7 +599,7 @@ export class Connection extends EventEmitter {
         responseFrames
       )
       this.log.trace('rejecting packet %s: %j', requestPacket.sequence, responsePacket)
-      throw new IlpPacket.Errors.FinalApplicationError(
+      return new IlpPacket.Errors.FinalApplicationError(
         '',
         await responsePacket.serializeAndEncrypt(
           this._pskKey,
@@ -627,7 +639,7 @@ export class Connection extends EventEmitter {
               new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed')
             )
           }
-          await throwFinalApplicationError()
+          throw await constructFinalApplicationError()
         }
 
         try {
@@ -635,7 +647,7 @@ export class Connection extends EventEmitter {
           this.handleNewStream(frame.streamId.toNumber())
         } catch (err) {
           this.log.debug('error handling new stream %s: %s', frame.streamId, err && err.message)
-          await throwFinalApplicationError()
+          throw await constructFinalApplicationError()
         }
       }
     }
@@ -645,7 +657,7 @@ export class Connection extends EventEmitter {
       this.handleControlFrames(requestPacket.frames)
     } catch (err) {
       this.log.debug('error handling frames:', err && err.message)
-      await throwFinalApplicationError()
+      throw await constructFinalApplicationError()
     }
 
     // TODO keep a running total of the offsets so we don't need to recalculate each time
@@ -658,7 +670,7 @@ export class Connection extends EventEmitter {
           ErrorCode.FlowControlError
         )
       )
-      await throwFinalApplicationError()
+      throw await constructFinalApplicationError()
     }
 
     const incomingAmount = Long.fromString(prepare.amount, true)
@@ -668,7 +680,7 @@ export class Connection extends EventEmitter {
         prepare.amount,
         requestPacket.prepareAmount
       )
-      await throwFinalApplicationError()
+      throw await constructFinalApplicationError()
     }
 
     // Ensure we can generate correct fulfillment
@@ -681,7 +693,7 @@ export class Connection extends EventEmitter {
         generatedCondition,
         prepare.executionCondition
       )
-      await throwFinalApplicationError()
+      throw await constructFinalApplicationError()
     }
 
     // Determine amount to receive on each frame
@@ -701,7 +713,15 @@ export class Connection extends EventEmitter {
       const streamId = frame.streamId.toNumber()
       // TODO make sure we don't lose any because of rounding issues
       const streamAmount = multiplyDivideFloor(incomingAmount, frame.shares, totalMoneyShares)
-      const stream = this.streams.get(streamId)!
+      const stream = this.streams.get(streamId)
+      if (!stream) {
+        this.log.debug("peer sent money for stream whose id we don't recognize: %d", streamId)
+        responseFrames.push(
+          new StreamCloseFrame(streamId, ErrorCode.StreamIdError, 'Unknown stream ID')
+        )
+
+        throw await constructFinalApplicationError()
+      }
       amountsToReceive.push({
         stream,
         amount: streamAmount,
@@ -725,7 +745,7 @@ export class Connection extends EventEmitter {
         )
 
         // TODO include error frame
-        await throwFinalApplicationError()
+        throw await constructFinalApplicationError()
       }
 
       // Reject the packet if any of the streams is already closed
@@ -735,7 +755,7 @@ export class Connection extends EventEmitter {
           new StreamCloseFrame(streamId, ErrorCode.StreamStateError, 'Stream is already closed')
         )
 
-        await throwFinalApplicationError()
+        throw await constructFinalApplicationError()
       }
     }
 
@@ -750,7 +770,7 @@ export class Connection extends EventEmitter {
       await this.shouldFulfill(incomingAmount, packetId, this.connectionTag).catch(async (err) => {
         this.removeIncomingHold(incomingAmount)
         this.log.debug('application declined to fulfill packet %s:', requestPacket.sequence, err)
-        await throwFinalApplicationError()
+        throw await constructFinalApplicationError()
       })
     }
 
@@ -763,7 +783,7 @@ export class Connection extends EventEmitter {
 
     // Tell peer about closed streams and how much each stream can receive
     if (!this.closed && this.remoteState !== RemoteState.Closed) {
-      for (const [_, stream] of this.streams) {
+      for (const [, stream] of this.streams) {
         if (!stream.isOpen() && !stream._remoteClosed) {
           this.log.trace('telling other side that stream %d is closed', stream.id)
           if (stream._errorMessage) {
@@ -1214,7 +1234,7 @@ export class Connection extends EventEmitter {
   protected async loadAndSendPacket(): Promise<void> {
     // Actually send on the next tick of the event loop in case multiple streams
     // have their limits raised at the same time
-    await new Promise((resolve, reject) => setImmediate(resolve))
+    await new Promise(setImmediate)
 
     this.log.trace('loadAndSendPacket')
     let amountToSend = Long.UZERO
@@ -1254,13 +1274,18 @@ export class Connection extends EventEmitter {
       this.remoteState = RemoteState.Closed
     }
 
+    if (!this.exchangeRate) {
+      // This shouldn't happen because loadAndSendPacket is only called after the exchange rate is established
+      throw new Error('Tried to send without an exchange rate established')
+    }
+
     // Determine how much to send based on amount frames and path maximum packet amount
     let maxAmountFromNextStream = this.congestion.testMaximumPacketAmount
-    if (this.exchangeRate!.greaterThanOne()) {
+    if (this.exchangeRate.greaterThanOne()) {
       // Ensure that the packet's PrepareAmount will never be larger than MAX_UNSIGNED_VALUE.
       maxAmountFromNextStream = minLong(
         maxAmountFromNextStream,
-        this.exchangeRate!.reciprocal().multiplyByLong(Long.MAX_UNSIGNED_VALUE)
+        this.exchangeRate.reciprocal().multiplyByLong(Long.MAX_UNSIGNED_VALUE)
       )
     }
     const streamsSentFrom = []
@@ -1279,8 +1304,9 @@ export class Connection extends EventEmitter {
         stream._remoteReceiveMax,
         stream._remoteReceived
       ).difference
-      const maxSourceAmount =
-        this.exchangeRate!.reciprocal().multiplyByLongCeil(maxDestinationAmount)
+      const maxSourceAmount = this.exchangeRate
+        .reciprocal()
+        .multiplyByLongCeil(maxDestinationAmount)
       if (maxSourceAmount.lessThan(amountToSendFromStream)) {
         this.log.trace(
           "stream %d could send %s but that would be more than the receiver says they can receive, so we'll send %s instead",
@@ -1315,9 +1341,9 @@ export class Connection extends EventEmitter {
         .subtract(amountToSendFromStream)
       /* tslint:disable-next-line:no-unnecessary-type-assertion */
       if (
-        this.exchangeRate!.multiplyByLong(amountLeftStreamWantsToSend).greaterThan(
-          checkedSubtract(stream._remoteReceiveMax, stream._remoteReceived).difference
-        )
+        this.exchangeRate
+          .multiplyByLong(amountLeftStreamWantsToSend)
+          .greaterThan(checkedSubtract(stream._remoteReceiveMax, stream._remoteReceived).difference)
       ) {
         requestPacket.frames.push(
           new StreamMoneyBlockedFrame(stream.id, stream.sendMax, stream.totalSent)
@@ -1396,7 +1422,7 @@ export class Connection extends EventEmitter {
     // Set minimum destination amount
     const minimumDestinationAmount = this.slippage
       .complement()
-      .multiplyByLong(this.exchangeRate!.multiplyByLong(amountToSend))
+      .multiplyByLong(this.exchangeRate.multiplyByLong(amountToSend))
     if (minimumDestinationAmount.greaterThan(0)) {
       requestPacket.prepareAmount = minimumDestinationAmount
     }
@@ -1454,11 +1480,11 @@ export class Connection extends EventEmitter {
    * (Internal) Send volley of test packets to find the exchange rate, its precision, and potential other amounts to try.
    * @private
    */
-  protected async sendTestPacketVolley(testPacketAmounts: number[]): Promise<any> {
+  protected async sendTestPacketVolley(testPacketAmounts: Long.Long[]): Promise<TestVolleyResult> {
     const results = await Promise.all(
       testPacketAmounts.map(async (amount) => {
         try {
-          return this.sendTestPacket(Long.fromNumber(amount, true))
+          return this.sendTestPacket(amount)
         } catch (err) {
           this.log.error('Error sending test packet for amount %d: %s', amount, err)
           return null
@@ -1474,7 +1500,7 @@ export class Connection extends EventEmitter {
           const receivedAmount = reader.readUInt64Long()
           const maximumAmount = reader.readUInt64Long()
           const maximumPacketAmount = multiplyDivideFloor(
-            Long.fromNumber(sourceAmount, true),
+            sourceAmount,
             maximumAmount,
             receivedAmount
           )
@@ -1492,22 +1518,18 @@ export class Connection extends EventEmitter {
     })
 
     // Figure out which test packet discovered the exchange rate with the most precision and gather packet error codes
-    const { maxDigits, exchangeRate, packetErrors } = results.reduce<any>(
-      ({ maxDigits, exchangeRate, packetErrors }, result, index) => {
+    return results.reduce<TestVolleyResult>(
+      ({ maxDigits, exchangeRate, maxPacketAmounts, packetErrors }, result, index) => {
         const sourceAmount = testPacketAmounts[index]
         if (result && (result as IlpPacket.IlpReject).code) {
           packetErrors.push({
-            sourceAmount: sourceAmount,
+            sourceAmount,
             code: (result as IlpPacket.IlpReject).code,
           })
         }
         if (result && (result as Packet).prepareAmount) {
           const prepareAmount = (result as Packet).prepareAmount
-          const exchangeRate = new Rational(
-            prepareAmount,
-            Long.fromNumber(sourceAmount, true),
-            true
-          )
+          const exchangeRate = new Rational(prepareAmount, sourceAmount, true)
           this.log.debug(
             'sending test packet of %d delivered %s (exchange rate: %s)',
             sourceAmount,
@@ -1518,15 +1540,15 @@ export class Connection extends EventEmitter {
             return {
               maxDigits: countDigits(prepareAmount),
               exchangeRate,
+              maxPacketAmounts,
               packetErrors,
             }
           }
         }
-        return { maxDigits, exchangeRate, packetErrors }
+        return { maxDigits, exchangeRate, maxPacketAmounts, packetErrors }
       },
-      { maxDigits: 0, exchangeRate: Rational.UZERO, packetErrors: [] }
+      { maxDigits: 0, exchangeRate: Rational.UZERO, maxPacketAmounts, packetErrors: [] }
     )
-    return { maxDigits, exchangeRate, maxPacketAmounts, packetErrors }
   }
 
   protected async setupExchangeRate(): Promise<void> {
@@ -1553,7 +1575,7 @@ export class Connection extends EventEmitter {
     }
 
     let retryDelay = RETRY_DELAY_START
-    let testPacketAmounts = [1, 1e3, 1e6, 1e9, 1e12]
+    let testPacketAmounts = [1, 1e3, 1e6, 1e9, 1e12].map((num) => Long.fromNumber(num, true))
     let attempts = 0
 
     // set a max attempts in case F08 & TXX errors keep occurring
@@ -1586,14 +1608,15 @@ export class Connection extends EventEmitter {
 
       // If we get here the first volley failed, try new volley using all unique packet amounts based on the max packets
       testPacketAmounts = maxPacketAmounts
-        .filter((amount: any) => !amount.equals(Long.MAX_UNSIGNED_VALUE))
-        .reduce((acc: any, curr: any) => [...new Set([...acc, curr.toString()])], [])
+        .filter((amount: Long.Long) => !amount.equals(Long.MAX_UNSIGNED_VALUE))
+        .reduce((acc: string[], curr: Long.Long) => [...new Set([...acc, curr.toString()])], [])
+        .map((str) => Long.fromString(str, true))
 
       // Check for any Txx Errors
-      if (packetErrors.some((error: any) => error.code[0] === 'T')) {
+      if (packetErrors.some((error: PacketError) => error.code[0] === 'T')) {
         // Find the smallest packet amount we tried in case we ran into Txx errors
-        const smallestPacketAmount = packetErrors.reduce((min: Long, error: any) => {
-          return minLong(min, Long.fromNumber(error.sourceAmount, true))
+        const smallestPacketAmount = packetErrors.reduce((min: Long, error: PacketError) => {
+          return minLong(min, error.sourceAmount)
         }, Long.MAX_UNSIGNED_VALUE)
         const reducedPacketAmount = smallestPacketAmount.subtract(smallestPacketAmount.divide(3))
         this.log.debug(
@@ -1646,16 +1669,21 @@ export class Connection extends EventEmitter {
 
     this.maybePushAccountFrames(requestPacket)
 
-    const prepare = {
-      destination: this._destinationAccount!,
+    if (!this._destinationAccount) {
+      this.log.error('tried to send test packet without having a destination account')
+      throw new Error('Tried to send test packet without having a destination account')
+    }
+
+    const prepare: IlpPacket.IlpPrepare = {
+      destination: this._destinationAccount,
       amount: amount.toString(),
       data: await requestPacket.serializeAndEncrypt(this._pskKey),
       executionCondition: cryptoHelper.generateRandomCondition(),
-      expiresAt: this.getExpiry(this._destinationAccount!),
+      expiresAt: this.getExpiry(this._destinationAccount),
     }
 
     /* tslint:disable-next-line:no-unnecessary-type-assertion */
-    const responseData = await (new Promise((resolve, reject) => {
+    const responseData = await new Promise<Buffer | null>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.log.error('test packet %s timed out before we got a response', requestPacket.sequence)
         resolve(null)
@@ -1667,7 +1695,7 @@ export class Connection extends EventEmitter {
           resolve(result)
         })
         .catch(reject)
-    }) as Promise<Buffer | null>)
+    })
 
     if (!responseData) {
       return null
@@ -1748,12 +1776,17 @@ export class Connection extends EventEmitter {
     ])
 
     try {
-      const prepare = {
-        destination: this._destinationAccount!,
+      if (!this._destinationAccount) {
+        this.log.error('tried to close connection without having a destination account')
+        throw new Error('Tried to close connection without having a destination account')
+      }
+
+      const prepare: IlpPacket.IlpPrepare = {
+        destination: this._destinationAccount,
         amount: '0',
         data: await packet.serializeAndEncrypt(this._pskKey),
         executionCondition: cryptoHelper.generateRandomCondition(),
-        expiresAt: this.getExpiry(this._destinationAccount!),
+        expiresAt: this.getExpiry(this._destinationAccount),
       }
       await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
     } catch (err) {
@@ -1795,12 +1828,18 @@ export class Connection extends EventEmitter {
       fulfillment = await cryptoHelper.generateFulfillment(this._fulfillmentKey, data)
       executionCondition = await cryptoHelper.hash(fulfillment)
     }
-    const prepare = {
-      destination: this._destinationAccount!,
+
+    if (!this._destinationAccount) {
+      this.log.error('tried to send a packet without having a destination account')
+      throw new Error('Tried to send a packet without having a destination account')
+    }
+
+    const prepare: IlpPacket.IlpPrepare = {
+      destination: this._destinationAccount,
       amount: sourceAmount.toString(),
       data,
       executionCondition,
-      expiresAt: this.getExpiry(this._destinationAccount!),
+      expiresAt: this.getExpiry(this._destinationAccount),
     }
 
     const responseData = await this.plugin.sendData(IlpPacket.serializeIlpPrepare(prepare))
@@ -1956,7 +1995,7 @@ export class Connection extends EventEmitter {
       )
       const delay = this.retryDelay
       this.retryDelay = Math.min(this.retryDelay * 2, RETRY_DELAY_MAX)
-      await new Promise((resolve, reject) => setTimeout(resolve, delay))
+      await new Promise((resolve) => setTimeout(resolve, delay))
     } else {
       this.log.error(
         'unexpected error. code: %s, triggered by: %s, message: %s, data: %h',

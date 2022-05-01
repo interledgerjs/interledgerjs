@@ -20,6 +20,14 @@ module.exports = {
   },
   rules: {
     '@typescript-eslint/no-empty-interface': ['off'],
+    '@typescript-eslint/no-unused-vars': [
+      'warn', // or error
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
   },
   globals: {
     BigInt: 'readable',
@@ -33,6 +41,7 @@ module.exports = {
         // warned about using 'any' or @ts-ignore comments.
         '@typescript-eslint/no-explicit-any': ['off'],
         '@typescript-eslint/ban-ts-comment': ['off'],
+        '@typescript-eslint/no-non-null-assertion': ['off'],
       },
     },
   ],

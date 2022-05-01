@@ -29,7 +29,7 @@ import * as PacketV1 from '../../src/packet'
     .add('v1', function () {
       moneyPacketV1._serialize()
     })
-    .on('cycle', function (event: any) {
+    .on('cycle', function (event: Benchmark.Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})
@@ -40,7 +40,7 @@ import * as PacketV1 from '../../src/packet'
     .add('v1', function () {
       PacketV1.Packet._deserializeUnencrypted(packetBuffer)
     })
-    .on('cycle', function (event: any) {
+    .on('cycle', function (event: Benchmark.Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})

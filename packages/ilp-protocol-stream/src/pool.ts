@@ -115,7 +115,7 @@ export class ServerConnectionPool {
     delete this.pendingConnections[id]
 
     // Wait for the next tick of the event loop before handling the prepare
-    await new Promise((resolve, reject) => setImmediate(resolve))
+    await new Promise(setImmediate)
     return connection
   }
 

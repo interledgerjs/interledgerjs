@@ -5,12 +5,9 @@ import {
   verifyReceipt,
   RECEIPT_VERSION,
 } from '../../src/util/receipt'
-import * as sinon from 'sinon'
-import * as Chai from 'chai'
-import { Writer } from 'oer-utils'
+import sinon from 'sinon'
+import Chai from 'chai'
 import chaiAsPromised from 'chai-as-promised'
-import * as Long from 'long'
-import { longFromValue } from '../../src/util/long'
 import { randomBytes } from '../../src/crypto'
 import packetsFixtures from '../fixtures/packets.json'
 Chai.use(chaiAsPromised)

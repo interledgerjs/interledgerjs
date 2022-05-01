@@ -1,4 +1,4 @@
-import createLogger from 'ilp-logger'
+import createLogger, { Logger } from 'ilp-logger'
 import * as Long from 'long'
 import { Duplex } from 'stream'
 import { DataQueue } from './util/data-queue'
@@ -48,7 +48,7 @@ export class DataAndMoneyStream extends Duplex {
   /** @private */
   _remoteSentEnd: boolean
 
-  protected log: any
+  protected log: Logger
   protected isServer: boolean
 
   protected _totalSent: Long
@@ -457,7 +457,7 @@ export class DataAndMoneyStream extends Duplex {
    * (Called internally by the Node Stream when the stream ends)
    * @private
    */
-  _final(callback: (...args: any[]) => void): void {
+  _final(callback: (error: Error | null | undefined) => void): void {
     this.log.info('stream is closing')
     const finish = (err?: Error) => {
       if (err) {
@@ -498,7 +498,7 @@ export class DataAndMoneyStream extends Duplex {
    * (Called internally by the Node Stream when stream.destroy is called)
    * @private
    */
-  _destroy(error: Error | undefined | null, callback: (...args: any[]) => void): void {
+  _destroy(error: Error | null, callback: (error: Error | null) => void): void {
     this.log.error('destroying stream because of error:', error)
     this.closed = true
     if (error) {
@@ -522,7 +522,7 @@ export class DataAndMoneyStream extends Duplex {
    * (Called internally by the Node Stream when stream.write is called)
    * @private
    */
-  _write(chunk: Buffer, encoding: string, callback: (...args: any[]) => void): void {
+  _write(chunk: Buffer, encoding: string, callback: () => void): void {
     this.log.trace('%d bytes written to the outgoing data queue', chunk.length)
     this._outgoingData.push(chunk, callback)
     this.emit('_maybe_start_send_loop')
@@ -532,7 +532,7 @@ export class DataAndMoneyStream extends Duplex {
    * (Called internally by the Node Stream when stream.write is called)
    * @private
    */
-  _writev(chunks: { chunk: Buffer; encoding: string }[], callback: (...args: any[]) => void): void {
+  _writev(chunks: { chunk: Buffer; encoding: string }[], callback: () => void): void {
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i]
       this.log.trace('%d bytes written to the outgoing data queue', chunk.chunk.length)
@@ -590,7 +590,8 @@ export class DataAndMoneyStream extends Duplex {
         toSend.offset = toSend.offset + size
         return { data, offset }
       } else {
-        return this._outgoingDataToRetry.shift()!
+        this._outgoingDataToRetry.shift()
+        return toSend
       }
     }
 
