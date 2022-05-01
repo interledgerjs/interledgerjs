@@ -393,26 +393,29 @@ describe('Connection', function () {
       assert.notCalled(connectionCloseSpy)
     })
 
-    it('should emit error on attempting to send data on a closed connection if an error listener is present', async function () {
+    it('should emit error on next tick after attempting to send data on a closed connection if an error listener is present', async function () {
       const serverStreamData = sinon.spy()
+      const clientErrorHandler = sinon.spy()
+
       this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
         stream.on('data', serverStreamData)
       })
       const clientStream = this.clientConn.createStream()
-      clientStream.on('error', (err: Error) => {
-        assert.equal(err.message, 'write after end')
-      })
-      clientStream.write('hello')
-      await this.serverConn.end()
-      clientStream.write('hello')
+      clientStream.on('error', clientErrorHandler)
 
+      // Writing when the stream is open should return true and trigger a data event on the server stream
+      assert.notCalled(serverStreamData)
+      assert.isTrue(clientStream.write('hello'))
+      await this.serverConn.end()
       assert.calledOnce(serverStreamData)
-    })
 
-    it('should throw error on sending data if no error listener', async function () {
-      const clientStream = this.clientConn.createStream()
-      await this.serverConn.end()
-      assert.throws(() => clientStream.write('hello'), 'write after end')
+      // Writing after the stream is closed should return false and, on the next tick, call the error handler
+      assert.isFalse(clientStream.write('hello'))
+      await new Promise(setImmediate)
+      assert.calledOnceWithMatch(
+        clientErrorHandler,
+        sinon.match.instanceOf(Error).and(sinon.match.has('message', 'write after end'))
+      )
     })
 
     it('should throw error on sending money from client after the client end is called', async function () {
@@ -457,21 +460,44 @@ describe('Connection', function () {
     })
 
     it('should close the connection immediately and not allow money or data to be transmitted', async function () {
+      const clientWriteCallback = sinon.spy()
+      const serverWriteCallback = sinon.spy()
       const clientStream = this.clientConn.createStream()
       const serverStream = this.serverConn.createStream()
+
       await this.serverConn.destroy()
 
-      assert.throws(
-        () => clientStream.write('hello'),
-        'Cannot call write after a stream was destroyed'
-      )
+      assert.isTrue(clientStream.destroyed)
+      assert.isTrue(serverStream.destroyed)
+
+      try {
+        assert.isFalse(clientStream.write('hello', clientWriteCallback))
+      } catch (err) {
+        // Older Node.js versions (<=12) will throw here, newer ones won't. Therefore, we handle
+        // both cases and, if an error is thrown, we check the error message.
+        assert.equal(err.message, 'Cannot call write after a stream was destroyed')
+      }
+      try {
+        assert.isFalse(serverStream.write('hello', serverWriteCallback))
+      } catch (err) {
+        // Older Node.js versions (<=12) will throw here, newer ones won't. Therefore, we handle
+        // both cases and, if an error is thrown, we check the error message.
+        assert.equal(err.message, 'Cannot call write after a stream was destroyed')
+      }
       assert.throws(() => clientStream.setSendMax(300), 'Stream already closed')
+      await new Promise(setImmediate)
+      assert.calledOnceWithMatch(
+        clientWriteCallback,
+        sinon.match
+          .instanceOf(Error)
+          .and(sinon.match.has('message', 'Cannot call write after a stream was destroyed'))
+      )
       await assert.isRejected(clientStream.sendTotal(300), 'Stream already closed')
-      // Node v10.0.0 throws 'Cannot call write after a stream was destroyed'
-      // Node v8.11.1 throws 'write after end'
-      assert.throws(
-        () => serverStream.write('hello'),
-        /Cannot call write after a stream was destroyed|write after end/
+      assert.calledOnceWithMatch(
+        serverWriteCallback,
+        sinon.match
+          .instanceOf(Error)
+          .and(sinon.match.has('message', 'Cannot call write after a stream was destroyed'))
       )
       assert.throws(() => serverStream.setSendMax(300), 'Stream already closed')
       await assert.isRejected(serverStream.sendTotal(300), 'Stream already closed')

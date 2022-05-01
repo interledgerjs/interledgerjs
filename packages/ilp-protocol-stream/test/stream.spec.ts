@@ -611,19 +611,22 @@ describe('DataAndMoneyStream', function () {
       assert.equal(closeFrame.errorMessage, expectFrame.errorMessage)
     })
 
-    it('should not allow more data to be written once the stream is closed and throw an error if there is no error listener', async function () {
+    it('should not allow more data to be written once the stream is closed and emit an error next tick if error listener present', async function () {
+      const clientErrorHandler = sinon.spy()
+      const clientWriteCallback = sinon.spy()
       const clientStream = this.clientConn.createStream()
+      clientStream.on('error', clientErrorHandler)
       clientStream.end()
-      assert.throws(() => clientStream.write('hello'), 'write after end')
-    })
-
-    it('should not allow more data to be written once the stream is closed and emit an error if error listener present', async function () {
-      const clientStream = this.clientConn.createStream()
-      clientStream.on('error', (err: Error) => {
-        assert.equal(err.message, 'write after end')
-      })
-      clientStream.end()
-      clientStream.write('hello')
+      clientStream.write('hello', clientWriteCallback)
+      await new Promise(setImmediate)
+      assert.calledOnceWithMatch(
+        clientWriteCallback,
+        sinon.match.instanceOf(Error).and(sinon.match.has('message', 'write after end'))
+      )
+      assert.calledOnceWithMatch(
+        clientErrorHandler,
+        sinon.match.instanceOf(Error).and(sinon.match.has('message', 'write after end'))
+      )
     })
 
     it('should not allow more money to be sent once the stream is closed and throw an error', async function () {
