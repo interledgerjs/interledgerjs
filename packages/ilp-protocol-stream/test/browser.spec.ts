@@ -4,7 +4,7 @@
 
 import assert from 'assert'
 import * as path from 'path'
-import * as puppeteer from 'puppeteer'
+import puppeteer from 'puppeteer'
 import webpack from 'webpack'
 import PluginMiniAccounts from 'ilp-plugin-mini-accounts'
 import { createServer, Connection } from '../src'

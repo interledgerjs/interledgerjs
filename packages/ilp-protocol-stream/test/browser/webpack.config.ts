@@ -13,7 +13,10 @@ const config: Configuration = {
       {
         test: /\.tsx?$/,
         loader: 'ts-loader',
-        options: { onlyCompileBundledFiles: true },
+        options: {
+          onlyCompileBundledFiles: true,
+          configFile: path.resolve(__dirname, '../../tsconfig.build.json'),
+        },
       },
     ],
   },
