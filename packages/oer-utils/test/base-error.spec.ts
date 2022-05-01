@@ -12,6 +12,8 @@ describe('BaseError', function () {
 
   it('should still work if Error.captureStackTrace is not available', function () {
     const captureStackTrace = Error.captureStackTrace
+
+    // @ts-expect-error We're not supposed to delete stuff off of built-ins
     delete Error.captureStackTrace
 
     const err = new BaseError()

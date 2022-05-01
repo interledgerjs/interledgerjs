@@ -2,10 +2,10 @@ import 'mocha'
 import { PayoutConnection } from '../src/lib/PayoutConnection'
 import * as sinon from 'sinon'
 import * as Chai from 'chai'
+import { Plugin } from 'ilp-plugin'
 const assert = Object.assign(Chai.assert, sinon.assert)
 
-/* eslint-disable @typescript-eslint/no-empty-function */
-function noop() {}
+const noop = () => Promise.resolve()
 
 describe('PayoutConnection', function () {
   describe('close', function () {
@@ -15,7 +15,9 @@ describe('PayoutConnection', function () {
       const payer = new PayoutConnection({
         // send() will fail because no-one is listening
         pointer: 'http://127.0.0.1:54321',
-        plugin: { disconnect: noop },
+        plugin: { disconnect: noop } as Plugin,
+        retryInterval: 10,
+        maxRetries: 5,
       })
       payer.send(123)
       payer.close()
@@ -25,7 +27,9 @@ describe('PayoutConnection', function () {
       const payer = new PayoutConnection({
         // send() will fail because no-one is listening
         pointer: 'http://127.0.0.1:54321',
-        plugin: { disconnect: noop },
+        plugin: { disconnect: noop } as Plugin,
+        retryInterval: 10,
+        maxRetries: 5,
       })
       payer.send(123)
       await new Promise((resolve) => setTimeout(resolve, 10))
@@ -38,7 +42,7 @@ describe('PayoutConnection', function () {
       const payer = new PayoutConnection({
         // send() will fail because no-one is listening
         pointer: 'http://127.0.0.1:54321',
-        plugin: { disconnect: noop },
+        plugin: { disconnect: noop } as Plugin,
         retryInterval: 10,
         maxRetries: 5,
       })
@@ -46,6 +50,7 @@ describe('PayoutConnection', function () {
       payer.send(123)
       await new Promise((resolve) => setTimeout(resolve, 100))
       assert.equal(payer.isIdle(), true)
+      // @ts-expect-error Retries is a private field
       assert.equal(payer.retries, 6)
     })
   })

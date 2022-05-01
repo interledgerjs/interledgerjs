@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
 import * as crypto from 'crypto'
 import { URL } from 'url'
+import createLogger from 'ilp-logger'
 
-const log = require('ilp-logger')('ilp-plugin')
+const log = createLogger('ilp-plugin')
 
 export interface Plugin {
   connect(params?: Record<string, unknown>): Promise<void>
@@ -44,6 +44,8 @@ export const pluginFromEnvironment = function (opts?: CredentialOptions): Plugin
 
   log.debug('creating plugin with module', module)
   log.debug('creating plugin with credentials', credentials)
+
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const Plugin = require(module)
   return new Plugin(credentials)
 } as ModuleExport

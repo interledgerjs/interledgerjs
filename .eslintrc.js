@@ -37,10 +37,8 @@ module.exports = {
     {
       files: ['**/*.spec.ts'],
       rules: {
-        // In test code, it's often useful to explicitly disable typing so we don't want to be
-        // warned about using 'any' or @ts-ignore comments.
+        // In test code, it's often useful to explicitly disable typing
         '@typescript-eslint/no-explicit-any': ['off'],
-        '@typescript-eslint/ban-ts-comment': ['off'],
         '@typescript-eslint/no-non-null-assertion': ['off'],
       },
     },
