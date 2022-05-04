@@ -128,7 +128,7 @@ In the `scripts` section of the `package.json`, be sure to have `build`, `cover`
 "scripts": {
   "build": "tsc -p tsconfig.build.json",
   "cover": "...",
-  "codecov": "codecov --root=../../ -f coverage/*.json -F <flagname>"
+  "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F <flagname>"
 }
 ```
 
