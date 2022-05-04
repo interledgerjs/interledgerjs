@@ -3,11 +3,7 @@
 This document describes the JavaScript implementation of Interledger's STREAM transport protocol.
 
 [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-stream.svg?style=flat)](https://npmjs.org/package/ilp-protocol-stream)
-[![CircleCI](https://circleci.com/gh/interledgerjs/ilp-protocol-stream.svg?style=shield)](https://circleci.com/gh/interledgerjs/ilp-protocol-stream)
-[![codecov](https://codecov.io/gh/interledgerjs/ilp-protocol-stream/branch/master/graph/badge.svg)](https://codecov.io/gh/interledgerjs/ilp-protocol-stream)
 [![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
-[![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-protocol-stream) [![Greenkeeper badge](https://badges.greenkeeper.io/interledgerjs/ilp-protocol-stream.svg)](https://greenkeeper.io/)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Finterledgerjs%2Filp-protocol-stream.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Finterledgerjs%2Filp-protocol-stream?ref=badge_shield)
 
 ## References
 
