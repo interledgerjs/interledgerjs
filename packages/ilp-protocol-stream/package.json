@@ -1,6 +1,6 @@
 {
   "name": "ilp-protocol-stream",
-  "version": "2.7.1",
+  "version": "2.7.2-alpha.0",
   "description": "Interledger Transport Protocol for sending multiple streams of money and data over ILP.",
   "main": "dist/src/index.js",
   "browser": {
