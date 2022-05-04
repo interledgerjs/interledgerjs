@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
 import { PayoutConnection } from './lib/PayoutConnection'
 import { Logger, defaultLogger } from './lib/Logger'
 import { pluginFromEnvironment as makeIlpPlugin, Plugin } from 'ilp-plugin'

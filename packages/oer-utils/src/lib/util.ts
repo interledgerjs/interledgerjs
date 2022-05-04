@@ -6,8 +6,7 @@ import * as Long from 'long'
 export const MAX_SAFE_BYTES = 6
 
 const INTEGER_REGEX = /^-?[0-9]+$/
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function isInteger(value: any): boolean {
+export function isInteger(value: unknown): boolean {
   if (typeof value === 'number') {
     return isFinite(value) && Math.floor(value) === value
   } else if (typeof value === 'string') {
@@ -50,10 +49,7 @@ export function bufferToLong(buffer: Buffer, unsigned: boolean): Long {
     return buffer.reduce((sum, value) => sum.shiftLeft(8).add(value), Long.UZERO)
   } else {
     return buffer.reduce(
-      (sum, value, i) =>
-        sum.multiply(256).add(
-          i === 0 && 0x80 <= value ? value - 0x100 : value // eslint-disable-line yoda
-        ),
+      (sum, value, i) => sum.multiply(256).add(i === 0 && 0x80 <= value ? value - 0x100 : value),
       Long.ZERO
     )
   }
@@ -72,6 +68,7 @@ const LONG_VAR_INT_SIZES: LongSizeRange[] = new Array(8)
 
 for (let i = 0; i < 8; i++) {
   LONG_VAR_UINT_SIZES[i] = {
+    min: Long.UZERO,
     max: Long.MAX_UNSIGNED_VALUE.shiftRightUnsigned(64 - 8 * (i + 1)),
     bytes: i + 1,
   }
@@ -82,8 +79,8 @@ for (let i = 0; i < 8; i++) {
   }
 }
 
-const VAR_UINT_SIZES: NumberSizeRange[] = makeNumberRanges(LONG_VAR_UINT_SIZES) // eslint-disable-line @typescript-eslint/no-use-before-define
-const VAR_INT_SIZES: NumberSizeRange[] = makeNumberRanges(LONG_VAR_INT_SIZES) // eslint-disable-line @typescript-eslint/no-use-before-define
+const VAR_UINT_SIZES: NumberSizeRange[] = makeNumberRanges(LONG_VAR_UINT_SIZES)
+const VAR_INT_SIZES: NumberSizeRange[] = makeNumberRanges(LONG_VAR_INT_SIZES)
 
 // Returns the minimum number of bytes required to encode the value.
 export function getLongUIntBufferSize(value: Long): number {
@@ -102,17 +99,14 @@ export function getUIntBufferSize(value: number): number {
     const item = VAR_UINT_SIZES[i]
     if (value <= item.max) return item.bytes
   }
-  return computeLongBufferSize(Long.fromNumber(value, true)) // eslint-disable-line @typescript-eslint/no-use-before-define
+  return computeLongBufferSize(Long.fromNumber(value, true))
 }
 
 // Returns the minimum number of bytes required to encode the value.
 export function getLongIntBufferSize(value: Long): number {
   for (let i = 0; i < LONG_VAR_INT_SIZES.length; i++) {
     const item = LONG_VAR_INT_SIZES[i]
-    if (
-      value.greaterThanOrEqual(item.min!) && // eslint-disable-line @typescript-eslint/no-non-null-assertion
-      value.lessThanOrEqual(item.max)
-    ) {
+    if (value.greaterThanOrEqual(item.min) && value.lessThanOrEqual(item.max)) {
       // Fast path: no extra work converting a Long to a String.
       return item.bytes
     }
@@ -123,10 +117,9 @@ export function getLongIntBufferSize(value: Long): number {
 export function getIntBufferSize(value: number): number {
   for (let i = 0; i < VAR_INT_SIZES.length; i++) {
     const item = VAR_INT_SIZES[i]
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    if (value >= item.min! && value <= item.max) return item.bytes
+    if (value >= item.min && value <= item.max) return item.bytes
   }
-  return computeLongBufferSize(Long.fromNumber(value, false)) // eslint-disable-line @typescript-eslint/no-use-before-define
+  return computeLongBufferSize(Long.fromNumber(value, false))
 }
 
 function computeLongBufferSize(value: Long): number {
@@ -135,14 +128,14 @@ function computeLongBufferSize(value: Long): number {
 
 interface LongSizeRange {
   // UInt ranges don't use min.
-  min?: Long
+  min: Long
   max: Long
   bytes: number
 }
 
 interface NumberSizeRange {
   // UInt ranges don't use min.
-  min?: number
+  min: number
   max: number
   bytes: number
 }

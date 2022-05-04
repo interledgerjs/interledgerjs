@@ -1,4 +1,4 @@
-import * as debug from 'debug'
+import debug from 'debug'
 
 export class Logger {
   private namespace: string

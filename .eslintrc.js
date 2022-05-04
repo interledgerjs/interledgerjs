@@ -20,6 +20,14 @@ module.exports = {
   },
   rules: {
     '@typescript-eslint/no-empty-interface': ['off'],
+    '@typescript-eslint/no-unused-vars': [
+      'warn', // or error
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+        caughtErrorsIgnorePattern: '^_',
+      },
+    ],
   },
   globals: {
     BigInt: 'readable',
@@ -29,9 +37,9 @@ module.exports = {
     {
       files: ['**/*.spec.ts'],
       rules: {
-        // In test code, it's often useful to explicitly disable typing so we don't want to be
-        // warned about using 'any'.
+        // In test code, it's often useful to explicitly disable typing
         '@typescript-eslint/no-explicit-any': ['off'],
+        '@typescript-eslint/no-non-null-assertion': ['off'],
       },
     },
   ],

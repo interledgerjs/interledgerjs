@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types */
 import { Predictor, Reader, Writer } from 'oer-utils'
 import { dateToInterledgerTime, interledgerTimeToDate, INTERLEDGER_TIME_LENGTH } from './utils/date'
-import * as assert from 'assert'
+import assert from 'assert'
 import { IlpAddress, isValidIlpAddress } from './utils/address'
 import * as Long from 'long'
 import * as errors from './errors'
@@ -200,11 +199,12 @@ const isUInt64 = (o: string): boolean => {
   }
 }
 
-export const isIlpReply = (o: any): o is IlpReply => isFulfill(o) || isReject(o)
+export const isIlpReply = (o: unknown): o is IlpReply => isFulfill(o) || isReject(o)
 
-export const isPrepare = (o: any): o is IlpPrepare =>
-  typeof o === 'object' &&
-  o !== null &&
+const isObject = (o: unknown): o is Record<string, unknown> => typeof o === 'object' && o !== null
+
+export const isPrepare = (o: unknown): o is IlpPrepare =>
+  isObject(o) &&
   typeof o.amount === 'string' &&
   isUInt64(o.amount) && // All ILP packet amounts must be within u64 range or should fail serialization
   o.expiresAt instanceof Date &&
@@ -214,16 +214,14 @@ export const isPrepare = (o: any): o is IlpPrepare =>
   o.executionCondition.byteLength === 32 &&
   Buffer.isBuffer(o.data)
 
-export const isFulfill = (o: any): o is IlpFulfill =>
-  typeof o === 'object' &&
-  o !== null &&
+export const isFulfill = (o: unknown): o is IlpFulfill =>
+  isObject(o) &&
   Buffer.isBuffer(o.fulfillment) &&
   o.fulfillment.byteLength === 32 &&
   Buffer.isBuffer(o.data)
 
-export const isReject = (o: any): o is IlpReject =>
-  typeof o === 'object' &&
-  o !== null &&
+export const isReject = (o: unknown): o is IlpReject =>
+  isObject(o) &&
   typeof o.code === 'string' &&
   (isValidIlpAddress(o.triggeredBy) || o.triggeredBy === '') && // ILP address or empty string
   typeof o.message === 'string' &&

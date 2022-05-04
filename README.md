@@ -14,15 +14,16 @@
 
 ### Utilities
 
-| Name                                                  | Version                                                                                                                                 | Description                                                |
-| :---------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
-| [`ilp-logger`](./packages/ilp-logger)                 | [![NPM Package](https://img.shields.io/npm/v/ilp-logger.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-logger)                 | Debug logging utility for Interledger modules              |
-| [`ilp-packet`](./packages/ilp-packet)                 | [![NPM Package](https://img.shields.io/npm/v/ilp-packet.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-packet)                 | Serialization/deserialization utility for ILP packets      |
-| [`ilp-plugin`](./packages/ilp-plugin)                 | [![NPM Package](https://img.shields.io/npm/v/ilp-plugin.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-plugin)                 | Connect to a local, open BTP server                        |
-| [`ilp-protocol-ccp`](./packages/ilp-protocol-ccp)     | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ccp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ccp)     | Serialization/deserialization for the CCP routing protocol |
-| [`ilp-protocol-ildcp`](./packages/ilp-protocol-ildcp) | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ildcp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ildcp) | Fetch asset and account details from a parent              |
-| [`oer-utils`](./packages/oer-utils)                   | [![NPM Package](https://img.shields.io/npm/v/oer-utils.svg?style=flat&logo=npm)](https://npmjs.org/package/oer-utils)                   | Tools for OER parsing and serialization                    |
-
+| Name                                                    | Version                                                                                                                                   | Description                                                |
+| :------------------------------------------------------ | :---------------------------------------------------------------------------------------------------------------------------------------- | :--------------------------------------------------------- |
+| [`ilp-logger`](./packages/ilp-logger)                   | [![NPM Package](https://img.shields.io/npm/v/ilp-logger.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-logger)                   | Debug logging utility for Interledger modules              |
+| [`ilp-packet`](./packages/ilp-packet)                   | [![NPM Package](https://img.shields.io/npm/v/ilp-packet.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-packet)                   | Serialization/deserialization utility for ILP packets      |
+| [`ilp-plugin`](./packages/ilp-plugin)                   | [![NPM Package](https://img.shields.io/npm/v/ilp-plugin.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-plugin)                   | Connect to a local, open BTP server                        |
+| [`ilp-protocol-ccp`](./packages/ilp-protocol-ccp)       | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ccp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ccp)       | Serialization/deserialization for the CCP routing protocol |
+| [`ilp-protocol-ildcp`](./packages/ilp-protocol-ildcp)   | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-ildcp.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-ildcp)   | Fetch asset and account details from a parent              |
+| [`ilp-protocol-stream`](./packages/ilp-protocol-stream) | [![NPM Package](https://img.shields.io/npm/v/ilp-protocol-stream.svg?style=flat&logo=npm)](https://npmjs.org/package/ilp-protocol-stream) | Reliably send streams of money and data over ILP           |
+| [`oer-utils`](./packages/oer-utils)                     | [![NPM Package](https://img.shields.io/npm/v/oer-utils.svg?style=flat&logo=npm)](https://npmjs.org/package/oer-utils)                     | Tools for OER parsing and serialization                    |
+ 
 ## Installation
 
 The monorepo is set up to use lerna and yarn workspaces. To get started run the following:
@@ -127,7 +128,7 @@ In the `scripts` section of the `package.json`, be sure to have `build`, `cover`
 "scripts": {
   "build": "tsc -p tsconfig.build.json",
   "cover": "...",
-  "codecov": "codecov --root=../../ -f coverage/*.json -F <flagname>"
+  "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F <flagname>"
 }
 ```
 

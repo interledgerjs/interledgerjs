@@ -51,11 +51,11 @@ class Reader {
    * Pop the most recently bookmarked cursor position off the stack.
    */
   restore(): void {
-    if (!this.bookmarks.length) {
+    const maybeCursor = this.bookmarks.pop()
+    if (typeof maybeCursor === 'undefined') {
       throw new Error('Cannot restore bookmark when no bookmark set')
     }
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    this.cursor = this.bookmarks.pop()!
+    this.cursor = maybeCursor
   }
 
   /**
