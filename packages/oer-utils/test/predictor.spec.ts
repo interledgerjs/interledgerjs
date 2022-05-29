@@ -1,6 +1,6 @@
 import Predictor from '../src/lib/predictor'
 import Writer, { WriterInterface } from '../src/lib/writer'
-import * as Long from 'long'
+import Long from 'long'
 
 import chai = require('chai')
 const assert = chai.assert
@@ -24,6 +24,7 @@ describe('Predictor', function () {
       for (const method of Object.getOwnPropertyNames(Object.getPrototypeOf(writer))) {
         if (method.startsWith('write')) {
           assert.typeOf(
+            // @ts-expect-error We're checking whether this property exists and are fine if the type checker doesn't know
             predictor[method],
             'function',
             `Expected predictor to have ${method} method`

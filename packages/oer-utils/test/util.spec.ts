@@ -1,5 +1,5 @@
 import * as util from '../src/lib/util'
-import * as Long from 'long'
+import Long from 'long'
 
 import chai = require('chai')
 const assert = chai.assert

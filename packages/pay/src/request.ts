@@ -2,6 +2,7 @@ import { Logger } from 'ilp-logger'
 import {
   deserializeIlpReply,
   IlpError,
+  IlpErrorCode,
   IlpPacketType,
   IlpReject,
   IlpReply,
@@ -122,8 +123,8 @@ export const generateKeys = (
 
     if (isFulfill(ilpReply)) {
       log.debug('got Fulfill. sentAmount=%s', sourceAmount)
-    } else {
-      log.debug('got %s Reject: %s', ilpReply.code, ILP_ERROR_CODES[ilpReply.code])
+    } else if (isReject(ilpReply)) {
+      log.debug('got %s Reject: %s', ilpReply.code, ILP_ERROR_CODES[ilpReply.code as IlpErrorCode])
 
       if (ilpReply.message.length > 0 || ilpReply.triggeredBy.length > 0) {
         log.trace('Reject message="%s" triggeredBy=%s', ilpReply.message, ilpReply.triggeredBy)
@@ -162,9 +163,9 @@ export const generateKeys = (
       log.warn('data in reply unexpectedly failed decryption.')
     }
 
-    return isReject(ilpReply)
-      ? new StreamReject(log, ilpReply, responseFrames, destinationAmount)
-      : new StreamFulfill(log, responseFrames, destinationAmount)
+    return isFulfill(ilpReply)
+      ? new StreamFulfill(log, responseFrames, destinationAmount)
+      : new StreamReject(log, ilpReply, responseFrames, destinationAmount)
   }
 }
 

@@ -1,6 +1,6 @@
 import { UnderflowError } from '../errors/underflow-error'
 import { ParseError } from '../errors/parse-error'
-import * as Long from 'long'
+import Long from 'long'
 import { bufferToLong, MAX_SAFE_BYTES } from './util'
 
 class Reader {
@@ -598,35 +598,41 @@ interface Reader {
 }
 
 // Create {read,peek,skip}UInt{8,16,32}{,Number,Long} shortcuts
-;['read', 'peek', 'skip'].forEach((verb) => {
-  ;[1, 2, 4, 8].forEach((bytes) => {
-    Reader.prototype[verb + 'UInt' + bytes * 8] = function () {
-      return this[verb + 'UInt'](bytes)
+;([8, 16, 32, 64] as const).forEach((bits) => {
+  ;(['read', 'peek'] as const).forEach((verb) => {
+    Reader.prototype[`${verb}UInt${bits}`] = function () {
+      return this[`${verb}UInt`](bits / 8)
     }
 
-    Reader.prototype[verb + 'Int' + bytes * 8] = function () {
-      return this[verb + 'Int'](bytes)
+    Reader.prototype[`${verb}Int${bits}`] = function () {
+      return this[`${verb}Int`](bits / 8)
     }
 
-    // No point if having typed skips
-    if (verb !== 'skip') {
-      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Number'] = function () {
-        return this[verb + 'UIntNumber'](bytes)
-      }
+    Reader.prototype[`${verb}UInt${bits}Number`] = function () {
+      return this[`${verb}UIntNumber`](bits / 8)
+    }
 
-      Reader.prototype[verb + 'Int' + bytes * 8 + 'Number'] = function () {
-        return this[verb + 'IntNumber'](bytes)
-      }
+    Reader.prototype[`${verb}Int${bits}Number`] = function () {
+      return this[`${verb}IntNumber`](bits / 8)
+    }
 
-      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Long'] = function () {
-        return this[verb + 'UIntLong'](bytes)
-      }
+    Reader.prototype[`${verb}UInt${bits}Long`] = function () {
+      return this[`${verb}UIntLong`](bits / 8)
+    }
 
-      Reader.prototype[verb + 'Int' + bytes * 8 + 'Long'] = function () {
-        return this[verb + 'IntLong'](bytes)
-      }
+    Reader.prototype[`${verb}Int${bits}Long`] = function () {
+      return this[`${verb}IntLong`](bits / 8)
     }
   })
+
+  // Skips have a different return type, so we do them separately
+  Reader.prototype[`skipUInt${bits}`] = function () {
+    return this[`skipUInt`](bits / 8)
+  }
+
+  Reader.prototype[`skipInt${bits}`] = function () {
+    return this[`skipInt`](bits / 8)
+  }
 })
 
 export default Reader

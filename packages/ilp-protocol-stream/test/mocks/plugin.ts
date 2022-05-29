@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 import * as IlpPacket from 'ilp-packet'
-import * as Long from 'long'
+import Long from 'long'
 import * as ILDCP from 'ilp-protocol-ildcp'
 import { Writer } from 'oer-utils'
 import Rational from '../../src/util/rational'
@@ -17,7 +17,7 @@ export default class MockPlugin extends EventEmitter {
   public dataHandler: DataHandler
   public moneyHandler: MoneyHandler
   public exchangeRate: number
-  public connected: boolean
+  public connected = false
   public mirror: MockPlugin
   protected identity: string
   protected assetCode: string

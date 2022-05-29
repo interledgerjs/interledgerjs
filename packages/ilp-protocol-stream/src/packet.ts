@@ -1,6 +1,6 @@
 import { Reader, Writer, WriterInterface, Predictor } from 'oer-utils'
 import * as IlpPacket from 'ilp-packet'
-import * as Long from 'long'
+import Long from 'long'
 import { encrypt, decrypt, ENCRYPTION_OVERHEAD } from './crypto'
 import { LongValue, longFromValue } from './util/long'
 
@@ -202,10 +202,10 @@ export abstract class BaseFrame {
     return writer
   }
 
-  protected writeContentsTo(contents: WriterInterface) {
+  protected writeContentsTo<T extends BaseFrame>(this: T, contents: WriterInterface) {
     const properties = Object.getOwnPropertyNames(this).filter(
       (propName: string) => propName !== 'type' && propName !== 'name'
-    )
+    ) as (keyof T)[]
     for (const prop of properties) {
       const value = this[prop]
       if (typeof value === 'number') {
@@ -230,7 +230,7 @@ export abstract class BaseFrame {
 }
 
 export class ConnectionCloseFrame extends BaseFrame {
-  type: FrameType.ConnectionClose
+  type = FrameType.ConnectionClose as const
   errorCode: ErrorCode
   errorMessage: string
 
@@ -248,7 +248,7 @@ export class ConnectionCloseFrame extends BaseFrame {
 }
 
 export class ConnectionNewAddressFrame extends BaseFrame {
-  type: FrameType.ConnectionNewAddress
+  type = FrameType.ConnectionNewAddress as const
   sourceAccount: string
 
   constructor(sourceAccount: string) {
@@ -263,7 +263,7 @@ export class ConnectionNewAddressFrame extends BaseFrame {
 }
 
 export class ConnectionAssetDetailsFrame extends BaseFrame {
-  type: FrameType.ConnectionAssetDetails
+  type = FrameType.ConnectionAssetDetails as const
   sourceAssetCode: string
   sourceAssetScale: number
 
@@ -281,7 +281,7 @@ export class ConnectionAssetDetailsFrame extends BaseFrame {
 }
 
 export class ConnectionMaxDataFrame extends BaseFrame {
-  type: FrameType.ConnectionMaxData
+  type = FrameType.ConnectionMaxData as const
   maxOffset: Long
 
   constructor(maxOffset: LongValue) {
@@ -296,7 +296,7 @@ export class ConnectionMaxDataFrame extends BaseFrame {
 }
 
 export class ConnectionDataBlockedFrame extends BaseFrame {
-  type: FrameType.ConnectionDataBlocked
+  type = FrameType.ConnectionDataBlocked as const
   maxOffset: Long
 
   constructor(maxOffset: LongValue) {
@@ -311,7 +311,7 @@ export class ConnectionDataBlockedFrame extends BaseFrame {
 }
 
 export class ConnectionMaxStreamIdFrame extends BaseFrame {
-  type: FrameType.ConnectionMaxStreamId
+  type = FrameType.ConnectionMaxStreamId as const
   maxStreamId: Long
 
   constructor(maxStreamId: LongValue) {
@@ -326,7 +326,7 @@ export class ConnectionMaxStreamIdFrame extends BaseFrame {
 }
 
 export class ConnectionStreamIdBlockedFrame extends BaseFrame {
-  type: FrameType.ConnectionStreamIdBlocked
+  type = FrameType.ConnectionStreamIdBlocked as const
   maxStreamId: Long
 
   constructor(maxStreamId: LongValue) {
@@ -341,7 +341,7 @@ export class ConnectionStreamIdBlockedFrame extends BaseFrame {
 }
 
 export class StreamCloseFrame extends BaseFrame {
-  type: FrameType.StreamClose
+  type = FrameType.StreamClose as const
   streamId: Long
   errorCode: ErrorCode
   errorMessage: string
@@ -362,7 +362,7 @@ export class StreamCloseFrame extends BaseFrame {
 }
 
 export class StreamMoneyFrame extends BaseFrame {
-  type: FrameType.StreamMoney
+  type = FrameType.StreamMoney as const
   streamId: Long
   shares: Long
 
@@ -380,7 +380,7 @@ export class StreamMoneyFrame extends BaseFrame {
 }
 
 export class StreamMaxMoneyFrame extends BaseFrame {
-  type: FrameType.StreamMaxMoney
+  type = FrameType.StreamMaxMoney as const
   streamId: Long
   receiveMax: Long
   totalReceived: Long
@@ -405,7 +405,7 @@ export class StreamMaxMoneyFrame extends BaseFrame {
 }
 
 export class StreamMoneyBlockedFrame extends BaseFrame {
-  type: FrameType.StreamMoneyBlocked
+  type = FrameType.StreamMoneyBlocked as const
   streamId: Long
   sendMax: Long
   totalSent: Long
@@ -426,7 +426,7 @@ export class StreamMoneyBlockedFrame extends BaseFrame {
 }
 
 export class StreamDataFrame extends BaseFrame {
-  type: FrameType.StreamData
+  type = FrameType.StreamData as const
   streamId: Long
   offset: Long
   data: Buffer
@@ -458,7 +458,7 @@ export class StreamDataFrame extends BaseFrame {
 }
 
 export class StreamMaxDataFrame extends BaseFrame {
-  type: FrameType.StreamMaxData
+  type = FrameType.StreamMaxData as const
   streamId: Long
   maxOffset: Long
 
@@ -476,7 +476,7 @@ export class StreamMaxDataFrame extends BaseFrame {
 }
 
 export class StreamDataBlockedFrame extends BaseFrame {
-  type: FrameType.StreamDataBlocked
+  type = FrameType.StreamDataBlocked as const
   streamId: Long
   maxOffset: Long
 
@@ -494,7 +494,7 @@ export class StreamDataBlockedFrame extends BaseFrame {
 }
 
 export class StreamReceiptFrame extends BaseFrame {
-  type: FrameType.StreamReceipt
+  type = FrameType.StreamReceipt as const
   streamId: Long
   receipt: Buffer
 

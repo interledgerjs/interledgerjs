@@ -1,6 +1,6 @@
 import * as IlpPacket from 'ilp-packet'
 import { Predictor, Reader, Writer, WriterInterface } from 'oer-utils'
-import debug = require('debug')
+import debug from 'debug'
 
 const log = debug('ilp-protocol-ildcp')
 
@@ -139,6 +139,8 @@ export interface ServeSettings {
   serverAddress: string
 }
 
+const isObject = (o: unknown): o is Record<string, unknown> => typeof o === 'object' && o !== null
+
 const serve = async ({ requestPacket, handler, serverAddress }: ServeSettings): Promise<Buffer> => {
   try {
     // Parse the request packet just to make sure it's valid
@@ -151,12 +153,14 @@ const serve = async ({ requestPacket, handler, serverAddress }: ServeSettings): 
 
     return serializeIldcpResponse(info)
   } catch (err) {
-    const errInfo = err && typeof err === 'object' && err.stack ? err.stack : err
-    log('error while handling ildcp request. error=%s', errInfo)
+    log('error while handling ildcp request. error=%s', err)
 
     return IlpPacket.serializeIlpReject({
       code: 'F00',
-      message: err && typeof err === 'object' && err.message ? err.message : 'unexpected error.',
+      message:
+        isObject(err) && 'message' in err && typeof err.message === 'string'
+          ? err.message
+          : 'unexpected error.',
       triggeredBy: serverAddress,
       data: Buffer.alloc(0),
     })

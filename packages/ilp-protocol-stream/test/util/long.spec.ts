@@ -1,7 +1,7 @@
 import 'mocha'
 import assert from 'assert'
 import BigNumber from 'bignumber.js'
-import * as Long from 'long'
+import Long from 'long'
 import {
   longFromValue,
   maxLong,

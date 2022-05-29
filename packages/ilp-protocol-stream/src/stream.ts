@@ -1,5 +1,5 @@
 import createLogger, { Logger } from 'ilp-logger'
-import * as Long from 'long'
+import Long from 'long'
 import { Duplex } from 'stream'
 import { DataQueue } from './util/data-queue'
 import { OffsetSorter } from './util/data-offset-sorter'

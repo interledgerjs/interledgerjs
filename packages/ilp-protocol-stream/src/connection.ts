@@ -37,7 +37,7 @@ import {
   checkedSubtract,
   multiplyDivideFloor,
 } from './util/long'
-import * as Long from 'long'
+import Long from 'long'
 import Rational from './util/rational'
 import { createReceipt } from './util/receipt'
 import { StoppableTimeout } from './util/stoppable-timeout'
@@ -134,6 +134,16 @@ export class ConnectionError extends Error {
   }
 }
 
+export class IlpRejectionError extends Error {
+  ilpReject: IlpPacket.IlpReject
+
+  constructor(message: string, ilpReject: IlpPacket.IlpReject) {
+    super(message)
+
+    this.ilpReject = ilpReject
+  }
+}
+
 enum RemoteState {
   Init,
   Connected,
@@ -141,14 +151,14 @@ enum RemoteState {
 }
 
 export interface PacketError {
-  sourceAmount: Long.Long
+  sourceAmount: Long
   code: string
 }
 
 export interface TestVolleyResult {
   maxDigits: number
   exchangeRate: Rational
-  maxPacketAmounts: Long.Long[]
+  maxPacketAmounts: Long[]
   packetErrors: PacketError[]
 }
 
@@ -188,7 +198,7 @@ export class Connection extends EventEmitter {
 
   protected idleTimeout: number
   protected lastActive: Date
-  protected idleTimer: NodeJS.Timer
+  protected idleTimer?: NodeJS.Timer
   protected rateRetryTimer: StoppableTimeout = new StoppableTimeout()
 
   protected nextPacketSequence: number
@@ -644,7 +654,7 @@ export class Connection extends EventEmitter {
           // Note this will throw if the stream was already closed
           this.handleNewStream(frame.streamId.toNumber())
         } catch (err) {
-          this.log.debug('error handling new stream %s: %s', frame.streamId, err && err.message)
+          this.log.debug('error handling new stream %s: %s', frame.streamId, err)
           throw await constructFinalApplicationError()
         }
       }
@@ -654,7 +664,7 @@ export class Connection extends EventEmitter {
     try {
       this.handleControlFrames(requestPacket.frames)
     } catch (err) {
-      this.log.debug('error handling frames:', err && err.message)
+      this.log.debug('error handling frames:', err)
       throw await constructFinalApplicationError()
     }
 
@@ -1209,7 +1219,7 @@ export class Connection extends EventEmitter {
     } catch (err) {
       this.looping = false
       // TODO should a connection error be an error on all of the streams?
-      return this.destroy(err)
+      return this.destroy(err instanceof Error ? err : undefined)
     }
     this.log.debug('finished sending')
     this.safeEmit('_send_loop_finished')
@@ -1470,7 +1480,7 @@ export class Connection extends EventEmitter {
    * (Internal) Send volley of test packets to find the exchange rate, its precision, and potential other amounts to try.
    * @private
    */
-  protected async sendTestPacketVolley(testPacketAmounts: Long.Long[]): Promise<TestVolleyResult> {
+  protected async sendTestPacketVolley(testPacketAmounts: Long[]): Promise<TestVolleyResult> {
     const results = await Promise.all(
       testPacketAmounts.map(async (amount) => {
         try {
@@ -1598,8 +1608,8 @@ export class Connection extends EventEmitter {
 
       // If we get here the first volley failed, try new volley using all unique packet amounts based on the max packets
       testPacketAmounts = maxPacketAmounts
-        .filter((amount: Long.Long) => !amount.equals(Long.MAX_UNSIGNED_VALUE))
-        .reduce((acc: string[], curr: Long.Long) => [...new Set([...acc, curr.toString()])], [])
+        .filter((amount: Long) => !amount.equals(Long.MAX_UNSIGNED_VALUE))
+        .reduce((acc: string[], curr: Long) => [...new Set([...acc, curr.toString()])], [])
         .map((str) => Long.fromString(str, true))
 
       // Check for any Txx Errors
@@ -1635,7 +1645,7 @@ export class Connection extends EventEmitter {
 
   private stopTimers(): void {
     if (this.rateRetryTimer) this.rateRetryTimer.stop()
-    clearTimeout(this.idleTimer)
+    if (this.idleTimer) clearTimeout(this.idleTimer)
     this.done = true
   }
 
@@ -1850,7 +1860,11 @@ export class Connection extends EventEmitter {
         err,
         responseData
       )
-      throw new Error(`Invalid response when sending packet ${packet.sequence}: ${err.message}`)
+      throw new Error(
+        `Invalid response when sending packet ${packet.sequence}: ${
+          err instanceof Error ? err.message : err
+        }`
+      )
     }
 
     // Handle fulfillment
@@ -1893,7 +1907,9 @@ export class Connection extends EventEmitter {
     } catch (err) {
       this.log.error('unable to decrypt and parse response data: %s %h', err)
       // TODO should we continue processing anyway? what if it was fulfilled?
-      throw new Error('Unable to decrypt and parse response data: ' + err.message)
+      throw new Error(
+        `Unable to decrypt and parse response data: ${err instanceof Error ? err.message : err}`
+      )
     }
 
     // Ensure the response corresponds to the request
@@ -1994,10 +2010,10 @@ export class Connection extends EventEmitter {
         reject.data
       )
       // This error will terminate the connection and bubble out to the caller.
-      const error = new Error(
-        `Unexpected error while sending packet. Code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}`
+      const error = new IlpRejectionError(
+        `Unexpected error while sending packet. Code: ${reject.code}, triggered by: ${reject.triggeredBy}, message: ${reject.message}`,
+        reject
       )
-      error['ilpReject'] = reject
       throw error
     }
   }
@@ -2070,6 +2086,7 @@ export class Connection extends EventEmitter {
   }
 
   private testIdle(): void {
+    this.log.trace('idle timeout reached')
     const idle = Date.now() - this.lastActive.getTime()
     if (idle >= this.idleTimeout) {
       this.log.error('Connection timed out due to inactivity, destroying connection')
@@ -2089,7 +2106,6 @@ export class Connection extends EventEmitter {
 
     if (result.overflow) {
       const err = new IlpPacket.Errors.BadRequestError('Total received exceeded MaxUint64')
-      err['ilpErrorMessage'] = err.message
       this.destroy(err)
       throw err
     } else {

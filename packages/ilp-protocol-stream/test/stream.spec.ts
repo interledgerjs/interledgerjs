@@ -1,6 +1,6 @@
 import 'mocha'
 import { createConnection, Server } from '../src/index'
-import * as Long from 'long'
+import Long from 'long'
 import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
 import { Duplex } from 'stream'
@@ -819,9 +819,8 @@ describe('DataAndMoneyStream', function () {
 
         // We consume some
         stream.read(3450)
-        await new Promise(setImmediate)
+        await new Promise((resolve) => setTimeout(resolve))
         assert.equal(stream.readableLength, 16384 - 3450)
-        //await new Promise(setImmediate)
 
         // Wait to allow both sides loops to finish.
         await new Promise((resolve) => setTimeout(resolve, 10))

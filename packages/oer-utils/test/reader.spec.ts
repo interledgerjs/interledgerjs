@@ -1,5 +1,5 @@
 import Reader from '../src/lib/reader'
-import * as Long from 'long'
+import Long from 'long'
 
 import { assert } from 'chai'
 

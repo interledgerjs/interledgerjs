@@ -2,7 +2,7 @@ import { Predictor, Reader, Writer } from 'oer-utils'
 import { dateToInterledgerTime, interledgerTimeToDate, INTERLEDGER_TIME_LENGTH } from './utils/date'
 import assert from 'assert'
 import { IlpAddress, isValidIlpAddress } from './utils/address'
-import * as Long from 'long'
+import Long from 'long'
 import * as errors from './errors'
 
 export const Errors = errors

@@ -3,7 +3,7 @@
 // - All future `wait` calls will reject.
 export class StoppableTimeout {
   private stopped = false
-  private timer: NodeJS.Timer
+  private timer?: NodeJS.Timer
   private reject?: (err: Error) => void
 
   wait(delay: number): Promise<void> {
@@ -18,7 +18,7 @@ export class StoppableTimeout {
   }
 
   stop(): void {
-    clearTimeout(this.timer)
+    if (this.timer) clearTimeout(this.timer)
     this.stopped = true
     if (this.reject) {
       this.reject(new Error('timer stopped'))

@@ -10,7 +10,7 @@ import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import { Writer } from 'oer-utils'
 import chaiAsPromised from 'chai-as-promised'
-import * as Long from 'long'
+import Long from 'long'
 import { createReceipt } from '../src/util/receipt'
 import packetsFixtures from './fixtures/packets.json'
 Chai.use(chaiAsPromised)
@@ -472,14 +472,14 @@ describe('Connection', function () {
       } catch (err) {
         // Older Node.js versions (<=12) will throw here, newer ones won't. Therefore, we handle
         // both cases and, if an error is thrown, we check the error message.
-        assert.equal(err.message, 'Cannot call write after a stream was destroyed')
+        assert.equal((err as Error).message, 'Cannot call write after a stream was destroyed')
       }
       try {
         assert.isFalse(serverStream.write('hello', serverWriteCallback))
       } catch (err) {
         // Older Node.js versions (<=12) will throw here, newer ones won't. Therefore, we handle
         // both cases and, if an error is thrown, we check the error message.
-        assert.equal(err.message, 'Cannot call write after a stream was destroyed')
+        assert.equal((err as Error).message, 'Cannot call write after a stream was destroyed')
       }
       assert.throws(() => clientStream.setSendMax(300), 'Stream already closed')
       await new Promise(setImmediate)
@@ -1427,7 +1427,7 @@ describe('Connection', function () {
        */
 
       const shouldFulfillSpy = sinon.spy(
-        async (amount: Long, packetId: Buffer, connectionTag: string) => {
+        async (amount: Long, packetId: Buffer, connectionTag?: string) => {
           assert.equal(actualConnectionTag, connectionTag)
 
           assert.isFalse(packetIds.has(packetId.toString())) // Test that the packet Ids are unique

@@ -167,6 +167,8 @@ export function multiplyDivide(
   return { quo, rem }
 }
 
+// TODO: Extend long with a subclass instead of overriding its prototype
+// @ts-expect-error TypeScript is right to complain, this is scary and we should not be doing it
 Long.prototype['toJSON'] = function () {
   return this.toString()
 }

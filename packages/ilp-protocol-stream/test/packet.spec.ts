@@ -8,7 +8,7 @@ import {
   StreamMoneyBlockedFrame,
 } from '../src/packet'
 import { Reader, Writer } from 'oer-utils'
-import * as Long from 'long'
+import Long from 'long'
 import packetsFixtures from './fixtures/packets.json'
 
 describe('Packet Format', function () {
@@ -23,7 +23,7 @@ describe('Packet Format', function () {
         await Packet.decryptAndDeserialize(Buffer.alloc(32), packet)
       } catch (err) {
         assert.equal(
-          err.message,
+          (err as Error).message,
           'Unable to decrypt packet. Data was corrupted or packet was encrypted with the wrong key'
         )
         return
@@ -147,5 +147,6 @@ function buildFrame(options: any) {
       }
     }
   }
-  return Object.assign(Object.create(PacketModule[options.name + 'Frame'].prototype), options)
+  // @ts-expect-error This would be a fun brain teaser to make type-safe...
+  return Object.assign(Object.create(PacketModule[`${options.name}Frame`].prototype), options)
 }

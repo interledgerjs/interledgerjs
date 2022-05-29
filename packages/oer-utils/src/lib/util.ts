@@ -1,9 +1,14 @@
-import * as Long from 'long'
+import Long from 'long'
 
 // How many bytes are safe to decode as a JS number
 // MAX_SAFE_INTEGER = 2^53 - 1
 // 53 div 8 -> 6 bytes
 export const MAX_SAFE_BYTES = 6
+
+export type SafeByteLength = 1 | 2 | 3 | 4 | 5 | 6
+
+export const isSafeLength = (length: number): length is SafeByteLength =>
+  isInteger(length) && length >= 0 && length <= MAX_SAFE_BYTES
 
 const INTEGER_REGEX = /^-?[0-9]+$/
 export function isInteger(value: unknown): boolean {
