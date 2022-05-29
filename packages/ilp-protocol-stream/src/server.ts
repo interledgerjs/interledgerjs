@@ -38,16 +38,11 @@ export interface GenerateAddressSecretOpts {
 export class Server extends EventEmitter {
   protected serverSecret: Buffer
   protected plugin: Plugin
-  protected serverAccount: string
-  protected serverAssetCode: string
-  protected serverAssetScale: number
   protected log: Logger
-  protected enablePadding?: boolean
-  protected connected: boolean
   protected connectionOpts: ConnectionOpts
   protected pendingRequests: Promise<void | Buffer> = Promise.resolve()
   protected disconnectDelay: number
-  private pool: ServerConnectionPool
+  private pool?: ServerConnectionPool
 
   constructor(opts: ServerOpts) {
     super()
@@ -56,9 +51,8 @@ export class Server extends EventEmitter {
     this.log = createLogger('ilp-protocol-stream:Server')
     this.connectionOpts = Object.assign({}, opts, {
       serverSecret: undefined,
-    }) as ConnectionOpts
+    })
     this.disconnectDelay = opts.disconnectDelay || DEFAULT_DISCONNECT_DELAY
-    this.connected = false
   }
 
   /**
@@ -68,6 +62,10 @@ export class Server extends EventEmitter {
    * @event connection
    * @type {Connection}
    */
+
+  get connected(): boolean {
+    return Boolean(this.pool)
+  }
 
   /**
    * Connect the plugin and start listening for incoming connections.
@@ -90,19 +88,15 @@ export class Server extends EventEmitter {
     const { clientAddress, assetCode, assetScale } = await ILDCP.fetch(
       this.plugin.sendData.bind(this.plugin)
     )
-    this.serverAccount = clientAddress
-    this.serverAssetCode = assetCode
-    this.serverAssetScale = assetScale
-    this.connected = true
     this.pool = new ServerConnectionPool(
       this.serverSecret,
       {
         ...this.connectionOpts,
         isServer: true,
         plugin: this.plugin,
-        sourceAccount: this.serverAccount,
-        assetCode: this.serverAssetCode,
-        assetScale: this.serverAssetScale,
+        sourceAccount: clientAddress,
+        assetCode,
+        assetScale,
       },
       (connection: Connection) => {
         this.emit('connection', connection)
@@ -114,6 +108,13 @@ export class Server extends EventEmitter {
    * End all connections and disconnect the plugin
    */
   async close(): Promise<void> {
+    if (!this.pool) {
+      // We're not connected, so there is nothing to do
+      return
+    }
+
+    const serverAccount = this.pool.getServerAccount()
+
     // Stop handling new requests, and return T99 while the connection is closing.
     // If an F02 unreachable was returned on new packets: clients would immediately destroy the connection
     // If an F99 was returned on on new packets: clients would retry with no backoff
@@ -121,7 +122,7 @@ export class Server extends EventEmitter {
     this.plugin.registerDataHandler(async () =>
       IlpPacket.serializeIlpReject({
         code: IlpPacket.Errors.codes.T99_APPLICATION_ERROR,
-        triggeredBy: this.serverAccount,
+        triggeredBy: serverAccount,
         message: 'Shutting down server',
         data: Buffer.alloc(0),
       })
@@ -139,7 +140,7 @@ export class Server extends EventEmitter {
     await this.plugin.disconnect()
 
     this.emit('_close')
-    this.connected = false
+    this.pool = undefined
   }
 
   /**
@@ -176,7 +177,7 @@ export class Server extends EventEmitter {
     sharedSecret: Buffer
     receiptsEnabled: boolean
   } {
-    if (!this.connected) {
+    if (!this.pool) {
       throw new Error('Server must be connected to generate address and secret')
     }
     let connectionTag = Buffer.alloc(0)
@@ -224,30 +225,34 @@ export class Server extends EventEmitter {
     const sharedSecret = cryptoHelper.generateSharedSecretFromToken(this.serverSecret, token)
     return {
       // TODO should this be called serverAccount or serverAddress instead?
-      destinationAccount: `${this.serverAccount}.${base64url(token)}`,
+      destinationAccount: `${this.pool.getServerAccount()}.${base64url(token)}`,
       sharedSecret,
       receiptsEnabled,
     }
   }
 
   get assetCode(): string {
-    if (!this.connected) {
+    if (!this.pool) {
       throw new Error('Server must be connected to get asset code.')
     }
-    return this.serverAssetCode
+    return this.pool.getAssetCode()
   }
 
   get assetScale(): number {
-    if (!this.connected) {
+    if (!this.pool) {
       throw new Error('Server must be connected to get asset scale.')
     }
-    return this.serverAssetScale
+    return this.pool.getAssetScale()
   }
 
   /**
    * Parse incoming ILP Prepare packets and pass them to the correct connection
    */
   protected async handleData(data: Buffer): Promise<Buffer> {
+    if (!this.pool) {
+      throw new Error('Unexpected call to handleData - server is not connected')
+    }
+
     try {
       let prepare: IlpPacket.IlpPrepare
       try {
@@ -258,11 +263,13 @@ export class Server extends EventEmitter {
           code: 'F00',
           message: `Expected an ILP Prepare packet (type 12), but got packet with type: ${data[0]}`,
           data: Buffer.alloc(0),
-          triggeredBy: this.serverAccount,
+          triggeredBy: this.pool.getServerAccount(),
         })
       }
 
-      const localAddressParts = prepare.destination.replace(this.serverAccount + '.', '').split('.')
+      const localAddressParts = prepare.destination
+        .replace(`${this.pool.getServerAccount()}.`, '')
+        .split('.')
       if (localAddressParts.length === 0 || !localAddressParts[0]) {
         this.log.error(
           'destination in ILP Prepare packet does not have a Connection ID: %s',
@@ -288,16 +295,21 @@ export class Server extends EventEmitter {
       const fulfill = await connection.handlePrepare(prepare)
       return IlpPacket.serializeIlpFulfill(fulfill)
     } catch (err) {
-      if (!err.ilpErrorCode) {
+      const triggeredBy = this.pool.getServerAccount()
+
+      if (IlpPacket.isIlpError(err)) {
+        return IlpPacket.errorToReject(triggeredBy, err)
+      } else {
         this.log.error('error handling prepare:', err)
+
+        return IlpPacket.serializeIlpReject({
+          // TODO should the default be F00 or T00?
+          code: 'F00',
+          message: '',
+          data: Buffer.alloc(0),
+          triggeredBy,
+        })
       }
-      // TODO should the default be F00 or T00?
-      return IlpPacket.serializeIlpReject({
-        code: err.ilpErrorCode || 'F00',
-        message: err.ilpErrorMessage || '',
-        data: err.ilpErrorData || Buffer.alloc(0),
-        triggeredBy: this.serverAccount || '',
-      })
     }
   }
 }

@@ -37,6 +37,18 @@ export class ServerConnectionPool {
     )
   }
 
+  getServerAccount(): string {
+    return this.connectionOpts.sourceAccount
+  }
+
+  getAssetScale(): number {
+    return this.connectionOpts.assetScale
+  }
+
+  getAssetCode(): string {
+    return this.connectionOpts.assetCode
+  }
+
   async getConnection(id: string, prepare: IlpPacket.IlpPrepare): Promise<Connection> {
     const activeConnection = this.activeConnections[id]
     if (activeConnection) return Promise.resolve(activeConnection)
