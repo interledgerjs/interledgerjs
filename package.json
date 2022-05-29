@@ -65,6 +65,7 @@
     "all": true
   },
   "devDependencies": {
+    "@tsconfig/recommended": "^1.0.1",
     "@types/chai": "^4.3.1",
     "@types/chai-as-promised": "^7.1.5",
     "@types/long": "^4.0.2",

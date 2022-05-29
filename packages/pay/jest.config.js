@@ -1,3 +1,4 @@
+/** @type {import('ts-jest/dist/types').InitialOptionsTsJest} */
 module.exports = {
   collectCoverageFrom: ['src/**/*.ts', '!**/node_modules/**'],
   coverageReporters: ['text', 'lcov'],
