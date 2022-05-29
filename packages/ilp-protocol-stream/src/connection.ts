@@ -2129,7 +2129,6 @@ export class Connection extends EventEmitter {
     const result = checkedAdd(this._totalSent, value)
     if (result.overflow) {
       const err = new IlpPacket.Errors.BadRequestError('Total sent exceeded MaxUint64')
-      err['ilpErrorMessage'] = err.message
       this.destroy(err)
       throw err
     } else {
@@ -2141,7 +2140,6 @@ export class Connection extends EventEmitter {
     const result = checkedAdd(this._totalDelivered, value)
     if (result.overflow) {
       const err = new IlpPacket.Errors.BadRequestError('Total delivered exceeded MaxUint64')
-      err['ilpErrorMessage'] = err.message
       this.destroy(err)
       throw err
     } else {
