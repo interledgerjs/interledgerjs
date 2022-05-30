@@ -22,8 +22,8 @@
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_logger"
   },
   "dependencies": {
-    "@types/debug": "^4.1.0",
-    "debug": "^4.3.0",
-    "supports-color": "^7.1.0"
+    "@types/debug": "^4.1.7",
+    "debug": "^4.3.4",
+    "supports-color": "^9.2.2"
   }
 }
