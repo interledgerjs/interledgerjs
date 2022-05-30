@@ -244,7 +244,7 @@ export class DataAndMoneyStream extends Duplex {
       }
       const endHandler = () => {
         // Clean up on next tick in case an error was also emitted
-        setImmediate(cleanup)
+        setTimeout(cleanup)
         if (this._totalSent.greaterThanOrEqual(limit)) {
           resolve()
         } else {
@@ -314,7 +314,7 @@ export class DataAndMoneyStream extends Duplex {
       }
       const endHandler = () => {
         // Clean up on next tick in case an error was also emitted
-        setImmediate(cleanup)
+        setTimeout(cleanup)
         if (this._totalReceived.greaterThanOrEqual(limit)) {
           resolve()
         } else {
@@ -466,7 +466,7 @@ export class DataAndMoneyStream extends Duplex {
       this.log.info('stream ended')
       this.closed = true
       // Only emit the 'close' & 'end' events if the stream doesn't automatically
-      setImmediate(() => {
+      setTimeout(() => {
         if (!this.emittedEnd) {
           this.emittedEnd = true
           this.safeEmit('end')
@@ -505,7 +505,7 @@ export class DataAndMoneyStream extends Duplex {
       this._errorMessage = error.message
     }
     // Only emit the 'close' & 'end' events if the stream doesn't automatically
-    setImmediate(() => {
+    setTimeout(() => {
       if (!this.emittedEnd) {
         this.emittedEnd = true
         this.safeEmit('end')
@@ -557,7 +557,7 @@ export class DataAndMoneyStream extends Duplex {
       // Don't call immediately since looping before the read() has finished
       // would report incorrect offsets.
       if (this['readableFlowing'] !== true) {
-        process.nextTick(() => this.emit('_maybe_start_send_loop'))
+        setTimeout(() => this.emit('_maybe_start_send_loop'))
       }
       return
     }

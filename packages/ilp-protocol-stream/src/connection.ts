@@ -1235,7 +1235,7 @@ export class Connection extends EventEmitter {
   protected async loadAndSendPacket(): Promise<void> {
     // Actually send on the next tick of the event loop in case multiple streams
     // have their limits raised at the same time
-    await new Promise(setImmediate)
+    await new Promise((resolve) => setTimeout(resolve))
 
     this.log.trace('loadAndSendPacket')
     let amountToSend = Long.UZERO
@@ -2064,13 +2064,14 @@ export class Connection extends EventEmitter {
     this.log.debug('removing record of stream %d', stream.id)
     this.streams.delete(stream.id)
     this.closedStreams.add(stream.id)
+    this.safeEmit('_stream_removed')
     if (!stream._sentEnd) {
       stream._sentEnd = true
       const streamEndFrame = stream._errorMessage
         ? new StreamCloseFrame(stream.id, ErrorCode.ApplicationError, stream._errorMessage)
         : new StreamCloseFrame(stream.id, ErrorCode.NoError, '')
       this.queuedFrames.push(streamEndFrame)
-      setImmediate(() => this.startSendLoop())
+      setTimeout(() => this.startSendLoop())
     }
   }
 
