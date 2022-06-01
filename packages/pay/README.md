@@ -312,25 +312,12 @@ Intermediate state or outcome of the payment, to account for sent/delivered amou
 | :------------------- | :-------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **`id`**             | `string`                                            | URL used to query and identify the Incoming Payment.                                                                                                                                                                                      |
 | **`accountId`**      | `string`                                            | URL of the recipient Open Payments account to which incoming payments will be credited (with well-known path, and stripped trailing slash). Each payment pointer and its corresponding `accountId` identifies a unique payment recipient. |
-| **`state`**          | **[`IncomingPaymentState`](#incomingpaymentstate)** | The state of the Incoming Payment.                                                                                                                                                                                                        |
+| **`completed`**      | `boolean`                                           | Describes whether the Incoming Payment has completed receiving funds. |
 | **`incomingAmount`** | **[`Amount`](#amount)** (Optional)                  | Fixed destination amount that must be delivered to complete payment of the Incoming Payment.                                                                                                                                              |
 | **`receivedAmount`** | **[`Amount`](#amount)**                             | Amount that has already been paid toward the Incoming Payment.                                                                                                                                                                            |
 | **`expiresAt`**      | `number` (Optional)                                 | UNIX timestamp in milliseconds after which payments toward the Incoming Payment will no longer be accepted.                                                                                                                               |
 | **`description`**    | `string` (Optional)                                 | Human-readable description of what is provided in return for completion of the Incoming Payment.                                                                                                                                          |
 | **`externalRef`**    | `string` (Optional)                                 | Human-readable external reference that can be used by external systems to reconcile this payment with outside systems.                                                                                                                    |
-
-#### `IncomingPaymentState`
-
-> String enum
-
-States of an Incoming Payment
-
-| Variant          | Description                                                                                                              |
-| :--------------- | :----------------------------------------------------------------------------------------------------------------------- | --- |
-| **`pending`**    | Incoming payment has been created.                                                                                       |
-| **`processing`** | Payment has started, funds have cleared into the account.                                                                |
-| **`completed`**  | The Incoming Payment was either auto-completed after being fully paid or it has been completed manually via an API call. |
-| **`expired`**    | The Incoming Payment expired before it was completed.                                                                    |     |
 
 #### `Amount`
 
