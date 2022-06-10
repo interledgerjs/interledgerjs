@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0-alpha.6](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.5...@interledger/pay@0.4.0-alpha.6) (2022-06-10)
+
+**Note:** Version bump only for package @interledger/pay
+
+
+
+
+
 # [0.4.0-alpha.5](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.4...@interledger/pay@0.4.0-alpha.5) (2022-05-04)
 
 **Note:** Version bump only for package @interledger/pay
