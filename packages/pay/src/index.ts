@@ -1,11 +1,6 @@
 import { AssetDetails, isValidAssetDetails } from './controllers/asset-details'
 import { Counter } from './controllers/sequence'
-import {
-  fetchPaymentDetails,
-  IncomingPaymentState,
-  PaymentDestination,
-  Amount,
-} from './open-payments'
+import { fetchPaymentDetails, PaymentDestination, Amount } from './open-payments'
 import { Plugin } from './request'
 import { AssetProbe } from './senders/asset-probe'
 import { ConnectionCloser } from './senders/connection-closer'
@@ -229,12 +224,12 @@ export const startQuote = async (options: QuoteOptions): Promise<Quote> => {
   const { destinationPaymentDetails, destinationAsset } = options.destination
 
   if (destinationPaymentDetails) {
-    if (destinationPaymentDetails.state === IncomingPaymentState.Completed) {
+    if (destinationPaymentDetails.completed) {
       log.debug('quote failed: Incoming Payment is already completed.')
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
       throw PaymentError.IncomingPaymentCompleted
     }
-    if (destinationPaymentDetails.state === IncomingPaymentState.Expired) {
+    if (destinationPaymentDetails.expiresAt && destinationPaymentDetails.expiresAt <= Date.now()) {
       log.debug('quote failed: Incoming Payment is expired.')
       // In Incoming Payment case, STREAM connection is yet to be established since no asset probe
       throw PaymentError.IncomingPaymentExpired

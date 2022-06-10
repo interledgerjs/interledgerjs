@@ -13,7 +13,7 @@ import {
 import Long from 'long'
 import nock from 'nock'
 import { PaymentError, PaymentType, setupPayment, startQuote } from '../src'
-import { fetchPaymentDetails, IncomingPaymentState, Account, Amount } from '../src/open-payments'
+import { fetchPaymentDetails, Account, Amount } from '../src/open-payments'
 import { generateEncryptionKey, Int } from '../src/utils'
 import {
   createMaxPacketMiddleware,
@@ -32,7 +32,7 @@ interface setupNockOptions {
   incomingPaymentId?: string | null
   accountUrl?: string | null
   destinationPayment?: string | null
-  state?: string | null
+  completed?: boolean | string | null
   incomingAmount?: NockAmount | null
   receivedAmount?: NockAmount | null
   expiresAt?: string | null
@@ -64,8 +64,7 @@ const setupNock = (options: setupNockOptions) => {
     options.destinationPayment !== null
       ? options.destinationPayment || `${accountUrl}/incoming-payments/${incomingPaymentId}`
       : undefined
-  const state =
-    options.state !== null ? options.state || IncomingPaymentState.Processing : undefined
+  const completed = options.completed !== null ? options.completed || false : undefined
   const incomingAmount =
     options.incomingAmount !== null
       ? options.incomingAmount || {
@@ -97,7 +96,7 @@ const setupNock = (options: setupNockOptions) => {
     .reply(200, {
       id: destinationPayment,
       accountId: accountUrl,
-      state,
+      completed,
       incomingAmount,
       receivedAmount,
       expiresAt,
@@ -111,7 +110,7 @@ const setupNock = (options: setupNockOptions) => {
     incomingPaymentId,
     destinationPayment,
     accountUrl,
-    state,
+    completed,
     incomingAmount,
     receivedAmount,
     expiresAt,
@@ -141,7 +140,7 @@ const mockCreateIncomingPayment = (account: Account, incomingAmount?: Amount) =>
       return {
         id: `${accountUrl.origin}/incoming-payments`,
         accountId: account.id,
-        state: IncomingPaymentState.Pending,
+        completed: false,
         incomingAmount: incomingAmount
           ? {
               value: incomingAmount.value.toString(),
@@ -368,7 +367,7 @@ describe('open payments', () => {
 
   it('fails if the Incoming Payment was already completed', async () => {
     const { destinationPayment } = setupNock({
-      state: IncomingPaymentState.Completed,
+      completed: true,
       receivedAmount: {
         value: '40000', // Paid $4.03 of $4
         assetCode: 'USD',
@@ -387,7 +386,6 @@ describe('open payments', () => {
 
   it('fails if the Incoming Payment has expired', async () => {
     const { destinationPayment } = setupNock({
-      state: IncomingPaymentState.Expired,
       expiresAt: new Date().toISOString(),
     })
 
@@ -492,9 +490,9 @@ describe('open payments', () => {
     )
   })
 
-  it('fails if Incoming Payment state is not defined in IncomingPaymentState', async () => {
+  it('fails if completed cannot be parsed', async () => {
     const { destinationPayment } = setupNock({
-      state: 'foo',
+      completed: 'foo',
     })
 
     await expect(fetchPaymentDetails({ destinationPayment })).resolves.toBe(

@@ -64,8 +64,8 @@ export interface IncomingPayment {
   id: string
   /** URL identifying the account into which payments toward the Incoming Payment will be credited */
   accountId: string
-  /** State of the Incoming Payment */
-  state: IncomingPaymentState
+  /** Describes whether the Incoming Payment has completed receiving funds */
+  completed: boolean
   /** UNIX timestamp in milliseconds when payments toward the Incoming Payment will no longer be accepted */
   expiresAt?: number
   /** Human-readable description of the Incoming Payment */
@@ -85,19 +85,6 @@ export interface Amount {
   assetCode: string
   /** Precision of the asset denomination: number of decimal places of the normal unit */
   assetScale: number
-}
-
-export enum IncomingPaymentState {
-  // The payment has a state of `pending` when it is initially created.
-  Pending = 'pending',
-  // As soon as payment has started (funds have cleared into the account) the state moves to `processing`.
-  Processing = 'processing',
-  // The payment is either auto-completed once the received amount equals the expected amount `amount`,
-  // or it is completed manually via an API call.
-  Completed = 'completed',
-  // If the payment expires before it is completed then the state will move to `expired`
-  // and no further payments will be accepted.
-  Expired = 'expired',
 }
 
 /** Validate and resolve the details provided by recipient to execute the payment */
@@ -387,7 +374,7 @@ const validateOpenPaymentsIncomingPayment = (
   const {
     id,
     accountId,
-    state,
+    completed,
     incomingAmount: unvalidatedIncomingAmount,
     receivedAmount: unvalidatedReceivedAmount,
     expiresAt: expiresAtIso,
@@ -401,6 +388,7 @@ const validateOpenPaymentsIncomingPayment = (
   if (
     typeof id !== 'string' ||
     typeof accountId !== 'string' ||
+    typeof completed !== 'boolean' ||
     !(typeof description === 'string' || description === undefined) ||
     !(typeof externalRef === 'string' || externalRef === undefined) ||
     !(isNonNegativeRational(expiresAt) || expiresAt === undefined) ||
@@ -423,14 +411,12 @@ const validateOpenPaymentsIncomingPayment = (
   if (!AccountUrl.fromUrl(id)) return
   if (!AccountUrl.fromUrl(accountId)) return
 
-  if (!Object.values(IncomingPaymentState).includes(state)) return
-
   // TODO Should the given Incoming Payment URL be validated against the `id` URL in the Incoming Payment itself?
 
   return {
     id,
     accountId,
-    state,
+    completed,
     expiresAt,
     description,
     externalRef,
