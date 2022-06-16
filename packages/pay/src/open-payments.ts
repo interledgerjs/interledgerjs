@@ -94,7 +94,7 @@ export const fetchPaymentDetails = async (
   const {
     destinationPayment,
     destinationAccount,
-    amountToDeliver,
+    destinationConnection,
     sharedSecret,
     destinationAddress,
     destinationAsset,
@@ -110,10 +110,12 @@ export const fetchPaymentDetails = async (
   else if (destinationAccount) {
     const account = await queryAccount(destinationAccount)
     if (isAccount(account)) {
-      return createIncomingPayment(account, amountToDeliver)
+      return PaymentError.InvalidDestination
     } else {
       return account
     }
+  } else if (destinationConnection) {
+    return queryConnection(destinationConnection)
   }
   // STREAM credentials were provided directly
   else if (
@@ -139,51 +141,6 @@ export const fetchPaymentDetails = async (
   }
 }
 
-/** Create an Incoming Payment for an Open Payments account */
-const createIncomingPayment = async (
-  account: Account,
-  amountToDeliver?: Amount
-): Promise<PaymentDestination | PaymentError> => {
-  if (!createHttpUrl(account.id)) {
-    log.debug('create IncomingPayment query failed: URL not HTTP/HTTPS.')
-    return PaymentError.QueryFailed
-  }
-  if (amountToDeliver) {
-    if (
-      account.assetCode !== amountToDeliver.assetCode ||
-      account.assetScale !== amountToDeliver.assetScale
-    ) {
-      log.debug('create IncomingPayment query failed: invalid amountToDeliver asset.')
-      return PaymentError.QueryFailed
-    }
-  }
-  const body = amountToDeliver
-    ? {
-        incomingAmount: {
-          ...amountToDeliver,
-          value: amountToDeliver.value.toString(),
-        },
-      }
-    : {}
-
-  return postJson(`${account.id}/incoming-payments`, OPEN_PAYMENT_QUERY_ACCEPT_HEADER, body)
-    .then(async (data) => {
-      const credentials = validateOpenPaymentsCredentials(data)
-      const incomingPayment = validateOpenPaymentsIncomingPayment(data, amountToDeliver)
-
-      if (incomingPayment && credentials) {
-        return {
-          accountUrl: incomingPayment.accountId,
-          destinationPaymentDetails: incomingPayment,
-          ...credentials,
-        }
-      }
-      log.debug('destinationPayment query returned an invalid response.')
-    })
-    .catch((err) => log.debug('create IncomingPayment query failed: %s', err?.message))
-    .then((res) => res || PaymentError.QueryFailed)
-}
-
 /** Fetch an Incoming Payment and STREAM credentials from an Open Payments account */
 const queryIncomingPayment = async (url: string): Promise<PaymentDestination | PaymentError> => {
   if (!createHttpUrl(url)) {
@@ -193,7 +150,7 @@ const queryIncomingPayment = async (url: string): Promise<PaymentDestination | P
 
   return fetchJson(url, OPEN_PAYMENT_QUERY_ACCEPT_HEADER)
     .then(async (data) => {
-      const credentials = validateOpenPaymentsCredentials(data)
+      const credentials = await validateOpenPaymentsCredentials(data)
       const incomingPayment = validateOpenPaymentsIncomingPayment(data)
 
       if (incomingPayment && credentials) {
@@ -241,6 +198,22 @@ export const queryAccount = async (
     )
 }
 
+/** Query an Open Payments Connection endpoint for STREAM credentials*/
+const queryConnection = async (url: string): Promise<PaymentDestination | PaymentError> => {
+  if (!createHttpUrl(url)) {
+    log.debug('destinationPayment query failed: URL not HTTP/HTTPS.')
+    return PaymentError.QueryFailed
+  }
+  return fetchJson(url, OPEN_PAYMENT_QUERY_ACCEPT_HEADER)
+    .then(
+      (data) =>
+        validateConnectionCredentials(data) ??
+        log.debug('payment pointer query returned no valid STREAM credentials.')
+    )
+    .catch((err) => log.debug('payment pointer query failed: %s', err))
+    .then((res) => (res ? res : PaymentError.QueryFailed))
+}
+
 /** Perform an HTTP request using `fetch` with timeout and retries. Resolve with parsed JSON, reject otherwise. */
 const fetchJson = async (
   url: string,
@@ -283,26 +256,6 @@ const fetchJson = async (
       }
     )
     .finally(() => clearTimeout(timer))
-}
-
-/** Perform an HTTP request using `fetch`. Resolve with parsed JSON, reject otherwise. */
-const postJson = async (
-  url: string,
-  acceptHeader: string,
-  body: Record<string, any>
-): Promise<any> => {
-  return fetch(url, {
-    method: 'post',
-    redirect: 'follow',
-    headers: {
-      Accept: acceptHeader,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  }).then(async (res: Response) => {
-    // Parse JSON on HTTP 2xx, otherwise error
-    return res.ok ? res.json() : Promise.reject()
-  })
 }
 
 const validateSharedSecretBase64 = (o: any): Buffer | undefined => {
@@ -426,13 +379,20 @@ const validateOpenPaymentsIncomingPayment = (
 }
 
 /** Validate Open Payments STREAM credentials and asset details */
-const validateOpenPaymentsCredentials = (o: any): PaymentDestination | undefined => {
+const validateOpenPaymentsCredentials = async (o: any): Promise<PaymentDestination | undefined> => {
   if (!isNonNullObject(o)) {
     return
   }
 
-  const { sharedSecret: sharedSecretBase64, ilpAddress: destinationAddress, receivedAmount } = o
+  const { ilpStreamConnection, receivedAmount } = o
   if (!receivedAmount) return
+  let details
+  if (typeof ilpStreamConnection === 'string') {
+    details = await fetchJson(ilpStreamConnection, OPEN_PAYMENT_QUERY_ACCEPT_HEADER)
+  } else {
+    details = ilpStreamConnection
+  }
+  const { ilpAddress: destinationAddress, sharedSecret: sharedSecretBase64 } = details
   const sharedSecret = validateSharedSecretBase64(sharedSecretBase64)
   const destinationAmount = validateOpenPaymentsAmount(receivedAmount)
   if (!sharedSecret || !isValidIlpAddress(destinationAddress) || !destinationAmount) {
@@ -454,6 +414,19 @@ const validateSpspCredentials = (o: any): PaymentDestination | undefined => {
 
   const { destination_account: destinationAddress, shared_secret } = o
   const sharedSecret = validateSharedSecretBase64(shared_secret)
+  if (sharedSecret && isValidIlpAddress(destinationAddress)) {
+    return { destinationAddress, sharedSecret }
+  }
+}
+
+/** Validate and transform the Open Payments connection endpoint response into STREAM credentials */
+const validateConnectionCredentials = (o: any): PaymentDestination | undefined => {
+  if (!isNonNullObject(o)) {
+    return
+  }
+
+  const { ilpAddress: destinationAddress, sharedSecret: sharedSecretBase64 } = o
+  const sharedSecret = validateSharedSecretBase64(sharedSecretBase64)
   if (sharedSecret && isValidIlpAddress(destinationAddress)) {
     return { destinationAddress, sharedSecret }
   }

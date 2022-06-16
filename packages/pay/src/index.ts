@@ -27,6 +27,8 @@ export interface SetupOptions {
   destinationAccount?: string
   /** Open Payments Incoming Payment URL to resolve details and credentials to pay a fixed-delivery payment */
   destinationPayment?: string
+  /** Open Payments Connection URL to resolve STREAM connection credentials */
+  destinationConnection?: string
   /** Fixed amount to deliver to the recipient, in base units of destination asset */
   amountToDeliver?: Amount
   /** For testing purposes: symmetric key to encrypt STREAM messages. Requires `destinationAddress` */
@@ -147,6 +149,8 @@ export enum PaymentError {
   UnenforceableDelivery = 'UnenforceableDelivery',
   /** Invalid quote parameters provided */
   InvalidQuote = 'InvalidQuote',
+  /** Invalid destination like an Open Payments account URL provided */
+  InvalidDestination = 'InvalidDestination',
 
   /**
    * Errors likely caused by the receiver, connectors, or other externalities
