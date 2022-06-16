@@ -104,9 +104,7 @@ export const fetchPaymentDetails = async (
   if (destinationPayment) {
     return queryIncomingPayment(destinationPayment)
   }
-  // Resolve STREAM credentials from either:
-  // - Incoming Payment created at Open Payments destinationAccount
-  // - SPSP query at payment pointer
+  // Resolve STREAM credentials from SPSP query at payment pointer
   else if (destinationAccount) {
     const account = await queryAccount(destinationAccount)
     if (isAccount(account)) {
@@ -114,6 +112,7 @@ export const fetchPaymentDetails = async (
     } else {
       return account
     }
+    // Resolve Open Payments Connection URL
   } else if (destinationConnection) {
     return queryConnection(destinationConnection)
   }
