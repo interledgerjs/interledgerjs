@@ -93,16 +93,35 @@ export const fetchPaymentDetails = async (
 ): Promise<PaymentDestination | PaymentError> => {
   const {
     destinationPayment,
-    destinationAccount,
     destinationConnection,
+    destinationAccount,
     sharedSecret,
     destinationAddress,
     destinationAsset,
   } = options
 
+  // Check that only one of destinationPayment, destinationConnection, destinationAccount, or STREAM credentials are provided
+  if (
+    Object.values({
+      destinationPayment,
+      destinationConnection,
+      destinationAccount,
+      destinationAddress,
+    }).filter((e) => e !== undefined).length > 1
+  ) {
+    log.debug(
+      'invalid config: more that one of destinationPayment, destinationConnection, destinationAccount, or STREAM credentials provided'
+    )
+    return PaymentError.InvalidDestination
+  }
+
   // Resolve Incoming Payment and STREAM credentials
   if (destinationPayment) {
     return queryIncomingPayment(destinationPayment)
+  }
+  // Resolve STREAM credentials from Open Payments Connection URL
+  else if (destinationConnection) {
+    return queryConnection(destinationConnection)
   }
   // Resolve STREAM credentials from SPSP query at payment pointer
   else if (destinationAccount) {
@@ -112,9 +131,6 @@ export const fetchPaymentDetails = async (
     } else {
       return account
     }
-    // Resolve Open Payments Connection URL
-  } else if (destinationConnection) {
-    return queryConnection(destinationConnection)
   }
   // STREAM credentials were provided directly
   else if (
@@ -134,7 +150,7 @@ export const fetchPaymentDetails = async (
   // No STREAM credentials or method to resolve them
   else {
     log.debug(
-      'invalid config: no destinationAccount, destinationPayment, or stream credentials provided'
+      'invalid config: no destinationPayment, destinationConnection, destinationAccount, or STREAM credentials provided'
     )
     return PaymentError.InvalidCredentials
   }

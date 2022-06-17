@@ -155,6 +155,15 @@ describe('open payments', () => {
   }
   const accountUrl = new URL(account.id)
 
+  it('fails if more than one destination provided', async () => {
+    await expect(
+      fetchPaymentDetails({
+        destinationPayment: `https://wallet.com/alice/incoming-payments/${uuid()}`,
+        destinationConnection: `https://wallet.com/${uuid()}`,
+      })
+    ).resolves.toBe(PaymentError.InvalidDestination)
+  })
+
   it('quotes an Incoming Payment', async () => {
     const prices = {
       EUR: 1,
