@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0-alpha.7](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.6...@interledger/pay@0.4.0-alpha.7) (2022-06-20)
+
+
+### Features
+
+* **ilp-pay:** allow connection url as payment destination ([#290](https://github.com/interledgerjs/interledgerjs/issues/290)) ([fdfd4e6](https://github.com/interledgerjs/interledgerjs/commit/fdfd4e638399e40b675f75be01eb7c3e08e9545c))
+
+
+
+
+
 # [0.4.0-alpha.6](https://github.com/interledgerjs/interledgerjs/compare/@interledger/pay@0.4.0-alpha.5...@interledger/pay@0.4.0-alpha.6) (2022-06-10)
 
 **Note:** Version bump only for package @interledger/pay
