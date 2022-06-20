@@ -1,4 +1,4 @@
-const { crypto } = window
+const { crypto } = self
 const HASH_ALGORITHM = 'SHA-256'
 const ENCRYPTION_ALGORITHM = 'AES-GCM'
 const IV_LENGTH = 12
