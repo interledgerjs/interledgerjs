@@ -63,7 +63,7 @@ export interface IncomingPayment {
   /** URL identifying the Incoming Payment */
   id: string
   /** URL identifying the account into which payments toward the Incoming Payment will be credited */
-  accountId: string
+  paymentPointer: string
   /** Describes whether the Incoming Payment has completed receiving funds */
   completed: boolean
   /** UNIX timestamp in milliseconds when payments toward the Incoming Payment will no longer be accepted */
@@ -170,7 +170,7 @@ const queryIncomingPayment = async (url: string): Promise<PaymentDestination | P
 
       if (incomingPayment && credentials) {
         return {
-          accountUrl: incomingPayment.accountId,
+          accountUrl: incomingPayment.paymentPointer,
           destinationPaymentDetails: incomingPayment,
           ...credentials,
         }
@@ -341,7 +341,7 @@ const validateOpenPaymentsIncomingPayment = (
 
   const {
     id,
-    accountId,
+    paymentPointer,
     completed,
     incomingAmount: unvalidatedIncomingAmount,
     receivedAmount: unvalidatedReceivedAmount,
@@ -355,7 +355,7 @@ const validateOpenPaymentsIncomingPayment = (
 
   if (
     typeof id !== 'string' ||
-    typeof accountId !== 'string' ||
+    typeof paymentPointer !== 'string' ||
     typeof completed !== 'boolean' ||
     !(typeof description === 'string' || description === undefined) ||
     !(typeof externalRef === 'string' || externalRef === undefined) ||
@@ -377,13 +377,13 @@ const validateOpenPaymentsIncomingPayment = (
   }
 
   if (!AccountUrl.fromUrl(id)) return
-  if (!AccountUrl.fromUrl(accountId)) return
+  if (!AccountUrl.fromUrl(paymentPointer)) return
 
   // TODO Should the given Incoming Payment URL be validated against the `id` URL in the Incoming Payment itself?
 
   return {
     id,
-    accountId,
+    paymentPointer,
     completed,
     expiresAt,
     description,
