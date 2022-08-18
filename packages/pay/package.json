@@ -27,7 +27,7 @@
     "ilp-packet": "^3.1.4-alpha.1",
     "ilp-protocol-stream": "^2.7.2-alpha.1",
     "long": "^4.0.0",
-    "node-fetch": "2.6.1"
+    "node-fetch": "2.6.7"
   },
   "devDependencies": {
     "@interledger/stream-receiver": "^0.3.3-alpha.2",
