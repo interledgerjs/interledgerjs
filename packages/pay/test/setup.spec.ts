@@ -106,7 +106,7 @@ const setupNock = (options: setupNockOptions) => {
     .matchHeader('Accept', 'application/json')
     .reply(200, {
       id: destinationPayment,
-      accountId: accountUrl,
+      paymentPointer: accountUrl,
       completed,
       incomingAmount,
       receivedAmount,
@@ -209,7 +209,7 @@ describe('open payments', () => {
     expect(minDeliveryAmount).toBe(BigInt(40000 - 20000))
     expect(destination.destinationPaymentDetails).toMatchObject({
       id: destinationPayment,
-      accountId: accountUrl,
+      paymentPointer: accountUrl,
       expiresAt: new Date(expiresAt!).getTime(),
       description,
       receivedAmount: receivedAmount
@@ -282,7 +282,7 @@ describe('open payments', () => {
     expect(minDeliveryAmount).toBe(BigInt(353))
     expect(destination.destinationPaymentDetails).toMatchObject({
       id: destinationPayment,
-      accountId: accountUrl,
+      paymentPointer: accountUrl,
       expiresAt: new Date(expiresAt!).getTime(),
       description,
       receivedAmount: receivedAmount
@@ -430,7 +430,7 @@ describe('open payments', () => {
             }
           : undefined,
         id: destinationPayment,
-        accountId: accountUrl,
+        paymentPointer: accountUrl,
         expiresAt: new Date(expiresAt!).getTime(),
         description,
         externalRef,
@@ -462,7 +462,7 @@ describe('open payments', () => {
             }
           : undefined,
         id: destinationPayment,
-        accountId: accountUrl,
+        paymentPointer: accountUrl,
       },
     })
   })
