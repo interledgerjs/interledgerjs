@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.7.2-alpha.1](https://github.com/interledgerjs/ilp-protocol-stream/compare/ilp-protocol-stream@2.7.2-alpha.0...ilp-protocol-stream@2.7.2-alpha.1) (2022-08-18)
+
+
+### Bug Fixes
+
+* **crypto-browser:** replace window object with self ([#291](https://github.com/interledgerjs/ilp-protocol-stream/issues/291)) ([897fa3f](https://github.com/interledgerjs/ilp-protocol-stream/commit/897fa3fe94b0119cb55a4890ba59beaeea465ed0))
+
+
+
+
+
 ## 2.7.2-alpha.0 (2022-05-04)
 
 

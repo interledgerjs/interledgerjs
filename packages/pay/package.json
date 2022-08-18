@@ -1,7 +1,7 @@
 {
   "name": "@interledger/pay",
   "description": "Send payments over Interledger",
-  "version": "0.4.0-alpha.7",
+  "version": "0.4.0-alpha.8",
   "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
   "publishConfig": {
@@ -25,12 +25,12 @@
     "abort-controller": "^3.0.0",
     "ilp-logger": "^1.4.5-alpha.1",
     "ilp-packet": "^3.1.4-alpha.1",
-    "ilp-protocol-stream": "^2.7.2-alpha.0",
+    "ilp-protocol-stream": "^2.7.2-alpha.1",
     "long": "^4.0.0",
     "node-fetch": "2.6.1"
   },
   "devDependencies": {
-    "@interledger/stream-receiver": "^0.3.3-alpha.1",
+    "@interledger/stream-receiver": "^0.3.3-alpha.2",
     "@types/long": "^4.0.1",
     "@types/node-fetch": "^2.5.7",
     "get-port": "^5.1.1",
