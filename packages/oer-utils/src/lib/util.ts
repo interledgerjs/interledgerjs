@@ -8,7 +8,7 @@ export const MAX_SAFE_BYTES = 6
 export type SafeByteLength = 1 | 2 | 3 | 4 | 5 | 6
 
 export const isSafeLength = (length: number): length is SafeByteLength =>
-  isInteger(length) && length >= 0 && length <= MAX_SAFE_BYTES
+  isInteger(length) && length >= 1 && length <= MAX_SAFE_BYTES
 
 const INTEGER_REGEX = /^-?[0-9]+$/
 export function isInteger(value: unknown): boolean {
