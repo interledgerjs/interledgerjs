@@ -116,7 +116,10 @@ describe('Reader', function () {
     it('should throw if asked to read a zero-length number', function () {
       const reader = Reader.from(Buffer.from('01', 'hex'))
 
-      assert.throw(() => reader.readUIntNumber(0), 'UInt length must be greater than zero')
+      assert.throw(
+        () => reader.readUIntNumber(0),
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     })
 
     it('should throw if asked to read a too-long number', function () {
@@ -124,7 +127,7 @@ describe('Reader', function () {
 
       assert.throw(
         () => reader.readUIntNumber(7),
-        'Value does not fit a JS number without sacrificing precision'
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
       )
     })
   })
@@ -248,7 +251,7 @@ describe('Reader', function () {
 
       assert.throws(function () {
         reader.peekUIntNumber(7)
-      }, 'Value does not fit a JS number without sacrificing precision')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
   })
 
@@ -392,7 +395,10 @@ describe('Reader', function () {
     it('should throw if asked to read a zero-length number', function () {
       const reader = Reader.from(Buffer.from('01', 'hex'))
 
-      assert.throw(() => reader.readIntNumber(0), 'Int length must be greater than zero')
+      assert.throw(
+        () => reader.readIntNumber(0),
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     })
 
     it('should throw if asked to read a too-long number', function () {
@@ -400,7 +406,7 @@ describe('Reader', function () {
 
       assert.throw(
         () => reader.readIntNumber(7),
-        'Value does not fit a JS number without sacrificing precision'
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
       )
     })
   })
@@ -525,7 +531,7 @@ describe('Reader', function () {
 
       assert.throws(function () {
         reader.peekIntNumber(7)
-      }, 'Value does not fit a JS number without sacrificing precision')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
   })
 
@@ -682,7 +688,7 @@ describe('Reader', function () {
 
       assert.throws(function () {
         reader.readVarUIntNumber()
-      }, 'Value does not fit a JS number without sacrificing precision')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
 
     it('should throw when parsing a number of length zero', function () {
@@ -690,7 +696,7 @@ describe('Reader', function () {
 
       assert.throws(function () {
         reader.readVarUIntNumber()
-      }, 'UInt of length 0 is invalid')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
   })
 
@@ -982,7 +988,7 @@ describe('Reader', function () {
 
       assert.throws(function () {
         reader.readVarIntNumber()
-      }, 'Value does not fit a JS number without sacrificing precision')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
 
     it('should throw when parsing a number of length zero', function () {
@@ -990,7 +996,7 @@ describe('Reader', function () {
 
       assert.throws(function () {
         reader.readVarIntNumber()
-      }, 'Int of length 0 is invalid')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
   })
 
@@ -1421,7 +1427,7 @@ describe('Reader', function () {
 
       assert.throws(
         () => reader.readLengthPrefix(),
-        'Value does not fit a JS number without sacrificing precision'
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
       )
     })
   })
@@ -1726,7 +1732,7 @@ describe('Reader', function () {
 
       assert.throws(() => {
         reader.readUInt64Number()
-      }, 'Value does not fit a JS number without sacrificing precision')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
   })
 
@@ -1933,7 +1939,7 @@ describe('Reader', function () {
 
       assert.throws(() => {
         reader.readInt64Number()
-      }, 'Value does not fit a JS number without sacrificing precision')
+      }, 'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision')
     })
   })
 
