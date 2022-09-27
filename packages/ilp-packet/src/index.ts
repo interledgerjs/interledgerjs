@@ -10,10 +10,10 @@ export const Errors = errors
 export { IlpAddress, isValidIlpAddress }
 export { getScheme, IlpAddressScheme } from './utils/address'
 
-export { codes as IlpError, codes as IlpErrorCode, BaseIlpError as IlpErrorClass } from './errors'
+export { IlpErrorCode, IlpErrorCode as IlpError, BaseIlpError as IlpErrorClass } from './errors'
 
-export const isCanonicalIlpRejectCode = (o: unknown): o is errors.codes =>
-  typeof o === 'string' && Object.values<string>(errors.codes).includes(o)
+export const isCanonicalIlpRejectCode = (o: unknown): o is errors.IlpErrorCode =>
+  typeof o === 'string' && Object.values<string>(errors.IlpErrorCode).includes(o)
 
 export enum Type {
   TYPE_ILP_PREPARE = 12,

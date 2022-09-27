@@ -1,6 +1,6 @@
 import { Writer } from 'oer-utils'
 
-export enum codes {
+export enum IlpErrorCode {
   F00_BAD_REQUEST = 'F00',
   F01_INVALID_PACKET = 'F01',
   F02_UNREACHABLE = 'F02',
@@ -24,42 +24,44 @@ export enum codes {
   R99_APPLICATION_ERROR = 'R99',
 }
 
+export const codes = IlpErrorCode
+
 export abstract class BaseIlpError extends Error {
-  public abstract ilpErrorCode: codes
+  public abstract ilpErrorCode: IlpErrorCode
   public ilpErrorMessage?: string
   public ilpErrorData?: Buffer
 }
 
 export class BadRequestError extends BaseIlpError {
-  public ilpErrorCode = codes.F00_BAD_REQUEST as const
+  public ilpErrorCode = IlpErrorCode.F00_BAD_REQUEST as const
 }
 
 export class InvalidPacketError extends BaseIlpError {
-  public ilpErrorCode = codes.F01_INVALID_PACKET as const
+  public ilpErrorCode = IlpErrorCode.F01_INVALID_PACKET as const
 }
 
 export class UnreachableError extends BaseIlpError {
-  public ilpErrorCode = codes.F02_UNREACHABLE as const
+  public ilpErrorCode = IlpErrorCode.F02_UNREACHABLE as const
 }
 
 export class InvalidAmountError extends BaseIlpError {
-  public ilpErrorCode = codes.F03_INVALID_AMOUNT as const
+  public ilpErrorCode = IlpErrorCode.F03_INVALID_AMOUNT as const
 }
 
 export class InsufficientDestinationAmountError extends BaseIlpError {
-  public ilpErrorCode = codes.F04_INSUFFICIENT_DESTINATION_AMOUNT as const
+  public ilpErrorCode = IlpErrorCode.F04_INSUFFICIENT_DESTINATION_AMOUNT as const
 }
 
 export class WrongConditionError extends BaseIlpError {
-  public ilpErrorCode = codes.F05_WRONG_CONDITION as const
+  public ilpErrorCode = IlpErrorCode.F05_WRONG_CONDITION as const
 }
 
 export class UnexpectedPaymentError extends BaseIlpError {
-  public ilpErrorCode = codes.F06_UNEXPECTED_PAYMENT as const
+  public ilpErrorCode = IlpErrorCode.F06_UNEXPECTED_PAYMENT as const
 }
 
 export class CannotReceiveError extends BaseIlpError {
-  public ilpErrorCode = codes.F07_CANNOT_RECEIVE as const
+  public ilpErrorCode = IlpErrorCode.F07_CANNOT_RECEIVE as const
 }
 
 export interface AmountTooLargeErrorOpts {
@@ -68,7 +70,7 @@ export interface AmountTooLargeErrorOpts {
 }
 
 export class AmountTooLargeError extends BaseIlpError {
-  public ilpErrorCode = codes.F08_AMOUNT_TOO_LARGE as const
+  public ilpErrorCode = IlpErrorCode.F08_AMOUNT_TOO_LARGE as const
   public ilpErrorData: Buffer
   constructor(message: string, opts: AmountTooLargeErrorOpts) {
     super(message)
@@ -82,7 +84,7 @@ export class AmountTooLargeError extends BaseIlpError {
 }
 
 export class FinalApplicationError extends BaseIlpError {
-  public ilpErrorCode = codes.F99_APPLICATION_ERROR as const
+  public ilpErrorCode = IlpErrorCode.F99_APPLICATION_ERROR as const
   public ilpErrorData: Buffer
   constructor(message: string, data: Buffer) {
     super(message)
@@ -91,31 +93,31 @@ export class FinalApplicationError extends BaseIlpError {
 }
 
 export class InternalError extends BaseIlpError {
-  public ilpErrorCode = codes.T00_INTERNAL_ERROR as const
+  public ilpErrorCode = IlpErrorCode.T00_INTERNAL_ERROR as const
 }
 
 export class PeerUnreachableError extends BaseIlpError {
-  public ilpErrorCode = codes.T01_PEER_UNREACHABLE as const
+  public ilpErrorCode = IlpErrorCode.T01_PEER_UNREACHABLE as const
 }
 
 export class PeerBusyError extends BaseIlpError {
-  public ilpErrorCode = codes.T02_PEER_BUSY as const
+  public ilpErrorCode = IlpErrorCode.T02_PEER_BUSY as const
 }
 
 export class ConnectorBusyError extends BaseIlpError {
-  public ilpErrorCode = codes.T03_CONNECTOR_BUSY as const
+  public ilpErrorCode = IlpErrorCode.T03_CONNECTOR_BUSY as const
 }
 
 export class InsufficientLiquidityError extends BaseIlpError {
-  public ilpErrorCode = codes.T04_INSUFFICIENT_LIQUIDITY as const
+  public ilpErrorCode = IlpErrorCode.T04_INSUFFICIENT_LIQUIDITY as const
 }
 
 export class RateLimitedError extends BaseIlpError {
-  public ilpErrorCode = codes.T05_RATE_LIMITED as const
+  public ilpErrorCode = IlpErrorCode.T05_RATE_LIMITED as const
 }
 
 export class TemporaryApplicationError extends BaseIlpError {
-  public ilpErrorCode = codes.T99_APPLICATION_ERROR as const
+  public ilpErrorCode = IlpErrorCode.T99_APPLICATION_ERROR as const
   public ilpErrorData: Buffer
   constructor(message: string, data: Buffer) {
     super(message)
@@ -124,19 +126,19 @@ export class TemporaryApplicationError extends BaseIlpError {
 }
 
 export class TransferTimedOutError extends BaseIlpError {
-  public ilpErrorCode = codes.R00_TRANSFER_TIMED_OUT as const
+  public ilpErrorCode = IlpErrorCode.R00_TRANSFER_TIMED_OUT as const
 }
 
 export class InsufficientSourceAmountError extends BaseIlpError {
-  public ilpErrorCode = codes.R01_INSUFFICIENT_SOURCE_AMOUNT as const
+  public ilpErrorCode = IlpErrorCode.R01_INSUFFICIENT_SOURCE_AMOUNT as const
 }
 
 export class InsufficientTimeoutError extends BaseIlpError {
-  public ilpErrorCode = codes.R02_INSUFFICIENT_TIMEOUT as const
+  public ilpErrorCode = IlpErrorCode.R02_INSUFFICIENT_TIMEOUT as const
 }
 
 export class RelativeApplicationError extends BaseIlpError {
-  public ilpErrorCode = codes.R99_APPLICATION_ERROR as const
+  public ilpErrorCode = IlpErrorCode.R99_APPLICATION_ERROR as const
   public ilpErrorData: Buffer
   constructor(message: string, data: Buffer) {
     super(message)
