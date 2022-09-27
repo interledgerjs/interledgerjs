@@ -129,6 +129,8 @@ export const generateKeys = (
       if (ilpReply.message.length > 0 || ilpReply.triggeredBy.length > 0) {
         log.trace('Reject message="%s" triggeredBy=%s', ilpReply.message, ilpReply.triggeredBy)
       }
+    } else {
+      throw new Error('ILP response is neither fulfillment nor rejection')
     }
 
     let responseFrames: Frame[] | undefined

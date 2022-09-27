@@ -262,6 +262,7 @@ describe('Connection', function () {
       stream2.on('end', clientSpy.stream2.end)
       stream2.on('close', clientSpy.stream2.close)
 
+      stream1.setSendMax(100)
       stream2.write('hello')
       await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
       const clientClosePromise = new Promise((resolve) => this.clientConn.once('close', resolve))
@@ -1162,9 +1163,6 @@ describe('Connection', function () {
         destinationAccount,
         sharedSecret,
         slippage: 0.05,
-      })
-      this.clientConn.on('_send_loop_finished', () => {
-        console.log('slf')
       })
       this.serverConn = await connectionPromise
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
