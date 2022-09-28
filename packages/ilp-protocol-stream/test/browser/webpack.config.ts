@@ -1,12 +1,22 @@
 import path from 'path'
-import { Configuration } from 'webpack'
+import { Configuration, ProvidePlugin } from 'webpack'
 
 const config: Configuration = {
   mode: 'development',
-  entry: './test/browser/main.js',
+  entry: './test/browser/main.ts',
   resolve: {
     aliasFields: ['browser'],
     extensions: ['.tsx', '.ts', '.js', '.json'],
+    fallback: {
+      fs: false,
+      net: false,
+      tls: false,
+      crypto: false,
+      assert: require.resolve('assert'),
+      process: require.resolve('process/browser'),
+      util: require.resolve('util/'),
+      stream: require.resolve('stream-browserify'),
+    },
   },
   module: {
     rules: [
@@ -25,14 +35,12 @@ const config: Configuration = {
     path: path.resolve(__dirname, '../..'),
   },
   optimization: { usedExports: true },
-
-  node: {
-    console: true,
-    fs: 'empty',
-    net: 'empty',
-    tls: 'empty',
-    crypto: 'empty',
-  },
+  plugins: [
+    new ProvidePlugin({
+      process: require.resolve('process/browser'),
+      Buffer: ['buffer', 'Buffer'],
+    }),
+  ],
 }
 
 export default config

@@ -3,13 +3,13 @@ import {
   isLong,
   longFromValue,
   longToBuffer,
-  MAX_SAFE_BYTES,
   getLongIntBufferSize,
   getLongUIntBufferSize,
   getIntBufferSize,
   getUIntBufferSize,
+  isSafeLength,
 } from './util'
-import * as Long from 'long'
+import Long from 'long'
 
 type LongValue = Long | number | string
 
@@ -72,6 +72,8 @@ class Writer implements WriterInterface {
   writeUInt(_value: LongValue, length: number): void {
     if (!isInteger(_value)) {
       throw new Error('UInt must be an integer')
+    } else if (!isInteger(length)) {
+      throw new Error('Length must be an integer')
     } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
       throw new Error('UInt is larger than safe JavaScript range (try using Longs instead)')
     } else if (length <= 0) {
@@ -80,7 +82,7 @@ class Writer implements WriterInterface {
       throw new Error('Expected unsigned Long')
     }
 
-    if (length <= MAX_SAFE_BYTES) {
+    if (isSafeLength(length)) {
       const value = Number(_value)
       if (value < 0) {
         throw new Error('UInt must be positive')
@@ -109,6 +111,8 @@ class Writer implements WriterInterface {
   writeInt(_value: LongValue, length: number): void {
     if (!isInteger(_value)) {
       throw new Error('Int must be an integer')
+    } else if (!isInteger(length)) {
+      throw new Error('Length must be an integer')
     } else if (length <= 0) {
       throw new Error('Int length must be greater than zero')
     } else if (typeof _value === 'number' && _value > Writer.MAX_SAFE_INTEGER) {
@@ -119,7 +123,7 @@ class Writer implements WriterInterface {
       throw new Error('Expected signed Long')
     }
 
-    if (length <= MAX_SAFE_BYTES) {
+    if (isSafeLength(length)) {
       const value = Number(_value)
       if (value < Writer.INT_RANGES[length][0] || value > Writer.INT_RANGES[length][1]) {
         throw new Error('Int ' + _value + ' does not fit in ' + length + ' bytes')
@@ -334,24 +338,24 @@ class Writer implements WriterInterface {
 }
 
 interface Writer {
-  writeUInt8(value: LongValue): undefined
-  writeUInt16(value: LongValue): undefined
-  writeUInt32(value: LongValue): undefined
-  writeUInt64(value: LongValue): undefined
-  writeInt8(value: LongValue): undefined
-  writeInt16(value: LongValue): undefined
-  writeInt32(value: LongValue): undefined
-  writeInt64(value: LongValue): undefined
+  writeUInt8(value: LongValue): void
+  writeUInt16(value: LongValue): void
+  writeUInt32(value: LongValue): void
+  writeUInt64(value: LongValue): void
+  writeInt8(value: LongValue): void
+  writeInt16(value: LongValue): void
+  writeInt32(value: LongValue): void
+  writeInt64(value: LongValue): void
 }
 
 // Create write(U)Int{8,16,32,64} shortcuts
-;[1, 2, 4, 8].forEach((bytes) => {
-  Writer.prototype['writeUInt' + bytes * 8] = function (value: number) {
-    this.writeUInt(value, bytes)
+;([8, 16, 32, 64] as const).forEach((bits) => {
+  Writer.prototype[`writeUInt${bits}`] = function (value) {
+    this.writeUInt(value, bits / 8)
   }
 
-  Writer.prototype['writeInt' + bytes * 8] = function (value: number) {
-    this.writeInt(value, bytes)
+  Writer.prototype[`writeInt${bits}`] = function (value) {
+    this.writeInt(value, bits / 8)
   }
 })
 
@@ -366,14 +370,14 @@ export interface WriterInterface {
   createVarOctetString(length: number): WriterInterface
   write(buffer: Buffer): void
 
-  writeUInt8(value: LongValue): undefined
-  writeUInt16(value: LongValue): undefined
-  writeUInt32(value: LongValue): undefined
-  writeUInt64(value: LongValue): undefined
-  writeInt8(value: LongValue): undefined
-  writeInt16(value: LongValue): undefined
-  writeInt32(value: LongValue): undefined
-  writeInt64(value: LongValue): undefined
+  writeUInt8(value: LongValue): void
+  writeUInt16(value: LongValue): void
+  writeUInt32(value: LongValue): void
+  writeUInt64(value: LongValue): void
+  writeInt8(value: LongValue): void
+  writeInt16(value: LongValue): void
+  writeInt32(value: LongValue): void
+  writeInt64(value: LongValue): void
 }
 
 export default Writer

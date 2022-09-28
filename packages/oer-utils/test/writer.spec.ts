@@ -1,5 +1,5 @@
 import Writer from '../src/lib/writer'
-import * as Long from 'long'
+import Long from 'long'
 
 import chai = require('chai')
 const assert = chai.assert

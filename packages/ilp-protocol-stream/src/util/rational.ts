@@ -1,5 +1,5 @@
 import assert from 'assert'
-import * as Long from 'long'
+import Long from 'long'
 import { multiplyDivideFloor, multiplyDivideCeil, multiplyDivideRound } from './long'
 
 export default class Rational {

@@ -1,5 +1,5 @@
 import createLogger, { Logger } from 'ilp-logger'
-import * as Long from 'long'
+import Long from 'long'
 import { Duplex } from 'stream'
 import { DataQueue } from './util/data-queue'
 import { OffsetSorter } from './util/data-offset-sorter'
@@ -57,7 +57,7 @@ export class DataAndMoneyStream extends Duplex {
   protected _receiveMax: Long
   protected _outgoingHeldAmount: Long
 
-  protected closed: boolean
+  protected _closed: boolean
   protected holds: { [id: string]: Long }
 
   protected _incomingData: OffsetSorter
@@ -90,7 +90,7 @@ export class DataAndMoneyStream extends Duplex {
 
     this._sentEnd = false
     this._remoteSentEnd = false
-    this.closed = false
+    this._closed = false
     this.holds = {}
 
     this._incomingData = new OffsetSorter()
@@ -150,6 +150,10 @@ export class DataAndMoneyStream extends Duplex {
    */
   get receipt(): Buffer | undefined {
     return this._receipt
+  }
+
+  get closed(): boolean {
+    return this._closed
   }
 
   /**
@@ -244,7 +248,7 @@ export class DataAndMoneyStream extends Duplex {
       }
       const endHandler = () => {
         // Clean up on next tick in case an error was also emitted
-        setImmediate(cleanup)
+        setTimeout(cleanup)
         if (this._totalSent.greaterThanOrEqual(limit)) {
           resolve()
         } else {
@@ -314,7 +318,7 @@ export class DataAndMoneyStream extends Duplex {
       }
       const endHandler = () => {
         // Clean up on next tick in case an error was also emitted
-        setImmediate(cleanup)
+        setTimeout(cleanup)
         if (this._totalReceived.greaterThanOrEqual(limit)) {
           resolve()
         } else {
@@ -464,9 +468,9 @@ export class DataAndMoneyStream extends Duplex {
         this.log.debug('error waiting for money to be sent:', err)
       }
       this.log.info('stream ended')
-      this.closed = true
+      this._closed = true
       // Only emit the 'close' & 'end' events if the stream doesn't automatically
-      setImmediate(() => {
+      setTimeout(() => {
         if (!this.emittedEnd) {
           this.emittedEnd = true
           this.safeEmit('end')
@@ -500,12 +504,12 @@ export class DataAndMoneyStream extends Duplex {
    */
   _destroy(error: Error | null, callback: (error: Error | null) => void): void {
     this.log.error('destroying stream because of error:', error)
-    this.closed = true
+    this._closed = true
     if (error) {
       this._errorMessage = error.message
     }
     // Only emit the 'close' & 'end' events if the stream doesn't automatically
-    setImmediate(() => {
+    setTimeout(() => {
       if (!this.emittedEnd) {
         this.emittedEnd = true
         this.safeEmit('end')
@@ -557,7 +561,7 @@ export class DataAndMoneyStream extends Duplex {
       // Don't call immediately since looping before the read() has finished
       // would report incorrect offsets.
       if (this['readableFlowing'] !== true) {
-        process.nextTick(() => this.emit('_maybe_start_send_loop'))
+        setTimeout(() => this.emit('_maybe_start_send_loop'))
       }
       return
     }

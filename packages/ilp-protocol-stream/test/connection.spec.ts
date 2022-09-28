@@ -10,7 +10,7 @@ import * as sinon from 'sinon'
 import * as Chai from 'chai'
 import { Writer } from 'oer-utils'
 import chaiAsPromised from 'chai-as-promised'
-import * as Long from 'long'
+import Long from 'long'
 import { createReceipt } from '../src/util/receipt'
 import packetsFixtures from './fixtures/packets.json'
 Chai.use(chaiAsPromised)
@@ -191,13 +191,8 @@ describe('Connection', function () {
       stream2.on('close', clientSpy.stream2.close)
 
       stream1.setSendMax(100)
-      await new Promise(setImmediate)
-
       stream2.write('hello')
-      await new Promise(setImmediate)
       await this.clientConn.end()
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
 
       assert.calledOnce(clientSpy.stream1.finish)
       assert.calledOnce(clientSpy.stream1.end)
@@ -268,13 +263,12 @@ describe('Connection', function () {
       stream2.on('close', clientSpy.stream2.close)
 
       stream1.setSendMax(100)
-      await new Promise(setImmediate)
-
       stream2.write('hello')
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
+      const clientClosePromise = new Promise((resolve) => this.clientConn.once('close', resolve))
       await this.serverConn.end()
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await clientClosePromise
+
       assert.calledOnce(clientSpy.stream1.finish)
       assert.calledOnce(clientSpy.stream1.end)
       assert.calledOnce(clientSpy.stream1.close)
@@ -293,20 +287,25 @@ describe('Connection', function () {
     })
 
     it('should remove the stream record once one side calls end', async function () {
-      this.clientConn.createStream().write('hello')
-      this.clientConn.createStream().write('hello')
+      const stream1 = this.clientConn.createStream()
+      const stream2 = this.clientConn.createStream()
+      stream1.write('hello')
+      stream2.write('hello')
 
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.serverConn.once('connect', resolve))
 
       assert.isTrue(this.serverConn['streams'].has(1))
       assert.isTrue(this.serverConn['streams'].has(3))
+
+      assert.isTrue(this.clientConn['streams'].has(1))
+      assert.isTrue(this.clientConn['streams'].has(3))
 
       await this.serverConn.end()
 
       assert.isFalse(this.serverConn['streams'].has(1))
       assert.isFalse(this.serverConn['streams'].has(3))
 
-      await new Promise(setImmediate)
+      await new Promise((resolve) => stream2.once('close', resolve))
 
       assert.isFalse(this.clientConn['streams'].has(1))
       assert.isFalse(this.clientConn['streams'].has(3))
@@ -321,7 +320,6 @@ describe('Connection', function () {
       })
       const serverStream = this.serverConn.createStream()
       serverStream.write(Buffer.alloc(30000))
-      await new Promise(setImmediate)
       await this.serverConn.end()
       assert.equal(Buffer.concat(data).length, 30000)
     })
@@ -335,7 +333,6 @@ describe('Connection', function () {
       })
       const clientStream = this.clientConn.createStream()
       clientStream.write(Buffer.alloc(30000))
-      await new Promise(setImmediate)
       await this.clientConn.end()
       await this.serverConn.end()
       assert.equal(Buffer.concat(data).length, 30000)
@@ -375,19 +372,26 @@ describe('Connection', function () {
     })
 
     it('should keep connection open when a stream is ended', async function () {
+      const serverStreamPromise = new Promise((resolve) => this.serverConn.once('stream', resolve))
+
       const stream = this.clientConn.createStream()
-      const connectionCloseSpy = sinon.spy()
-      this.serverConn.on('stream', (stream: DataAndMoneyStream) => {
-        stream.on('closed', connectionCloseSpy)
-      })
+      const clientConnectionCloseSpy = sinon.spy()
+      const serverConnectionCloseSpy = sinon.spy()
+      this.clientConn.on('close', clientConnectionCloseSpy)
+      this.serverConn.on('close', serverConnectionCloseSpy)
+      await serverStreamPromise
 
-      stream.write('hello')
-      await new Promise(setImmediate)
-      stream.setSendMax(100)
-      await new Promise(setImmediate)
+      const serverStreamClosePromise = new Promise((resolve) =>
+        this.serverConn.streams.get(1).once('close', resolve)
+      )
+
+      await stream.write('hello')
+      await stream.setSendMax(100)
       await stream.end()
+      await serverStreamClosePromise
 
-      assert.notCalled(connectionCloseSpy)
+      assert.notCalled(clientConnectionCloseSpy)
+      assert.notCalled(serverConnectionCloseSpy)
     })
 
     it('should emit error on next tick after attempting to send data on a closed connection if an error listener is present', async function () {
@@ -407,8 +411,7 @@ describe('Connection', function () {
       assert.calledOnce(serverStreamData)
 
       // Writing after the stream is closed should return false and, on the next tick, call the error handler
-      assert.isFalse(clientStream.write('hello'))
-      await new Promise(setImmediate)
+      await new Promise((resolve) => assert.isFalse(clientStream.write('hello', resolve)))
       assert.calledOnceWithMatch(
         clientErrorHandler,
         sinon.match.instanceOf(Error).and(sinon.match.has('message', 'write after end'))
@@ -472,17 +475,17 @@ describe('Connection', function () {
       } catch (err) {
         // Older Node.js versions (<=12) will throw here, newer ones won't. Therefore, we handle
         // both cases and, if an error is thrown, we check the error message.
-        assert.equal(err.message, 'Cannot call write after a stream was destroyed')
+        assert.equal((err as Error).message, 'Cannot call write after a stream was destroyed')
       }
       try {
         assert.isFalse(serverStream.write('hello', serverWriteCallback))
       } catch (err) {
         // Older Node.js versions (<=12) will throw here, newer ones won't. Therefore, we handle
         // both cases and, if an error is thrown, we check the error message.
-        assert.equal(err.message, 'Cannot call write after a stream was destroyed')
+        assert.equal((err as Error).message, 'Cannot call write after a stream was destroyed')
       }
       assert.throws(() => clientStream.setSendMax(300), 'Stream already closed')
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve))
       assert.calledOnceWithMatch(
         clientWriteCallback,
         sinon.match
@@ -515,15 +518,15 @@ describe('Connection', function () {
       })
 
       stream1.write('hello')
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
       stream1.setSendMax(100)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
       await stream1.destroy()
 
       stream2.write('hello')
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
       stream2.setSendMax(200)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
       assert.calledTwice(dataSpy)
       assert.calledTwice(moneySpy)
     })
@@ -542,6 +545,7 @@ describe('Connection', function () {
     it('should destroy the connection if it is idle for too long', async function () {
       const clock = sinon.useFakeTimers({
         toFake: ['setTimeout', 'Date'],
+        shouldAdvanceTime: true,
       })
       const clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
@@ -1176,7 +1180,7 @@ describe('Connection', function () {
       assert.equal(this.clientConn.totalSent, 2000)
 
       // Wait for the return payment.
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
 
       // Server Sends 111
       assert.equal(this.clientConn.totalReceived, 222)
@@ -1195,7 +1199,6 @@ describe('Connection', function () {
 
   describe('Fixed Exchange Rate', function () {
     beforeEach(async function () {
-      await new Promise((resolve) => setTimeout(resolve, 100))
       const connectionPromise = this.server.acceptConnection()
       this.clientConn = await createConnection({
         ...this.server.generateAddressAndSecret(),
@@ -1427,7 +1430,7 @@ describe('Connection', function () {
        */
 
       const shouldFulfillSpy = sinon.spy(
-        async (amount: Long, packetId: Buffer, connectionTag: string) => {
+        async (amount: Long, packetId: Buffer, connectionTag?: string) => {
           assert.equal(actualConnectionTag, connectionTag)
 
           assert.isFalse(packetIds.has(packetId.toString())) // Test that the packet Ids are unique
@@ -1500,7 +1503,6 @@ describe('Connection', function () {
 
   describe('Custom Expiry', function () {
     beforeEach(async function () {
-      await new Promise((resolve) => setTimeout(resolve, 100))
       this.expiry = new Date(Date.now() + 1234)
       const connectionPromise = this.server.acceptConnection()
       this.clientConn = await createConnection({
@@ -1530,8 +1532,8 @@ describe('Connection', function () {
   describe('Error Handling', function () {
     it('should emit an error and reject all flushed promises if a packet is rejected with an unexpected final error code', async function () {
       const sendDataStub = sinon.stub(this.clientPlugin, 'sendData')
-      const spy = sinon.spy()
-      this.clientConn.on('error', spy)
+      const clientErrorSpy = sinon.spy()
+      this.clientConn.on('error', clientErrorSpy)
       sendDataStub.resolves(
         IlpPacket.serializeIlpReject({
           code: 'F89',
@@ -1554,8 +1556,7 @@ describe('Connection', function () {
           'Stream was closed before the desired amount was sent (target: 204, totalSent: 0)'
         ),
       ])
-      await new Promise(setImmediate)
-      assert.callCount(spy, 1)
+      assert.callCount(clientErrorSpy, 1)
     })
 
     it('should reduce the packet amount on T04: Insufficient Liquidity errors', async function () {
@@ -1944,9 +1945,7 @@ describe('Connection', function () {
       assert.throws(() => serverConn.createStream())
 
       streams[0].end()
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => serverConn.once('_send_loop_finished', resolve))
 
       assert.doesNotThrow(() => serverConn.createStream())
     })
@@ -1970,9 +1969,7 @@ describe('Connection', function () {
         }
       }
 
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
 
       const bytesBuffered = serverStreams.reduce((sum, stream) => sum + stream.readableLength, 0)
       // Max data - estimated overhead for StreamDataFrame
@@ -1990,15 +1987,23 @@ describe('Connection', function () {
         this.clientConn.createStream(),
         this.clientConn.createStream(),
       ]
+
+      // Artifically force remoteMaxOffset to be very large
+      Object.defineProperty(this.clientConn, 'remoteMaxOffset', {
+        get: () => 999999999,
+        set: () => {
+          // ignore setting
+        },
+      })
+
+      // Then try to send a lot of data
       const data = Buffer.alloc(16384)
       for (const stream of streams) {
         stream.write(data)
       }
-      await new Promise(setImmediate)
-      this.clientConn['remoteMaxOffset'] = 999999999
-      await new Promise(setImmediate)
-      this.clientConn['remoteMaxOffset'] = 999999999
-      await new Promise(setImmediate)
+
+      // Finally, wait until we get kicked off the connection
+      await new Promise((resolve) => this.clientConn.once('close', resolve))
 
       assert.calledOnce(spy)
       assert.equal(
@@ -2012,13 +2017,23 @@ describe('Connection', function () {
       this.clientConn.on('error', spy)
 
       const clientStream = this.clientConn.createStream()
+
+      // Artifically force remoteMaxOffset to be very large
+      Object.defineProperty(clientStream, '_remoteMaxOffset', {
+        get: () => 999999,
+        set: () => {
+          // ignore setting
+        },
+      })
+
+      // Then try to send a lot of data
       const data = Buffer.alloc(1000)
       for (let i = 0; i < 20; i++) {
         clientStream.write(data)
       }
 
-      clientStream._remoteMaxOffset = 999999
-      await new Promise(setImmediate)
+      // Finally, wait until we get kicked off the connection
+      await new Promise((resolve) => this.clientConn.once('close', resolve))
 
       assert.calledOnce(spy)
       assert.equal(
@@ -2055,12 +2070,16 @@ describe('Connection', function () {
   describe('Closing Streams', function () {
     it('should remove the stream record when it is closed', async function () {
       const clientStream = this.clientConn.createStream()
-      clientStream.end('hello')
 
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.serverConn.once('stream', resolve))
+      assert.isTrue(this.clientConn['streams'].has(1))
       assert.isTrue(this.serverConn['streams'].has(1))
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+
+      const clientStreamRemovePromise = new Promise((resolve) =>
+        this.serverConn.once('_stream_removed', resolve)
+      )
+      clientStream.end('hello')
+      await clientStreamRemovePromise
 
       assert.isFalse(this.clientConn['streams'].has(1))
       assert.isFalse(this.serverConn['streams'].has(1))
@@ -2077,7 +2096,7 @@ describe('Connection', function () {
 
       this.clientConn['nextPacketSequence'] = 2 ** 31
       clientStream.write('hello')
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('close', resolve))
 
       assert.calledOnce(clientSpy)
       assert.calledOnce(serverSpy)

@@ -60,16 +60,19 @@ export async function createConnection(opts: CreateConnectionOpts): Promise<Conn
       const fulfill = await connection.handlePrepare(prepare)
       return IlpPacket.serializeIlpFulfill(fulfill)
     } catch (err) {
-      if (!err.ilpErrorCode) {
+      if (IlpPacket.isIlpError(err)) {
+        return IlpPacket.errorToReject(clientAddress, err)
+      } else {
         log.error('error handling prepare:', err)
+
+        return IlpPacket.serializeIlpReject({
+          // TODO should the default be F00 or T00?
+          code: 'F00',
+          message: '',
+          data: Buffer.alloc(0),
+          triggeredBy: clientAddress,
+        })
       }
-      // TODO should the default be F00 or T00?
-      return IlpPacket.serializeIlpReject({
-        code: err.ilpErrorCode || 'F00',
-        message: err.ilpErrorMessage || '',
-        data: err.ilpErrorData || Buffer.alloc(0),
-        triggeredBy: clientAddress,
-      })
     }
   })
   connection.once('close', () => {

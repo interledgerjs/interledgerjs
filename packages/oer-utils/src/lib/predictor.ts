@@ -6,7 +6,7 @@ import {
   getLongUIntBufferSize,
   getLongIntBufferSize,
 } from './util'
-import * as Long from 'long'
+import Long from 'long'
 import { WriterInterface } from './writer'
 
 type LongValue = Long | number | string
@@ -162,24 +162,24 @@ class Predictor implements WriterInterface {
 }
 
 interface Predictor {
-  writeUInt8(value: number): undefined
-  writeUInt16(value: number): undefined
-  writeUInt32(value: number): undefined
-  writeUInt64(value: number): undefined
-  writeInt8(value: number): undefined
-  writeInt16(value: number): undefined
-  writeInt32(value: number): undefined
-  writeInt64(value: number): undefined
+  writeUInt8(value: number): void
+  writeUInt16(value: number): void
+  writeUInt32(value: number): void
+  writeUInt64(value: number): void
+  writeInt8(value: number): void
+  writeInt16(value: number): void
+  writeInt32(value: number): void
+  writeInt64(value: number): void
 }
 
 // Create writeUInt{8,16,32,64} shortcuts
-;[1, 2, 4, 8].forEach((bytes) => {
-  Predictor.prototype['writeUInt' + bytes * 8] = function (value: number) {
-    return this.writeUInt(value, bytes)
+;([8, 16, 32, 64] as const).forEach((bits) => {
+  Predictor.prototype[`writeUInt${bits}`] = function (value) {
+    return this.writeUInt(value, bits / 8)
   }
 
-  Predictor.prototype['writeInt' + bytes * 8] = function (value: number) {
-    return this.writeUInt(value, bytes)
+  Predictor.prototype[`writeInt${bits}`] = function (value) {
+    return this.writeUInt(value, bits / 8)
   }
 })
 

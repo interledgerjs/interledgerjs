@@ -1,11 +1,15 @@
 // This code is executed within Chromium by Puppeteer.
 
-const IlpPluginBtp = require('ilp-plugin-btp')
-const { createConnection, Connection } = require('../..')
+import IlpPluginBtp from 'ilp-plugin-btp'
+import { createConnection } from '../../src'
+import MagicalWindow from './magical-window-interface'
+import { runCryptoTests } from '../crypto.spec'
+
+declare const window: Partial<MagicalWindow>
 
 // Use a wrapper function, because for some reason attaching `Client` to `window`
 // loses the constructor so the test can't use it.
-async function makeStreamClient(btpOpts, opts) {
+window.makeStreamClient = async (btpOpts, opts) => {
   const clientPlugin = new IlpPluginBtp(btpOpts)
   return await createConnection({
     plugin: clientPlugin,
@@ -15,5 +19,4 @@ async function makeStreamClient(btpOpts, opts) {
   })
 }
 
-window.makeStreamClient = makeStreamClient
-window.runCryptoTests = require('../crypto.spec').runCryptoTests
+window.runCryptoTests = runCryptoTests

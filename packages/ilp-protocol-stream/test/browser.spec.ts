@@ -9,6 +9,7 @@ import webpack from 'webpack'
 import PluginMiniAccounts from 'ilp-plugin-mini-accounts'
 import { createServer, Connection } from '../src'
 import webpackConfig from './browser/webpack.config'
+import MagicalWindow from './browser/magical-window-interface'
 
 const BTP_SERVER_OPTS = {
   port: 9000,
@@ -19,6 +20,8 @@ const BTP_SERVER_OPTS = {
     assetCode: '___',
   },
 }
+
+declare const window: MagicalWindow
 
 describe('Puppeteer', function () {
   before(async function () {
@@ -75,7 +78,7 @@ describe('Puppeteer', function () {
             opts
           )
         } catch (err) {
-          console.error('uncaught error:', err.stack)
+          console.error('uncaught error:', err)
           throw err
         }
       },
@@ -89,7 +92,7 @@ describe('Puppeteer', function () {
 
   afterEach('Tear down client & server', async function () {
     await this.page.evaluate(async function () {
-      await window['streamClient'].end()
+      await window.streamClient!.end()
     })
     await this.serverConnection.destroy()
     await this.server.close()
@@ -98,8 +101,10 @@ describe('Puppeteer', function () {
   describe('stream money', function () {
     it('sends money', async function () {
       await this.page.evaluate(async function () {
-        const stream = window['streamClient'].createStream()
-        await stream.sendTotal(100)
+        if (window.streamClient) {
+          const stream = window.streamClient.createStream()
+          await stream.sendTotal(100)
+        }
       })
       assert.equal(this.serverConnection.totalReceived, '100')
     })
@@ -110,14 +115,16 @@ describe('Puppeteer', function () {
     it('passes', async function () {
       await this.page.evaluate(async function () {
         const tests: any[] = []
-        window['runCryptoTests']({
+        // TODO: This could be typed more strongly but don't want to figure it out for mocha
+        // since I think we should switch to jest anyways
+        window.runCryptoTests({
           describe: function (label: any, run: any) {
             run()
           },
           it: function (label: any, run: any) {
             tests.push(run())
           },
-        })
+        } as any)
         await Promise.all(tests)
       })
     })
@@ -129,7 +136,7 @@ function buildClientBundle() {
     webpack(webpackConfig, (err, stats) => {
       if (err) {
         reject(err)
-      } else if (stats.hasErrors()) {
+      } else if (stats && stats.hasErrors()) {
         reject(stats.compilation.errors[0])
       } else {
         resolve()

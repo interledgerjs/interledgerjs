@@ -17,6 +17,10 @@ const responseObject = {
 }
 const responseBuffer = PacketV0.serializeIldcpResponse(responseObject)
 
+interface BenchmarkContext {
+  name: string
+}
+
 new Benchmark.Suite('serializeIldcpResponse  ')
   .add('v0', function () {
     PacketV0.serializeIldcpResponse(responseObject)
@@ -24,7 +28,7 @@ new Benchmark.Suite('serializeIldcpResponse  ')
   .add('v1', function () {
     PacketV1.serializeIldcpResponse(responseObject)
   })
-  .on('cycle', function (event: any) {
+  .on('cycle', function (this: BenchmarkContext, event: any) {
     console.log(this.name, '\t', String(event.target))
   })
   .run({})
@@ -35,7 +39,7 @@ new Benchmark.Suite('deserializeIldcpResponse')
   .add('v1', function () {
     PacketV1.deserializeIldcpResponse(responseBuffer)
   })
-  .on('cycle', function (event: any) {
+  .on('cycle', function (this: BenchmarkContext, event: any) {
     console.log(this.name, '\t', String(event.target))
   })
   .run({})

@@ -1,6 +1,6 @@
 import { Reader, Writer } from 'oer-utils'
 import { longFromValue, LongValue } from './long'
-import * as Long from 'long'
+import Long from 'long'
 import { generateReceiptHMAC } from '../crypto'
 
 export const RECEIPT_VERSION = 1

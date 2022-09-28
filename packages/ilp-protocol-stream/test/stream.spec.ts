@@ -1,6 +1,6 @@
 import 'mocha'
 import { createConnection, Server } from '../src/index'
-import * as Long from 'long'
+import Long from 'long'
 import MockPlugin from './mocks/plugin'
 import { DataAndMoneyStream } from '../src/stream'
 import { Duplex } from 'stream'
@@ -99,8 +99,7 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
 
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve))
       assert.notCalled(spy)
       assert.equal(clientStream.totalSent, '0')
     })
@@ -121,7 +120,6 @@ describe('DataAndMoneyStream', function () {
     it('should accept money if the receiveMax is raised after an async call', async function () {
       const spy = sinon.spy()
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
-        await new Promise((resolve) => setTimeout(resolve, 10))
         stream.setReceiveMax(500)
         stream.on('money', spy)
       })
@@ -143,18 +141,13 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(2000)
 
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
       assert.callCount(spy, 1)
       assert.calledWith(spy, '500')
       assert.equal(clientStream.totalSent, '1000')
 
       serverStream!.setReceiveMax(1000)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => clientStream.once('outgoing_total_sent', resolve))
 
       assert.callCount(spy, 2)
       assert.calledWith(spy.firstCall, '500')
@@ -167,8 +160,7 @@ describe('DataAndMoneyStream', function () {
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
         stream.setReceiveMax(500)
 
-        await new Promise(setImmediate)
-        await new Promise(setImmediate)
+        await new Promise((resolve) => setTimeout(resolve))
 
         assert.equal(stream.totalReceived, '500')
         assert.throws(
@@ -362,13 +354,12 @@ describe('DataAndMoneyStream', function () {
       })
       const clientStream = this.clientConn.createStream()
       clientStream.setSendMax(1000)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve))
 
       await receivedPromise!
       assert.equal(receiverStream!.totalReceived, '500')
 
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve))
       assert.equal(clientStream.totalSent, '1000')
     })
 
@@ -527,9 +518,7 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.write(Buffer.alloc(30000))
       clientStream.end()
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => clientStream.once('close', resolve))
       assert.equal(Buffer.concat(data).length, 30000)
     })
 
@@ -554,7 +543,7 @@ describe('DataAndMoneyStream', function () {
       const clientStream = this.clientConn.createStream()
       clientStream.on('error', spy)
       clientStream.setSendMax(100)
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      await new Promise((resolve) => this.serverConn.once('_send_loop_finished', resolve))
 
       const response = await this.clientConn['sendPacket'].call(
         this.clientConn,
@@ -588,9 +577,9 @@ describe('DataAndMoneyStream', function () {
       // Send a small amount to open the stream on the other side
       const clientStream = this.clientConn.createStream()
       clientStream.write('hello')
-      await new Promise((resolve) => setTimeout(resolve, 10))
+      await new Promise((resolve) => this.serverConn.once('_send_loop_finished', resolve))
 
-      const response = await this.clientConn['sendPacket'].call(
+      const response = await this.clientConn.sendPacket.call(
         this.clientConn,
         new Packet(this.clientConn['nextPacketSequence']++, 12, 0, [
           new StreamDataFrame(clientStream.id, 5, Buffer.from('blah')),
@@ -617,7 +606,7 @@ describe('DataAndMoneyStream', function () {
       clientStream.on('error', clientErrorHandler)
       clientStream.end()
       clientStream.write('hello', clientWriteCallback)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve))
       assert.calledOnceWithMatch(
         clientWriteCallback,
         sinon.match.instanceOf(Error).and(sinon.match.has('message', 'write after end'))
@@ -709,7 +698,7 @@ describe('DataAndMoneyStream', function () {
 
     it('should accurately report the readableLength and writableLength', function (done) {
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
-        await new Promise(setImmediate)
+        await new Promise((resolve) => setTimeout(resolve))
         assert.equal(stream.readableLength, 5)
         stream.on('data', () => {
           // do nothing
@@ -724,7 +713,7 @@ describe('DataAndMoneyStream', function () {
 
     it('should accurately report the readableHighWaterMark and writableHighWaterMark', function (done) {
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
-        await new Promise(setImmediate)
+        await new Promise((resolve) => setTimeout(resolve))
         assert.equal(stream.readableHighWaterMark, 16384)
         assert.equal(stream.writableHighWaterMark, 16384)
         stream.on('data', () => {
@@ -786,15 +775,15 @@ describe('DataAndMoneyStream', function () {
     it('should respect the backpressure from the other side', function (done) {
       this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
         // Peer sends first chunk
-        await new Promise(setImmediate)
+        await new Promise((resolve) => setTimeout(resolve))
         assert.equal(stream.readableLength, 16384)
         assert.equal(stream._getIncomingOffsets().maxAcceptable, 16384)
 
         // We consume some
         stream.read(3450)
-        await new Promise(setImmediate)
+        await new Promise((resolve) => setTimeout(resolve))
         assert.equal(stream.readableLength, 16384 - 3450)
-        await new Promise(setImmediate)
+        await new Promise((resolve) => setTimeout(resolve))
 
         // Now they've sent the next chunk
         assert.equal(stream.readableLength, 16384)
@@ -809,43 +798,41 @@ describe('DataAndMoneyStream', function () {
       }
     })
 
-    it('should respect the backpressure from the other side (paused idle stream)', function (done) {
-      this.serverConn.on('stream', async (stream: DataAndMoneyStream) => {
-        // Peer sends first chunk
-        // Wait to allow both sides loops to finish.
-        await new Promise((resolve) => setTimeout(resolve, 10))
-        assert.equal(stream.readableLength, 16384)
-        assert.equal(stream._getIncomingOffsets().maxAcceptable, 16384)
-
-        // We consume some
-        stream.read(3450)
-        await new Promise(setImmediate)
-        assert.equal(stream.readableLength, 16384 - 3450)
-        //await new Promise(setImmediate)
-
-        // Wait to allow both sides loops to finish.
-        await new Promise((resolve) => setTimeout(resolve, 10))
-        // Now they've sent the next chunk
-        assert.equal(stream.readableLength, 16384)
-        assert.equal(stream._getIncomingOffsets().maxAcceptable, 16384 + 3450)
-        done()
-      })
-
+    it('should respect the backpressure from the other side (paused idle stream)', async function () {
       const clientStream = this.clientConn.createStream()
       clientStream.write(Buffer.alloc(400 * 1000, 'af39', 'hex'))
+
+      const serverStream = await new Promise<DataAndMoneyStream>((resolve) =>
+        this.serverConn.on('stream', resolve)
+      )
+      // Peer sends first chunk
+      // Wait to allow both sides loops to finish.
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
+      assert.equal(serverStream.readableLength, 16384)
+      assert.equal(serverStream._getIncomingOffsets().maxAcceptable, 16384)
+
+      // We consume some
+      serverStream.read(3450)
+      assert.equal(serverStream.readableLength, 16384 - 3450)
+
+      // Wait to allow both sides loops to finish.
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
+      // Now they've sent the next chunk
+      assert.equal(serverStream.readableLength, 16384)
+      assert.equal(serverStream._getIncomingOffsets().maxAcceptable, 16384 + 3450)
     })
 
     it('should apply backpressure to the writableStream', async function () {
       const clientStream = this.clientConn.createStream()
       assert.equal(clientStream.write(Buffer.alloc(16384)), false)
       assert.equal(clientStream.writableLength, 16384)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
 
       // Now the data has been sent
       assert.equal(clientStream.writableLength, 0)
       assert.equal(clientStream.write(Buffer.alloc(16384)), false)
       assert.equal(clientStream.writableLength, 16384)
-      await new Promise(setImmediate)
+      await new Promise((resolve) => this.clientConn.once('_send_loop_finished', resolve))
 
       // The other side isn't accepting data so it's still in the buffer on our side
       assert.equal(clientStream.writableLength, 16384)
@@ -951,7 +938,7 @@ describe('DataAndMoneyStream', function () {
 
       assert.equal(clientStream.readableLength, 600)
 
-      await new Promise(setImmediate)
+      await new Promise((resolve) => setTimeout(resolve))
 
       assert.callCount(spy, 3)
       assert.calledWith(spy.firstCall, Buffer.alloc(100, 1))

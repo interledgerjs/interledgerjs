@@ -1,7 +1,7 @@
 import { UnderflowError } from '../errors/underflow-error'
 import { ParseError } from '../errors/parse-error'
-import * as Long from 'long'
-import { bufferToLong, MAX_SAFE_BYTES } from './util'
+import Long from 'long'
+import { bufferToLong, isSafeLength } from './util'
 
 class Reader {
   // Most significant bit in a byte
@@ -85,15 +85,15 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   readUIntNumber(length: number): number {
-    if (length < 1) {
-      throw new Error('UInt length must be greater than zero')
-    } else if (MAX_SAFE_BYTES < length) {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
-    } else {
-      const value = this.buffer.readUIntBE(this.cursor, length)
-      this.cursor += length
-      return value
+    if (!isSafeLength(length)) {
+      throw new Error(
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     }
+
+    const value = this.buffer.readUIntBE(this.cursor, length)
+    this.cursor += length
+    return value
   }
 
   /**
@@ -113,7 +113,7 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   readUInt(length: number): string {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
+    if (isSafeLength(length)) {
       return String(this.readUIntNumber(length))
     } else {
       return this.readUIntLong(length).toString()
@@ -121,11 +121,13 @@ class Reader {
   }
 
   peekUIntNumber(length: number): number {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
-      return this.buffer.readUIntBE(this.cursor, length)
-    } else {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
+    if (!isSafeLength(length)) {
+      throw new Error(
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     }
+
+    return this.buffer.readUIntBE(this.cursor, length)
   }
 
   /**
@@ -151,7 +153,7 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   peekUInt(length: number): string {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
+    if (isSafeLength(length)) {
       return String(this.peekUIntNumber(length))
     } else {
       return this.peekUIntLong(length).toString()
@@ -171,15 +173,15 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   readIntNumber(length: number): number {
-    if (length < 1) {
-      throw new Error('Int length must be greater than zero')
-    } else if (MAX_SAFE_BYTES < length) {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
-    } else {
-      const value = this.buffer.readIntBE(this.cursor, length)
-      this.cursor += length
-      return value
+    if (!isSafeLength(length)) {
+      throw new Error(
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     }
+
+    const value = this.buffer.readIntBE(this.cursor, length)
+    this.cursor += length
+    return value
   }
 
   /**
@@ -199,7 +201,7 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   readInt(length: number): string {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
+    if (isSafeLength(length)) {
       return String(this.readIntNumber(length))
     } else {
       return this.readIntLong(length).toString()
@@ -212,11 +214,13 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   peekIntNumber(length: number): number {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
-      return this.buffer.readIntBE(this.cursor, length)
-    } else {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
+    if (!isSafeLength(length)) {
+      throw new Error(
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     }
+
+    return this.buffer.readIntBE(this.cursor, length)
   }
 
   /**
@@ -242,7 +246,7 @@ class Reader {
    * @param length Length of the integer in bytes.
    */
   peekInt(length: number): string {
-    if (length >= 1 && length <= MAX_SAFE_BYTES) {
+    if (isSafeLength(length)) {
       return String(this.peekIntNumber(length))
     } else {
       return this.peekIntLong(length).toString()
@@ -260,17 +264,15 @@ class Reader {
    * Read a variable-length unsigned integer at the cursor position and advance the cursor.
    */
   readVarUIntNumber(): number {
-    if (this.buffer[this.cursor] === 0) {
-      throw new ParseError('UInt of length 0 is invalid')
-    }
-
     // Interledger uses canonical OER (C-OER), so we know that any value that
     // fits six bytes MUST be encoded with a one-byte length determinant
-    if (this.buffer[this.cursor] <= MAX_SAFE_BYTES) {
-      return this.readUIntNumber(this.buffer[this.cursor++])
-    } else {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
+    if (!isSafeLength(this.buffer[this.cursor])) {
+      throw new Error(
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     }
+
+    return this.readUIntNumber(this.buffer[this.cursor++])
   }
 
   /**
@@ -335,17 +337,15 @@ class Reader {
    * Read a variable-length unsigned integer at the cursor position and advance the cursor.
    */
   readVarIntNumber(): number {
-    if (this.buffer[this.cursor] === 0) {
-      throw new ParseError('Int of length 0 is invalid')
-    }
-
     // Interledger uses canonical OER (C-OER), so we know that any value that
     // fits six bytes MUST be encoded with a one-byte length determinant
-    if (this.buffer[this.cursor] <= MAX_SAFE_BYTES) {
-      return this.readIntNumber(this.buffer[this.cursor++])
-    } else {
-      throw new Error('Value does not fit a JS number without sacrificing precision')
+    if (!isSafeLength(this.buffer[this.cursor])) {
+      throw new Error(
+        'Length must be a be a positive integer in the range [1,6] to ensure that the parsed integer can be represented as a JavaScript number without sacrificing precision'
+      )
     }
+
+    return this.readIntNumber(this.buffer[this.cursor++])
   }
 
   /**
@@ -598,35 +598,41 @@ interface Reader {
 }
 
 // Create {read,peek,skip}UInt{8,16,32}{,Number,Long} shortcuts
-;['read', 'peek', 'skip'].forEach((verb) => {
-  ;[1, 2, 4, 8].forEach((bytes) => {
-    Reader.prototype[verb + 'UInt' + bytes * 8] = function () {
-      return this[verb + 'UInt'](bytes)
+;([8, 16, 32, 64] as const).forEach((bits) => {
+  ;(['read', 'peek'] as const).forEach((verb) => {
+    Reader.prototype[`${verb}UInt${bits}`] = function () {
+      return this[`${verb}UInt`](bits / 8)
     }
 
-    Reader.prototype[verb + 'Int' + bytes * 8] = function () {
-      return this[verb + 'Int'](bytes)
+    Reader.prototype[`${verb}Int${bits}`] = function () {
+      return this[`${verb}Int`](bits / 8)
     }
 
-    // No point if having typed skips
-    if (verb !== 'skip') {
-      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Number'] = function () {
-        return this[verb + 'UIntNumber'](bytes)
-      }
+    Reader.prototype[`${verb}UInt${bits}Number`] = function () {
+      return this[`${verb}UIntNumber`](bits / 8)
+    }
 
-      Reader.prototype[verb + 'Int' + bytes * 8 + 'Number'] = function () {
-        return this[verb + 'IntNumber'](bytes)
-      }
+    Reader.prototype[`${verb}Int${bits}Number`] = function () {
+      return this[`${verb}IntNumber`](bits / 8)
+    }
 
-      Reader.prototype[verb + 'UInt' + bytes * 8 + 'Long'] = function () {
-        return this[verb + 'UIntLong'](bytes)
-      }
+    Reader.prototype[`${verb}UInt${bits}Long`] = function () {
+      return this[`${verb}UIntLong`](bits / 8)
+    }
 
-      Reader.prototype[verb + 'Int' + bytes * 8 + 'Long'] = function () {
-        return this[verb + 'IntLong'](bytes)
-      }
+    Reader.prototype[`${verb}Int${bits}Long`] = function () {
+      return this[`${verb}IntLong`](bits / 8)
     }
   })
+
+  // Skips have a different return type, so we do them separately
+  Reader.prototype[`skipUInt${bits}`] = function () {
+    return this[`skipUInt`](bits / 8)
+  }
+
+  Reader.prototype[`skipInt${bits}`] = function () {
+    return this[`skipInt`](bits / 8)
+  }
 })
 
 export default Reader

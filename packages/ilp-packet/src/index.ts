@@ -2,7 +2,7 @@ import { Predictor, Reader, Writer } from 'oer-utils'
 import { dateToInterledgerTime, interledgerTimeToDate, INTERLEDGER_TIME_LENGTH } from './utils/date'
 import assert from 'assert'
 import { IlpAddress, isValidIlpAddress } from './utils/address'
-import * as Long from 'long'
+import Long from 'long'
 import * as errors from './errors'
 
 export const Errors = errors
@@ -10,67 +10,10 @@ export const Errors = errors
 export { IlpAddress, isValidIlpAddress }
 export { getScheme, IlpAddressScheme } from './utils/address'
 
-export interface IlpErrorClass {
-  message: string
-  ilpErrorCode?: IlpErrorCode
-  ilpErrorData?: Buffer
-}
+export { IlpErrorCode, IlpErrorCode as IlpError, BaseIlpError as IlpErrorClass } from './errors'
 
-/** ILP Reject error codes */
-export enum IlpError {
-  // Final errors
-  F00_BAD_REQUEST = 'F00',
-  F01_INVALID_PACKET = 'F01',
-  F02_UNREACHABLE = 'F02',
-  F03_INVALID_AMOUNT = 'F03',
-  F04_INSUFFICIENT_DESTINATION_AMOUNT = 'F04',
-  F05_WRONG_CONDITION = 'F05',
-  F06_UNEXPECTED_PAYMENT = 'F06',
-  F07_CANNOT_RECEIVE = 'F07',
-  F08_AMOUNT_TOO_LARGE = 'F08',
-  F99_APPLICATION_ERROR = 'F99',
-
-  // Temporary errors
-  T00_INTERNAL_ERROR = 'T00',
-  T01_PEER_UNREACHABLE = 'T01',
-  T02_PEER_BUSY = 'T02',
-  T03_CONNECTOR_BUSY = 'T03',
-  T04_INSUFFICIENT_LIQUIDITY = 'T04',
-  T05_RATE_LIMITED = 'T05',
-  T99_APPLICATION_ERROR = 'T99',
-
-  // Relative errors
-  R00_TRANSFER_TIMED_OUT = 'R00',
-  R01_INSUFFICIENT_SOURCE_AMOUNT = 'R01',
-  R02_INSUFFICIENT_TIMEOUT = 'R02',
-  R99_APPLICATION_ERROR = 'R99',
-}
-
-export type IlpErrorCode =
-  | 'F00'
-  | 'F01'
-  | 'F02'
-  | 'F03'
-  | 'F04'
-  | 'F05'
-  | 'F06'
-  | 'F07'
-  | 'F08'
-  | 'F99'
-  | 'T00'
-  | 'T01'
-  | 'T02'
-  | 'T03'
-  | 'T04'
-  | 'T05'
-  | 'T99'
-  | 'R00'
-  | 'R01'
-  | 'R02'
-  | 'R99'
-
-export const isCanonicalIlpRejectCode = (o: unknown): o is IlpErrorCode =>
-  typeof o === 'string' && Object.values<string>(IlpError).includes(o)
+export const isCanonicalIlpRejectCode = (o: unknown): o is errors.IlpErrorCode =>
+  typeof o === 'string' && Object.values<string>(errors.IlpErrorCode).includes(o)
 
 export enum Type {
   TYPE_ILP_PREPARE = 12,
@@ -226,6 +169,13 @@ export const isReject = (o: unknown): o is IlpReject =>
   (isValidIlpAddress(o.triggeredBy) || o.triggeredBy === '') && // ILP address or empty string
   typeof o.message === 'string' &&
   Buffer.isBuffer(o.data)
+
+export const isIlpError = (o: unknown): o is errors.BaseIlpError =>
+  isObject(o) &&
+  typeof o.message === 'string' &&
+  typeof o.ilpErrorCode === 'string' &&
+  ['string', 'undefined'].includes(typeof o.ilpErrorMessage) &&
+  (typeof o.ilpErrorData === 'undefined' || Buffer.isBuffer(o.ilpErrorData))
 
 export const serializeIlpFulfill = (json: IlpFulfill): Buffer => {
   assert(
@@ -392,20 +342,15 @@ export const deserializeIlpReply = (data: Buffer): IlpReply =>
 export const serializeIlpReply = (packet: IlpReply): Buffer =>
   isFulfill(packet) ? serializeIlpFulfill(packet) : serializeIlpReject(packet)
 
-export const errorToReject = (address: string, error: IlpErrorClass): Buffer => {
-  return serializeIlpReject({
-    code: error.ilpErrorCode || 'F00',
-    triggeredBy: address,
-    message: error.message || '',
-    data: error.ilpErrorData || Buffer.alloc(0),
-  })
+export const errorToReject = (address: string, error: errors.BaseIlpError): Buffer => {
+  return serializeIlpReject(errorToIlpReject(address, error))
 }
 
-export const errorToIlpReject = (address: string, error: IlpErrorClass): IlpReject => {
+export const errorToIlpReject = (address: string, error: errors.BaseIlpError): IlpReject => {
   return {
     code: error.ilpErrorCode || 'F00',
     triggeredBy: address,
-    message: error.message || '',
+    message: error.ilpErrorMessage || error.message || '',
     data: error.ilpErrorData || Buffer.alloc(0),
   }
 }

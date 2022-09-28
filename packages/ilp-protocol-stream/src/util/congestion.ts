@@ -1,4 +1,4 @@
-import * as Long from 'long'
+import Long from 'long'
 import createLogger from 'ilp-logger'
 import * as IlpPacket from 'ilp-packet'
 import { Reader } from 'oer-utils'

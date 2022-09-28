@@ -1,6 +1,6 @@
 import Long from 'long'
-import * as IlpPacket from 'ilp-packet'
 import * as Packet from '../src/packet'
+import { Fixture, TestPacket, TestPacketVariant } from '../test/fixtures/fixtureTypes'
 
 const NUMBERS = [
   { name: '0', value: Long.UZERO },
@@ -8,6 +8,7 @@ const NUMBERS = [
   { name: 'max_uint_64', value: Long.MAX_UNSIGNED_VALUE },
 ]
 
+// @ts-expect-error This is a utility script so we're ok with overriding this prototype
 Long.prototype['toJSON'] = function () {
   return this.toString()
 }
@@ -20,22 +21,6 @@ Packet.StreamDataFrame.prototype.toJSON = function () {
     offset: this.offset,
     data: this.data.toString('base64'),
   }
-}
-
-interface TestPacket {
-  sequence: string
-  packetType: IlpPacket.Type
-  frames: Packet.Frame[]
-  amount: string
-}
-
-type TestPacketVariant = Partial<TestPacket> & { name: string }
-
-interface Fixture {
-  name: string
-  packet: TestPacket
-  buffer: string
-  decode_only?: boolean
 }
 
 const variants: TestPacketVariant[] = [
@@ -179,7 +164,7 @@ fixtures.push({
   decode_only: true,
 })
 
-const fixturesObject = {}
+const fixturesObject: Record<string, Omit<Fixture, 'name'>> = {}
 
 fixtures.forEach(({ name, ...fixture }) => (fixturesObject[name] = fixture))
 

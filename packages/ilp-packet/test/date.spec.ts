@@ -1,4 +1,4 @@
-import * as assert from 'assert'
+import assert from 'assert'
 import { dateToInterledgerTime, interledgerTimeToDate } from '../src/utils/date'
 
 function randomBetween(min: number, max: number): number {

@@ -1,5 +1,10 @@
 import Benchmark from 'benchmark'
 import * as PacketV1 from '../../src/index'
+
+interface BenchmarkContext {
+  name: string
+}
+
 ;(async () => {
   const packageV0 = process.argv[2]
   if (!packageV0) {
@@ -38,7 +43,7 @@ import * as PacketV1 from '../../src/index'
     .add('v1', function () {
       PacketV1.serializeIlpPrepare(prepareObject)
     })
-    .on('cycle', function (event: Event) {
+    .on('cycle', function (this: BenchmarkContext, event: Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})
@@ -49,7 +54,7 @@ import * as PacketV1 from '../../src/index'
     .add('v1', function () {
       PacketV1.deserializeIlpPacket(prepareBuffer)
     })
-    .on('cycle', function (event: Event) {
+    .on('cycle', function (this: BenchmarkContext, event: Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})
@@ -60,7 +65,7 @@ import * as PacketV1 from '../../src/index'
     .add('v1', function () {
       PacketV1.serializeIlpFulfill(fulfillObject)
     })
-    .on('cycle', function (event: Event) {
+    .on('cycle', function (this: BenchmarkContext, event: Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})
@@ -71,7 +76,7 @@ import * as PacketV1 from '../../src/index'
     .add('v1', function () {
       PacketV1.deserializeIlpFulfill(fulfillBuffer)
     })
-    .on('cycle', function (event: Event) {
+    .on('cycle', function (this: BenchmarkContext, event: Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})
@@ -82,7 +87,7 @@ import * as PacketV1 from '../../src/index'
     .add('v1', function () {
       PacketV1.serializeIlpReject(rejectObject)
     })
-    .on('cycle', function (event: Event) {
+    .on('cycle', function (this: BenchmarkContext, event: Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})
@@ -93,7 +98,7 @@ import * as PacketV1 from '../../src/index'
     .add('v1', function () {
       PacketV1.deserializeIlpReject(rejectBuffer)
     })
-    .on('cycle', function (event: Event) {
+    .on('cycle', function (this: BenchmarkContext, event: Event) {
       console.log(this.name, '\t', String(event.target))
     })
     .run({})
