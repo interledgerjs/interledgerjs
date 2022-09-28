@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [2.7.2-alpha.2](https://github.com/interledgerjs/ilp-protocol-stream/compare/ilp-protocol-stream@2.7.2-alpha.1...ilp-protocol-stream@2.7.2-alpha.2) (2022-09-28)
+
+
+### Bug Fixes
+
+* **stream:** update browser tests for webpack 5 ([dcc76bf](https://github.com/interledgerjs/ilp-protocol-stream/commit/dcc76bf71e559ccf935e863aec259f4f4d1da8d1))
+* **stream:** use setTimeout over setImmediate ([17e87b0](https://github.com/interledgerjs/ilp-protocol-stream/commit/17e87b00af352476ea595ab65aa0247050441314))
+* support node 18 ([62f9ce0](https://github.com/interledgerjs/ilp-protocol-stream/commit/62f9ce0fda7d5d1ac06dd8f55f499e522974011b)), closes [#284](https://github.com/interledgerjs/ilp-protocol-stream/issues/284)
+
+
+
+
+
 ## [2.7.2-alpha.1](https://github.com/interledgerjs/ilp-protocol-stream/compare/ilp-protocol-stream@2.7.2-alpha.0...ilp-protocol-stream@2.7.2-alpha.1) (2022-08-18)
 
 

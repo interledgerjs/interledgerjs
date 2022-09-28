@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [5.1.3-alpha.2](https://github.com/interledgerjs/interledgerjs/compare/oer-utils@5.1.3-alpha.1...oer-utils@5.1.3-alpha.2) (2022-09-28)
+
+
+### Bug Fixes
+
+* **oer:** isSafeLength should not accept zero ([9ba5e8c](https://github.com/interledgerjs/interledgerjs/commit/9ba5e8c671c604c22609f416a8d09ca85d38fcb2))
+
+
+
+
+
 ## [5.1.3-alpha.1](https://github.com/interledgerjs/interledgerjs/compare/oer-utils@5.1.3-alpha.0...oer-utils@5.1.3-alpha.1) (2022-05-04)
 
 **Note:** Version bump only for package oer-utils

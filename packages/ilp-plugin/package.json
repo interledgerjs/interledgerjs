@@ -1,6 +1,6 @@
 {
   "name": "ilp-plugin",
-  "version": "3.5.5-alpha.1",
+  "version": "3.5.5-alpha.2",
   "description": "> A generic handle to ILP",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,7 +22,7 @@
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_plugin"
   },
   "dependencies": {
-    "ilp-logger": "^1.4.5-alpha.1",
+    "ilp-logger": "^1.4.5-alpha.2",
     "ilp-plugin-btp": "^1.5.0"
   }
 }
