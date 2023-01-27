@@ -1,7 +1,7 @@
 // Note: this polyfill doesn't include `crypto.timingSafeEqual()`. The browser
 // never runs a BTP server, so it doesn't need to compare tokens.
 
-const { crypto } = window
+const { crypto } = self
 
 export function randomBytes (
   size: number,
