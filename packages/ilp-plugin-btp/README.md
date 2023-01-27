@@ -3,8 +3,8 @@
 
 [![NPM Package](https://img.shields.io/npm/v/ilp-plugin-btp.svg?style=flat)](https://npmjs.org/package/ilp-plugin-btp)
 [![CircleCI](https://circleci.com/gh/interledgerjs/ilp-plugin-btp.svg?style=shield)](https://circleci.com/gh/interledgerjs/ilp-plugin-btp)
-[![JavaScript Style Guide](https://img.shields.io/badge/code_style-standard-brightgreen.svg)](https://standardjs.com)
-[![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-plugin-btp/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-plugin-btp) [![Greenkeeper badge](https://badges.greenkeeper.io/interledgerjs/ilp-plugin-btp.svg)](https://greenkeeper.io/)
+[![Prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://prettier.io/)
+[![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-plugin-btp/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-plugin-btp)
 
 Used right out of the box, this plugin is capable of representing a data
 channel with no money involved. It will send BTP messages with no knowledge

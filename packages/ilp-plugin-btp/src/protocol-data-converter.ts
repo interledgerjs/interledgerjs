@@ -12,7 +12,9 @@ export interface Protocols {
  * BTP sub protocol array. Also specifically extract the `ilp` and `custom` protocols
  * from the map.
  */
-export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubProtocol> }): Protocols {
+export function protocolDataToIlpAndCustom(data: {
+  protocolData: Array<BtpSubProtocol>
+}): Protocols {
   const protocolMap = {}
   const { protocolData } = data
 
@@ -40,7 +42,9 @@ export function protocolDataToIlpAndCustom (data: { protocolData: Array<BtpSubPr
  * array is: `ilp`, any explicitly defined sub protocols (the ones in the
  * protocol map), and finally `custom`.
  */
-export function ilpAndCustomToProtocolData (data: Protocols): Array<BtpSubProtocol> {
+export function ilpAndCustomToProtocolData(
+  data: Protocols
+): Array<BtpSubProtocol> {
   const protocolData = []
   const { ilp, custom, protocolMap } = data
 

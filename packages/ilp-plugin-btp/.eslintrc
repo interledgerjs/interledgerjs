@@ -1,1 +1,38 @@
-extends: standard
+{
+    "root": true,
+    "extends": [
+        "eslint:recommended",
+        "plugin:@typescript-eslint/recommended",
+        "prettier"
+    ],
+    "parser": "@typescript-eslint/parser",
+    "rules": {
+        "no-undef": "warn",
+        "prefer-rest-params": "warn",
+        "prefer-spread": "warn"
+    },
+    "ignorePatterns": [
+        "build/**/*"
+    ],
+    "overrides": [
+        {
+            "files": [
+                "*.ts",
+                "*.js"
+            ],
+            "rules": {
+                "@typescript-eslint/no-empty-function": "warn",
+                "@typescript-eslint/no-non-null-assertion": "warn",
+                "@typescript-eslint/no-var-requires": "warn",
+                "@typescript-eslint/no-unused-vars": "warn",
+                "@typescript-eslint/no-explicit-any": "warn",
+                "@typescript-eslint/ban-types": [
+                    "warn",
+                    {
+                        "extendDefaults": true
+                    }
+                ]
+            }
+        }
+    ]
+}

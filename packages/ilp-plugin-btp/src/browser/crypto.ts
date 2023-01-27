@@ -3,7 +3,7 @@
 
 const { crypto } = self
 
-export function randomBytes (
+export function randomBytes(
   size: number,
   callback: (err: Error | null, buf: Buffer) => void
 ): void {
