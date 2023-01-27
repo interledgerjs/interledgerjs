@@ -18,7 +18,7 @@
   "scripts": {
     "prettier": "prettier --write 'src/**/*.ts' 'test/**/*.js'",
     "lint": "eslint . --ext .js,.ts",
-    "build": "tsc --project .",
+    "build": "tsc --project tsconfig.build.json",
     "test": "jest ./test/index.test.js",
     "codecov": "codecov"
   },
@@ -37,19 +37,10 @@
     "@types/long": "^4.0.2",
     "@types/node": "^18.0.0",
     "@types/ws": "^8.5.3",
-    "@typescript-eslint/eslint-plugin": "^5.28.0",
-    "@typescript-eslint/parser": "^5.28.0",
-    "codecov": "^3.8.3",
-    "eslint": "^8.18.0",
-    "eslint-config-prettier": "^8.5.0",
     "gh-pages": "^4.0.0",
-    "jest": "^28.1.1",
     "node-fetch": "^2.3.0",
-    "prettier": "^2.7.1",
     "source-map-support": "^0.5.21",
-    "ts-node": "^10.8.1",
-    "typedoc": "^0.22.17",
-    "typescript": "^4.7.4"
+    "typedoc": "^0.22.17"
   },
   "engines": {
     "node": ">=14.0.0"

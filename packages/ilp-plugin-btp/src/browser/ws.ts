@@ -9,16 +9,13 @@ class WebSocketPolyfill extends EventEmitter {
     this._ws.onerror = this.emit.bind(this, 'error')
     this._ws.onopen = this.emit.bind(this, 'open')
     this._ws.onclose = this.emit.bind(this, 'close')
-    this._ws.onmessage = msg => {
+    this._ws.onmessage = (msg) => {
       this.emit('message', Buffer.from(msg.data))
     }
   }
 
   send(msg: Buffer, cb: (err?: Error) => void) {
-    if (
-      this._ws.readyState === WebSocket.CONNECTING ||
-      this._ws.readyState === WebSocket.OPEN
-    ) {
+    if (this._ws.readyState === WebSocket.CONNECTING || this._ws.readyState === WebSocket.OPEN) {
       this._ws.send(msg.buffer)
       process.nextTick(cb)
     } else {
@@ -32,7 +29,7 @@ class WebSocketPolyfill extends EventEmitter {
    * see: https://github.com/websockets/ws/blob/master/lib/sender.js#L47
    * see: https://github.com/websockets/ws/blob/master/lib/sender.js#L173
    */
-  // tslint:disable-next-line:no-empty
+  // eslint-disable-next-line @typescript-eslint/no-empty-function
   ping() {}
 
   close() {

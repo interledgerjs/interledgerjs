@@ -1,6 +1,7 @@
-import * as WebSocket from 'ws'
-const createLogger = require('ilp-logger')
+import WebSocket from 'ws'
 import { EventEmitter2 } from 'eventemitter2'
+import createLogger from 'ilp-logger'
+
 const debug = createLogger('ilp-ws-reconnect')
 
 const HEARTBEAT_INTERVAL = 20000
@@ -11,6 +12,7 @@ const DEFAULT_RECONNECT_INTERVALS = [0, 100, 500, 1000, 2000, 5000]
  * Accepts URL string pointing to connection endpoint.
  */
 export interface WebSocketConstructor {
+  // new (url: null): WebSocket
   new (url: string): WebSocket
 }
 
@@ -43,17 +45,17 @@ export class WebSocketReconnector extends EventEmitter2 {
   /**
    * URL endpoint of websocket server.
    */
-  private _url: string
+  private _url!: string
 
   /**
    * Websocket connection.
    */
-  private _instance: WebSocket
+  private _instance!: WebSocket
 
   /**
    * Is websocket connection connected to endpoint?
    */
-  private _connected: boolean
+  private _connected!: boolean
 
   /**
    * Websocket constructor.
@@ -73,9 +75,7 @@ export class WebSocketReconnector extends EventEmitter2 {
 
     this._tries = 0
     this._intervals =
-      options.intervals ||
-      (options.interval && [options.interval]) ||
-      DEFAULT_RECONNECT_INTERVALS
+      options.intervals || (options.interval && [options.interval]) || DEFAULT_RECONNECT_INTERVALS
   }
 
   /**
@@ -87,7 +87,7 @@ export class WebSocketReconnector extends EventEmitter2 {
   open(url: string): Promise<void> {
     this._url = url
     this._open()
-    return new Promise(resolve => void this.once('open', resolve))
+    return new Promise((resolve) => void this.once('open', resolve))
   }
 
   /**
@@ -121,14 +121,9 @@ export class WebSocketReconnector extends EventEmitter2 {
       this.emit('open')
       this.heartbeat()
     })
-    this._instance.on('close', (code: number, reason: string) =>
-      this._reconnect(code)
-    )
+    this._instance.on('close', (code: number, _: string) => this._reconnect(code))
     this._instance.on('error', (err: Error) => this._reconnect(err))
-    this._instance.on(
-      'message',
-      (data: WebSocket.Data) => void this.emit('message', data)
-    )
+    this._instance.on('message', (data: WebSocket.Data) => void this.emit('message', data))
   }
 
   heartbeat() {
@@ -138,10 +133,7 @@ export class WebSocketReconnector extends EventEmitter2 {
 
     if (this._instance && this._instance.readyState === this._instance.OPEN) {
       this._instance.ping()
-      this._heartbeatTimer = setTimeout(
-        () => this.heartbeat(),
-        HEARTBEAT_INTERVAL
-      )
+      this._heartbeatTimer = setTimeout(() => this.heartbeat(), HEARTBEAT_INTERVAL)
     }
   }
 
@@ -153,9 +145,7 @@ export class WebSocketReconnector extends EventEmitter2 {
    */
   private _reconnect(codeOrError: number | Error) {
     debug.debug(
-      `websocket disconnected with ${codeOrError}; reconnect in ${
-        this._intervals[this._tries]
-      }`
+      `websocket disconnected with ${codeOrError}; reconnect in ${this._intervals[this._tries]}`
     )
     this._connected = false
     this._instance.removeAllListeners()
