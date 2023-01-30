@@ -3,13 +3,13 @@
   "version": "2.0.0",
   "description": "Generic BTP plugin for ILP",
   "main": "index.js",
-  "types": "build/index.d.ts",
+  "types": "dist/index.d.ts",
   "browser": {
-    "crypto": "./build/browser/crypto.js",
-    "ws": "./build/browser/ws.js"
+    "crypto": "./dist/browser/crypto.js",
+    "ws": "./dist/browser/ws.js"
   },
   "files": [
-    "build/**/*"
+    "dist/**/*"
   ],
   "repository": {
     "type": "git",
@@ -20,6 +20,7 @@
     "lint": "eslint . --ext .js,.ts",
     "build": "tsc --project tsconfig.build.json",
     "test": "jest ./test/index.test.js",
+    "cover": "yarn test --coverage",
     "codecov": "codecov"
   },
   "author": "Interledger Team <info@interledger.org>",

@@ -15,7 +15,7 @@ import {
 
 import ilp_logger from 'ilp-logger'
 
-import BtpPacketModule from 'btp-packet'
+import * as BtpPacket from 'btp-packet'
 
 const debug = ilp_logger('ilp-plugin-btp')
 
@@ -44,7 +44,11 @@ const namesToCodes: Record<string, string> = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
-function isError(x: unknown): asserts x is Error {}
+function isError(x: unknown): asserts x is Error {
+  if (!(x instanceof Error)) {
+    throw new Error(`${String(x)} is not Error`)
+  }
+}
 
 const toBrowserSafeURL = (btpUrl: string): URL => {
   if (!btpUrl.startsWith('btp+')) {
@@ -82,11 +86,11 @@ function subProtocolToString(data: BtpSubProtocol): string {
   let stringData
 
   switch (data.contentType) {
-    case BtpPacketModule.MIME_APPLICATION_OCTET_STREAM:
+    case BtpPacket.MIME_APPLICATION_OCTET_STREAM:
       stringData = data.data.toString('base64')
       break
-    case BtpPacketModule.MIME_APPLICATION_JSON:
-    case BtpPacketModule.MIME_TEXT_PLAIN_UTF8:
+    case BtpPacket.MIME_APPLICATION_JSON:
+    case BtpPacket.MIME_TEXT_PLAIN_UTF8:
       stringData = data.data.toString('utf8')
       break
   }
@@ -122,7 +126,7 @@ function generatePacketDataTracer(packetData: BtpPacketData) {
   }
 }
 
-export interface BtpPacket {
+export interface BtpPacketType {
   requestId: number
   type: number
   data: BtpPacketData
@@ -364,7 +368,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
       wss.on('connection', (socket: WebSocket) => {
         this._log.info('got connection')
-        let authPacket: BtpPacket
+        let authPacket: BtpPacketType
 
         socket.on('close', (code: number) => {
           this._log.info('incoming websocket closed. code=' + code)
@@ -378,18 +382,18 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
 
         socket.once('message', async (binaryAuthMessage: WebSocket.Data) => {
           try {
-            authPacket = BtpPacketModule.deserialize(binaryAuthMessage as Buffer)
+            authPacket = BtpPacket.deserialize(binaryAuthMessage as Buffer)
             this._log.trace('got auth packet. packet=%j', authPacket)
             this._validateAuthPacket(authPacket)
             if (this._incomingWs) {
               this._closeIncomingSocket(this._incomingWs, authPacket)
             }
             this._incomingWs = socket
-            socket.send(BtpPacketModule.serializeResponse(authPacket.requestId, []))
+            socket.send(BtpPacket.serializeResponse(authPacket.requestId, []))
           } catch (err) {
             this._incomingWs = undefined
             if (authPacket) {
-              const errorResponse = BtpPacketModule.serializeError(
+              const errorResponse = BtpPacket.serializeError(
                 {
                   code: 'F00',
                   name: 'NotAcceptedError',
@@ -438,7 +442,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       this._ws.on('open', async () => {
         this._log.trace('connected to server')
         this._call('', {
-          type: BtpPacketModule.TYPE_MESSAGE,
+          type: BtpPacket.TYPE_MESSAGE,
           requestId: await _requestId(),
           data: { protocolData: ilpAndCustomToProtocolData({ protocolMap }) },
         })
@@ -467,7 +471,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
         reject(new Error('connection aborted'))
       }
       this.once('disconnect', onDisconnect)
-      this.once('_first_time_connect', (authPacket?: BtpPacket) => {
+      this.once('_first_time_connect', (authPacket?: BtpPacketType) => {
         this.removeListener('disconnect', onDisconnect)
         resolve(authPacket ? protocolDataToIlpAndCustom(authPacket.data).protocolMap : {})
       })
@@ -485,12 +489,12 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * connection is opened. Removes all listeners from previous connection and
    * sends an error to the user on the old socket (with the new request ID).
    */
-  _closeIncomingSocket(socket: WebSocket, authPacket: BtpPacket) {
+  _closeIncomingSocket(socket: WebSocket, authPacket: BtpPacketType) {
     socket.removeAllListeners()
     socket.once('message', async (_: WebSocket.Data) => {
       try {
         socket.send(
-          BtpPacketModule.serializeError(
+          BtpPacket.serializeError(
             {
               code: 'F00',
               name: 'NotAcceptedError',
@@ -545,9 +549,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * the error through the socket.
    */
   async _handleIncomingWsMessage(ws: Pick<WebSocket, 'close'>, binaryMessage: WebSocket.Data) {
-    let btpPacket: BtpPacket
+    let btpPacket: BtpPacketType
     try {
-      btpPacket = BtpPacketModule.deserialize(binaryMessage as Buffer)
+      btpPacket = BtpPacket.deserialize(binaryMessage as Buffer)
     } catch (err) {
       this._log.error('deserialization error:', err)
       ws.close()
@@ -563,7 +567,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       const { code, name, triggeredAt, data } = error
 
       await this._handleOutgoingBtpPacket('', {
-        type: BtpPacketModule.TYPE_ERROR,
+        type: BtpPacket.TYPE_ERROR,
         requestId,
         data: {
           code,
@@ -582,13 +586,13 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    */
   async sendData(buffer: Buffer): Promise<Buffer> {
     const response = await this._call('', {
-      type: BtpPacketModule.TYPE_MESSAGE,
+      type: BtpPacket.TYPE_MESSAGE,
       requestId: await _requestId(),
       data: {
         protocolData: [
           {
             protocolName: 'ilp',
-            contentType: BtpPacketModule.MIME_APPLICATION_OCTET_STREAM,
+            contentType: BtpPacket.MIME_APPLICATION_OCTET_STREAM,
             data: buffer,
           },
         ],
@@ -685,7 +689,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * out. If a response/error is received, `_handleIncomingBtpPacket` emits
    * `__callback__`, which triggers the aforementioned listener.
    */
-  protected async _call(to: string, btpPacket: BtpPacket): Promise<BtpPacketData> {
+  protected async _call(to: string, btpPacket: BtpPacketType): Promise<BtpPacketData> {
     const requestId = btpPacket.requestId
 
     let callback: ListenerFn
@@ -693,12 +697,12 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     const response = new Promise<BtpPacketData>((resolve, reject) => {
       callback = (type: number, data: BtpPacketData) => {
         switch (type) {
-          case BtpPacketModule.TYPE_RESPONSE:
+          case BtpPacket.TYPE_RESPONSE:
             resolve(data)
             clearTimeout(timer)
             break
 
-          case BtpPacketModule.TYPE_ERROR:
+          case BtpPacket.TYPE_ERROR:
             reject(new Error(JSON.stringify(data)))
             clearTimeout(timer)
             break
@@ -732,9 +736,9 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * packet in the websocket is because that is defined in the
    * _handleIncomingWsMessage function.
    */
-  protected async _handleIncomingBtpPacket(from: string, btpPacket: BtpPacket) {
+  protected async _handleIncomingBtpPacket(from: string, btpPacket: BtpPacketType) {
     const { type, requestId, data } = btpPacket
-    const typeString = BtpPacketModule.typeToString(type)
+    const typeString = BtpPacket.typeToString(type)
 
     this._log.trace(
       `received btp packet. type=${typeString} requestId=${requestId} info=${generatePacketDataTracer(
@@ -743,8 +747,8 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     )
     let result: Array<BtpSubProtocol>
     switch (type) {
-      case BtpPacketModule.TYPE_RESPONSE:
-      case BtpPacketModule.TYPE_ERROR:
+      case BtpPacket.TYPE_RESPONSE:
+      case BtpPacket.TYPE_ERROR:
         this.emit('__callback_' + requestId, type, data)
         return
 
@@ -755,11 +759,11 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
       // case BtpPacketModule.TYPE_REJECT:
       //   throw new Error('Unsupported BTP packet')
 
-      case BtpPacketModule.TYPE_TRANSFER:
+      case BtpPacket.TYPE_TRANSFER:
         result = await this._handleMoney(from, btpPacket)
         break
 
-      case BtpPacketModule.TYPE_MESSAGE:
+      case BtpPacket.TYPE_MESSAGE:
         result = await this._handleData(from, btpPacket)
         break
 
@@ -768,7 +772,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     }
 
     await this._handleOutgoingBtpPacket(from, {
-      type: BtpPacketModule.TYPE_RESPONSE,
+      type: BtpPacket.TYPE_RESPONSE,
       requestId,
       data: { protocolData: result || [] },
     })
@@ -779,7 +783,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * format, then handle the ILP data with the regsistered data handler, and then convert it back to BTP
    * structure and send a response. E.g. for prepare, fulfill, and reject packets.
    */
-  protected async _handleData(from: string, btpPacket: BtpPacket): Promise<Array<BtpSubProtocol>> {
+  protected async _handleData(
+    from: string,
+    btpPacket: BtpPacketType
+  ): Promise<Array<BtpSubProtocol>> {
     const { data } = btpPacket
     const { ilp } = protocolDataToIlpAndCustom(data) /* Defined in protocol-data-converter.ts. */
 
@@ -795,7 +802,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * Need to fully define on you own.
    */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected async _handleMoney(from: string, btpPacket: BtpPacket): Promise<Array<BtpSubProtocol>> {
+  protected async _handleMoney(
+    from: string,
+    btpPacket: BtpPacketType
+  ): Promise<Array<BtpSubProtocol>> {
     throw new Error('No sendMoney functionality is included in this module')
   }
 
@@ -803,13 +813,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * Send a BTP packet to a user and wait for the promise to resolve without
    * error.
    */
-  protected async _handleOutgoingBtpPacket(to: string, btpPacket: BtpPacket) {
+  protected async _handleOutgoingBtpPacket(to: string, btpPacket: BtpPacketType) {
     const ws = this._ws || this._incomingWs
-    if (!ws) {
-      throw new Error('ws is null')
-    }
     const { type, requestId, data } = btpPacket
-    const typeString = BtpPacketModule.typeToString(type)
+    const typeString = BtpPacket.typeToString(type)
     this._log.trace(
       `sending btp packet. type=${typeString} requestId=${requestId} info=${generatePacketDataTracer(
         data
@@ -817,7 +824,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
     )
 
     try {
-      await new Promise((resolve) => ws.send(BtpPacketModule.serialize(btpPacket), resolve))
+      if (!ws) {
+        throw new Error('ws is null')
+      }
+      await new Promise((resolve) => ws.send(BtpPacket.serialize(btpPacket), resolve))
     } catch (e) {
       isError(e)
       this._log.error(
@@ -845,7 +855,7 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * registered listeners (i.e. connected before) and is in the appropriate
    * ready state then emit a normal 'connect' event.
    */
-  private _emitConnect(authPacket?: BtpPacket) {
+  private _emitConnect(authPacket?: BtpPacketType) {
     if (this._readyState === ReadyState.CONNECTING) {
       this.emit('_first_time_connect', authPacket)
     } else if (
@@ -863,10 +873,10 @@ export default class AbstractBtpPlugin extends EventEmitter2 {
    * secret defined by the server (which should have been given to the client
    * beforehand.) If the auth token does not pass any of these checks, error.
    */
-  private _validateAuthPacket(authPacket: BtpPacket): void {
+  private _validateAuthPacket(authPacket: BtpPacketType): void {
     assert.strictEqual(
       authPacket.type,
-      BtpPacketModule.TYPE_MESSAGE,
+      BtpPacket.TYPE_MESSAGE,
       'First message sent over BTP connection must be auth packet'
     )
     assert(

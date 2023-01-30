@@ -1,5 +1,5 @@
 import { BtpSubProtocol } from '.'
-import Btp from 'btp-packet'
+import * as Btp from 'btp-packet'
 
 export type ObjectType = Record<string, unknown>
 export type ProtocolMapType = Record<string, Buffer | string | ObjectType>
