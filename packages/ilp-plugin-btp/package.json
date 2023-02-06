@@ -1,0 +1,49 @@
+{
+  "name": "ilp-plugin-btp",
+  "version": "2.0.0",
+  "description": "Generic BTP plugin for ILP",
+  "main": "index.js",
+  "types": "dist/index.d.ts",
+  "browser": {
+    "crypto": "./dist/browser/crypto.js",
+    "ws": "./dist/browser/ws.js"
+  },
+  "files": [
+    "dist/**/*"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interledgerjs/ilp-plugin-btp.git"
+  },
+  "scripts": {
+    "prettier": "prettier --write 'src/**/*.ts' 'test/**/*.js'",
+    "lint": "eslint . --ext .js,.ts",
+    "build": "tsc --project tsconfig.build.json",
+    "test": "jest ./test/index.test.js",
+    "cover": "yarn test --coverage",
+    "codecov": "codecov"
+  },
+  "author": "Interledger Team <info@interledger.org>",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "btp-packet": "^2.2.1",
+    "debug": "^4.3.4",
+    "eventemitter2": "^6.4.5",
+    "ilp-logger": "^1.4.5-alpha.1",
+    "ws": "^8.8.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.7",
+    "@types/lodash": "^4.14.182",
+    "@types/long": "^4.0.2",
+    "@types/node": "^18.0.0",
+    "@types/ws": "^8.5.3",
+    "gh-pages": "^4.0.0",
+    "node-fetch": "^2.3.0",
+    "source-map-support": "^0.5.21",
+    "typedoc": "^0.22.17"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}

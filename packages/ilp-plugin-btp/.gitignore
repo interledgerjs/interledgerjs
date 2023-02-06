@@ -1,0 +1,11 @@
+node_modules/
+
+# Output of 'npm pack'
+*.tgz
+# dotenv environment variables file
+.env
+
+/src/*.js
+/src/*.js.map
+/src/*.d.ts
+build/

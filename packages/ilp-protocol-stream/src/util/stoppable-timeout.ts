@@ -1,9 +1,10 @@
-// When `stop` is been called:
+// When `stop` has been called:
 // - The current `wait` promise (if any) will reject.
 // - All future `wait` calls will reject.
 export class StoppableTimeout {
   private stopped = false
-  private timer?: NodeJS.Timer
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private timer?: any // TypeScript can get confused between dom and NodeJS
   private reject?: (err: Error) => void
 
   wait(delay: number): Promise<void> {
