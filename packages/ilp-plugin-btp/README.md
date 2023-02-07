@@ -2,7 +2,6 @@
 > One plugin to rule them all
 
 [![NPM Package](https://img.shields.io/npm/v/ilp-plugin-btp.svg?style=flat)](https://npmjs.org/package/ilp-plugin-btp)
-[![CircleCI](https://circleci.com/gh/interledgerjs/ilp-plugin-btp.svg?style=shield)](https://circleci.com/gh/interledgerjs/ilp-plugin-btp)
 [![Prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square)](https://prettier.io/)
 [![Known Vulnerabilities](https://snyk.io/test/github/interledgerjs/ilp-plugin-btp/badge.svg)](https://snyk.io/test/github/interledgerjs/ilp-plugin-btp)
 
