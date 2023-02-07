@@ -24,11 +24,16 @@ jobs:
       - name: Install dependencies
         run: yarn
       - name: Lint
-        run: yarn lint:all
+        run: |
+          warnings=$(yarn lint:all 2>&1)
+          echo "Matrix node version: ${{ matrix.node-version }}"
+          if [[ "${{ matrix.node-version }}" == "18.x" ]]; then
+            echo "$warnings"
+          fi
       - name: Format Check
         run: |
           yarn prettier:all
-          yarn lint:all --fix
+          yarn lint:all --fix --quiet
           # yarn.lock sometimes (rarely) changes for unknown reasons
           # perhaps different versions of yarn ??
           # we don't *really* care so exclude it from the diff check
