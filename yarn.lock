@@ -1939,11 +1939,6 @@
   resolved "https://registry.yarnpkg.com/@types/chai/-/chai-4.3.1.tgz#e2c6e73e0bdeb2521d00756d099218e9f5d90a04"
   integrity sha512-/zPMqDkzSZ8t3VtxOa4KPq7uzzW978M9Tvh+j7GHKuo6k6GTLxPJ4J5gE5cjfJ26pnXst0N5Hax8Sr0T2Mi9zQ==
 
-"@types/debug@0.0.30":
-  version "0.0.30"
-  resolved "https://registry.yarnpkg.com/@types/debug/-/debug-0.0.30.tgz#dc1e40f7af3b9c815013a7860e6252f6352a84df"
-  integrity sha512-orGL5LXERPYsLov6CWs3Fh6203+dXzJkR7OnddIr2514Hsecwc8xRpzCapshBbKFImCsvS/mk6+FWiN5LyZJAQ==
-
 "@types/debug@^4.1.0":
   version "4.1.6"
   resolved "https://registry.yarnpkg.com/@types/debug/-/debug-4.1.6.tgz#0b7018723084918a865eff99249c490505df2163"
@@ -2108,7 +2103,7 @@
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.17.24.tgz#c57511e3a19c4b5e9692bb2995c40a3a52167944"
   integrity sha512-5SCfvCxV74kzR3uWgTYiGxrd69TbT1I6+cMx1A5kEly/IVveJBimtAMlXiEyVFn5DvUFewQWxOOiJhlxeQwxgA==
 
-"@types/node@^10.5.1", "@types/node@^10.7.1":
+"@types/node@^10.5.1":
   version "10.17.60"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-10.17.60.tgz#35f3d6213daed95da7f0f73e75bcc6980e90597b"
   integrity sha512-F0KIgDJfy2nA3zMLmWGKxcH2ZVEtCZXHHdOQs2gSaQ27+lNeEfGxzkIw90aXswATX7AZ33tahPbzy6KAfUreVw==
@@ -4865,11 +4860,6 @@ event-target-shim@^5.0.0:
   resolved "https://registry.yarnpkg.com/event-target-shim/-/event-target-shim-5.0.1.tgz#5d4d3ebdf9583d63a5333ce2deb7480ab2b05789"
   integrity sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==
 
-eventemitter2@^5.0.0:
-  version "5.0.1"
-  resolved "https://registry.yarnpkg.com/eventemitter2/-/eventemitter2-5.0.1.tgz#6197a095d5fb6b57e8942f6fd7eaad63a09c9452"
-  integrity sha1-YZegldX7a1folC9v1+qtY6CclFI=
-
 eventemitter2@^6.4.5:
   version "6.4.9"
   resolved "https://registry.yarnpkg.com/eventemitter2/-/eventemitter2-6.4.9.tgz#41f2750781b4230ed58827bc119d293471ecb125"
@@ -6033,20 +6023,6 @@ ilp-packet@^3.0.7, ilp-packet@^3.0.8, ilp-packet@^3.0.9, ilp-packet@^3.1.3:
   dependencies:
     extensible-error "^1.0.2"
     oer-utils "^5.1.2"
-
-ilp-plugin-btp@^1.2.1, ilp-plugin-btp@^1.3.5, ilp-plugin-btp@^1.5.0:
-  version "1.5.0"
-  resolved "https://registry.yarnpkg.com/ilp-plugin-btp/-/ilp-plugin-btp-1.5.0.tgz#a8fbb2a218b0c7ef41e47b85d2ce115f31df7e75"
-  integrity sha512-TMJ/2a2LhDZCbGtYQ+NnTika+dDZZX/htP7DGJkeo3oxdqD5D+FZ+ny/oopOZZEjIw+TvMGVozuYMhN898gbxA==
-  dependencies:
-    "@types/debug" "0.0.30"
-    "@types/node" "^10.7.1"
-    "@types/ws" "^6.0.0"
-    btp-packet "^2.2.0"
-    debug "^3.1.0"
-    eventemitter2 "^5.0.0"
-    ilp-logger "^1.1.3"
-    ws "^6.0.0"
 
 ilp-plugin-http@^1.6.1:
   version "1.6.1"
