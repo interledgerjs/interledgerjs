@@ -1909,10 +1909,10 @@
     "@types/node" "*"
     "@types/ssh2" "*"
 
-"@types/dockerode@^3.3.8":
-  version "3.3.8"
-  resolved "https://registry.npmjs.org/@types/dockerode/-/dockerode-3.3.8.tgz"
-  integrity sha512-/Hip29GzPBWfbSS87lyQDVoB7Ja+kr8oOFWXsySxNFa7jlyj3Yws8LaZRmn1xZl7uJH3Xxsg0oI09GHpT1pIBw==
+"@types/dockerode@^3.3.12":
+  version "3.3.14"
+  resolved "https://registry.yarnpkg.com/@types/dockerode/-/dockerode-3.3.14.tgz#0c4ff53ea9990c43d525c865525f13e084afb5b0"
+  integrity sha512-PUTwtySPzCbjZ/uqRMBWKHtLGqBAlhnLitzHuom19NEX0KBYsQXqbVlig+zbUgYQU1paDeQURXj7QNglh1RI6A==
   dependencies:
     "@types/docker-modem" "*"
     "@types/node" "*"
@@ -4149,11 +4149,12 @@ docker-modem@^3.0.0:
     split-ca "^1.0.1"
     ssh2 "^0.8.7"
 
-dockerode@^3.3.1:
-  version "3.3.1"
-  resolved "https://registry.npmjs.org/dockerode/-/dockerode-3.3.1.tgz"
-  integrity sha512-AS2mr8Lp122aa5n6d99HkuTNdRV1wkkhHwBdcnY6V0+28D3DSYwhxAk85/mM9XwD3RMliTxyr63iuvn5ZblFYQ==
+dockerode@^3.3.4:
+  version "3.3.4"
+  resolved "https://registry.yarnpkg.com/dockerode/-/dockerode-3.3.4.tgz#875de614a1be797279caa9fe27e5637cf0e40548"
+  integrity sha512-3EUwuXnCU+RUlQEheDjmBE0B7q66PV9Rw5NiH1sXwINq0M9c5ERP9fxgkw36ZHOtzf4AGEEYySnkx/sACC9EgQ==
   dependencies:
+    "@balena/dockerignore" "^1.0.2"
     docker-modem "^3.0.0"
     tar-fs "~2.0.1"
 
@@ -10579,20 +10580,21 @@ test-exclude@^6.0.0:
     glob "^7.1.4"
     minimatch "^3.0.4"
 
-testcontainers@^8.10.0:
-  version "8.10.0"
-  resolved "https://registry.npmjs.org/testcontainers/-/testcontainers-8.10.0.tgz"
-  integrity sha512-7Kwcw9JFav2H+J9/0JF9ZYaxn4nvboLHyh0xpKHw8Imtoc8H2w/HgKJGgpn+hi6X1y1I0F24Z+jYkARYBgbdHQ==
+testcontainers@^9.0.0:
+  version "9.1.1"
+  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-9.1.1.tgz#3a3df829a4c0bf5d3003171fe65b62f1f86c63fb"
+  integrity sha512-4vTjKQWZxpMA+pNFlpupZ3XCdcbisYwbZIVUYFaNxl9bk8Vi/ELDzZJ3Kr14WdG7Q7333BGaZjKgKtx/ouEuMg==
   dependencies:
     "@balena/dockerignore" "^1.0.2"
     "@types/archiver" "^5.3.1"
-    "@types/dockerode" "^3.3.8"
+    "@types/dockerode" "^3.3.12"
     archiver "^5.3.1"
     byline "^5.0.0"
     debug "^4.3.4"
     docker-compose "^0.23.17"
-    dockerode "^3.3.1"
+    dockerode "^3.3.4"
     get-port "^5.1.1"
+    node-fetch "^2.6.7"
     properties-reader "^2.2.0"
     ssh-remote-port-forward "^1.0.4"
     tar-fs "^2.1.1"
