@@ -18,7 +18,6 @@
   },
   "homepage": "https://github.com/interledgerjs/interledgerjs#readme",
   "scripts": {
-    "postinstall": "lerna bootstrap",
     "clean": "yarn clean:artifacts && yarn clean:packages && yarn clean:root",
     "clean:artifacts": "lerna run clean --parallel",
     "clean:packages": "lerna clean --yes",
