@@ -66,7 +66,7 @@
     "ilp-plugin-btp": "^1.5.0",
     "ilp-plugin-mini-accounts": "^4.2.0",
     "process": "^0.11.10",
-    "puppeteer": "^13.7.0",
+    "puppeteer": "^19.0.0",
     "stream-browserify": "^3.0.0",
     "ts-loader": "^9.3.0",
     "typedoc": "^0.22.15",
