@@ -61,7 +61,7 @@
     "benchmark": "^2.1.4",
     "bignumber.js": "^9.0.2",
     "buffer": "^6.0.3",
-    "gh-pages": "^3.2.3",
+    "gh-pages": "^5.0.0",
     "ilp-plugin": "^3.5.4",
     "ilp-plugin-btp": "^1.5.0",
     "ilp-plugin-mini-accounts": "^4.2.0",
