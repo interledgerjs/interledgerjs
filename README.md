@@ -1,6 +1,6 @@
 # Interledger.js Monorepo
 
-![status](https://github.com/interledgerjs/interledgerjs/actions/workflows/master.yml/badge.svg?branch=master)
+![status](https://github.com/interledgerjs/interledgerjs/actions/workflows/push.yml/badge.svg?branch=master)
 [![codecov](https://codecov.io/gh/interledgerjs/interledgerjs/branch/master/graph/badge.svg)](https://codecov.io/gh/interledgerjs/interledgerjs)
 
 ## Packages
