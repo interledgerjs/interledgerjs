@@ -25,6 +25,15 @@ jobs:
         run: yarn
       - name: Lint
         run: yarn lint:all
+      - name: Format Check
+        run: |
+          yarn prettier:all
+          yarn lint:all --fix
+          # yarn.lock sometimes (rarely) changes for unknown reasons
+          # perhaps different versions of yarn ??
+          # we don't *really* care so exclude it from the diff check
+          git diff --exit-code -- . ':!yarn.lock'
+
       - name: Build
         run: yarn build
       - name: Test
