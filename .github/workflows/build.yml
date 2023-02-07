@@ -26,7 +26,7 @@ jobs:
       - name: Lint
         run: |
           warnings=$(yarn lint:all 2>&1)
-          if [[ ${{ matrix.node-version }} == "18.x" ]]; then
+          if [[ "${{ matrix.node-version }}" == "18.x" ]]; then
             echo $warnings
           fi
       - name: Format Check
