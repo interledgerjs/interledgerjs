@@ -41,7 +41,7 @@
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/interledgerjs/ilp-protocol-stream.git"
+    "url": "git+https://github.com/interledgerjs/interledgerjs.git"
   },
   "dependencies": {
     "ilp-logger": "^1.4.4",
