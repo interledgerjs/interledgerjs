@@ -95,7 +95,7 @@
     "nyc": "^15.1.0",
     "prettier": "2.8.3",
     "prettier-standard": "^16.4.1",
-    "rimraf": "^3.0.2",
+    "rimraf": "^4.0.0",
     "sinon": "^15.0.0",
     "source-map-support": "^0.5.21",
     "ts-jest": "^28.0.1",
