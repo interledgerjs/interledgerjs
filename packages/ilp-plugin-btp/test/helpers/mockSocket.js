@@ -30,17 +30,12 @@ class OutgoingSocket extends EventEmitter {
         const message = this.messages.shift()
         const gotReq = btp.deserialize(data)
         assert.ok(message, 'Unexpected message ' + JSON.stringify(gotReq))
-        const wantReq = Object.assign(
-          { requestId: gotReq.requestId },
-          message.req
-        )
+        const wantReq = Object.assign({ requestId: gotReq.requestId }, message.req)
         assert.deepEqual(gotReq, wantReq)
         if (message.res) {
           this.emit(
             'message',
-            btp.serialize(
-              Object.assign({ requestId: gotReq.requestId }, message.res)
-            )
+            btp.serialize(Object.assign({ requestId: gotReq.requestId }, message.res))
           )
         }
       })
@@ -68,7 +63,7 @@ class Server extends EventEmitter {
       noServer,
       clientTracking,
       perMessageDeflate,
-      maxPayload
+      maxPayload,
     },
     cb
   ) {
@@ -111,5 +106,5 @@ function makeClient(messages) {
 module.exports = {
   IncomingSocket,
   Server,
-  makeClient
+  makeClient,
 }

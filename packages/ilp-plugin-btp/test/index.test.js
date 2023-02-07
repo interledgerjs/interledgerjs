@@ -11,83 +11,83 @@ describe('BtpPlugin', function () {
   beforeEach(async function () {
     this.clientOpts = {
       server: 'btp+ws://bob:secret@localhost:9000',
-      responseTimeout: 100
+      responseTimeout: 100,
     }
     this.serverOpts = {
       listener: {
         port: 9000,
-        secret: 'secret'
+        secret: 'secret',
       },
-      responseTimeout: 100
+      responseTimeout: 100,
     }
     this.authData = [
       {
         protocolName: 'auth',
         contentType: btp.MIME_APPLICATION_OCTET_STREAM,
-        data: Buffer.from('')
+        data: Buffer.from(''),
       },
       {
         protocolName: 'auth_username',
         contentType: btp.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from('bob')
+        data: Buffer.from('bob'),
       },
       {
         protocolName: 'auth_token',
         contentType: btp.MIME_TEXT_PLAIN_UTF8,
-        data: Buffer.from('secret')
-      }
+        data: Buffer.from('secret'),
+      },
     ]
     this.ilpReqData = [
       {
         protocolName: 'ilp',
         contentType: btp.MIME_APPLICATION_OCTET_STREAM,
-        data: Buffer.from('ilp request')
-      }
+        data: Buffer.from('ilp request'),
+      },
     ]
     this.ilpResData = [
       {
         protocolName: 'ilp',
         contentType: btp.MIME_APPLICATION_OCTET_STREAM,
-        data: Buffer.from('ilp response')
-      }
+        data: Buffer.from('ilp response'),
+      },
     ]
     this.errorData = {
       code: 'F00',
       name: 'NotAcceptedError',
       data: 'error data',
       triggeredAt: new Date().toISOString(),
-      protocolData: []
+      protocolData: [],
     }
     this.authReqPacket = {
       type: btp.TYPE_MESSAGE,
       requestId: 123,
-      data: { protocolData: this.authData }
+      data: { protocolData: this.authData },
     }
     this.authResPacket = {
       type: btp.TYPE_RESPONSE,
       requestId: 123,
-      data: { protocolData: [] }
+      data: { protocolData: [] },
     }
     this.ilpReqPacket = {
       type: btp.TYPE_MESSAGE,
       requestId: 456,
-      data: { protocolData: this.ilpReqData }
+      data: { protocolData: this.ilpReqData },
     }
     this.ilpResPacket = {
       type: btp.TYPE_RESPONSE,
       requestId: 456,
-      data: { protocolData: this.ilpResData }
+      data: { protocolData: this.ilpResData },
     }
     this.errorPacket = {
       type: btp.TYPE_ERROR,
       requestId: 456,
-      data: this.errorData
+      data: this.errorData,
     }
 
     this.setupServer = async () => {
       this.ws = new mockSocket.IncomingSocket()
       this.plugin = new Plugin(this.serverOpts, {
-        WebSocketServer: mockSocket.Server
+        WebSocketServer: mockSocket.Server,
       })
 
       const connect = this.plugin.connect()
@@ -113,7 +113,7 @@ describe('BtpPlugin', function () {
       assert.strictEqual(this.server.isConnected(), true)
       assert.strictEqual(this.client.isConnected(), true)
 
-      this.server.registerDataHandler(ilp => {
+      this.server.registerDataHandler((ilp) => {
         assert.deepEqual(ilp, Buffer.from('foo'))
         return Buffer.from('bar')
       })
@@ -133,33 +133,27 @@ describe('BtpPlugin', function () {
 
       // first reconnect (0ms)
       this.server._ws._instance.close()
-      await new Promise(res => this.server._ws.once('open', res))
+      await new Promise((res) => this.server._ws.once('open', res))
       const date1 = Date.now()
       const timer1 = this.server._ws._clearTryTimer
       assert.equal(this.server._ws._tries, 1)
 
       // second reconnect (100ms)
       this.server._ws._instance.close()
-      await new Promise(res => this.server._ws.once('open', res))
+      await new Promise((res) => this.server._ws.once('open', res))
       const date2 = Date.now()
       const timer2 = this.server._ws._clearTryTimer
       assert.equal(this.server._ws._tries, 2)
 
       // third reconnect (500ms)
       this.server._ws._instance.close()
-      await new Promise(res => this.server._ws.once('open', res))
+      await new Promise((res) => this.server._ws.once('open', res))
       const date3 = Date.now()
       assert.equal(this.server._ws._tries, 3)
 
-      assert(
-        timer1 !== timer2,
-        'should have reset try clear timer between tries'
-      )
+      assert(timer1 !== timer2, 'should have reset try clear timer between tries')
       assert(date1 - date0 >= 0, 'first reconnect should take at least 0ms')
-      assert(
-        date2 - date1 >= 100,
-        'second reconnect should take at least 100ms'
-      )
+      assert(date2 - date1 >= 100, 'second reconnect should take at least 100ms')
       assert(date3 - date2 >= 500, 'third reconnect should take at least 500ms')
     })
   })
@@ -180,20 +174,20 @@ describe('BtpPlugin', function () {
           btpAccount: 'bob',
           btpToken: 'secret',
           reconnectInterval: 100,
-          responseTimeout: 100
+          responseTimeout: 100,
         })
       }, /account\/token must be passed in via constructor or uri, but not both/)
     })
 
     it('throws if the client auth is incorrect', async function () {
       this.client = new Plugin({
-        server: 'btp+ws://bob:wrong_secret@localhost:9000'
+        server: 'btp+ws://bob:wrong_secret@localhost:9000',
       })
       await Promise.all([this.server.connect(), this.client.connect()])
         .then(() => {
           assert(false)
         })
-        .catch(err => {
+        .catch((err) => {
           assert.equal(err.message, 'connection aborted')
         })
       assert.strictEqual(this.server.isConnected(), false)
@@ -208,14 +202,14 @@ describe('BtpPlugin', function () {
         btpAccount: 'bob',
         btpToken: 'secret',
         reconnectInterval: 100,
-        responseTimeout: 100
+        responseTimeout: 100,
       })
 
       await Promise.all([this.server.connect(), this.client.connect()])
       assert.strictEqual(this.server.isConnected(), true)
       assert.strictEqual(this.client.isConnected(), true)
 
-      this.server.registerDataHandler(ilp => {
+      this.server.registerDataHandler((ilp) => {
         assert.deepEqual(ilp, Buffer.from('foo'))
         return Buffer.from('bar')
       })
@@ -233,10 +227,10 @@ describe('BtpPlugin', function () {
         btpToken: 'secret',
         reconnectInterval: 100,
         responseTimeout: 100,
-        btpAuthFlags: { foo: 123 }
+        btpAuthFlags: { foo: 123 },
       })
       let gotFlags
-      this.server._connect = flags => {
+      this.server._connect = (flags) => {
         gotFlags = flags
       }
 
@@ -244,7 +238,7 @@ describe('BtpPlugin', function () {
       assert.strictEqual(this.server.isConnected(), true)
       assert.strictEqual(this.client.isConnected(), true)
 
-      this.server.registerDataHandler(ilp => {
+      this.server.registerDataHandler((ilp) => {
         assert.deepEqual(ilp, Buffer.from('foo'))
         return Buffer.from('bar')
       })
@@ -276,8 +270,8 @@ describe('BtpPlugin', function () {
         {
           type: btp.TYPE_RESPONSE,
           requestId: 123,
-          data: { protocolData: [] }
-        }
+          data: { protocolData: [] },
+        },
       ])
     })
 
@@ -297,17 +291,13 @@ describe('BtpPlugin', function () {
     it('emits "connect"/"disconnect" as connections are gained/lost', async function () {
       this.server.connect()
       this.server._wss.emit('connection', this.ws)
-      setImmediate(() =>
-        this.ws.emit('message', btp.serialize(this.authReqPacket))
-      )
-      await new Promise(resolve => this.server.once('connect', resolve))
+      setImmediate(() => this.ws.emit('message', btp.serialize(this.authReqPacket)))
+      await new Promise((resolve) => this.server.once('connect', resolve))
       setImmediate(() => this.ws.emit('error', new Error('fail')))
-      await new Promise(resolve => this.server.once('disconnect', resolve))
+      await new Promise((resolve) => this.server.once('disconnect', resolve))
       this.server._wss.emit('connection', this.ws)
-      setImmediate(() =>
-        this.ws.emit('message', btp.serialize(this.authReqPacket))
-      )
-      await new Promise(resolve => this.server.once('connect', resolve))
+      setImmediate(() => this.ws.emit('message', btp.serialize(this.authReqPacket)))
+      await new Promise((resolve) => this.server.once('connect', resolve))
       assert.equal(this.server.isConnected(), true)
     })
     ;[
@@ -317,20 +307,20 @@ describe('BtpPlugin', function () {
           {
             protocolName: 'auth_username',
             contentType: btp.MIME_TEXT_PLAIN_UTF8,
-            data: Buffer.from('bob')
+            data: Buffer.from('bob'),
           },
           {
             protocolName: 'auth',
             contentType: btp.MIME_APPLICATION_OCTET_STREAM,
-            data: Buffer.from('')
+            data: Buffer.from(''),
           },
           {
             protocolName: 'auth_token',
             contentType: btp.MIME_TEXT_PLAIN_UTF8,
-            data: Buffer.from('INVALID')
-          }
+            data: Buffer.from('INVALID'),
+          },
         ],
-        error: 'First subprotocol must be auth'
+        error: 'First subprotocol must be auth',
       },
       {
         label: 'throws if the auth token is missing',
@@ -338,15 +328,15 @@ describe('BtpPlugin', function () {
           {
             protocolName: 'auth',
             contentType: btp.MIME_APPLICATION_OCTET_STREAM,
-            data: Buffer.from('')
+            data: Buffer.from(''),
           },
           {
             protocolName: 'auth_username',
             contentType: btp.MIME_TEXT_PLAIN_UTF8,
-            data: Buffer.from('bob')
-          }
+            data: Buffer.from('bob'),
+          },
         ],
-        error: 'auth_token subprotocol is required'
+        error: 'auth_token subprotocol is required',
       },
       {
         label: 'throws if the auth token is incorrect',
@@ -354,21 +344,21 @@ describe('BtpPlugin', function () {
           {
             protocolName: 'auth',
             contentType: btp.MIME_APPLICATION_OCTET_STREAM,
-            data: Buffer.from('')
+            data: Buffer.from(''),
           },
           {
             protocolName: 'auth_username',
             contentType: btp.MIME_TEXT_PLAIN_UTF8,
-            data: Buffer.from('bob')
+            data: Buffer.from('bob'),
           },
           {
             protocolName: 'auth_token',
             contentType: btp.MIME_TEXT_PLAIN_UTF8,
-            data: Buffer.from('INVALID')
-          }
+            data: Buffer.from('INVALID'),
+          },
         ],
-        error: 'invalid auth_token'
-      }
+        error: 'invalid auth_token',
+      },
     ].forEach(function ({ label, authData, error }) {
       it(label, async function () {
         this.server.connect().catch(() => {})
@@ -378,7 +368,7 @@ describe('BtpPlugin', function () {
           btp.serialize({
             type: btp.TYPE_MESSAGE,
             requestId: 123,
-            data: { protocolData: authData }
+            data: { protocolData: authData },
           })
         )
         assert.strictEqual(this.server.isConnected(), false)
@@ -389,8 +379,8 @@ describe('BtpPlugin', function () {
           requestId: 123,
           data: Object.assign(this.errorData, {
             data: error,
-            triggeredAt: res.data.triggeredAt
-          })
+            triggeredAt: res.data.triggeredAt,
+          }),
         })
         assert.ok(this.ws.closed)
       })
@@ -405,15 +395,15 @@ describe('BtpPlugin', function () {
           {
             req: {
               type: btp.TYPE_MESSAGE,
-              data: { protocolData: this.authData }
+              data: { protocolData: this.authData },
             },
-            res: { type: btp.TYPE_RESPONSE, data: { protocolData: [] } }
-          }
-        ])
+            res: { type: btp.TYPE_RESPONSE, data: { protocolData: [] } },
+          },
+        ]),
       })
 
       const pConnect = client.connect()
-      await new Promise(resolve => setTimeout(resolve, 10))
+      await new Promise((resolve) => setTimeout(resolve, 10))
       await pConnect
       assert.strictEqual(client.isConnected(), true)
 
@@ -428,11 +418,11 @@ describe('BtpPlugin', function () {
           {
             req: {
               type: btp.TYPE_MESSAGE,
-              data: { protocolData: this.authData }
+              data: { protocolData: this.authData },
             },
-            res: { type: btp.TYPE_RESPONSE, data: { protocolData: [] } }
-          }
-        ])
+            res: { type: btp.TYPE_RESPONSE, data: { protocolData: [] } },
+          },
+        ]),
       })
       await client.connect()
       let disconnected
@@ -451,25 +441,22 @@ describe('BtpPlugin', function () {
     })
 
     it('registers a data handler', async function () {
-      this.plugin.registerDataHandler(packet => {
+      this.plugin.registerDataHandler((packet) => {
         assert.deepEqual(packet, this.ilpReqData[0].data)
         return this.ilpResData[0].data
       })
       await this.plugin._handleIncomingBtpPacket('', {
         type: btp.TYPE_MESSAGE,
         requestId: 456,
-        data: { protocolData: this.ilpReqData }
+        data: { protocolData: this.ilpReqData },
       })
-      assert.deepEqual(this.ws.responses, [
-        this.authResPacket,
-        this.ilpResPacket
-      ])
+      assert.deepEqual(this.ws.responses, [this.authResPacket, this.ilpResPacket])
     })
 
     it('throws if the plugin already has a data handler', async function () {
-      this.plugin.registerDataHandler(packet => {})
+      this.plugin.registerDataHandler((packet) => {})
       assert.throws(() => {
-        this.plugin.registerDataHandler(packet => {})
+        this.plugin.registerDataHandler((packet) => {})
       })
     })
 
@@ -489,9 +476,9 @@ describe('BtpPlugin', function () {
     })
 
     it('deregisters a data handler', async function () {
-      this.plugin.registerDataHandler(packet => {})
+      this.plugin.registerDataHandler((packet) => {})
       this.plugin.deregisterDataHandler()
-      this.plugin.registerDataHandler(packet => {})
+      this.plugin.registerDataHandler((packet) => {})
     })
   })
 
@@ -514,10 +501,7 @@ describe('BtpPlugin', function () {
     it('rejects an error', async function () {
       setImmediate(async () => {
         try {
-          const res = await this.plugin._handleIncomingBtpPacket(
-            '',
-            this.errorPacket
-          )
+          const res = await this.plugin._handleIncomingBtpPacket('', this.errorPacket)
           await this.plugin._call('', this.ilpReqPacket)
           assert(false)
         } catch (err) {
@@ -546,9 +530,7 @@ describe('BtpPlugin', function () {
       this.client = new Plugin(this.serverOpts)
       this.server = new Plugin(this.clientOpts)
       await Promise.all([this.server.connect(), this.client.connect()])
-      const res = await fetch(
-        `http://localhost:${this.serverOpts.listener.port}`
-      )
+      const res = await fetch(`http://localhost:${this.serverOpts.listener.port}`)
       assert.strictEqual(res.status, 426)
       assert.strictEqual(await res.text(), 'Upgrade Required')
     })
@@ -563,10 +545,10 @@ describe('BtpPlugin', function () {
           port: 9000,
           secret: 'secret',
           wsOpts: {
-            server: httpServer
-          }
+            server: httpServer,
+          },
         },
-        responseTimeout: 100
+        responseTimeout: 100,
       }
       this.client = new Plugin(serverOpts)
       this.server = new Plugin(this.clientOpts)

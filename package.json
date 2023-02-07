@@ -30,7 +30,7 @@
     "publish:release": "lerna publish from-git --yes",
     "lint": "eslint --cache --cache-location node_modules/.cache/eslint",
     "lint:all": "yarn lint 'packages/*/src/**/*.ts*'",
-    "prettier::all": "yarn prettier --write 'packages/*/src/**/*.{js,ts}*'",
+    "prettier:all": "yarn prettier --write 'packages/*/src/**/*.{js,ts}*'",
     "lint:staged": "lint-staged",
     "version": "yarn && git add yarn.lock",
     "prepare": "husky install"
