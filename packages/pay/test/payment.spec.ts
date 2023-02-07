@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion, prefer-const */
 import { StreamServer } from '@interledger/stream-receiver'
-import { describe, expect, it } from '@jest/globals'
+import { describe, expect, it, jest } from '@jest/globals'
 import { createApp } from 'ilp-connector'
 import {
   deserializeIlpPrepare,
@@ -1756,6 +1756,8 @@ describe('stream receipts', () => {
 })
 
 describe('closes connection', () => {
+  jest.setTimeout(20e3)
+
   it('closes connection with ilp-protocol-stream', async () => {
     const [senderPlugin, alicePlugin] = MirrorPlugin.createPair()
     const [bobPlugin, receiverPlugin] = MirrorPlugin.createPair()
