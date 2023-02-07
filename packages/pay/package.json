@@ -33,7 +33,7 @@
     "@interledger/stream-receiver": "^0.3.3-alpha.3",
     "@types/long": "^4.0.2",
     "@types/node-fetch": "^2.6.1",
-    "get-port": "^5.1.1",
+    "get-port": "^6.0.0",
     "ilp-connector": "^23.0.2",
     "ilp-plugin-http": "^1.6.1",
     "nock": "^13.2.4",
