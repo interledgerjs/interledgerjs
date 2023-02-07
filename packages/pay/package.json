@@ -31,13 +31,13 @@
   },
   "devDependencies": {
     "@interledger/stream-receiver": "^0.3.3-alpha.3",
-    "@types/long": "^4.0.2",
-    "@types/node-fetch": "^2.6.1",
-    "get-port": "^5.1.1",
-    "ilp-connector": "^23.0.2",
-    "ilp-plugin-http": "^1.6.1",
-    "nock": "^13.2.4",
-    "reduct": "^3.3.1",
-    "testcontainers": "^8.10.0"
+    "@types/long": "4.0.2",
+    "@types/node-fetch": "2.6.1",
+    "get-port": "5.1.1",
+    "ilp-connector": "23.0.2",
+    "ilp-plugin-http": "1.6.1",
+    "nock": "13.2.4",
+    "reduct": "3.3.1",
+    "testcontainers": "8.10.0"
   }
 }
