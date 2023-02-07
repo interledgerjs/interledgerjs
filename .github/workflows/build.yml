@@ -25,12 +25,10 @@ jobs:
         run: yarn
       - name: Lint
         run: |
-          warnings=($(yarn lint:all 2>&1))
+          warnings=$(yarn lint:all 2>&1)
           echo "Matrix node version: ${{ matrix.node-version }}"
           if [[ "${{ matrix.node-version }}" == "18.x" ]]; then
-            for warning in "${warnings[@]}"; do
-              echo "$warning"
-            done
+            echo "$warnings"
           fi
       - name: Format Check
         run: |
