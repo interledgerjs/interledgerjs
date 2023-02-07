@@ -13,7 +13,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/interledgerjs/ilp-plugin-btp.git"
+    "url": "git+https://github.com/interledgerjs/interledgerjs.git"
   },
   "scripts": {
     "prettier": "prettier --write 'src/**/*.ts' 'test/**/*.js'",
