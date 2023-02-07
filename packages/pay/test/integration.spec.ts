@@ -32,11 +32,13 @@ describe('interledger.rs integration', () => {
     // Setup the Rust connector
     const adminAuthToken = 'admin'
     rustNodeContainer = await new GenericContainer('interledgerrs/ilp-node:latest')
-      .withEnv('ILP_SECRET_SEED', randomBytes(32).toString('hex'))
-      .withEnv('ILP_ADMIN_AUTH_TOKEN', adminAuthToken)
-      .withEnv('ILP_DATABASE_URL', `redis://redis_rs:6379`)
-      .withEnv('ILP_ILP_ADDRESS', 'g.corp')
-      .withEnv('ILP_HTTP_BIND_ADDRESS', '0.0.0.0:7770')
+      .withEnvironment({
+        ILP_SECRET_SEED: randomBytes(32).toString('hex'),
+        ILP_ADMIN_AUTH_TOKEN: adminAuthToken,
+        ILP_DATABASE_URL: `redis://redis_rs:6379`,
+        ILP_ILP_ADDRESS: 'g.corp',
+        ILP_HTTP_BIND_ADDRESS: '0.0.0.0:7770',
+      })
       .withName('connector')
       .withNetworkMode(network.getName())
       .withExposedPorts(7770)
@@ -164,11 +166,14 @@ describe('interledger4j integration', () => {
     // Setup the Java connector
     const adminPassword = 'admin'
     connectorContainer = await new GenericContainer('interledger4j/java-ilpv4-connector:0.5.1')
-      .withEnv('redis.host', 'redis_4j') // Hostname of Redis container
-      .withEnv('interledger.connector.adminPassword', adminPassword)
-      .withEnv('interledger.connector.spsp.serverSecret', randomBytes(32).toString('base64'))
-      .withEnv('interledger.connector.enabledFeatures.localSpspFulfillmentEnabled', 'true')
-      .withEnv('interledger.connector.enabledProtocols.spspEnabled', 'true')
+      .withEnvironment({
+        // Hostname of Redis container
+        'redis.host': 'redis_4j',
+        'interledger.connector.adminPassword': adminPassword,
+        'interledger.connector.spsp.serverSecret': randomBytes(32).toString('base64'),
+        'interledger.connector.enabledFeatures.localSpspFulfillmentEnabled': 'true',
+        'interledger.connector.enabledProtocols.spspEnabled': 'true',
+      })
       .withNetworkMode(network.getName())
       .withExposedPorts(8080)
       .withWaitStrategy(Wait.forLogMessage('STARTED INTERLEDGER CONNECTOR'))
