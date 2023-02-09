@@ -38,6 +38,6 @@
     "ilp-plugin-http": "^1.6.1",
     "nock": "^13.2.4",
     "reduct": "^3.3.1",
-    "testcontainers": "^9.0.0"
+    "testcontainers": "9.1.2"
   }
 }
