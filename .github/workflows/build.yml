@@ -40,7 +40,10 @@ jobs:
           git diff --exit-code -- . ':!yarn.lock'
 
       - name: Build
-        run: yarn build
+        run: |
+          yarn build
+          # Build the root tsconfig.json, seems to require a prior build step
+          yarn tsc -p tsconfig.json --noEmit
       - name: Test
         run: |
           function retry() {

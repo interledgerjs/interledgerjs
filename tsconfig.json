@@ -20,6 +20,7 @@
       "ilp-protocol-ildcp": ["packages/ilp-protocol-ildcp/src"],
       "ilp-protocol-stream": ["packages/ilp-protocol-stream/src"],
       "ilp-plugin": ["packages/ilp-plugin/src"],
+      "ilp-plugin-btp": ["packages/ilp-plugin-btp/src"],
       "ilp-spsp-payout": ["packages/ilp-spsp-payout/src"],
       "@interledger/connection-tag-utils": ["packages/connection-tag-utils/src"],
       "@interledger/stream-receiver": ["packages/stream-receiver/src"],
