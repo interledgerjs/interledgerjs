@@ -33,14 +33,14 @@
     "ws": "^8.8.0"
   },
   "devDependencies": {
-    "@types/debug": "^4.1.7",
-    "@types/lodash": "^4.14.182",
-    "@types/long": "^4.0.2",
-    "@types/node": "^18.0.0",
-    "@types/ws": "^8.5.3",
-    "node-fetch": "^2.3.0",
-    "source-map-support": "^0.5.21",
-    "typedoc": "^0.23.0"
+    "@types/debug": "4.1.7",
+    "@types/lodash": "4.14.191",
+    "@types/long": "4.0.2",
+    "@types/node": "18.11.18",
+    "@types/ws": "8.5.4",
+    "node-fetch": "2.6.7",
+    "source-map-support": "0.5.21",
+    "typedoc": "0.23.24"
   },
   "engines": {
     "node": ">=14.0.0"
