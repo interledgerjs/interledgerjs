@@ -51,7 +51,7 @@
     "uuid": "^8.3.2"
   },
   "devDependencies": {
-    "@types/benchmark": "2.1.1",
+    "@types/benchmark": "2.1.2",
     "@types/long": "4.0.2",
     "@types/uuid": "8.3.4",
     "@types/webpack": "5.28.0",
