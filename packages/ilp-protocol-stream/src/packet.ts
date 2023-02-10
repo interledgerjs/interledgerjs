@@ -217,7 +217,9 @@ export abstract class BaseFrame {
       } else if (Long.isLong(value)) {
         contents.writeVarUInt(value)
       } else {
-        throw new Error(`Unexpected property type for property "${prop}": ${typeof value}`)
+        throw new Error(
+          `Unexpected property type for property "${prop as string}": ${typeof value}`
+        )
       }
     }
   }
