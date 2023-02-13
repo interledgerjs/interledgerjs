@@ -43,7 +43,7 @@
     "url": "git+https://github.com/interledgerjs/interledgerjs.git"
   },
   "dependencies": {
-    "ilp-logger": "^1.4.4",
+    "ilp-logger": "^1.4.5-alpha.2",
     "ilp-packet": "^3.1.4-alpha.2",
     "ilp-protocol-ildcp": "^2.2.4-alpha.2",
     "long": "^4.0.0",
@@ -59,7 +59,7 @@
     "benchmark": "2.1.4",
     "bignumber.js": "9.1.1",
     "buffer": "6.0.3",
-    "ilp-plugin": "^3.5.4",
+    "ilp-plugin": "^3.5.5-alpha.2",
     "ilp-plugin-btp": "^1.5.0",
     "ilp-plugin-mini-accounts": "4.2.0",
     "process": "0.11.10",

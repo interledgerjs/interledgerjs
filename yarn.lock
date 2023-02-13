@@ -1774,11 +1774,6 @@
   resolved "https://registry.npmjs.org/@types/chai/-/chai-4.3.4.tgz"
   integrity sha512-KnRanxnpfpjUTqTCXslZSEdLfXExwgNxYPdiO2WGUj8+HDjFi8R3k5RVKPeSCzLjCcshCAtVO2QBbVuAV4kTnw==
 
-"@types/debug@0.0.30":
-  version "0.0.30"
-  resolved "https://registry.npmjs.org/@types/debug/-/debug-0.0.30.tgz"
-  integrity sha512-orGL5LXERPYsLov6CWs3Fh6203+dXzJkR7OnddIr2514Hsecwc8xRpzCapshBbKFImCsvS/mk6+FWiN5LyZJAQ==
-
 "@types/debug@4.1.7", "@types/debug@^4.1.0", "@types/debug@^4.1.7":
   version "4.1.7"
   resolved "https://registry.npmjs.org/@types/debug/-/debug-4.1.7.tgz"
@@ -1925,7 +1920,7 @@
   resolved "https://registry.npmjs.org/@types/node/-/node-10.17.24.tgz"
   integrity sha512-5SCfvCxV74kzR3uWgTYiGxrd69TbT1I6+cMx1A5kEly/IVveJBimtAMlXiEyVFn5DvUFewQWxOOiJhlxeQwxgA==
 
-"@types/node@^10.5.1", "@types/node@^10.7.1":
+"@types/node@^10.5.1":
   version "10.17.60"
   resolved "https://registry.npmjs.org/@types/node/-/node-10.17.60.tgz"
   integrity sha512-F0KIgDJfy2nA3zMLmWGKxcH2ZVEtCZXHHdOQs2gSaQ27+lNeEfGxzkIw90aXswATX7AZ33tahPbzy6KAfUreVw==
@@ -4615,11 +4610,6 @@ event-target-shim@^5.0.0:
   resolved "https://registry.npmjs.org/event-target-shim/-/event-target-shim-5.0.1.tgz"
   integrity sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==
 
-eventemitter2@^5.0.0:
-  version "5.0.1"
-  resolved "https://registry.npmjs.org/eventemitter2/-/eventemitter2-5.0.1.tgz"
-  integrity sha512-5EM1GHXycJBS6mauYAbVKT1cVs7POKWb2NXD4Vyt8dDqeZa7LaDK1/sjtL+Zb0lzTpSNil4596Dyu97hz37QLg==
-
 eventemitter2@^6.4.5:
   version "6.4.9"
   resolved "https://registry.npmjs.org/eventemitter2/-/eventemitter2-6.4.9.tgz"
@@ -5671,7 +5661,7 @@ ilp-connector@23.0.2:
     source-map-support "^0.5.0"
     through2 "^2.0.3"
 
-ilp-logger@^1.1.3, ilp-logger@^1.4.4:
+ilp-logger@^1.1.3:
   version "1.4.4"
   resolved "https://registry.npmjs.org/ilp-logger/-/ilp-logger-1.4.4.tgz"
   integrity sha512-R7F+SH6Aiipuqoq63gtzy6/HVIfcCK1rEmq8bE8NLSufXJPRoXszNs6RpypQi9HJcZvTcIUPFE15bS/HI+T+/A==
@@ -5697,20 +5687,6 @@ ilp-packet@^3.0.7, ilp-packet@^3.0.8, ilp-packet@^3.0.9, ilp-packet@^3.1.3:
   dependencies:
     extensible-error "^1.0.2"
     oer-utils "^5.1.2"
-
-ilp-plugin-btp@^1.2.1, ilp-plugin-btp@^1.3.5, ilp-plugin-btp@^1.5.0:
-  version "1.5.0"
-  resolved "https://registry.npmjs.org/ilp-plugin-btp/-/ilp-plugin-btp-1.5.0.tgz"
-  integrity sha512-TMJ/2a2LhDZCbGtYQ+NnTika+dDZZX/htP7DGJkeo3oxdqD5D+FZ+ny/oopOZZEjIw+TvMGVozuYMhN898gbxA==
-  dependencies:
-    "@types/debug" "0.0.30"
-    "@types/node" "^10.7.1"
-    "@types/ws" "^6.0.0"
-    btp-packet "^2.2.0"
-    debug "^3.1.0"
-    eventemitter2 "^5.0.0"
-    ilp-logger "^1.1.3"
-    ws "^6.0.0"
 
 ilp-plugin-http@1.6.1:
   version "1.6.1"
@@ -5741,14 +5717,6 @@ ilp-plugin-mini-accounts@4.2.0:
     ilp-store-wrapper "^2.0.0"
     int64 "0.0.5"
     ws "^6.0.0"
-
-ilp-plugin@^3.5.4:
-  version "3.5.4"
-  resolved "https://registry.npmjs.org/ilp-plugin/-/ilp-plugin-3.5.4.tgz"
-  integrity sha512-KSTieSr4cezxhhODg3VW83oGGbSTuM+FGw6P1SP9DOL0OAz4WIWdZc1IOcLRyF6MzW0ULhf+JTRb2kACQi6nfw==
-  dependencies:
-    ilp-logger "^1.4.4"
-    ilp-plugin-btp "^1.2.1"
 
 ilp-protocol-ccp@^1.1.1:
   version "1.2.3"
