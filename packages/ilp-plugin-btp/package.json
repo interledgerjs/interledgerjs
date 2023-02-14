@@ -1,6 +1,6 @@
 {
   "name": "ilp-plugin-btp",
-  "version": "2.0.0",
+  "version": "1.5.0",
   "description": "Generic BTP plugin for ILP",
   "main": "index.js",
   "types": "dist/index.d.ts",
@@ -41,8 +41,5 @@
     "node-fetch": "2.6.9",
     "source-map-support": "0.5.21",
     "typedoc": "0.23.25"
-  },
-  "engines": {
-    "node": ">=14.0.0"
   }
 }
