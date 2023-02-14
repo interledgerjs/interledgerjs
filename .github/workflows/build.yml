@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies
-        run: yarn
+        run: yarn install --frozen-lockfile
       - name: Lint
         run: |
           warnings=$(yarn lint:all 2>&1)
