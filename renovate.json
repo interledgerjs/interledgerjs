@@ -9,7 +9,7 @@
     },
     {
       "matchDatasources": ["npm"],
-      "matchPackageNames": ["uuid"],
+      "matchPackageNames": ["uuid", "@types/uuid"],
       "allowedVersions": "< 9"
     },
     {
