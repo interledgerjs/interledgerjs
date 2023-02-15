@@ -1212,9 +1212,9 @@
     "@types/node" "*"
     "@types/ssh2" "*"
 
-"@types/dockerode@^3.3.12":
+"@types/dockerode@^3.3.14":
   version "3.3.14"
-  resolved "https://registry.npmjs.org/@types/dockerode/-/dockerode-3.3.14.tgz"
+  resolved "https://registry.yarnpkg.com/@types/dockerode/-/dockerode-3.3.14.tgz#0c4ff53ea9990c43d525c865525f13e084afb5b0"
   integrity sha512-PUTwtySPzCbjZ/uqRMBWKHtLGqBAlhnLitzHuom19NEX0KBYsQXqbVlig+zbUgYQU1paDeQURXj7QNglh1RI6A==
   dependencies:
     "@types/docker-modem" "*"
@@ -2156,6 +2156,11 @@ async-limiter@~1.0.0:
   version "1.0.1"
   resolved "https://registry.npmjs.org/async-limiter/-/async-limiter-1.0.1.tgz"
   integrity sha512-csOlWGAcRFJaI6m+F2WKdnMKr4HhdhFVBk0H/QbJFMCr+uO2kwohwXQPxw/9OCxp05r5ghVBFSyioixx3gfkNQ==
+
+async-lock@^1.4.0:
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/async-lock/-/async-lock-1.4.0.tgz#c8b6630eff68fbbdd8a5b6eb763dac3bfbb8bf02"
+  integrity sha512-coglx5yIWuetakm3/1dsX9hxCNox22h7+V80RQOu2XUUMidtArxKoZoOtHUPuR84SycKTXzgGzAUR5hJxujyJQ==
 
 async@^3.2.3:
   version "3.2.4"
@@ -3423,10 +3428,10 @@ dir-glob@^3.0.1:
   dependencies:
     path-type "^4.0.0"
 
-docker-compose@^0.23.17:
-  version "0.23.17"
-  resolved "https://registry.npmjs.org/docker-compose/-/docker-compose-0.23.17.tgz"
-  integrity sha512-YJV18YoYIcxOdJKeFcCFihE6F4M2NExWM/d4S1ITcS9samHKnNUihz9kjggr0dNtsrbpFNc7/Yzd19DWs+m1xg==
+docker-compose@^0.23.19:
+  version "0.23.19"
+  resolved "https://registry.yarnpkg.com/docker-compose/-/docker-compose-0.23.19.tgz#9947726e2fe67bdfa9e8efe1ff15aa0de2e10eb8"
+  integrity sha512-v5vNLIdUqwj4my80wxFDkNH+4S85zsRuH29SO7dCWVWPCMt/ohZBsGN6g6KXWifT0pzQ7uOxqEKCYCDPJ8Vz4g==
   dependencies:
     yaml "^1.10.2"
 
@@ -7417,7 +7422,7 @@ node-fetch@2.6.7:
   dependencies:
     whatwg-url "^5.0.0"
 
-node-fetch@2.6.9, node-fetch@^2.3.0, node-fetch@^2.6.1, node-fetch@^2.6.6, node-fetch@^2.6.7:
+node-fetch@2.6.9, node-fetch@^2.3.0, node-fetch@^2.6.1, node-fetch@^2.6.6, node-fetch@^2.6.7, node-fetch@^2.6.9:
   version "2.6.9"
   resolved "https://registry.npmjs.org/node-fetch/-/node-fetch-2.6.9.tgz"
   integrity sha512-DJm/CJkZkRjKKj4Zi4BsKVZh3ValV5IR5s7LVZnW+6YMh0W1BfNA8XSs6DLMGYlId5F3KnA70uu2qepcR08Qqg==
@@ -9895,21 +9900,22 @@ test-exclude@^6.0.0:
     glob "^7.1.4"
     minimatch "^3.0.4"
 
-testcontainers@9.1.2:
-  version "9.1.2"
-  resolved "https://registry.npmjs.org/testcontainers/-/testcontainers-9.1.2.tgz"
-  integrity sha512-a4VbUUntbrnTsxD20u8TBhFRpdHufGbBQ3ZlPHsROK7JXh9mLDsx7qk272bt+jBm6yUf0SBBhBynC+B6uxb9Mg==
+testcontainers@9.1.3:
+  version "9.1.3"
+  resolved "https://registry.yarnpkg.com/testcontainers/-/testcontainers-9.1.3.tgz#5a02f9eb17b6993c7c4ba3684318247c0d282262"
+  integrity sha512-Kw7GZC8nD84Uuq2oxa2Ln9F5vIALWIZoQHywOGuiiVthSHzOVl4CtebO25whMf3CrVICwy8CBUimvSdVgU9N7g==
   dependencies:
     "@balena/dockerignore" "^1.0.2"
     "@types/archiver" "^5.3.1"
-    "@types/dockerode" "^3.3.12"
+    "@types/dockerode" "^3.3.14"
     archiver "^5.3.1"
+    async-lock "^1.4.0"
     byline "^5.0.0"
     debug "^4.3.4"
-    docker-compose "^0.23.17"
+    docker-compose "^0.23.19"
     dockerode "^3.3.4"
     get-port "^5.1.1"
-    node-fetch "^2.6.7"
+    node-fetch "^2.6.9"
     properties-reader "^2.2.0"
     ssh-remote-port-forward "^1.0.4"
     tar-fs "^2.1.1"
