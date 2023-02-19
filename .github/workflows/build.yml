@@ -17,33 +17,34 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 7
+      - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
       - name: Install dependencies
-        run: yarn install --frozen-lockfile
+        shell: bash
+        run: pnpm install --frozen-lockfile
       - name: Lint
         run: |
-          warnings=$(yarn lint:all 2>&1)
+          warnings=$(pnpm lint:all 2>&1)
           echo "Matrix node version: ${{ matrix.node-version }}"
           if [[ "${{ matrix.node-version }}" == "18.x" ]]; then
             echo "$warnings"
           fi
       - name: Format Check
         run: |
-          yarn prettier:all
-          yarn lint:all --fix --quiet
-          # yarn.lock sometimes (rarely) changes for unknown reasons
-          # perhaps different versions of yarn ??
-          # we don't *really* care so exclude it from the diff check
-          git diff --exit-code -- . ':!yarn.lock'
+          pnpm prettier:all
+          pnpm lint:all --fix --quiet
+          git diff --exit-code -- .
 
       - name: Build
         run: |
-          yarn build
+          pnpm build
           # Build the root tsconfig.json, seems to require a prior build step
-          yarn tsc -p tsconfig.json --noEmit
+          pnpm tsc -p tsconfig.json --noEmit
       - name: Test
         run: |
           function retry() {
@@ -66,11 +67,11 @@ jobs:
           
             done
           }
-          retry 3 yarn cover
+          retry 3 pnpm cover
         env:
           CI: true
       - name: Report coverage
         if: matrix.node-version == '14.x'
-        run: yarn codecov
+        run: pnpm codecov
         env:
           CI: true

@@ -18,14 +18,14 @@ The NPM package will not contain any TypeScript files (`*.ts`) but will have typ
 
 ### Dependencies
 
-The monorepo is set up to use lerna and yarn workspaces. This means that dev dependencies that are shared across all packages are kept in the root `package.json`.
-Dependencies can be added to individual packages by using yarn from the monorepo root folder
+The monorepo is set up to use lerna and pnpm workspaces. This means that dev dependencies that are shared across all packages are kept in the root `package.json`.
+Dependencies can be added to individual packages by using pnpm from the monorepo root folder
 
 ```sh
-yarn workspace <package-name> add <dependency to install>
+pnpm --filter <package-name> add <dependency to install>
 
 # Add dev dependency
-yarn workspace <package-name> add <dependency to install> --dev
+pnpm --filter <package-name> add <dependency to install> --dev
 ```
 
 ## Commit messages
@@ -43,6 +43,6 @@ For discussions and general questions, please join the [interledger](https://com
 Please ensure that you create a fork from the `master` branch. Please check that the following has been done before submitting the PR:
 
 - Test coverage for what has been added
-- Make sure linting passes (`yarn lint:all` run from the project root)
-- Make sure everything builds (`yarn build`run from the project root)
-- Make sure all tests pass (`yarn test` run from the project root)
+- Make sure linting passes (`pnpm lint:all` run from the project root)
+- Make sure everything builds (`pnpm build` run from the project root)
+- Make sure all tests pass (`pnpm test` run from the project root)

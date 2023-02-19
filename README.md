@@ -27,11 +27,11 @@
  
 ## Installation
 
-The monorepo is set up to use lerna and yarn workspaces. To get started run the following:
+The monorepo is set up to use lerna and pnpm workspaces. To get started run the following:
 
-1. `yarn install` - Yarn will install the dependencies and do the necessary linking (no need to run `lerna bootstrap`).
-2. `yarn build`
-3. `yarn test` - This will run the tests in all the packages.
+1. `pnpm install` - Yarn will install the dependencies and do the necessary linking (no need to run `lerna bootstrap`).
+2. `pnpm build`
+3. `pnpm test` - This will run the tests in all the packages.
 
 ### Running script commands
 
@@ -39,16 +39,16 @@ Script commands such as `test` and `lint` can be run from the root of the projec
 
 ```sh
 # Run tests for all packages
-yarn test
+pnpm test
 
 # Run tests for a specific module a package
-yarn test --scope=<package-name>
+pnpm test --scope=<package-name>
 ```
 
 Or in the package directory:
 
 ```sh
-yarn test
+pnpm test
 ```
 
 If you are interested in contributing, please read the [contributing guidelines](./CONTRIBUTING.md).

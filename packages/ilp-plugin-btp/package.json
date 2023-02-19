@@ -20,7 +20,7 @@
     "lint": "eslint . --ext .js,.ts",
     "build": "tsc --project tsconfig.build.json",
     "test": "jest ./test/index.test.js",
-    "cover": "yarn test --coverage",
+    "cover": "pnpm test --coverage",
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_plugin_btp"
   },
   "author": "Interledger Team <info@interledger.org>",
