@@ -17,12 +17,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 7
+      - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
       - name: Install dependencies
-        run: pnpm install
+        shell: bash
+        run: pnpm install --frozen-lockfile
       - name: Lint
         run: |
           warnings=$(pnpm lint:all 2>&1)
