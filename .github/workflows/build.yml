@@ -38,10 +38,7 @@ jobs:
         run: |
           pnpm prettier:all
           pnpm lint:all --fix --quiet
-          # pnpm.lock sometimes (rarely) changes for unknown reasons
-          # perhaps different versions of pnpm ??
-          # we don't *really* care so exclude it from the diff check
-          git diff --exit-code -- . ':!pnpm.lock'
+          git diff --exit-code -- .
 
       - name: Build
         run: |

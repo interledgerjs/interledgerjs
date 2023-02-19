@@ -22,10 +22,10 @@ The monorepo is set up to use lerna and pnpm workspaces. This means that dev dep
 Dependencies can be added to individual packages by using pnpm from the monorepo root folder
 
 ```sh
-pnpm workspace <package-name> add <dependency to install>
+pnpm --filter <package-name> add <dependency to install>
 
 # Add dev dependency
-pnpm workspace <package-name> add <dependency to install> --dev
+pnpm --filter <package-name> add <dependency to install> --dev
 ```
 
 ## Commit messages
