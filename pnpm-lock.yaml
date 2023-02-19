@@ -100,9 +100,14 @@ importers:
 
   packages/ilp-packet:
     specifiers:
+      '@types/benchmark': 2.1.2
+      benchmark: 2.1.4
       oer-utils: ^5.1.3-alpha.2
     dependencies:
       oer-utils: link:../oer-utils
+    devDependencies:
+      '@types/benchmark': 2.1.2
+      benchmark: 2.1.4
 
   packages/ilp-plugin:
     specifiers:
