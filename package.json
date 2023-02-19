@@ -62,6 +62,7 @@
     "all": true
   },
   "devDependencies": {
+    "@jest/globals": "^29.4.3",
     "@tsconfig/recommended": "1.0.2",
     "@types/chai": "4.3.4",
     "@types/chai-as-promised": "7.1.5",

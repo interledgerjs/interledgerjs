@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/no-non-null-assertion */
-import { expect, it } from '@jest/globals'
+import { describe, expect, it } from '@jest/globals'
 import { randomBytes } from 'crypto'
 import createLogger from 'ilp-logger'
 import {
