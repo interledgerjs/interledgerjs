@@ -2,6 +2,20 @@
   "name": "ilp-protocol-stream",
   "version": "2.7.2-alpha.2",
   "description": "Interledger Transport Protocol for sending multiple streams of money and data over ILP.",
+  "keywords": [
+    "interledger",
+    "ilp",
+    "streaming",
+    "payments",
+    "micropayments",
+    "chunked"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/interledgerjs/interledgerjs.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Evan Schwartz <evan@ripple.com>",
   "main": "dist/src/index.js",
   "browser": {
     "./dist/src/util/crypto-node.js": "./dist/src/util/crypto-browser.js",
@@ -17,30 +31,24 @@
     "dist/src/**/*.js.map",
     "dist/src/**/*.d.ts"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
-    "clean": "rimraf .nyc_output/* dist/* coverage/*",
     "build": "tsc -p tsconfig.build.json",
-    "test": "mocha --exit --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.spec.ts test/**/*.spec.ts",
+    "clean": "rimraf .nyc_output/* dist/* coverage/*",
+    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_protocol_stream",
     "cover": "nyc --extension .ts --reporter=json --reporter=html --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register mocha --exit test/*.spec.ts test/**/*.spec.ts",
     "doc": "typedoc --options typedoc.js src/index.ts src/connection.ts src/stream.ts --theme node_modules/typedoc-neo-theme/bin/default",
-    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_protocol_stream"
+    "test": "mocha --exit --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.spec.ts test/**/*.spec.ts"
   },
-  "keywords": [
-    "interledger",
-    "ilp",
-    "streaming",
-    "payments",
-    "micropayments",
-    "chunked"
-  ],
-  "author": "Evan Schwartz <evan@ripple.com>",
-  "license": "Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/interledgerjs/interledgerjs.git"
+  "nyc": {
+    "branches": 80,
+    "check-coverage": true,
+    "functions": 80,
+    "lines": 80,
+    "reporter": [
+      "lcov",
+      "text-summary"
+    ],
+    "statements": 80
   },
   "dependencies": {
     "ilp-logger": "^1.4.5-alpha.2",
@@ -59,8 +67,8 @@
     "benchmark": "2.1.4",
     "bignumber.js": "9.1.1",
     "buffer": "6.0.3",
-    "ilp-plugin": "3.5.5-alpha.2",
-    "ilp-plugin-btp": "1.5.0",
+    "ilp-plugin": "^3.5.5-alpha.2",
+    "ilp-plugin-btp": "^1.5.0",
     "ilp-plugin-mini-accounts": "4.2.0",
     "process": "0.11.10",
     "puppeteer": "19.7.1",
@@ -72,15 +80,7 @@
     "webpack": "5.75.0",
     "webpack-cli": "5.0.1"
   },
-  "nyc": {
-    "check-coverage": true,
-    "lines": 80,
-    "statements": 80,
-    "functions": 80,
-    "branches": 80,
-    "reporter": [
-      "lcov",
-      "text-summary"
-    ]
+  "publishConfig": {
+    "access": "public"
   }
 }

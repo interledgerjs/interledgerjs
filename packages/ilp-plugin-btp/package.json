@@ -2,34 +2,34 @@
   "name": "ilp-plugin-btp",
   "version": "1.5.0",
   "description": "Generic BTP plugin for ILP",
-  "main": "index.js",
-  "types": "dist/index.d.ts",
-  "browser": {
-    "crypto": "./dist/browser/crypto.js",
-    "ws": "./dist/browser/ws.js"
-  },
-  "files": [
-    "dist/**/*"
-  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/interledgerjs/interledgerjs.git"
   },
-  "scripts": {
-    "prettier": "prettier --write 'src/**/*.ts' 'test/**/*.js'",
-    "lint": "eslint . --ext .js,.ts",
-    "build": "tsc --project tsconfig.build.json",
-    "test": "jest ./test/index.test.js",
-    "cover": "pnpm test --coverage",
-    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_plugin_btp"
-  },
-  "author": "Interledger Team <info@interledger.org>",
   "license": "Apache-2.0",
+  "author": "Interledger Team <info@interledger.org>",
+  "main": "index.js",
+  "browser": {
+    "crypto": "./dist/browser/crypto.js",
+    "ws": "./dist/browser/ws.js"
+  },
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*"
+  ],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_plugin_btp",
+    "cover": "pnpm test --coverage",
+    "lint": "eslint . --ext .js,.ts",
+    "prettier": "prettier --write 'src/**/*.ts' 'test/**/*.js'",
+    "test": "jest ./test/index.test.js"
+  },
   "dependencies": {
     "btp-packet": "^2.2.1",
     "debug": "^4.3.4",
     "eventemitter2": "^6.4.5",
-    "ilp-logger": "^1.4.5-alpha.1",
+    "ilp-logger": "^1.4.5-alpha.2",
     "ws": "^8.8.0"
   },
   "devDependencies": {

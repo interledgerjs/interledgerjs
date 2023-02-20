@@ -2,6 +2,13 @@
   "name": "ilp-protocol-ccp",
   "version": "1.2.4-alpha.2",
   "description": "Implementation of the Connector-to-Connector Protocol (CCP)",
+  "keywords": [
+    "ilp",
+    "routing",
+    "path-vector"
+  ],
+  "license": "Apache-2.0",
+  "author": "Interledger Team <info@interledger.org>",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": [
@@ -9,25 +16,18 @@
     "dist/**/*.js.map",
     "dist/**/*.d.ts"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "scripts": {
-    "clean": "rimraf .nyc_output/* dist/* coverage/*",
     "build": "tsc -p tsconfig.build.json",
-    "test": "mocha --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts",
+    "clean": "rimraf .nyc_output/* dist/* coverage/*",
+    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_protocol_ccp",
     "cover": "nyc --extension .ts --reporter=json --reporter=html --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register mocha test/*.test.ts",
-    "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_protocol_ccp"
+    "test": "mocha --require ts-node/register/transpile-only --ui mocha-typescript --require source-map-support/register --watch-extensions ts test/*.ts"
   },
-  "keywords": [
-    "ilp",
-    "routing",
-    "path-vector"
-  ],
-  "author": "Interledger Team <info@interledger.org>",
-  "license": "Apache-2.0",
   "dependencies": {
     "ilp-packet": "^3.1.4-alpha.2",
     "oer-utils": "^5.1.3-alpha.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

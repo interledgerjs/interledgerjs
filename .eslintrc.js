@@ -1,4 +1,5 @@
-module.exports = {
+const fs = require('fs')
+let config = {
   root: true,
   parser: '@typescript-eslint/parser',
   extends: [
@@ -16,7 +17,8 @@ module.exports = {
   parserOptions: {
     ecmaVersion: 2017,
     sourceType: 'module',
-    project: './tsconfig.json',
+    // Makes sure to use the root tsconfig.json
+    project: `${__dirname}/tsconfig.json`,
   },
   rules: {
     '@typescript-eslint/no-empty-interface': ['off'],
@@ -43,4 +45,11 @@ module.exports = {
       },
     },
   ],
+};
+
+const localConfig = `${__dirname}/.eslintrc.local.js`;
+if (fs.existsSync(localConfig)) {
+  config = require(localConfig)(config)
 }
+
+module.exports = config
