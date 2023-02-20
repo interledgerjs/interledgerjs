@@ -2,3 +2,4 @@ packages:
   - 'packages/*'
   # exclude packages that are inside test directories
   - '!**/test/**'
+  - '!packages/coil-monorepo-upkeep'
