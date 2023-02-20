@@ -29,7 +29,7 @@
 
 The monorepo is set up to use lerna and pnpm workspaces. To get started run the following:
 
-1. `pnpm install` - Yarn will install the dependencies and do the necessary linking (no need to run `lerna bootstrap`).
+1. `pnpm install` - pnpm will install the dependencies and do the necessary linking (no need to run `lerna bootstrap`).
 2. `pnpm build`
 3. `pnpm test` - This will run the tests in all the packages.
 
