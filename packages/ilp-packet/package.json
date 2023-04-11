@@ -25,10 +25,12 @@
     "codecov": "curl -s https://codecov.io/bash | bash -s - -s coverage -F ilp_packet"
   },
   "dependencies": {
-    "oer-utils": "^5.1.3-alpha.2"
+    "oer-utils": "^5.1.3-alpha.2",
+    "long": "^4.0.0"
   },
   "devDependencies": {
     "@types/benchmark": "2.1.2",
-    "benchmark": "2.1.4"
+    "benchmark": "2.1.4",
+    "@types/long": "4.0.2"
   }
 }
