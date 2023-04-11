@@ -152,10 +152,6 @@ export class DataAndMoneyStream extends Duplex {
     return this._receipt
   }
 
-  get closed(): boolean {
-    return this._closed
-  }
-
   /**
    * Returns true if the stream is open for sending and/or receiving.
    */
@@ -696,3 +692,13 @@ export class DataAndMoneyStream extends Duplex {
     }
   }
 }
+
+// We set this outside the class definition due to typing issues
+// TS2611: 'closed' is defined as a property in class 'Duplex', but is overridden here in 'DataAndMoneyStream' as an accessor.
+Object.defineProperty(DataAndMoneyStream.prototype, 'closed', {
+  get(this: DataAndMoneyStream) {
+    return this._closed
+  },
+  enumerable: true,
+  configurable: true,
+})
