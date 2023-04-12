@@ -101,8 +101,8 @@ importers:
         specifier: 16.4.1
         version: 16.4.1(typescript@4.9.5)
       rimraf:
-        specifier: 4.1.2
-        version: 4.1.2
+        specifier: 4.4.1
+        version: 4.4.1
       sinon:
         specifier: 15.0.3
         version: 15.0.3
@@ -10144,12 +10144,6 @@ packages:
     hasBin: true
     dependencies:
       glob: 7.2.3
-    dev: true
-
-  /rimraf@4.1.2:
-    resolution: {integrity: sha512-BlIbgFryTbw3Dz6hyoWFhKk+unCcHMSkZGrTFVAx2WmttdBSonsdtRlwiuTbDqTKr+UlXIUqJVS4QT5tUzGENQ==}
-    engines: {node: '>=14'}
-    hasBin: true
     dev: true
 
   /rimraf@4.4.1:
