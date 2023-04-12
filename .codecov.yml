@@ -23,7 +23,10 @@ flags:
       - packages/ilp-packet/src/
   ilp_plugin:
     paths:
-      - packages/ilp-packet/src/
+      - packages/ilp-plugin/src/
+  ilp_plugin_btp:
+    paths:
+      - packages/ilp-plugin-btp/src/
   ilp_protocol_ccp:
     paths:
       - packages/ilp-protocol-ccp/src/
@@ -39,3 +42,6 @@ flags:
   pay:
     paths:
       - packages/pay/src/
+  stream_receiver:
+    paths:
+      - packages/stream-receiver/src/
