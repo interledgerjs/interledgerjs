@@ -67,7 +67,7 @@
     "puppeteer": "19.7.1",
     "stream-browserify": "3.0.0",
     "ts-loader": "9.4.2",
-    "typedoc": "0.23.25",
+    "typedoc": "0.24.1",
     "typedoc-neo-theme": "1.1.1",
     "util": "0.12.5",
     "webpack": "5.78.0",
