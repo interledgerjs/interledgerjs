@@ -938,7 +938,7 @@ describe('Connection', function () {
       }
 
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      sinon.stub(this.clientPlugin, 'sendData').callsFake(mySendData)
+      sinon.stub(this.clientPlugin as MockPlugin, 'sendData').callsFake(mySendData)
 
       await createConnection({
         ...this.server.generateAddressAndSecret(),
@@ -970,7 +970,7 @@ describe('Connection', function () {
       }
 
       const realSendData = this.clientPlugin.sendData.bind(this.clientPlugin)
-      sinon.stub(this.clientPlugin, 'sendData').callsFake(mySendData)
+      sinon.stub(this.clientPlugin as MockPlugin, 'sendData').callsFake(mySendData)
 
       const serverPromise = this.server.acceptConnection()
       const clientConn = await createConnection({
