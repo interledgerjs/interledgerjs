@@ -66,7 +66,7 @@ importers:
         version: 11.1.0(eslint@8.34.0)
       eslint-plugin-prettier:
         specifier: 4.2.1
-        version: 4.2.1(eslint-config-prettier@8.6.0)(eslint@8.34.0)(prettier@2.8.4)
+        version: 4.2.1(eslint-config-prettier@8.6.0)(eslint@8.34.0)(prettier@2.8.7)
       eslint-plugin-promise:
         specifier: 6.1.1
         version: 6.1.1(eslint@8.34.0)
@@ -95,8 +95,8 @@ importers:
         specifier: 15.1.0
         version: 15.1.0
       prettier:
-        specifier: 2.8.4
-        version: 2.8.4
+        specifier: 2.8.7
+        version: 2.8.7
       prettier-standard:
         specifier: 16.4.1
         version: 16.4.1(typescript@4.9.5)
@@ -4444,7 +4444,7 @@ packages:
       semver: 6.3.0
     dev: true
 
-  /eslint-plugin-prettier@4.2.1(eslint-config-prettier@8.6.0)(eslint@8.34.0)(prettier@2.8.4):
+  /eslint-plugin-prettier@4.2.1(eslint-config-prettier@8.6.0)(eslint@8.34.0)(prettier@2.8.7):
     resolution: {integrity: sha512-f/0rXLXUt0oFYs8ra4w49wYZBG5GKZpAYsJSm6rnYL5uVDjd+zowwMwVZHnAjf4edNrKpCDYfXDgmRE/Ak7QyQ==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
@@ -4457,7 +4457,7 @@ packages:
     dependencies:
       eslint: 8.34.0
       eslint-config-prettier: 8.6.0(eslint@8.34.0)
-      prettier: 2.8.4
+      prettier: 2.8.7
       prettier-linter-helpers: 1.0.0
     dev: true
 
@@ -9030,8 +9030,8 @@ packages:
       - zenObservable
     dev: true
 
-  /prettier@2.8.4:
-    resolution: {integrity: sha512-vIS4Rlc2FNh0BySk3Wkd6xmwxB0FpOndW5fisM5H8hsZSxU2VWVB5CWIkIjWvrHjIhxk2g3bfMKM87zNTrZddw==}
+  /prettier@2.8.7:
+    resolution: {integrity: sha512-yPngTo3aXUUmyuTjeTUT75txrf+aMh9FiD7q9ZE/i6r0bPb22g4FsE6Y338PQX1bmfy08i9QQCB7/rcUAVntfw==}
     engines: {node: '>=10.13.0'}
     hasBin: true
     dev: true
