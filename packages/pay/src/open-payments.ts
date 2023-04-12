@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/explicit-module-boundary-types, @typescript-eslint/no-empty-function */
 import { Int, isNonNegativeRational, sleep } from './utils'
-import fetch, { Response } from 'node-fetch'
+import fetch, { Response, RequestInit } from 'node-fetch'
 import { PaymentError, SetupOptions } from '.'
 import createLogger from 'ilp-logger'
 import { AssetDetails, isValidAssetScale, isValidAssetDetails } from './controllers/asset-details'
@@ -246,7 +246,8 @@ const fetchJson = async (
     headers: {
       Accept: acceptHeader,
     },
-    signal: controller.signal,
+    // @types/node-fetch isn't compatible with abort-controller
+    signal: controller.signal as RequestInit['signal'],
   })
     .then(
       async (res: Response) => {
