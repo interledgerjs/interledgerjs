@@ -205,8 +205,8 @@ importers:
         specifier: 0.5.21
         version: 0.5.21
       typedoc:
-        specifier: 0.23.25
-        version: 0.23.25(typescript@4.9.5)
+        specifier: 0.24.1
+        version: 0.24.1(typescript@4.9.5)
 
   packages/ilp-protocol-ccp:
     dependencies:
@@ -303,8 +303,8 @@ importers:
         specifier: 9.4.2
         version: 9.4.2(typescript@4.9.5)(webpack@5.78.0)
       typedoc:
-        specifier: 0.23.25
-        version: 0.23.25(typescript@4.9.5)
+        specifier: 0.24.1
+        version: 0.24.1(typescript@4.9.5)
       typedoc-neo-theme:
         specifier: 1.1.1
         version: 1.1.1(typescript@4.9.5)
@@ -11429,16 +11429,16 @@ packages:
       typescript: 4.9.5
     dev: true
 
-  /typedoc@0.23.25(typescript@4.9.5):
-    resolution: {integrity: sha512-O1he153qVyoCgJYSvIyY3bPP1wAJTegZfa6tL3APinSZhJOf8CSd8F/21M6ex8pUY/fuY6n0jAsT4fIuMGA6sA==}
+  /typedoc@0.24.1(typescript@4.9.5):
+    resolution: {integrity: sha512-u4HwjZcSQhQSkkhLjgcs0ooAf6HrFVLDHHrwU2xZW8WxH0KnGZlNkaWxiOcK5Gagj7mxJSgwWx0dv8ACDAOXAQ==}
     engines: {node: '>= 14.14'}
     hasBin: true
     peerDependencies:
-      typescript: 4.6.x || 4.7.x || 4.8.x || 4.9.x
+      typescript: 4.6.x || 4.7.x || 4.8.x || 4.9.x || 5.0.x
     dependencies:
       lunr: 2.3.9
       marked: 4.2.12
-      minimatch: 6.2.0
+      minimatch: 7.4.6
       shiki: 0.14.1
       typescript: 4.9.5
     dev: true
