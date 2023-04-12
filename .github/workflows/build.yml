@@ -40,9 +40,11 @@ jobs:
           pnpm lint:all --fix --quiet
           git diff --exit-code -- .
 
-      - name: Build
+      - name: Build - each packages build script
         run: |
           pnpm build
+      - name: Build - root tsconfig.json as used by IDE /test code
+        run: |
           # Build the root tsconfig.json, seems to require a prior build step
           pnpm tsc -p tsconfig.json --noEmit
       - name: Test
