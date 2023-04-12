@@ -193,8 +193,8 @@ importers:
         specifier: 4.0.2
         version: 4.0.2
       '@types/node':
-        specifier: 18.11.18
-        version: 18.11.18
+        specifier: 18.15.11
+        version: 18.15.11
       '@types/ws':
         specifier: 8.5.4
         version: 8.5.4
@@ -1881,10 +1881,6 @@ packages:
 
   /@types/node@10.17.60:
     resolution: {integrity: sha512-F0KIgDJfy2nA3zMLmWGKxcH2ZVEtCZXHHdOQs2gSaQ27+lNeEfGxzkIw90aXswATX7AZ33tahPbzy6KAfUreVw==}
-    dev: true
-
-  /@types/node@18.11.18:
-    resolution: {integrity: sha512-DHQpWGjyQKSHj3ebjFI/wRKcqQcdR+MoFBygntYOZytCqNfkd2ZC4ARDJ2DQqhjH5p85Nnd3jhUJIXrszFX/JA==}
     dev: true
 
   /@types/node@18.15.11:
