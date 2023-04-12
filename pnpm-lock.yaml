@@ -391,8 +391,8 @@ importers:
         specifier: 3.3.1
         version: 3.3.1
       testcontainers:
-        specifier: 9.1.3
-        version: 9.1.3
+        specifier: 9.4.0
+        version: 9.4.0
 
   packages/stream-receiver:
     dependencies:
@@ -1888,10 +1888,10 @@ packages:
       minimatch: 8.0.4
     dev: true
 
-  /@types/archiver@5.3.1:
-    resolution: {integrity: sha512-wKYZaSXaDvTZuInAWjCeGG7BEAgTWG2zZW0/f7IYFcoHB2X2d9lkVFnrOlXl3W6NrvO6Ml3FLLu8Uksyymcpnw==}
+  /@types/archiver@5.3.2:
+    resolution: {integrity: sha512-IctHreBuWE5dvBDz/0WeKtyVKVRs4h75IblxOACL92wU66v+HGAfEYAOyXkOFphvRJMhuXdI9huDXpX0FC6lCw==}
     dependencies:
-      '@types/glob': 8.0.1
+      '@types/readdir-glob': 1.1.1
     dev: true
 
   /@types/babel__core@7.20.0:
@@ -1953,8 +1953,8 @@ packages:
       '@types/ssh2': 1.11.7
     dev: true
 
-  /@types/dockerode@3.3.14:
-    resolution: {integrity: sha512-PUTwtySPzCbjZ/uqRMBWKHtLGqBAlhnLitzHuom19NEX0KBYsQXqbVlig+zbUgYQU1paDeQURXj7QNglh1RI6A==}
+  /@types/dockerode@3.3.16:
+    resolution: {integrity: sha512-ZAX2VrkTjwjk1808T8m6vMr+CFXSLiDD+tkEkLThI+v83AfzlYQZEWfZKwFyk1PWopSXkdDunmIhrF7sxt+zWg==}
     dependencies:
       '@types/docker-modem': 3.0.2
       '@types/node': 18.15.11
@@ -1980,13 +1980,6 @@ packages:
 
   /@types/glob@7.2.0:
     resolution: {integrity: sha512-ZUxbzKl0IfJILTS6t7ip5fQQM/J3TJYubDm3nMbgubNNYS62eXeUpoLUC8/7fJNiFYHTrGPQn7hspDUzIHX3UA==}
-    dependencies:
-      '@types/minimatch': 5.1.2
-      '@types/node': 18.15.11
-    dev: true
-
-  /@types/glob@8.0.1:
-    resolution: {integrity: sha512-8bVUjXZvJacUFkJXHdyZ9iH1Eaj5V7I8c4NdH5sQJsdXkqT4CA5Dhb4yb4VE/3asyx4L9ayZr1NIhTsWHczmMw==}
     dependencies:
       '@types/minimatch': 5.1.2
       '@types/node': 18.15.11
@@ -2080,6 +2073,12 @@ packages:
 
   /@types/prettier@2.7.2:
     resolution: {integrity: sha512-KufADq8uQqo1pYKVIYzfKbJfBAc0sOeXqGbFaSpv8MRmC/zXgowNZmFcbngndGk922QDmOASEXUZCaY48gs4cg==}
+    dev: true
+
+  /@types/readdir-glob@1.1.1:
+    resolution: {integrity: sha512-ImM6TmoF8bgOwvehGviEj3tRdRBbQujr1N+0ypaln/GWjaerOB26jb93vsRHmdMtvVQZQebOlqt2HROark87mQ==}
+    dependencies:
+      '@types/node': 18.15.11
     dev: true
 
   /@types/semver@7.3.13:
@@ -4300,8 +4299,8 @@ packages:
       - supports-color
     dev: true
 
-  /dockerode@3.3.4:
-    resolution: {integrity: sha512-3EUwuXnCU+RUlQEheDjmBE0B7q66PV9Rw5NiH1sXwINq0M9c5ERP9fxgkw36ZHOtzf4AGEEYySnkx/sACC9EgQ==}
+  /dockerode@3.3.5:
+    resolution: {integrity: sha512-/0YNa3ZDNeLr/tSckmD69+Gq+qVNhvKfAHNeZJBnp7EOP6RGKV8ORrJHkUn20So5wU+xxT7+1n5u8PjHbfjbSA==}
     engines: {node: '>= 8.0'}
     dependencies:
       '@balena/dockerignore': 1.0.2
@@ -11062,19 +11061,19 @@ packages:
       minimatch: 3.1.2
     dev: true
 
-  /testcontainers@9.1.3:
-    resolution: {integrity: sha512-Kw7GZC8nD84Uuq2oxa2Ln9F5vIALWIZoQHywOGuiiVthSHzOVl4CtebO25whMf3CrVICwy8CBUimvSdVgU9N7g==}
+  /testcontainers@9.4.0:
+    resolution: {integrity: sha512-Mg7GMYENWd4U6KavKZ8XUTqYeW7dAJRYxltEmNid+4YcFNanG2qqUhrqIUvW4sZsjuH+kfjtlTUoOaEDavRJYw==}
     engines: {node: '>= 10.16'}
     dependencies:
       '@balena/dockerignore': 1.0.2
-      '@types/archiver': 5.3.1
-      '@types/dockerode': 3.3.14
+      '@types/archiver': 5.3.2
+      '@types/dockerode': 3.3.16
       archiver: 5.3.1
       async-lock: 1.4.0
       byline: 5.0.0
       debug: 4.3.4(supports-color@8.1.1)
       docker-compose: 0.23.19
-      dockerode: 3.3.4
+      dockerode: 3.3.5
       get-port: 5.1.1
       node-fetch: 2.6.9
       properties-reader: 2.2.0
