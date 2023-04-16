@@ -294,8 +294,8 @@ importers:
         specifier: 0.11.10
         version: 0.11.10
       puppeteer:
-        specifier: 19.7.1
-        version: 19.7.1(typescript@5.0.4)
+        specifier: 19.9.0
+        version: 19.9.0(typescript@5.0.4)
       stream-browserify:
         specifier: 3.0.0
         version: 3.0.0
@@ -1800,6 +1800,29 @@ packages:
       typescript: 4.9.5
     dev: true
 
+  /@puppeteer/browsers@0.4.1(typescript@5.0.4):
+    resolution: {integrity: sha512-4IICvy1McAkT/HyNZHIs7sp8ngBX1dmO0TPQ+FWq9ATQMqI8p+Ulm5A3kS2wYDh5HDHHkYrrETOu6rlj64VuTw==}
+    engines: {node: '>=14.1.0'}
+    hasBin: true
+    peerDependencies:
+      typescript: '>= 4.7.4'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+    dependencies:
+      debug: 4.3.4(supports-color@8.1.1)
+      extract-zip: 2.0.1
+      https-proxy-agent: 5.0.1
+      progress: 2.0.3
+      proxy-from-env: 1.1.0
+      tar-fs: 2.1.1
+      typescript: 5.0.4
+      unbzip2-stream: 1.4.3
+      yargs: 17.7.1
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
+
   /@samverschueren/stream-to-observable@0.3.1(rxjs@6.6.7):
     resolution: {integrity: sha512-c/qwwcHyafOQuVQJj0IlBjf5yYgBI7YPJ77k4fOJYesb41jio65eaJODRUmfYKhTOFBrIZ66kgvGPlNbjuoRdQ==}
     engines: {node: '>=6'}
@@ -2691,7 +2714,7 @@ packages:
       '@angular/compiler': '>= 6.0.0 < 9.0.6'
     dependencies:
       '@angular/compiler': 8.2.14
-      lines-and-columns: 1.1.6
+      lines-and-columns: 1.2.4
       tslib: 1.14.1
     dev: true
 
@@ -3566,6 +3589,15 @@ packages:
     engines: {node: '>=6.0'}
     dev: true
 
+  /chromium-bidi@0.4.6(devtools-protocol@0.0.1107588):
+    resolution: {integrity: sha512-TQOkWRaLI/IWvoP8XC+7jO4uHTIiAUiklXU1T0qszlUFEai9LgKXIBXy3pOS3EnQZ3bQtMbKUPkug0fTAEHCSw==}
+    peerDependencies:
+      devtools-protocol: '*'
+    dependencies:
+      devtools-protocol: 0.0.1107588
+      mitt: 3.0.0
+    dev: true
+
   /ci-info@2.0.0:
     resolution: {integrity: sha512-5tK7EtrZ0N+OLFMthtqOj4fI2Jeb88C4CAZPu25LDVUgXJ0A3Js4PMGqrn0JU1W0Mh1/Z8wZzYPxqUrXeBboCQ==}
     dev: true
@@ -3996,8 +4028,8 @@ packages:
       yaml: 1.10.2
     dev: true
 
-  /cosmiconfig@8.0.0:
-    resolution: {integrity: sha512-da1EafcpH6b/TD8vDRaWV7xFINlHlF6zKsGwS1TsuVJTZRkquaS5HTMq7uq6h31619QjbsYl21gVDOm32KM1vQ==}
+  /cosmiconfig@8.1.3:
+    resolution: {integrity: sha512-/UkO2JKI18b5jVMJUp0lvKFMpa/Gye+ZgZjKD+DGEN9y7NRcf/nK1A0sp67ONmKtnDCNMS44E6jrk0Yc3bDuUw==}
     engines: {node: '>=14'}
     dependencies:
       import-fresh: 3.3.0
@@ -4272,8 +4304,8 @@ packages:
     engines: {node: '>=8'}
     dev: true
 
-  /devtools-protocol@0.0.1094867:
-    resolution: {integrity: sha512-pmMDBKiRVjh0uKK6CT1WqZmM3hBVSgD+N2MrgyV1uNizAZMw4tx6i/RTc+/uCsKSCmg0xXx7arCP/OFcIwTsiQ==}
+  /devtools-protocol@0.0.1107588:
+    resolution: {integrity: sha512-yIR+pG9x65Xko7bErCUSQaDLrO/P1p3JUzEk7JCU4DowPcGHkTGUGQapcfcLc4qj0UaALwZ+cr0riFgiqpixcg==}
     dev: true
 
   /diff-sequences@29.4.3:
@@ -6906,7 +6938,7 @@ packages:
       jest-util: 29.5.0
       jest-validate: 29.5.0
       prompts: 2.4.2
-      yargs: 17.7.0
+      yargs: 17.7.1
     transitivePeerDependencies:
       - '@types/node'
       - supports-color
@@ -8362,6 +8394,10 @@ packages:
       yallist: 4.0.0
     dev: true
 
+  /mitt@3.0.0:
+    resolution: {integrity: sha512-7dX2/10ITVyqh4aOSVI9gdape+t9l2/8QxHrFmUXu4EEUpdlxl6RudZUPZoc+zuY2hk1j7XxVroIVIan/pD/SQ==}
+    dev: true
+
   /mkdirp-classic@0.5.3:
     resolution: {integrity: sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A==}
     dev: true
@@ -8900,7 +8936,7 @@ packages:
       tsconfig-paths: 4.1.2
       tslib: 2.5.0
       v8-compile-cache: 2.3.0
-      yargs: 17.7.0
+      yargs: 17.7.1
       yargs-parser: 21.1.1
     optionalDependencies:
       '@nrwl/nx-darwin-arm64': 15.7.2
@@ -9851,29 +9887,27 @@ packages:
     engines: {node: '>=6'}
     dev: true
 
-  /puppeteer-core@19.7.1(typescript@5.0.4):
-    resolution: {integrity: sha512-4b5Go25IA+0xrUIw0Qtqi4nxc0qwdu/C7VT1+tFPl1W27207YT+7bxfANC3PjXMlS6bcbzinCf5YfGqMl8tfyQ==}
-    engines: {node: '>=14.1.0'}
+  /puppeteer-core@19.9.0(typescript@5.0.4):
+    resolution: {integrity: sha512-IJYfCE0oFpi5dTvNFqOwo8Dey6zzx7hANy7z6K2bjpCux9oPOSOIubq40awNhaHlfi8soYtgU4qabnzMXB7xBQ==}
+    engines: {node: '>=14.14.0'}
     peerDependencies:
-      chromium-bidi: 0.4.3
       typescript: '>= 4.7.4'
     peerDependenciesMeta:
-      chromium-bidi:
-        optional: true
       typescript:
         optional: true
     dependencies:
+      '@puppeteer/browsers': 0.4.1(typescript@5.0.4)
+      chromium-bidi: 0.4.6(devtools-protocol@0.0.1107588)
       cross-fetch: 3.1.5
       debug: 4.3.4(supports-color@8.1.1)
-      devtools-protocol: 0.0.1094867
+      devtools-protocol: 0.0.1107588
       extract-zip: 2.0.1
       https-proxy-agent: 5.0.1
       proxy-from-env: 1.1.0
-      rimraf: 3.0.2
       tar-fs: 2.1.1
       typescript: 5.0.4
       unbzip2-stream: 1.4.3
-      ws: 8.11.0
+      ws: 8.13.0
     transitivePeerDependencies:
       - bufferutil
       - encoding
@@ -9881,19 +9915,18 @@ packages:
       - utf-8-validate
     dev: true
 
-  /puppeteer@19.7.1(typescript@5.0.4):
-    resolution: {integrity: sha512-Hampj7jHlicySL1sSLHCwoFoRCi6RcEbnZmRE5brtbk0mp6Td33+9kWQD2eFs09772JIt00ybPKr50Gt7Y18Xg==}
-    engines: {node: '>=14.1.0'}
+  /puppeteer@19.9.0(typescript@5.0.4):
+    resolution: {integrity: sha512-JDx8WwGlkdQYTaa3OMYDF+uFWimiwNnacg5FGEC5J6+VxDsLK30wHKU/Db2LqEhtAoIu4RwS+BRH4zRPlCsFpA==}
     requiresBuild: true
     dependencies:
-      cosmiconfig: 8.0.0
+      '@puppeteer/browsers': 0.4.1(typescript@5.0.4)
+      cosmiconfig: 8.1.3
       https-proxy-agent: 5.0.1
       progress: 2.0.3
       proxy-from-env: 1.1.0
-      puppeteer-core: 19.7.1(typescript@5.0.4)
+      puppeteer-core: 19.9.0(typescript@5.0.4)
     transitivePeerDependencies:
       - bufferutil
-      - chromium-bidi
       - encoding
       - supports-color
       - typescript
@@ -12112,19 +12145,6 @@ packages:
       async-limiter: 1.0.1
     dev: true
 
-  /ws@8.11.0:
-    resolution: {integrity: sha512-HPG3wQd9sNQoT9xHyNCXoDUa+Xw/VevmY9FoHyQ+g+rrMn4j6FB4np7Z0OhdTgjx6MgQLK7jwSy1YecU1+4Asg==}
-    engines: {node: '>=10.0.0'}
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: ^5.0.2
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-    dev: true
-
   /ws@8.12.1:
     resolution: {integrity: sha512-1qo+M9Ba+xNhPB+YTWUlK6M17brTut5EXbcBaMRN5pH5dFrXz7lzz1ChFSUq3bOUl8yEvSenhHmYUNJxFzdJew==}
     engines: {node: '>=10.0.0'}
@@ -12137,6 +12157,19 @@ packages:
       utf-8-validate:
         optional: true
     dev: false
+
+  /ws@8.13.0:
+    resolution: {integrity: sha512-x9vcZYTrFPC7aSIbj7sRCYo7L/Xb8Iy+pW0ng0wt2vCJv7M9HOMy0UoN3rr+IFC7hb7vXoqS+P9ktyLLLhO+LA==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+    dev: true
 
   /xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -12172,7 +12205,7 @@ packages:
     resolution: {integrity: sha512-cGtqhHBlcft+rTKiPsVcSyi43Eqm5a1buYokW9VkztroKMErBSdR9ANHx+/XxNppHZTu2KMEn4yY8MdhuGoFuA==}
     engines: {node: '>= 6'}
     dependencies:
-      lines-and-columns: 1.1.6
+      lines-and-columns: 1.2.4
       tslib: 1.14.1
       yaml: 1.10.2
     dev: true
@@ -12275,8 +12308,8 @@ packages:
       yargs-parser: 20.2.4
     dev: true
 
-  /yargs@17.7.0:
-    resolution: {integrity: sha512-dwqOPg5trmrre9+v8SUo2q/hAwyKoVfu8OC1xPHKJGNdxAvPl4sKxL4vBnh3bQz/ZvvGAFeA5H3ou2kcOY8sQQ==}
+  /yargs@17.7.1:
+    resolution: {integrity: sha512-cwiTb08Xuv5fqF4AovYacTFNxk62th7LKJ6BL9IGUpTJrWoU7/7WdQGTP2SjKf1dUNBGzDd28p/Yfs/GI6JrLw==}
     engines: {node: '>=12'}
     dependencies:
       cliui: 8.0.1
