@@ -205,8 +205,8 @@ importers:
         specifier: 0.5.21
         version: 0.5.21
       typedoc:
-        specifier: 0.24.1
-        version: 0.24.1(typescript@5.0.4)
+        specifier: 0.24.2
+        version: 0.24.2(typescript@5.0.4)
 
   packages/ilp-protocol-ccp:
     dependencies:
@@ -303,8 +303,8 @@ importers:
         specifier: 9.4.2
         version: 9.4.2(typescript@5.0.4)(webpack@5.79.0)
       typedoc:
-        specifier: 0.24.1
-        version: 0.24.1(typescript@5.0.4)
+        specifier: 0.24.2
+        version: 0.24.2(typescript@5.0.4)
       typedoc-neo-theme:
         specifier: 1.1.1
         version: 1.1.1(typescript@5.0.4)
@@ -8110,8 +8110,8 @@ packages:
     hasBin: true
     dev: true
 
-  /marked@4.2.12:
-    resolution: {integrity: sha512-yr8hSKa3Fv4D3jdZmtMMPghgVt6TWbk86WQaWhDloQjRSQhMMYCAro7jP7VDJrjjdV8pxVxMssXS8B8Y5DZ5aw==}
+  /marked@4.3.0:
+    resolution: {integrity: sha512-PRsaiG84bK+AMvxziE/lCFss8juXjNaWzVbN5tXAm4XjeaS9NAHhop+PjQxz2A9h8Q4M/xGmzP8vqNwy6JeK0A==}
     engines: {node: '>= 12'}
     hasBin: true
     dev: true
@@ -8251,6 +8251,13 @@ packages:
 
   /minimatch@8.0.4:
     resolution: {integrity: sha512-W0Wvr9HyFXZRGIDgCicunpQ299OKXs9RgZfaukz4qAW/pJhcpUfupc9c+OObPOFueNy8VSrZgEmDtk6Kh4WzDA==}
+    engines: {node: '>=16 || 14 >=14.17'}
+    dependencies:
+      brace-expansion: 2.0.1
+    dev: true
+
+  /minimatch@9.0.0:
+    resolution: {integrity: sha512-0jJj8AvgKqWN05mrwuqi8QYKx1WmYSUoKSxu5Qhs9prezTz10sxAHGNZe9J9cqIJzta8DWsleh2KaVaLl6Ru2w==}
     engines: {node: '>=16 || 14 >=14.17'}
     dependencies:
       brace-expansion: 2.0.1
@@ -11477,16 +11484,16 @@ packages:
       typescript: 5.0.4
     dev: true
 
-  /typedoc@0.24.1(typescript@5.0.4):
-    resolution: {integrity: sha512-u4HwjZcSQhQSkkhLjgcs0ooAf6HrFVLDHHrwU2xZW8WxH0KnGZlNkaWxiOcK5Gagj7mxJSgwWx0dv8ACDAOXAQ==}
+  /typedoc@0.24.2(typescript@5.0.4):
+    resolution: {integrity: sha512-Ln1EItgcdKfRzaFSfs9uEc4amz9ZeUZoaTbFdH0ZC8ScA2OjvNMdW7vrjTtZwKE0iF38njUmuFFgQMP4tDl7ag==}
     engines: {node: '>= 14.14'}
     hasBin: true
     peerDependencies:
       typescript: 4.6.x || 4.7.x || 4.8.x || 4.9.x || 5.0.x
     dependencies:
       lunr: 2.3.9
-      marked: 4.2.12
-      minimatch: 7.4.6
+      marked: 4.3.0
+      minimatch: 9.0.0
       shiki: 0.14.1
       typescript: 5.0.4
     dev: true
