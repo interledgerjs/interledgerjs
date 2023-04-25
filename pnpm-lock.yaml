@@ -205,8 +205,8 @@ importers:
         specifier: 0.5.21
         version: 0.5.21
       typedoc:
-        specifier: 0.24.4
-        version: 0.24.4(typescript@5.0.4)
+        specifier: 0.24.6
+        version: 0.24.6(typescript@5.0.4)
 
   packages/ilp-protocol-ccp:
     dependencies:
@@ -303,8 +303,8 @@ importers:
         specifier: 9.4.2
         version: 9.4.2(typescript@5.0.4)(webpack@5.79.0)
       typedoc:
-        specifier: 0.24.4
-        version: 0.24.4(typescript@5.0.4)
+        specifier: 0.24.6
+        version: 0.24.6(typescript@5.0.4)
       typedoc-neo-theme:
         specifier: 1.1.1
         version: 1.1.1(typescript@5.0.4)
@@ -11517,8 +11517,8 @@ packages:
       typescript: 5.0.4
     dev: true
 
-  /typedoc@0.24.4(typescript@5.0.4):
-    resolution: {integrity: sha512-vQuliyGhJEGeKzzCFHbkS3m0gHoIL6cfr0fHf6eX658iGELtq2J9mWe0b+X5McEYgFoMuHFt5Py3Zug6Sxjn/Q==}
+  /typedoc@0.24.6(typescript@5.0.4):
+    resolution: {integrity: sha512-c3y3h45xJv3qYwKDAwU6Cl+26CjT0ZvblHzfHJ+SjQDM4p1mZxtgHky4lhmG0+nNarRht8kADfZlbspJWdZarQ==}
     engines: {node: '>= 14.14'}
     hasBin: true
     peerDependencies:
