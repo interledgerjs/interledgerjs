@@ -30,6 +30,6 @@
     "oer-utils": "^5.1.3-alpha.2"
   },
   "devDependencies": {
-    "@types/debug" : "4.1.7"
+    "@types/debug" : "4.1.8"
   }
 }
