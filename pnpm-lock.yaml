@@ -300,11 +300,11 @@ importers:
         specifier: 3.0.0
         version: 3.0.0
       ts-loader:
-        specifier: 9.4.2
-        version: 9.4.2(webpack@5.84.1)
+        specifier: 9.4.3
+        version: 9.4.3(webpack@5.84.1)
       typedoc:
-        specifier: 0.24.7
-        version: 0.24.7
+        specifier: 0.24.6
+        version: 0.24.6
       typedoc-neo-theme:
         specifier: 1.1.1
         version: 1.1.1
@@ -4515,8 +4515,8 @@ packages:
       once: 1.4.0
     dev: true
 
-  /enhanced-resolve@5.12.0:
-    resolution: {integrity: sha512-QHTXI/sZQmko1cbDoNAa3mJ5qhWUUNAq3vR0/YiD379fWQrcfuoX1+HW2S0MTt7XmoPLapdaDKUtelUSPic7hQ==}
+  /enhanced-resolve@5.13.0:
+    resolution: {integrity: sha512-eyV8f0y1+bzyfh8xAwW/WTSZpLbjhqc4ne9eGSH4Zo2ejdyiNG9pU6mf9DG8a7+Auk6MFTlNOT4Y2y/9k8GKVg==}
     engines: {node: '>=10.13.0'}
     dependencies:
       graceful-fs: 4.2.10
@@ -11450,15 +11450,15 @@ packages:
       yargs-parser: 21.1.1
     dev: true
 
-  /ts-loader@9.4.2(webpack@5.84.1):
-    resolution: {integrity: sha512-OmlC4WVmFv5I0PpaxYb+qGeGOdm5giHU7HwDDUjw59emP2UYMHy9fFSDcYgSNoH8sXcj4hGCSEhlDZ9ULeDraA==}
+  /ts-loader@9.4.3(webpack@5.84.1):
+    resolution: {integrity: sha512-n3hBnm6ozJYzwiwt5YRiJZkzktftRpMiBApHaJPoWLA+qetQBAXkHqCLM6nwSdRDimqVtA5ocIkcTRLMTt7yzA==}
     engines: {node: '>=12.0.0'}
     peerDependencies:
       typescript: '*'
       webpack: ^5.0.0
     dependencies:
       chalk: 4.1.2
-      enhanced-resolve: 5.12.0
+      enhanced-resolve: 5.13.0
       micromatch: 4.0.5
       semver: 7.3.8
       webpack: 5.84.1(webpack-cli@5.0.2)
@@ -11664,6 +11664,19 @@ packages:
       shelljs: 0.8.5
       shiki: 0.9.15
       typedoc-default-themes: 0.12.10
+    dev: true
+
+  /typedoc@0.24.6:
+    resolution: {integrity: sha512-c3y3h45xJv3qYwKDAwU6Cl+26CjT0ZvblHzfHJ+SjQDM4p1mZxtgHky4lhmG0+nNarRht8kADfZlbspJWdZarQ==}
+    engines: {node: '>= 14.14'}
+    hasBin: true
+    peerDependencies:
+      typescript: 4.6.x || 4.7.x || 4.8.x || 4.9.x || 5.0.x
+    dependencies:
+      lunr: 2.3.9
+      marked: 4.3.0
+      minimatch: 9.0.0
+      shiki: 0.14.1
     dev: true
 
   /typedoc@0.24.7:
