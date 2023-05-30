@@ -33,7 +33,7 @@
     "ws": "^8.8.0"
   },
   "devDependencies": {
-    "@types/debug": "4.1.7",
+    "@types/debug": "4.1.8",
     "@types/lodash": "4.14.194",
     "@types/long": "4.0.2",
     "@types/node": "18.16.0",
