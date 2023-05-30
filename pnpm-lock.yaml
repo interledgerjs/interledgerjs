@@ -391,8 +391,8 @@ importers:
         specifier: 3.3.1
         version: 3.3.1
       testcontainers:
-        specifier: 9.5.0
-        version: 9.5.0
+        specifier: 9.8.0
+        version: 9.8.0
 
   packages/stream-receiver:
     dependencies:
@@ -11295,8 +11295,8 @@ packages:
       minimatch: 3.1.2
     dev: true
 
-  /testcontainers@9.5.0:
-    resolution: {integrity: sha512-XdLZec7CN8/eXfT/A0zR03J2bNIpwLM3O3kLbp1OZPpZTNtjnR1zsdhS688o2qAx5+FS+xZ8nHL+vm3UBMnfHg==}
+  /testcontainers@9.8.0:
+    resolution: {integrity: sha512-61IlJeVrUbS5JlAgM/N0koFnRxsID+vDap7CUmgaHXSGxmFofCiokB7kD96c1BtDWGOznrd7lTAPGSkd3RVkPA==}
     engines: {node: '>= 10.16'}
     dependencies:
       '@balena/dockerignore': 1.0.2
