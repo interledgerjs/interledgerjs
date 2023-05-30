@@ -199,8 +199,8 @@ importers:
         specifier: 8.5.4
         version: 8.5.4
       node-fetch:
-        specifier: 2.6.9
-        version: 2.6.9
+        specifier: 2.6.11
+        version: 2.6.11
       source-map-support:
         specifier: 0.5.21
         version: 0.5.21
@@ -370,8 +370,8 @@ importers:
         specifier: 4.0.2
         version: 4.0.2
       '@types/node-fetch':
-        specifier: 2.6.3
-        version: 2.6.3
+        specifier: 2.6.4
+        version: 2.6.4
       axios:
         specifier: 1.4.0
         version: 1.4.0
@@ -1720,7 +1720,7 @@ packages:
       '@octokit/request-error': 3.0.3
       '@octokit/types': 9.0.0
       is-plain-object: 5.0.0
-      node-fetch: 2.6.9
+      node-fetch: 2.6.11
       universal-user-agent: 6.0.0
     transitivePeerDependencies:
       - encoding
@@ -2061,8 +2061,8 @@ packages:
   /@types/ms@0.7.31:
     resolution: {integrity: sha512-iiUgKzV9AuaEkZqkOLDIvlQiL6ltuZd9tGcW3gwpnX8JbuiuhFlEGmmFXEXkN50Cvq7Os88IY2v0dkDqXYWVgA==}
 
-  /@types/node-fetch@2.6.3:
-    resolution: {integrity: sha512-ETTL1mOEdq/sxUtgtOhKjyB2Irra4cjxksvcMUR5Zr4n+PxVhsCD9WS46oPbHL3et9Zde7CNRr+WUNlcHvsX+w==}
+  /@types/node-fetch@2.6.4:
+    resolution: {integrity: sha512-1ZX9fcN4Rvkvgv4E6PAY5WXUFWFcRWxZa3EW83UjycOB9ljJCedb2CupIP4RZMEwF/M3eTcCihbBRgwtGbg5Rg==}
     dependencies:
       '@types/node': 18.16.0
       form-data: 3.0.1
@@ -4515,14 +4515,6 @@ packages:
       once: 1.4.0
     dev: true
 
-  /enhanced-resolve@5.13.0:
-    resolution: {integrity: sha512-eyV8f0y1+bzyfh8xAwW/WTSZpLbjhqc4ne9eGSH4Zo2ejdyiNG9pU6mf9DG8a7+Auk6MFTlNOT4Y2y/9k8GKVg==}
-    engines: {node: '>=10.13.0'}
-    dependencies:
-      graceful-fs: 4.2.10
-      tapable: 2.2.1
-    dev: true
-
   /enhanced-resolve@5.14.1:
     resolution: {integrity: sha512-Vklwq2vDKtl0y/vtwjSesgJ5MYS7Etuk5txS8VdKL4AOS1aUlD96zqIfsOSLQsdv3xgMRbtkWM8eG9XDfKUPow==}
     engines: {node: '>=10.13.0'}
@@ -6241,7 +6233,7 @@ packages:
       ilp-protocol-ildcp: 2.2.3
       lodash: 4.17.21
       long: 4.0.0
-      node-fetch: 2.6.9
+      node-fetch: 2.6.11
       oer-utils: 4.0.0
       prom-client: 11.5.3
       reduct: 3.3.1
@@ -6304,7 +6296,7 @@ packages:
       ilp-protocol-ildcp: 2.2.3
       jsonwebtoken: 8.5.1
       koa: 2.14.1
-      node-fetch: 2.6.9
+      node-fetch: 2.6.11
       raw-body: 2.5.1
     transitivePeerDependencies:
       - encoding
@@ -8741,6 +8733,7 @@ packages:
         optional: true
     dependencies:
       whatwg-url: 5.0.0
+    dev: false
 
   /node-gyp-build@4.6.0:
     resolution: {integrity: sha512-NTZVKn9IylLwUzaKjkas1e4u2DLNcV4rdYagA4PWdPwW87Bi7z+BznyKSRwS/761tV/lzCGXplWsiaMjLqP2zQ==}
@@ -11228,7 +11221,7 @@ packages:
     dependencies:
       http-proxy-agent: 4.0.1
       https-proxy-agent: 5.0.1
-      node-fetch: 2.6.9
+      node-fetch: 2.6.11
       stream-events: 1.0.5
       uuid: 8.3.2
     transitivePeerDependencies:
@@ -11315,7 +11308,7 @@ packages:
       docker-compose: 0.23.19
       dockerode: 3.3.5
       get-port: 5.1.1
-      node-fetch: 2.6.9
+      node-fetch: 2.6.11
       properties-reader: 2.2.0
       ssh-remote-port-forward: 1.0.4
       tar-fs: 2.1.1
@@ -11458,9 +11451,9 @@ packages:
       webpack: ^5.0.0
     dependencies:
       chalk: 4.1.2
-      enhanced-resolve: 5.13.0
+      enhanced-resolve: 5.14.1
       micromatch: 4.0.5
-      semver: 7.3.8
+      semver: 7.5.1
       webpack: 5.84.1(webpack-cli@5.0.2)
     dev: true
 
