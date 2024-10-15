@@ -9,6 +9,7 @@ import { Counter, SequenceController } from '../controllers/sequence'
 import { Plugin, RequestBuilder } from '../request'
 import { StreamSender } from '.'
 import { PaymentDestination } from '../open-payments'
+import { Counter as TelCounter, Histogram as TelHistogram } from '@opentelemetry/api'
 
 /** Send requests that trigger receiver to respond with asset details */
 export class AssetProbe extends StreamSender<AssetDetails> {
@@ -19,8 +20,14 @@ export class AssetProbe extends StreamSender<AssetDetails> {
   private readonly assetController: AssetDetailsController
   protected readonly controllers: StreamController[]
 
-  constructor(plugin: Plugin, destination: PaymentDestination, counter: Counter) {
-    super(plugin, destination)
+  constructor(
+    plugin: Plugin,
+    destination: PaymentDestination,
+    counter: Counter,
+    counters?: Map<string, TelCounter>,
+    histograms?: Map<string, TelHistogram>
+  ) {
+    super(plugin, destination, counters, histograms)
 
     this.establishmentController = new EstablishmentController(destination)
     this.assetController = new AssetDetailsController(destination)

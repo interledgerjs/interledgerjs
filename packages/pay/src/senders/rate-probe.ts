@@ -58,8 +58,8 @@ export class RateProbe extends StreamSender<ProbeResult> {
   private maxPacketController: MaxPacketAmountController
   private rateCalculator: ExchangeRateController
 
-  constructor({ plugin, destination }: QuoteOptions) {
-    super(plugin, destination)
+  constructor({ plugin, destination, counters, histograms }: QuoteOptions) {
+    super(plugin, destination, counters, histograms)
     const { requestCounter } = destination
 
     this.rateCalculator = new ExchangeRateController()

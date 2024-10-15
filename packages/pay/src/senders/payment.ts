@@ -69,8 +69,15 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
   private readonly rateCalculator: ExchangeRateController
   private readonly maxPacketController: MaxPacketAmountController
 
-  constructor({ plugin, destination, quote, progressHandler }: PaymentSenderOptions) {
-    super(plugin, destination)
+  constructor({
+    plugin,
+    destination,
+    quote,
+    progressHandler,
+    counters,
+    histograms,
+  }: PaymentSenderOptions) {
+    super(plugin, destination, counters, histograms)
     const { requestCounter } = destination
 
     this.quote = quote
@@ -98,178 +105,208 @@ export class PaymentSender extends StreamSender<PaymentProgress> {
   }
 
   nextState(request: RequestBuilder): SendState<PaymentProgress> {
-    const { log } = request
+    const timerNextState = this.startTimer('interledgerjs_payment_next_state_time_ms', {
+      description: 'Time to perform the next state operations.',
+    })
 
-    // Ensure we never overpay the maximum source amount
-    const availableToSend = this.quote.maxSourceAmount
-      .saturatingSubtract(this.amountSent)
-      .saturatingSubtract(this.sourceAmountInFlight)
-    if (!availableToSend.isPositive()) {
-      // If we've sent as much as we can, next attempt will only be scheduled after an in-flight request finishes
-      return SendState.Yield()
-    }
+    try {
+      const { log } = request
 
-    // Compute source amount (always positive)
-    const maxPacketAmount = this.maxPacketController.getNextMaxPacketAmount()
-    let sourceAmount = availableToSend.orLesser(maxPacketAmount).orLesser(Int.MAX_U64)
-
-    // Does this request complete the payment, so should the rounding correction be applied?
-    let completesPayment = false
-
-    // Apply fixed delivery limits
-    if (this.quote.paymentType === PaymentType.FixedDelivery) {
-      const remainingToDeliver = this.quote.minDeliveryAmount
-        .saturatingSubtract(this.amountDelivered)
-        .saturatingSubtract(this.destinationAmountInFlight)
-      if (!remainingToDeliver.isPositive()) {
-        // If we've already sent enough to potentially complete the payment,
-        // next attempt will only be scheduled after an in-flight request finishes
+      // Ensure we never overpay the maximum source amount
+      const availableToSend = this.quote.maxSourceAmount
+        .saturatingSubtract(this.amountSent)
+        .saturatingSubtract(this.sourceAmountInFlight)
+      if (!availableToSend.isPositive()) {
+        // If we've sent as much as we can, next attempt will only be scheduled after an in-flight request finishes
         return SendState.Yield()
       }
 
-      const sourceAmountDeliveryLimit =
-        this.rateCalculator.estimateSourceAmount(remainingToDeliver)?.[1]
-      if (!sourceAmountDeliveryLimit) {
-        log.warn('payment cannot complete: exchange rate dropped to 0')
-        return SendState.Error(PaymentError.InsufficientExchangeRate)
+      // Compute source amount (always positive)
+      const maxPacketAmount = this.maxPacketController.getNextMaxPacketAmount()
+      let sourceAmount = availableToSend.orLesser(maxPacketAmount).orLesser(Int.MAX_U64)
+
+      // Does this request complete the payment, so should the rounding correction be applied?
+      let completesPayment = false
+
+      // Apply fixed delivery limits
+      if (this.quote.paymentType === PaymentType.FixedDelivery) {
+        const remainingToDeliver = this.quote.minDeliveryAmount
+          .saturatingSubtract(this.amountDelivered)
+          .saturatingSubtract(this.destinationAmountInFlight)
+        if (!remainingToDeliver.isPositive()) {
+          // If we've already sent enough to potentially complete the payment,
+          // next attempt will only be scheduled after an in-flight request finishes
+          return SendState.Yield()
+        }
+
+        const sourceAmountDeliveryLimit =
+          this.rateCalculator.estimateSourceAmount(remainingToDeliver)?.[1]
+        if (!sourceAmountDeliveryLimit) {
+          log.warn('payment cannot complete: exchange rate dropped to 0')
+          return SendState.Error(PaymentError.InsufficientExchangeRate)
+        }
+
+        sourceAmount = sourceAmount.orLesser(sourceAmountDeliveryLimit)
+        completesPayment = sourceAmount.isEqualTo(sourceAmountDeliveryLimit)
+      } else {
+        completesPayment = sourceAmount.isEqualTo(availableToSend)
       }
 
-      sourceAmount = sourceAmount.orLesser(sourceAmountDeliveryLimit)
-      completesPayment = sourceAmount.isEqualTo(sourceAmountDeliveryLimit)
-    } else {
-      completesPayment = sourceAmount.isEqualTo(availableToSend)
-    }
+      // Enforce the minimum exchange rate.
+      // Allow up to 1 source unit to be lost to rounding only *on the final packet*.
+      const applyCorrection = completesPayment && !this.appliedRoundingCorrection
+      const minDestinationAmount = applyCorrection
+        ? sourceAmount.saturatingSubtract(Int.ONE).multiplyCeil(this.quote.minExchangeRate)
+        : sourceAmount.multiplyCeil(this.quote.minExchangeRate)
 
-    // Enforce the minimum exchange rate.
-    // Allow up to 1 source unit to be lost to rounding only *on the final packet*.
-    const applyCorrection = completesPayment && !this.appliedRoundingCorrection
-    const minDestinationAmount = applyCorrection
-      ? sourceAmount.saturatingSubtract(Int.ONE).multiplyCeil(this.quote.minExchangeRate)
-      : sourceAmount.multiplyCeil(this.quote.minExchangeRate)
-
-    // If the min destination amount isn't met, the rate dropped and payment cannot be completed.
-    const [projectedDestinationAmount, highEndDestinationAmount] =
-      this.rateCalculator.estimateDestinationAmount(sourceAmount)
-    if (projectedDestinationAmount.isLessThan(minDestinationAmount)) {
-      log.warn('payment cannot complete: exchange rate dropped below minimum')
-      return RequestState.Error(PaymentError.InsufficientExchangeRate)
-    }
-
-    // Rate calculator caps projected destination amounts to U64,
-    // so that checks against `minDestinationAmount` overflowing U64 range
-
-    // Update in-flight amounts (request will be applied synchronously)
-    this.sourceAmountInFlight = this.sourceAmountInFlight.add(sourceAmount)
-    this.destinationAmountInFlight = this.destinationAmountInFlight.add(highEndDestinationAmount)
-    this.appliedRoundingCorrection = applyCorrection
-
-    this.progressHandler?.(this.getProgress())
-
-    request
-      .setSourceAmount(sourceAmount)
-      .setMinDestinationAmount(minDestinationAmount)
-      .enableFulfillment()
-      .addFrames(new StreamMoneyFrame(PaymentSender.DEFAULT_STREAM_ID, 1))
-
-    return SendState.Send((reply) => {
-      // Delivered amount must be *at least* the minimum acceptable amount we told the receiver
-      // No matter what, since they fulfilled it, we must assume they got at least the minimum
-      const destinationAmount = minDestinationAmount.orGreater(reply.destinationAmount)
-
-      if (reply.isFulfill()) {
-        this.amountSent = this.amountSent.add(sourceAmount)
-        this.amountDelivered = this.amountDelivered.add(destinationAmount)
-
-        log.debug(
-          'accounted for fulfill. sent=%s delivered=%s minDestination=%s',
-          sourceAmount,
-          destinationAmount,
-          minDestinationAmount
-        )
+      // If the min destination amount isn't met, the rate dropped and payment cannot be completed.
+      const [projectedDestinationAmount, highEndDestinationAmount] =
+        this.rateCalculator.estimateDestinationAmount(sourceAmount)
+      if (projectedDestinationAmount.isLessThan(minDestinationAmount)) {
+        log.warn('payment cannot complete: exchange rate dropped below minimum')
+        return RequestState.Error(PaymentError.InsufficientExchangeRate)
       }
 
-      if (reply.isReject() && reply.destinationAmount?.isLessThan(minDestinationAmount)) {
-        log.debug(
-          'packet rejected for insufficient rate. received=%s minDestination=%s',
-          reply.destinationAmount,
-          minDestinationAmount
-        )
-      }
+      // Rate calculator caps projected destination amounts to U64,
+      // so that checks against `minDestinationAmount` overflowing U64 range
 
-      // Update in-flight amounts
-      this.sourceAmountInFlight = this.sourceAmountInFlight.saturatingSubtract(sourceAmount)
-      this.destinationAmountInFlight =
-        this.destinationAmountInFlight.saturatingSubtract(highEndDestinationAmount)
-      // If this packet failed (e.g. for some other reason), refund the delivery deficit so it may be retried
-      if (reply.isReject() && applyCorrection) {
-        this.appliedRoundingCorrection = false
-      }
-
-      log.debug(
-        'payment sent %s of %s (max). inflight=%s',
-        this.amountSent,
-        this.quote.maxSourceAmount,
-        this.sourceAmountInFlight
-      )
-      log.debug(
-        'payment delivered %s of %s (min). inflight=%s (destination units)',
-        this.amountDelivered,
-        this.quote.minDeliveryAmount,
-        this.destinationAmountInFlight
-      )
-
-      this.updateStreamReceipt(reply)
+      // Update in-flight amounts (request will be applied synchronously)
+      this.sourceAmountInFlight = this.sourceAmountInFlight.add(sourceAmount)
+      this.destinationAmountInFlight = this.destinationAmountInFlight.add(highEndDestinationAmount)
+      this.appliedRoundingCorrection = applyCorrection
 
       this.progressHandler?.(this.getProgress())
 
-      // Handle protocol violations after all accounting has been performed
-      if (reply.isFulfill()) {
-        if (!reply.destinationAmount) {
-          // Technically, an intermediary could strip the data so we can't ascertain whose fault this is
-          log.warn('ending payment: packet fulfilled with no authentic STREAM data')
-          return SendState.Error(PaymentError.ReceiverProtocolViolation)
-        } else if (reply.destinationAmount.isLessThan(minDestinationAmount)) {
-          log.warn(
-            'ending payment: receiver violated procotol. packet fulfilled below min exchange rate. delivered=%s minDestination=%s',
+      request
+        .setSourceAmount(sourceAmount)
+        .setMinDestinationAmount(minDestinationAmount)
+        .enableFulfillment()
+        .addFrames(new StreamMoneyFrame(PaymentSender.DEFAULT_STREAM_ID, 1))
+
+      return SendState.Send((reply) => {
+        // Delivered amount must be *at least* the minimum acceptable amount we told the receiver
+        // No matter what, since they fulfilled it, we must assume they got at least the minimum
+        const destinationAmount = minDestinationAmount.orGreater(reply.destinationAmount)
+
+        if (reply.isFulfill()) {
+          this.amountSent = this.amountSent.add(sourceAmount)
+          this.amountDelivered = this.amountDelivered.add(destinationAmount)
+
+          log.debug(
+            'accounted for fulfill. sent=%s delivered=%s minDestination=%s',
+            sourceAmount,
             destinationAmount,
             minDestinationAmount
           )
-          return SendState.Error(PaymentError.ReceiverProtocolViolation)
         }
-      }
 
-      const paidFixedSend =
-        this.quote.paymentType === PaymentType.FixedSend &&
-        this.amountSent.isEqualTo(this.quote.maxSourceAmount) // Amount in flight is always 0 if this is true
-      if (paidFixedSend) {
-        log.debug('payment complete: paid fixed source amount.')
-        return SendState.Done(this.getProgress())
-      }
+        if (reply.isReject() && reply.destinationAmount?.isLessThan(minDestinationAmount)) {
+          log.debug(
+            'packet rejected for insufficient rate. received=%s minDestination=%s',
+            reply.destinationAmount,
+            minDestinationAmount
+          )
+        }
 
-      const paidFixedDelivery =
-        this.quote.paymentType === PaymentType.FixedDelivery &&
-        this.amountDelivered.isGreaterThanOrEqualTo(this.quote.minDeliveryAmount) &&
-        !this.sourceAmountInFlight.isPositive()
-      if (paidFixedDelivery) {
-        log.debug('payment complete: paid fixed destination amount.')
-        return SendState.Done(this.getProgress())
-      }
+        // Update in-flight amounts
+        this.sourceAmountInFlight = this.sourceAmountInFlight.saturatingSubtract(sourceAmount)
+        this.destinationAmountInFlight =
+          this.destinationAmountInFlight.saturatingSubtract(highEndDestinationAmount)
+        // If this packet failed (e.g. for some other reason), refund the delivery deficit so it may be retried
+        if (reply.isReject() && applyCorrection) {
+          this.appliedRoundingCorrection = false
+        }
 
-      this.remoteReceiveMax =
-        this.updateReceiveMax(reply)?.orGreater(this.remoteReceiveMax) ?? this.remoteReceiveMax
-      if (this.remoteReceiveMax?.isLessThan(this.quote.minDeliveryAmount)) {
-        log.error(
-          'ending payment: minimum delivery amount is too much for recipient. minDelivery=%s receiveMax=%s',
-          this.quote.minDeliveryAmount,
-          this.remoteReceiveMax
+        log.debug(
+          'payment sent %s of %s (max). inflight=%s',
+          this.amountSent,
+          this.quote.maxSourceAmount,
+          this.sourceAmountInFlight
         )
-        return SendState.Error(PaymentError.IncompatibleReceiveMax)
-      }
+        log.debug(
+          'payment delivered %s of %s (min). inflight=%s (destination units)',
+          this.amountDelivered,
+          this.quote.minDeliveryAmount,
+          this.destinationAmountInFlight
+        )
 
-      // Since payment isn't complete yet, immediately queue attempt to send more money
-      // (in case we were at max in flight previously)
-      return SendState.Schedule()
-    })
+        this.updateStreamReceipt(reply)
+
+        this.progressHandler?.(this.getProgress())
+
+        // Handle protocol violations after all accounting has been performed
+        if (reply.isFulfill()) {
+          if (!reply.destinationAmount) {
+            // Technically, an intermediary could strip the data so we can't ascertain whose fault this is
+            log.warn('ending payment: packet fulfilled with no authentic STREAM data')
+            return SendState.Error(PaymentError.ReceiverProtocolViolation)
+          } else if (reply.destinationAmount.isLessThan(minDestinationAmount)) {
+            log.warn(
+              'ending payment: receiver violated procotol. packet fulfilled below min exchange rate. delivered=%s minDestination=%s',
+              destinationAmount,
+              minDestinationAmount
+            )
+            return SendState.Error(PaymentError.ReceiverProtocolViolation)
+          }
+        }
+
+        const paidFixedSend =
+          this.quote.paymentType === PaymentType.FixedSend &&
+          this.amountSent.isEqualTo(this.quote.maxSourceAmount) // Amount in flight is always 0 if this is true
+        if (paidFixedSend) {
+          log.debug('payment complete: paid fixed source amount.')
+          const payTps = this.getOrCreateCounter('interledgerjs_pay_complete_total', undefined)
+          if (payTps) {
+            payTps.add(1, {
+              source: 'ilp_pay',
+              description: 'Count of ILP Payment packets sent (fixed paid/source).',
+            })
+          }
+          return SendState.Done(this.getProgress())
+        }
+
+        const paidFixedDelivery =
+          this.quote.paymentType === PaymentType.FixedDelivery &&
+          this.amountDelivered.isGreaterThanOrEqualTo(this.quote.minDeliveryAmount) &&
+          !this.sourceAmountInFlight.isPositive()
+        if (paidFixedDelivery) {
+          log.debug('payment complete: paid fixed destination amount.')
+          const payTps = this.getOrCreateCounter('interledgerjs_pay_complete_total', undefined)
+          if (payTps) {
+            payTps.add(1, {
+              source: 'ilp_pay',
+              description: 'Count of ILP Payment packets sent (fixed paid/source).',
+            })
+          }
+          return SendState.Done(this.getProgress())
+        }
+
+        this.remoteReceiveMax =
+          this.updateReceiveMax(reply)?.orGreater(this.remoteReceiveMax) ?? this.remoteReceiveMax
+        if (this.remoteReceiveMax?.isLessThan(this.quote.minDeliveryAmount)) {
+          log.error(
+            'ending payment: minimum delivery amount is too much for recipient. minDelivery=%s receiveMax=%s',
+            this.quote.minDeliveryAmount,
+            this.remoteReceiveMax
+          )
+          return SendState.Error(PaymentError.IncompatibleReceiveMax)
+        }
+
+        // Log the metrics for each payment:
+        const payTps = this.getOrCreateCounter('interledgerjs_pay_total', undefined)
+        if (payTps) {
+          payTps.add(1, {
+            source: 'ilp_pay',
+            description: 'Count of ILP Payment packets sent.',
+          })
+        }
+        // Since payment isn't complete yet, immediately queue attempt to send more money
+        // (in case we were at max in flight previously)
+        return SendState.Schedule()
+      })
+    } finally {
+      timerNextState && timerNextState()
+    }
   }
 
   getProgress(): PaymentProgress {

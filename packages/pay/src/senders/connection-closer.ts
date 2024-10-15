@@ -6,6 +6,7 @@ import { ExpiryController } from '../controllers/expiry'
 import { Plugin, RequestBuilder } from '../request'
 import { StreamSender } from '.'
 import { ResolvedPayment } from '..'
+import { Counter as TelCounter, Histogram as TelHistogram } from '@opentelemetry/api'
 
 /** Send a best-effort `ConnectionClose` frame if necessary, and resolve if it was sent */
 export class ConnectionCloser extends StreamSender<void> {
@@ -13,8 +14,13 @@ export class ConnectionCloser extends StreamSender<void> {
 
   protected readonly controllers: StreamController[]
 
-  constructor(plugin: Plugin, destination: ResolvedPayment) {
-    super(plugin, destination)
+  constructor(
+    plugin: Plugin,
+    destination: ResolvedPayment,
+    counters?: Map<string, TelCounter>,
+    histograms?: Map<string, TelHistogram>
+  ) {
+    super(plugin, destination, counters, histograms)
 
     this.controllers = [
       new SequenceController(destination.requestCounter),

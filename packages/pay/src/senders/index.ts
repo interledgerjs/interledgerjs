@@ -6,6 +6,9 @@ import { PaymentDestination } from '../open-payments'
 import createLogger, { Logger } from 'ilp-logger'
 import { Plugin } from '../request'
 import { sha256 } from '../utils'
+import { Counter, Histogram, MetricOptions, metrics } from '@opentelemetry/api'
+
+const METER_NAME = 'Rafiki'
 
 /**
  * Orchestrates all business rules to schedule and send a series of ILP/STREAM requests
@@ -48,49 +51,112 @@ export abstract class StreamSender<T> {
 
   /** Logger namespaced to this connection */
   readonly log: Logger
+  readonly counters?: Map<string, Counter>
+  readonly histograms?: Map<string, Histogram>
+  readonly SOURCE = 'ilp_sender'
 
-  constructor(plugin: Plugin, destinationDetails: PaymentDestination) {
+  constructor(
+    plugin: Plugin,
+    destinationDetails: PaymentDestination,
+    counters?: Map<string, Counter>,
+    histograms?: Map<string, Histogram>
+  ) {
     const { destinationAddress, sharedSecret } = destinationDetails
 
     const connectionId = sha256(Buffer.from(destinationAddress)).toString('hex').slice(0, 6)
     this.log = createLogger(`ilp-pay:${connectionId}`)
+    this.counters = counters
+    this.histograms = histograms
 
     this.sendRequest = generateKeys(plugin, sharedSecret)
   }
 
   private trySending(): SendState<T> {
-    const request = new RequestBuilder({ log: this.log })
-    const requestState = [...this.controllers.values()].reduce<RequestState>(
-      (state, controller) =>
-        state.type === SendStateType.Ready ? controller.buildRequest?.(request) ?? state : state,
-      RequestState.Ready()
-    )
-    if (requestState.type !== SendStateType.Ready) {
-      return requestState // Cancel this attempt
-    }
-
-    // If committing and sending this request, continue
-    const state = this.nextState(request)
-    if (state.type !== SendStateType.Send) {
-      return state // Cancel this attempt
-    }
-
-    // Synchronously apply the request
-    const replyHandlers = this.controllers.map((c) => c.applyRequest?.(request))
-
-    // Asynchronously send the request and queue the reply side effects as another task
-    const task = this.sendRequest(request).then((reply) => () => {
-      // Apply side effects from all controllers and StreamSender, then return the first error or next state
-      // (For example, even if a payment error occurs in a controller, it shouldn't return
-      //  immediately since that packet still needs to be correctly accounted for)
-      const error = replyHandlers.map((apply) => apply?.(reply)).find(isPaymentError)
-      const newState = state.applyReply(reply)
-      return error ? SendState.Error(error) : newState
+    const timerSending = this.startTimer('interledgerjs_strictly_sending_time_ms', {
+      description: 'Time to perform sending only.',
     })
+    try {
+      const request = new RequestBuilder({ log: this.log })
+      const requestState = [...this.controllers.values()].reduce<RequestState>(
+        (state, controller) =>
+          state.type === SendStateType.Ready ? controller.buildRequest?.(request) ?? state : state,
+        RequestState.Ready()
+      )
+      if (requestState.type !== SendStateType.Ready) {
+        return requestState // Cancel this attempt
+      }
 
-    this.replyScheduler.queue(task)
+      // If committing and sending this request, continue
+      const state = this.nextState(request)
+      if (state.type !== SendStateType.Send) {
+        return state // Cancel this attempt
+      }
 
-    return SendState.Schedule() // Schedule another attempt immediately
+      // Synchronously apply the request
+      const replyHandlers = this.controllers.map((c) => c.applyRequest?.(request))
+      // Asynchronously send the request and queue the reply side effects as another task
+      const task = this.sendRequest(request).then((reply) => () => {
+        // Apply side effects from all controllers and StreamSender, then return the first error or next state
+        // (For example, even if a payment error occurs in a controller, it shouldn't return
+        //  immediately since that packet still needs to be correctly accounted for)
+        const error = replyHandlers.map((apply) => apply?.(reply)).find(isPaymentError)
+        const newState = state.applyReply(reply)
+        return error ? SendState.Error(error) : newState
+      })
+      const counterForTps = this.getOrCreateCounter('interledgerjs_sender_total', undefined)
+      if (counterForTps) {
+        counterForTps.add(1, {
+          source: this.SOURCE,
+          description: 'Count of ILP packets sent through sender.',
+        })
+      }
+      this.replyScheduler.queue(task)
+
+      return SendState.Schedule() // Schedule another attempt immediately
+    } finally {
+      timerSending && timerSending()
+    }
+  }
+
+  protected getOrCreateCounter(name: string, options?: MetricOptions): Counter | undefined {
+    if (!this.counters) return undefined
+    let counter = this.counters.get(name)
+    if (!counter) {
+      counter = metrics.getMeter(METER_NAME).createCounter(name, options)
+      this.counters.set(name, counter)
+    }
+    return counter
+  }
+
+  protected getOrCreateHistogram(name: string, options?: MetricOptions): Histogram | undefined {
+    if (!this.histograms) return undefined
+
+    let histogram = this.histograms.get(name)
+    if (!histogram) {
+      histogram = metrics.getMeter(METER_NAME).createHistogram(name, options)
+      this.histograms.set(name, histogram)
+    }
+    return histogram
+  }
+
+  protected recordHistogram(
+    name: string,
+    value: number,
+    attributes: Record<string, unknown> = {}
+  ): void {
+    const histogram = this.getOrCreateHistogram(name)
+    if (histogram)
+      histogram.record(value, {
+        source: this.SOURCE,
+        ...attributes,
+      })
+  }
+
+  protected startTimer(name: string, attributes: Record<string, unknown> = {}): () => void {
+    const start = Date.now()
+    return () => {
+      this.recordHistogram(name, Date.now() - start, attributes)
+    }
   }
 
   /**

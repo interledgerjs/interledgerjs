@@ -14,6 +14,7 @@ import {
   PositiveRatio,
   Ratio,
 } from './utils'
+import { Counter as TelCounter, Histogram as TelHistogram } from '@opentelemetry/api'
 
 export { IncomingPayment } from './open-payments'
 export { AccountUrl } from './payment-pointer'
@@ -65,6 +66,8 @@ export interface QuoteOptions {
   prices?: {
     [assetCode: string]: number
   }
+  counters?: Map<string, TelCounter>
+  histograms?: Map<string, TelHistogram>
 }
 
 /** Parameters of payment execution and the projected outcome of a payment */
@@ -107,6 +110,8 @@ export interface PayOptions {
    * Handler will be called for all fulfillable packets and replies before the payment resolves.
    */
   progressHandler?: (progress: PaymentProgress) => void
+  counters?: Map<string, TelCounter>
+  histograms?: Map<string, TelHistogram>
 }
 
 /** Intermediate state or outcome of the payment, to account for sent/delivered amounts */
