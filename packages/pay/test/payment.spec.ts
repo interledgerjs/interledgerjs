@@ -1872,6 +1872,68 @@ describe('application data handling', () => {
     expect(appDataPackets).toBe(1)
   })
 
+  it('retries app data on a temporary reject of the first packet', async () => {
+    const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
+    const encryptionKey = generateEncryptionKey(sharedSecret)
+    const defaultStreamId = Long.fromNumber(PaymentSender.DEFAULT_STREAM_ID, true)
+
+    let appDataPackets = 0
+    let rejectedFirstAppDataPacket = false
+    const plugin = createPlugin(async (prepare, next) => {
+      const streamPacket = await Packet.decryptAndDeserialize(encryptionKey, prepare.data)
+      const frames = streamPacket.frames ?? []
+      const hasAppData = frames.some(
+        (frame) => frame.type === FrameType.StreamData && frame.streamId.equals(defaultStreamId)
+      )
+
+      if (hasAppData) {
+        appDataPackets++
+        if (!rejectedFirstAppDataPacket) {
+          rejectedFirstAppDataPacket = true
+          return {
+            code: IlpError.T00_INTERNAL_ERROR,
+            message: 'temporary failure',
+            triggeredBy: '',
+            data: Buffer.alloc(0),
+          }
+        }
+      }
+
+      return next(prepare)
+    }, streamReceiver)
+
+    const destination = await setupPayment({
+      plugin,
+      destinationAddress,
+      sharedSecret,
+      destinationAsset: {
+        code: 'USD',
+        scale: 2,
+      },
+    })
+    const quote = await startQuote({
+      plugin,
+      destination,
+      amountToDeliver: 100,
+      sourceAsset: {
+        code: 'USD',
+        scale: 2,
+      },
+      slippage: 0.01,
+    })
+
+    const receipt = await pay({
+      plugin,
+      destination,
+      quote,
+      appData: Buffer.from('data-from-sender'),
+    })
+
+    expect(receipt.error).toBeUndefined()
+    expect(rejectedFirstAppDataPacket).toBe(true)
+    expect(appDataPackets).toBe(2)
+  })
+
   it('does not attribute later rejects to the initial app data packet', async () => {
     const { sharedSecret, ilpAddress: destinationAddress } = streamServer.generateCredentials()
     const encryptionKey = generateEncryptionKey(sharedSecret)
